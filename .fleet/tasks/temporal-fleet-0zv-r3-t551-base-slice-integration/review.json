@@ -1,0 +1,9 @@
+{
+  "verdict": "approve",
+  "reason": "The context key is now order-insensitive, the new regression tests cover both canonical key generation and conditional-slice reuse, and the touched test suites pass.",
+  "scores": {
+    "correctness": 10,
+    "style": 9,
+    "completeness": 10
+  }
+}
