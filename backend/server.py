@@ -1893,6 +1893,34 @@ def preview_unconditional_probability_edit(
     }
 
 
+def min_asset_check(
+    market_id: str,
+    payload: dict[str, Any],
+    account_id: str,
+) -> dict[str, Any] | None:
+    """Reject unconditional edits that would drive account min-asset below zero."""
+    if payload["context"]:
+        return None
+
+    preview = preview_unconditional_probability_edit(market_id, payload, account_id)
+    asset_preview = preview["assetDelta"]
+    if asset_preview["afterMinAsset"] < 0:
+        raise ApiError(
+            422,
+            "min_asset_violation",
+            "Edit would produce negative state-contingent assets",
+            {
+                "accountId": account_id,
+                "marketId": market_id,
+                "riskLimit": asset_preview["riskLimit"],
+                "beforeMinAsset": asset_preview["beforeMinAsset"],
+                "impactScore": asset_preview["impactScore"],
+                "afterMinAsset": asset_preview["afterMinAsset"],
+            },
+        )
+    return preview
+
+
 def create_probability_edit_order(
     command: dict[str, Any],
     preview: dict[str, Any] | None = None,
@@ -2598,20 +2626,19 @@ def handle_probability_edit(market_id: str, payload: dict[str, Any] | None) -> t
                         market_id,
                         account_id,
                         "ProbabilityEdit",
-                    )
+                )
                 return replay_terminal_outcome(existing_command_id)
 
-        submitted_at = utc_timestamp()
-        command = materialize_probability_edit_command(
-            market_id=market_id,
-            normalized_payload=normalized_payload,
-            account_id=account_id,
-            command_id=generate_command_id(),
-            submitted_at=submitted_at,
-            idempotency_key=idempotency_key,
-        )
         market = MARKETS[market_id]
         if market["status"] != "active":
+            command = materialize_probability_edit_command(
+                market_id=market_id,
+                normalized_payload=normalized_payload,
+                account_id=account_id,
+                command_id=generate_command_id(),
+                submitted_at=utc_timestamp(),
+                idempotency_key=idempotency_key,
+            )
             return build_terminal_rejection_response(
                 command,
                 code="market_not_active",
@@ -2626,28 +2653,15 @@ def handle_probability_edit(market_id: str, payload: dict[str, Any] | None) -> t
                 status=409,
                 scope_key=scope_key,
             )
-        preview: dict[str, Any] | None = None
-        if not normalized_payload["context"]:
-            preview = preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
-            asset_preview = preview["assetDelta"]
-            if asset_preview["afterMinAsset"] < 0:
-                return build_terminal_rejection_response(
-                    command,
-                    code="min_asset_violation",
-                    message="Edit would produce negative state-contingent assets",
-                    details={
-                        "accountId": account_id,
-                        "marketId": market_id,
-                        "commandId": command["commandId"],
-                        "riskLimit": asset_preview["riskLimit"],
-                        "beforeMinAsset": asset_preview["beforeMinAsset"],
-                        "impactScore": asset_preview["impactScore"],
-                        "afterMinAsset": asset_preview["afterMinAsset"],
-                    },
-                    retry_hint="reduce probability target",
-                    status=409,
-                    scope_key=scope_key,
-                )
+        preview = min_asset_check(market_id, normalized_payload, account_id)
+        command = materialize_probability_edit_command(
+            market_id=market_id,
+            normalized_payload=normalized_payload,
+            account_id=account_id,
+            command_id=generate_command_id(),
+            submitted_at=utc_timestamp(),
+            idempotency_key=idempotency_key,
+        )
 
         order = create_probability_edit_order(command, preview=preview)
         asset_delta = sync_account_risk_state(order)
