@@ -74,6 +74,31 @@ class BayesMarketFormulaSchemaTests(unittest.TestCase):
         self.assertEqual(validator.last_error.code, "invalid_event_formula")
         self.assertEqual(validator.last_error.details["field"], "formula[0][0].variableId")
 
+    def test_formula_validator_rejects_literals_with_unexpected_fields(self):
+        validator = self.build_validator()
+
+        self.assertFalse(
+            validator.validate(
+                [
+                    [
+                        {
+                            "variableId": "eth_price_gt_3000_mar15",
+                            "outcomeId": "yes",
+                            "negated": False,
+                            "kind": "legacy",
+                        }
+                    ]
+                ]
+            )
+        )
+        self.assertEqual(validator.last_error.code, "invalid_event_formula")
+        self.assertEqual(validator.last_error.details["field"], "formula[0][0]")
+        self.assertEqual(validator.last_error.details["unexpected"], ["kind"])
+        self.assertEqual(
+            validator.last_error.details["allowed"],
+            sorted(formula_schema.EVENT_FORMULA_LITERAL_FIELDS),
+        )
+
     def test_formula_validator_normalizes_literals_by_variable_id(self):
         normalized = formula_schema.normalize_event_formula(
             [
@@ -141,6 +166,20 @@ class BayesMarketFormulaSchemaTests(unittest.TestCase):
         self.assertEqual(error.code, "invalid_event_formula")
         self.assertEqual(error.details["field"], "formula[0][0].variableId")
         self.assertEqual(error.details["received"], "eth_price_gt_3000_mar15")
+
+    def test_event_trade_adapter_rejects_literals_with_unexpected_fields(self):
+        adapter = self.build_adapter()
+
+        with self.assertRaises(formula_schema.FormulaSchemaError) as ctx:
+            adapter.normalize(
+                [[{"variableId": "m1", "outcomeId": "yes", "negated": False, "kind": "legacy"}]]
+            )
+
+        error = ctx.exception
+        self.assertEqual(error.code, "invalid_event_formula")
+        self.assertEqual(error.details["field"], "formula[0][0]")
+        self.assertEqual(error.details["unexpected"], ["kind"])
+        self.assertEqual(error.details["allowed"], sorted(formula_schema.EVENT_FORMULA_LITERAL_FIELDS))
 
     def test_event_trade_adapter_preserves_501_boundary_for_valid_broader_cnf(self):
         adapter = self.build_adapter()

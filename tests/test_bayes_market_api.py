@@ -2753,6 +2753,28 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 for detail_key, detail_value in expected_details.items():
                     self.assertEqual(error.details[detail_key], detail_value)
 
+    def test_event_formula_rejects_literals_with_unexpected_fields(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.normalize_event_formula(
+                [
+                    [
+                        {
+                            "variableId": "eth_price_gt_3000_mar15",
+                            "outcomeId": "yes",
+                            "negated": False,
+                            "kind": "legacy",
+                        }
+                    ]
+                ]
+            )
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_event_formula")
+        self.assertEqual(error.details["field"], "formula[0][0]")
+        self.assertEqual(error.details["unexpected"], ["kind"])
+        self.assertEqual(error.details["allowed"], sorted(server.formula_schema.EVENT_FORMULA_LITERAL_FIELDS))
+
     def test_event_formula_rejects_empty_inputs_and_clause_literal_cap(self):
         with self.subTest("empty formula"):
             with self.assertRaises(server.ApiError) as ctx:

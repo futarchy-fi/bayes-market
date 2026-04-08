@@ -494,6 +494,7 @@ class EventTradeFormulaAdapter:
 
 
 __all__ = [
+    "EVENT_FORMULA_LITERAL_FIELDS",
     "EventTradeFormulaAdapter",
     "FormulaSchemaError",
     "FormulaValidator",
