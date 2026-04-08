@@ -9,6 +9,7 @@ import importlib.util
 import json
 import math
 import os
+import re
 import sys
 import threading
 import time
@@ -17,7 +18,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, NamedTuple
 from urllib.parse import parse_qs, urlparse
 
 BACKEND_DIR = Path(__file__).resolve().parent
@@ -130,6 +131,9 @@ AUTH_REQUIRE_AGENT_ID_ENV = "BAYES_REQUIRE_AGENT_ID"
 RATE_LIMIT_PER_MIN_ENV = "BAYES_RATE_LIMIT_PER_MIN"
 RATE_LIMIT_POLICY_VERSION = "bayes-agent-id-v1"
 RATE_LIMIT_WINDOW_SECONDS = 60
+AGENT_ID_TOKEN_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
+MARKET_ADMIN_WRITE_CATEGORY = "market_admin"
+TRADE_WRITE_CATEGORY = "trade_write"
 ENGINE_CONFIG: EngineConfig = DEFAULT_ENGINE_CONFIG
 ENGINE_MODE = ENGINE_CONFIG.mode
 ENGINE_BACKEND = ENGINE_CONFIG.backend
@@ -158,6 +162,18 @@ ORDER_COUNTER = 0
 COMMAND_COUNTER = 0
 EVENT_COUNTER = 0
 GENESIS_EVENT_HASH = f"sha256:{hashlib.sha256(b'').hexdigest()}"
+WRITE_ROUTE_POLICIES: dict[str, dict[str, bool]] = {
+    MARKET_ADMIN_WRITE_CATEGORY: {"requires_agent_id": True},
+    TRADE_WRITE_CATEGORY: {"requires_agent_id": True},
+}
+
+
+class WriteRequestAgentContext(NamedTuple):
+    """Describe one protected write request and its normalized agent identity."""
+
+    category: str
+    policy: dict[str, bool]
+    agent_id: str
 
 
 def get_market_write_lock(market_id: str) -> threading.Lock:
@@ -285,20 +301,116 @@ def reset_rate_limit_state() -> None:
         _RATE_LIMIT_WINDOWS.clear()
 
 
+def request_agent_id_values(headers: Any) -> list[str]:
+    """Extract all raw Bayes agent id header values without normalization."""
+    get_all = getattr(headers, "get_all", None)
+    if callable(get_all):
+        values = get_all(AGENT_ID_HEADER, [])
+        if values:
+            return [str(value) for value in values if value is not None]
+
+    value = headers.get(AGENT_ID_HEADER)
+    if value is None:
+        return []
+    return [str(value)]
+
+
 def request_agent_id(headers: Any) -> str:
-    """Extract and normalize the Bayes agent id header value."""
-    return (headers.get(AGENT_ID_HEADER) or "").strip()
+    """Extract and normalize one Bayes agent id header value when available."""
+    values = request_agent_id_values(headers)
+    if len(values) != 1:
+        return ""
+    return values[0].strip()
 
 
-def enforce_agent_id(agent_id: str) -> None:
+def enforce_agent_id(agent_id: str, *, category: str | None = None) -> None:
     """Raise when write controls require an agent id and none is present."""
     if AUTH_REQUIRE_AGENT_ID and not agent_id:
+        details: dict[str, Any] = {"header": AGENT_ID_HEADER}
+        if category is not None:
+            details["category"] = category
         raise ApiError(
             401,
             "missing_agent_id",
             "Missing Bayes agent id header",
-            {"header": AGENT_ID_HEADER},
+            details,
         )
+
+
+def write_policy_requires_agent_id(policy: dict[str, bool]) -> bool:
+    """Return whether the matched write policy currently requires an agent id."""
+    return AUTH_REQUIRE_AGENT_ID and bool(policy.get("requires_agent_id"))
+
+
+def resolve_write_route_category(method: str, raw_path: str) -> str | None:
+    """Resolve the frozen T582 write-route category for a request, if any."""
+    if method != "POST":
+        return None
+
+    parsed = urlparse(raw_path)
+    path = normalize_path(parsed.path)
+    if path == "/v1/markets":
+        return MARKET_ADMIN_WRITE_CATEGORY
+
+    parts = [part for part in path.split("/") if part]
+    if len(parts) < 4 or parts[:2] != ["v1", "markets"]:
+        return None
+
+    if len(parts) == 4 and parts[3] == "resolve":
+        return MARKET_ADMIN_WRITE_CATEGORY
+    if len(parts) == 5 and parts[3:] in (["orders", "probability-edit"], ["orders", "event-trade"]):
+        return TRADE_WRITE_CATEGORY
+    return None
+
+
+def _raise_invalid_agent_id(category: str, *, reason: str | None = None) -> None:
+    """Raise the stable invalid-agent-id error shape for protected write routes."""
+    details: dict[str, Any] = {
+        "header": AGENT_ID_HEADER,
+        "category": category,
+    }
+    if reason is not None:
+        details["reason"] = reason
+    raise ApiError(401, "invalid_agent_id", "Invalid Bayes agent id header", details)
+
+
+def resolve_write_request_agent(method: str, raw_path: str, headers: Any) -> WriteRequestAgentContext | None:
+    """Resolve and validate the agent identity for the frozen protected write surface."""
+    category = resolve_write_route_category(method, raw_path)
+    if category is None:
+        return None
+
+    policy = WRITE_ROUTE_POLICIES[category]
+    require_agent_id = write_policy_requires_agent_id(policy)
+    raw_values = request_agent_id_values(headers)
+    if not raw_values:
+        enforce_agent_id("", category=category)
+        return WriteRequestAgentContext(category=category, policy=policy, agent_id="")
+
+    if len(raw_values) > 1:
+        if require_agent_id:
+            _raise_invalid_agent_id(category, reason="multiple_values")
+        return WriteRequestAgentContext(category=category, policy=policy, agent_id="")
+
+    raw_agent_id = raw_values[0]
+    agent_id = raw_agent_id.strip()
+    if not agent_id:
+        if require_agent_id:
+            raise ApiError(
+                401,
+                "blank_agent_id",
+                "Blank Bayes agent id header",
+                {"header": AGENT_ID_HEADER, "category": category},
+            )
+        return WriteRequestAgentContext(category=category, policy=policy, agent_id="")
+
+    if "," in raw_agent_id or not AGENT_ID_TOKEN_RE.fullmatch(agent_id):
+        if require_agent_id:
+            reason = "multiple_values" if "," in raw_agent_id else "invalid_format"
+            _raise_invalid_agent_id(category, reason=reason)
+        return WriteRequestAgentContext(category=category, policy=policy, agent_id="")
+
+    return WriteRequestAgentContext(category=category, policy=policy, agent_id=agent_id)
 
 
 def enforce_rate_limit(agent_id: str) -> None:
@@ -2895,13 +3007,12 @@ class BayesHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _enforce_write_controls(self, method: str) -> str:
-        if method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        write_request = resolve_write_request_agent(method, self.path, self.headers)
+        if write_request is None:
             return ""
 
-        agent_id = request_agent_id(self.headers)
-        enforce_agent_id(agent_id)
-        enforce_rate_limit(agent_id)
-        return agent_id
+        enforce_rate_limit(write_request.agent_id)
+        return write_request.agent_id
 
     def _read_json_body(self) -> dict[str, Any] | None:
         try:

@@ -10,6 +10,7 @@ import threading
 import time
 import unittest
 from copy import deepcopy
+from email.message import Message
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 from unittest.mock import patch
@@ -4744,6 +4745,22 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
             headers=headers,
         )
 
+    def market_resolution_with_headers(
+        self,
+        *,
+        market_id: str = "m1",
+        account_id: str = "ops_http_auth",
+        outcome_id: str = "yes",
+        agent_id: str | None = None,
+    ):
+        headers = {} if agent_id is None else {server.AGENT_ID_HEADER: agent_id}
+        return self.request_with_headers(
+            "POST",
+            f"/v1/markets/{market_id}/resolve",
+            build_market_resolution_body(account_id, outcome_id),
+            headers=headers,
+        )
+
     def assert_rate_limit_headers(self, headers: dict[str, str], *, limit: int, remaining: int) -> None:
         self.assertEqual(headers.get("X-RateLimit-Limit"), str(limit))
         self.assertEqual(headers.get("X-RateLimit-Remaining"), str(remaining))
@@ -4759,6 +4776,24 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         self.assertNotIn("X-RateLimit-Reset", headers)
         self.assertNotIn("X-RateLimit-Policy", headers)
         self.assertNotIn("Retry-After", headers)
+
+    def assert_agent_id_error(
+        self,
+        status: int,
+        payload: dict[str, object],
+        *,
+        code: str,
+        category: str,
+        reason: str | None = None,
+    ) -> None:
+        self.assertEqual(status, 401)
+        self.assertEqual(payload["error"]["code"], code)
+        self.assertEqual(payload["error"]["details"]["header"], server.AGENT_ID_HEADER)
+        self.assertEqual(payload["error"]["details"]["category"], category)
+        if reason is None:
+            self.assertNotIn("reason", payload["error"]["details"])
+        else:
+            self.assertEqual(payload["error"]["details"]["reason"], reason)
 
     def test_probability_edit_http_allows_missing_agent_id_by_default(self):
         server.RATE_LIMIT_PER_MIN = 1
@@ -4866,6 +4901,40 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         self.assertEqual(payload["error"]["details"]["header"], server.AGENT_ID_HEADER)
         self.assert_rate_limit_headers_absent(response_headers)
 
+    def test_probability_edit_http_rejects_blank_agent_id_when_required(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+        before_state = snapshot_domain_state()
+
+        status, payload, response_headers = self.probability_edit_with_headers(
+            0.8,
+            account_id="acct_http_auth_blank",
+            agent_id="   ",
+        )
+
+        self.assert_agent_id_error(status, payload, code="blank_agent_id", category=server.TRADE_WRITE_CATEGORY)
+        self.assert_rate_limit_headers_absent(response_headers)
+        assert_domain_state_unchanged(self, before_state)
+
+    def test_probability_edit_http_rejects_malformed_agent_id_when_required(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+        before_state = snapshot_domain_state()
+
+        status, payload, response_headers = self.probability_edit_with_headers(
+            0.8,
+            account_id="acct_http_auth_invalid",
+            agent_id="agent invalid",
+        )
+
+        self.assert_agent_id_error(
+            status,
+            payload,
+            code="invalid_agent_id",
+            category=server.TRADE_WRITE_CATEGORY,
+            reason="invalid_format",
+        )
+        self.assert_rate_limit_headers_absent(response_headers)
+        assert_domain_state_unchanged(self, before_state)
+
     def test_probability_edit_http_accepts_agent_id_when_enabled(self):
         server.AUTH_REQUIRE_AGENT_ID = True
         bad_json_status, bad_json_payload, _ = self.request_raw(
@@ -4884,6 +4953,56 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(payload["result"]["status"], "accepted")
         self.assertEqual(len(server.ORDERS), 1)
+
+    def test_market_resolve_http_requires_valid_agent_id_when_enabled(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+
+        missing_status, missing_payload, missing_headers = self.market_resolution_with_headers(
+            account_id="ops_http_auth_missing",
+        )
+        blank_status, blank_payload, blank_headers = self.market_resolution_with_headers(
+            account_id="ops_http_auth_blank",
+            agent_id="   ",
+        )
+        invalid_status, invalid_payload, invalid_headers = self.market_resolution_with_headers(
+            account_id="ops_http_auth_invalid",
+            agent_id="ops admin",
+        )
+        valid_status, valid_payload, valid_headers = self.market_resolution_with_headers(
+            market_id="m2",
+            account_id="ops_http_auth_valid",
+            outcome_id="delayed",
+            agent_id="agent-admin-valid",
+        )
+
+        self.assert_agent_id_error(
+            missing_status,
+            missing_payload,
+            code="missing_agent_id",
+            category=server.MARKET_ADMIN_WRITE_CATEGORY,
+        )
+        self.assert_rate_limit_headers_absent(missing_headers)
+        self.assert_agent_id_error(
+            blank_status,
+            blank_payload,
+            code="blank_agent_id",
+            category=server.MARKET_ADMIN_WRITE_CATEGORY,
+        )
+        self.assert_rate_limit_headers_absent(blank_headers)
+        self.assert_agent_id_error(
+            invalid_status,
+            invalid_payload,
+            code="invalid_agent_id",
+            category=server.MARKET_ADMIN_WRITE_CATEGORY,
+            reason="invalid_format",
+        )
+        self.assert_rate_limit_headers_absent(invalid_headers)
+        self.assertEqual(valid_status, 201)
+        self.assertEqual(valid_payload["market"]["id"], "m2")
+        self.assertEqual(valid_payload["market"]["resolution"], "delayed")
+        self.assertEqual(valid_payload["result"]["status"], "accepted")
+        self.assert_rate_limit_headers_absent(valid_headers)
+        self.assertEqual(server.MARKETS["m1"]["status"], "active")
 
     def test_probability_edit_http_emits_retry_after_and_quota_headers_on_429(self):
         server.AUTH_REQUIRE_AGENT_ID = True
@@ -4992,6 +5111,36 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         self.assertEqual(authorized_status, 201)
         self.assertEqual(authorized_payload["market"]["status"], "resolved")
         self.assertEqual(authorized_payload["market"]["resolution"], "yes")
+
+    def test_resolve_write_request_agent_rejects_duplicate_header_lines_when_required(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+        headers = Message()
+        headers.add_header(server.AGENT_ID_HEADER, "agent-dup-a")
+        headers.add_header(server.AGENT_ID_HEADER, "agent-dup-b")
+
+        with self.assertRaises(server.ApiError) as raised:
+            server.resolve_write_request_agent("POST", "/v1/markets/m1/orders/probability-edit", headers)
+
+        error = raised.exception
+        self.assertEqual(error.status, 401)
+        self.assertEqual(error.code, "invalid_agent_id")
+        self.assertEqual(error.details["header"], server.AGENT_ID_HEADER)
+        self.assertEqual(error.details["category"], server.TRADE_WRITE_CATEGORY)
+        self.assertEqual(error.details["reason"], "multiple_values")
+
+    def test_unsupported_post_route_stays_router_not_found_when_auth_enabled(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+
+        status, payload, response_headers = self.request_with_headers(
+            "POST",
+            "/v1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_http_legacy", "m1", "yes", 0.8),
+        )
+
+        self.assertEqual(status, 404)
+        self.assertEqual(payload["error"]["code"], "not_found")
+        self.assertEqual(payload["error"]["details"]["path"], "/v1/orders/probability-edit")
+        self.assert_rate_limit_headers_absent(response_headers)
 
 
 class BayesMarketApiIntegrationTests(unittest.TestCase):
