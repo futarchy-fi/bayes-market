@@ -434,11 +434,448 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["service"], "bayes-market")
         self.assertEqual(payload["status"], "ok")
         self.assertIn("routes", payload)
-        self.assertEqual(payload["routes"]["accounts"], ["/v1/accounts/{id}/risk"])
+        self.assertEqual(
+            payload["routes"]["accounts"],
+            ["/v1/accounts/{id}/risk", "/v1/accounts/{id}/pnl"],
+        )
+        self.assertIn("GET /v1/markets/{id}/analytics", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/events", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/engine-stats", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/resolve", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/orders/event-trade", payload["routes"]["orders"])
+
+    def test_market_analytics_returns_multi_outcome_price_series_and_excludes_contextual_edits(self):
+        unconditional_body = build_unconditional_probability_edit_body("acct_chart", "m2", "yes", 0.4)
+        contextual_body = build_unconditional_probability_edit_body("acct_context", "m2", "delayed", 0.2)
+        contextual_body["context"] = [{"variableId": server.MARKETS["m1"]["variableId"], "outcomeId": "yes"}]
+
+        unconditional_payload, unconditional_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/probability-edit",
+            unconditional_body,
+        )
+        contextual_payload, contextual_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/probability-edit",
+            contextual_body,
+        )
+        trade_payload, trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body("acct_trade", "m2", "yes", size=7.0),
+        )
+        analytics_payload, analytics_status = server.route_request("GET", "/v1/markets/m2/analytics")
+
+        self.assertEqual(unconditional_status, 201)
+        self.assertEqual(contextual_status, 201)
+        self.assertEqual(trade_status, 201)
+        self.assertEqual(analytics_status, 200)
+        self.assertEqual(analytics_payload["marketId"], "m2")
+        self.assertEqual(analytics_payload["summary"]["totalTrades"], 3)
+        self.assertEqual(analytics_payload["summary"]["uniqueTraders"], 3)
+        self.assertEqual(analytics_payload["summary"]["bucketInterval"], "day")
+        self.assertEqual(
+            analytics_payload["summary"]["totalVolume"],
+            server.round_risk_value(
+                float(unconditional_payload["order"]["impactScore"])
+                + float(contextual_payload["order"]["impactScore"])
+                + float(trade_payload["order"]["notional"])
+            ),
+        )
+        self.assertEqual(len(analytics_payload["volumeBuckets"]), 1)
+        self.assertEqual(analytics_payload["volumeBuckets"][0]["tradeCount"], 3)
+        self.assertEqual(
+            analytics_payload["volumeBuckets"][0]["volume"],
+            analytics_payload["summary"]["totalVolume"],
+        )
+
+        series_by_outcome = {
+            series["outcomeId"]: series
+            for series in analytics_payload["priceSeries"]
+        }
+        self.assertEqual(set(series_by_outcome), {"yes", "no", "delayed"})
+        self.assertEqual(
+            [point["probability"] for point in series_by_outcome["yes"]["points"]],
+            [0.25, unconditional_payload["order"]["newMarginals"]["yes"]],
+        )
+        self.assertEqual(
+            [point["probability"] for point in series_by_outcome["no"]["points"]],
+            [0.6, unconditional_payload["order"]["newMarginals"]["no"]],
+        )
+        self.assertEqual(
+            [point["probability"] for point in series_by_outcome["delayed"]["points"]],
+            [0.15, unconditional_payload["order"]["newMarginals"]["delayed"]],
+        )
+        emitted_at_points = {
+            point["emittedAt"]
+            for series in analytics_payload["priceSeries"]
+            for point in series["points"]
+        }
+        self.assertNotIn(contextual_payload["result"]["emittedAt"], emitted_at_points)
+        self.assertNotIn(trade_payload["result"]["emittedAt"], emitted_at_points)
+
+    def test_market_analytics_buckets_mixed_activity_by_hour_and_day(self):
+        probability_payload, probability_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_prob", "m1", "yes", 0.8),
+        )
+        first_trade_payload, first_trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_buy", "m1", "yes", size=5.0, side="buy"),
+        )
+        second_trade_payload, second_trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_sell", "m1", "yes", size=2.0, side="sell"),
+        )
+
+        server.EVENTS[probability_payload["result"]["eventId"]]["emittedAt"] = "2026-04-08T10:15:00Z"
+        server.EVENTS[first_trade_payload["result"]["eventId"]]["emittedAt"] = "2026-04-08T10:45:00Z"
+        server.EVENTS[second_trade_payload["result"]["eventId"]]["emittedAt"] = "2026-04-09T01:10:00Z"
+
+        hourly_payload, hourly_status = server.route_request("GET", "/v1/markets/m1/analytics?interval=hour")
+        daily_payload, daily_status = server.route_request("GET", "/v1/markets/m1/analytics?interval=day")
+
+        self.assertEqual(probability_status, 201)
+        self.assertEqual(first_trade_status, 201)
+        self.assertEqual(second_trade_status, 201)
+        self.assertEqual(hourly_status, 200)
+        self.assertEqual(daily_status, 200)
+        self.assertEqual(hourly_payload["summary"]["bucketInterval"], "hour")
+        self.assertEqual(daily_payload["summary"]["bucketInterval"], "day")
+        self.assertEqual(hourly_payload["summary"]["lastUpdated"], "2026-04-09T01:10:00Z")
+        self.assertEqual(daily_payload["summary"]["lastUpdated"], "2026-04-09T01:10:00Z")
+
+        expected_first_bucket_volume = server.round_risk_value(
+            float(probability_payload["order"]["impactScore"]) + float(first_trade_payload["order"]["notional"])
+        )
+        expected_second_bucket_volume = server.round_risk_value(float(second_trade_payload["order"]["notional"]))
+        self.assertEqual(
+            hourly_payload["volumeBuckets"],
+            [
+                {
+                    "bucketStart": "2026-04-08T10:00:00Z",
+                    "bucketEnd": "2026-04-08T11:00:00Z",
+                    "tradeCount": 2,
+                    "volume": expected_first_bucket_volume,
+                },
+                {
+                    "bucketStart": "2026-04-09T01:00:00Z",
+                    "bucketEnd": "2026-04-09T02:00:00Z",
+                    "tradeCount": 1,
+                    "volume": expected_second_bucket_volume,
+                },
+            ],
+        )
+        self.assertEqual(
+            daily_payload["volumeBuckets"],
+            [
+                {
+                    "bucketStart": "2026-04-08T00:00:00Z",
+                    "bucketEnd": "2026-04-09T00:00:00Z",
+                    "tradeCount": 2,
+                    "volume": expected_first_bucket_volume,
+                },
+                {
+                    "bucketStart": "2026-04-09T00:00:00Z",
+                    "bucketEnd": "2026-04-10T00:00:00Z",
+                    "tradeCount": 1,
+                    "volume": expected_second_bucket_volume,
+                },
+            ],
+        )
+
+    def test_market_analytics_ranks_traders_deterministically_on_ties(self):
+        alpha_payload, alpha_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body("acct_alpha", "m2", "yes", size=4.0),
+        )
+        zeta_payload, zeta_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body("acct_zeta", "m2", "yes", size=4.0),
+        )
+        beta_payload, beta_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body("acct_beta", "m2", "yes", size=4.0),
+        )
+
+        shared_timestamp = "2026-04-08T09:00:00Z"
+        server.EVENTS[alpha_payload["result"]["eventId"]]["emittedAt"] = shared_timestamp
+        server.EVENTS[zeta_payload["result"]["eventId"]]["emittedAt"] = shared_timestamp
+        server.EVENTS[beta_payload["result"]["eventId"]]["emittedAt"] = "2026-04-08T10:00:00Z"
+
+        analytics_payload, analytics_status = server.route_request("GET", "/v1/markets/m2/analytics")
+
+        self.assertEqual(alpha_status, 201)
+        self.assertEqual(zeta_status, 201)
+        self.assertEqual(beta_status, 201)
+        self.assertEqual(analytics_status, 200)
+        self.assertEqual(
+            [row["accountId"] for row in analytics_payload["topTraders"]],
+            ["acct_beta", "acct_alpha", "acct_zeta"],
+        )
+        self.assertEqual(
+            {row["volume"] for row in analytics_payload["topTraders"]},
+            {alpha_payload["order"]["notional"]},
+        )
+
+    def test_market_analytics_rejects_invalid_interval_query(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/markets/m1/analytics?interval=week")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_query")
+        self.assertEqual(error.details["parameter"], "interval")
+        self.assertEqual(error.details["received"], "week")
+        self.assertEqual(error.details["allowed"], ["day", "hour"])
+
+    def test_market_analytics_requires_known_market(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/markets/missing/analytics")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 404)
+        self.assertEqual(error.code, "market_not_found")
+        self.assertEqual(error.details["market_id"], "missing")
+
+    def test_market_analytics_route_is_method_not_allowed_for_post(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", "/v1/markets/m1/analytics", {})
+
+        error = ctx.exception
+        self.assertEqual(error.status, 405)
+        self.assertEqual(error.code, "method_not_allowed")
+        self.assertEqual(error.details["method"], "POST")
+        self.assertEqual(error.details["path"], "/v1/markets/m1/analytics")
+
+    def test_account_pnl_replays_resolved_probability_edit_exposure_after_risk_settlement(self):
+        account_id = "acct_resolved_pnl"
+        edit_payload, edit_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
+        )
+        resolve_payload, resolve_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_pnl", "yes"),
+        )
+        pnl_payload, pnl_status = server.route_request("GET", f"/v1/accounts/{account_id}/pnl")
+
+        order = edit_payload["order"]
+        score_by_outcome = server._round_score_by_outcome(
+            server.lmsr.lmsr_score_delta(
+                order["previousMarginals"],
+                order["newMarginals"],
+                float(server.MARKETS["m1"]["liquidity"]),
+            )
+        )
+        expected_marked_value = server.round_risk_value(float(score_by_outcome["yes"]))
+        expected_realized_pnl = server.round_risk_value(expected_marked_value - float(order["impactScore"]))
+
+        self.assertEqual(edit_status, 201)
+        self.assertEqual(resolve_status, 201)
+        self.assertEqual(pnl_status, 200)
+        self.assertEqual(server.ACCOUNT_RISK[account_id]["markets"], {})
+        self.assertEqual(server.ACCOUNT_RISK[account_id]["lmsrState"]["slices"], {})
+        self.assertEqual(
+            pnl_payload["account"]["pnl"]["positions"],
+            [
+                {
+                    "marketId": "m1",
+                    "marketTitle": server.MARKETS["m1"]["title"],
+                    "marketStatus": "resolved",
+                    "realizedPnl": expected_realized_pnl,
+                    "unrealizedPnl": 0.0,
+                    "costBasis": order["impactScore"],
+                    "markedValue": expected_marked_value,
+                }
+            ],
+        )
+        self.assertEqual(
+            pnl_payload["account"]["pnl"]["totals"],
+            {
+                "costBasis": order["impactScore"],
+                "markedValue": expected_marked_value,
+                "realizedPnl": expected_realized_pnl,
+                "unrealizedPnl": 0.0,
+                "netPnl": expected_realized_pnl,
+            },
+        )
+        self.assertEqual(pnl_payload["account"]["pnl"]["updatedAt"], resolve_payload["result"]["emittedAt"])
+
+    def test_account_pnl_marks_contextual_probability_edits_against_current_conditional_marginals(self):
+        account_id = "acct_context_pnl"
+        context = [{"variableId": server.MARKETS["m2"]["variableId"], "outcomeId": "yes"}]
+        body = build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8)
+        body["context"] = deepcopy(context)
+
+        edit_payload, edit_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            body,
+        )
+        pnl_payload, pnl_status = server.route_request("GET", f"/v1/accounts/{account_id}/pnl")
+
+        order = edit_payload["order"]
+        context_key = server.context_state_key(context)
+        valuation_distribution = server.CONDITIONAL_MARGINALS["m1"][context_key]
+        score_by_outcome = server._round_score_by_outcome(
+            server.lmsr.lmsr_score_delta(
+                order["previousMarginals"],
+                order["newMarginals"],
+                float(server.MARKETS["m1"]["liquidity"]),
+            )
+        )
+        expected_marked_value = server.round_risk_value(
+            sum(float(valuation_distribution[outcome_id]) * float(score) for outcome_id, score in score_by_outcome.items())
+        )
+        expected_unrealized_pnl = server.round_risk_value(expected_marked_value - float(order["impactScore"]))
+
+        self.assertEqual(edit_status, 201)
+        self.assertEqual(pnl_status, 200)
+        self.assertEqual(
+            pnl_payload["account"]["pnl"]["positions"],
+            [
+                {
+                    "marketId": "m1",
+                    "marketTitle": server.MARKETS["m1"]["title"],
+                    "marketStatus": "active",
+                    "realizedPnl": 0.0,
+                    "unrealizedPnl": expected_unrealized_pnl,
+                    "costBasis": order["impactScore"],
+                    "markedValue": expected_marked_value,
+                }
+            ],
+        )
+
+    def test_account_pnl_falls_back_to_unconditional_marginals_when_context_slice_missing(self):
+        account_id = "acct_context_fallback"
+        context = [{"variableId": server.MARKETS["m2"]["variableId"], "outcomeId": "yes"}]
+        body = build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8)
+        body["context"] = deepcopy(context)
+
+        edit_payload, edit_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            body,
+        )
+        context_key = server.context_state_key(context)
+        del server.CONDITIONAL_MARGINALS["m1"][context_key]
+
+        pnl_payload, pnl_status = server.route_request("GET", f"/v1/accounts/{account_id}/pnl")
+
+        order = edit_payload["order"]
+        valuation_distribution = deepcopy(server.MARKETS["m1"]["marginals"])
+        score_by_outcome = server._round_score_by_outcome(
+            server.lmsr.lmsr_score_delta(
+                order["previousMarginals"],
+                order["newMarginals"],
+                float(server.MARKETS["m1"]["liquidity"]),
+            )
+        )
+        expected_marked_value = server.round_risk_value(
+            sum(float(valuation_distribution[outcome_id]) * float(score) for outcome_id, score in score_by_outcome.items())
+        )
+        expected_unrealized_pnl = server.round_risk_value(expected_marked_value - float(order["impactScore"]))
+
+        self.assertEqual(edit_status, 201)
+        self.assertEqual(pnl_status, 200)
+        self.assertEqual(pnl_payload["account"]["pnl"]["positions"][0]["markedValue"], expected_marked_value)
+        self.assertEqual(pnl_payload["account"]["pnl"]["positions"][0]["unrealizedPnl"], expected_unrealized_pnl)
+
+    def test_account_pnl_marks_event_trade_sells_with_signed_cost_basis_and_payout(self):
+        account_id = "acct_short_pnl"
+        trade_payload, trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=3.0, side="sell"),
+        )
+        resolve_payload, resolve_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_short", "no"),
+        )
+        pnl_payload, pnl_status = server.route_request("GET", f"/v1/accounts/{account_id}/pnl")
+
+        order = trade_payload["order"]
+        expected_cost_basis = server.round_risk_value(-float(order["size"]) * float(order["price"]))
+        expected_marked_value = 0.0
+        expected_realized_pnl = server.round_risk_value(expected_marked_value - expected_cost_basis)
+
+        self.assertEqual(trade_status, 201)
+        self.assertEqual(resolve_status, 201)
+        self.assertEqual(pnl_status, 200)
+        self.assertEqual(
+            pnl_payload["account"]["pnl"]["positions"],
+            [
+                {
+                    "marketId": "m1",
+                    "marketTitle": server.MARKETS["m1"]["title"],
+                    "marketStatus": "resolved",
+                    "realizedPnl": expected_realized_pnl,
+                    "unrealizedPnl": 0.0,
+                    "costBasis": expected_cost_basis,
+                    "markedValue": expected_marked_value,
+                }
+            ],
+        )
+        self.assertEqual(pnl_payload["account"]["pnl"]["updatedAt"], resolve_payload["result"]["emittedAt"])
+
+    def test_account_pnl_updated_at_tracks_market_valuation_changes_from_other_accounts(self):
+        account_id = "acct_mark_to_market"
+        own_trade_payload, own_trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=5.0, side="buy"),
+        )
+        before_payload, before_status = server.route_request("GET", f"/v1/accounts/{account_id}/pnl")
+        other_edit_payload, other_edit_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_other", "m1", "yes", 0.8),
+        )
+        after_payload, after_status = server.route_request("GET", f"/v1/accounts/{account_id}/pnl")
+
+        self.assertEqual(own_trade_status, 201)
+        self.assertEqual(before_status, 200)
+        self.assertEqual(other_edit_status, 201)
+        self.assertEqual(after_status, 200)
+        self.assertEqual(before_payload["account"]["pnl"]["updatedAt"], own_trade_payload["result"]["emittedAt"])
+        self.assertEqual(after_payload["account"]["pnl"]["updatedAt"], other_edit_payload["result"]["emittedAt"])
+        self.assertGreater(
+            after_payload["account"]["pnl"]["positions"][0]["markedValue"],
+            before_payload["account"]["pnl"]["positions"][0]["markedValue"],
+        )
+        self.assertGreater(
+            after_payload["account"]["pnl"]["positions"][0]["unrealizedPnl"],
+            before_payload["account"]["pnl"]["positions"][0]["unrealizedPnl"],
+        )
+
+    def test_account_pnl_requires_known_account(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/accounts/acct_missing/pnl")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 404)
+        self.assertEqual(error.code, "account_not_found")
+        self.assertEqual(error.details["accountId"], "acct_missing")
+
+    def test_account_pnl_route_is_method_not_allowed_for_post(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", "/v1/accounts/acct_test/pnl", {})
+
+        error = ctx.exception
+        self.assertEqual(error.status, 405)
+        self.assertEqual(error.code, "method_not_allowed")
+        self.assertEqual(error.details["method"], "POST")
+        self.assertEqual(error.details["path"], "/v1/accounts/acct_test/pnl")
 
     def test_list_markets_returns_summary_shape(self):
         payload, status = server.route_request("GET", "/v1/markets")

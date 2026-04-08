@@ -15,7 +15,7 @@ import threading
 import time
 from collections import deque
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path, PurePosixPath
 from typing import Any, NamedTuple
@@ -111,6 +111,7 @@ INITIAL_MARKETS: dict[str, dict[str, Any]] = {
 }
 
 ALLOWED_MARKET_STATUSES = frozenset({"active", "resolved", "closed", "draft"})
+ALLOWED_ANALYTICS_INTERVALS = frozenset({"hour", "day"})
 MARKET_SUMMARY_FIELDS = (
     "id",
     "title",
@@ -515,6 +516,7 @@ def service_index_payload() -> dict[str, Any]:
                 "GET /v1/markets",
                 "POST /v1/markets",
                 "/v1/markets/{id}",
+                "GET /v1/markets/{id}/analytics",
                 "/v1/markets/{id}/events",
                 "/v1/markets/{id}/engine-stats",
                 "POST /v1/markets/{id}/resolve",
@@ -523,7 +525,10 @@ def service_index_payload() -> dict[str, Any]:
                 "POST /v1/markets/{id}/orders/probability-edit",
                 "POST /v1/markets/{id}/orders/event-trade",
             ],
-            "accounts": ["/v1/accounts/{id}/risk"],
+            "accounts": [
+                "/v1/accounts/{id}/risk",
+                "/v1/accounts/{id}/pnl",
+            ],
         },
         "meta": make_meta(),
     }
@@ -1089,6 +1094,619 @@ def get_account_risk(account_id: str) -> tuple[dict[str, Any], int]:
         },
         "meta": make_meta(),
     }, 200
+
+
+def parse_iso_timestamp(timestamp: str) -> datetime:
+    """Parse an ISO-8601 timestamp into a UTC datetime."""
+    normalized = str(timestamp).replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def format_iso_timestamp(timestamp: datetime) -> str:
+    """Serialize a UTC datetime using the backend's Z suffix convention."""
+    return timestamp.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def parse_analytics_interval_query(query: dict[str, list[str]]) -> str:
+    """Parse the optional analytics bucket interval query parameter."""
+    values = query.get("interval", [])
+    if len(values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "interval must be provided at most once",
+            {"parameter": "interval", "received": values},
+        )
+
+    if not values:
+        return "day"
+
+    interval = values[0]
+    if interval not in ALLOWED_ANALYTICS_INTERVALS:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "interval must be one of the supported bucket intervals",
+            {
+                "parameter": "interval",
+                "received": interval,
+                "allowed": sorted(ALLOWED_ANALYTICS_INTERVALS),
+            },
+        )
+    return interval
+
+
+def snapshot_market_analytics_state(market_id: str) -> dict[str, Any]:
+    """Snapshot the mutable state needed to project one market analytics response."""
+    with get_market_write_lock(market_id):
+        market = MARKETS.get(market_id)
+        if market is None:
+            raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+        commands_snapshot = COMMANDS.copy()
+        orders_snapshot = ORDERS.copy()
+        with _EVENTS_LOCK:
+            events_snapshot = EVENTS.copy()
+
+        return {
+            "market": deepcopy(market),
+            "commands": {
+                command_id: deepcopy(command)
+                for command_id, command in commands_snapshot.items()
+                if str(command.get("marketId")) == market_id
+            },
+            "orders": [
+                deepcopy(order)
+                for order in orders_snapshot.values()
+                if str(order.get("marketId")) == market_id
+            ],
+            "events": [
+                deepcopy(event)
+                for event in events_snapshot.values()
+                if str(event.get("marketId")) == market_id
+            ],
+        }
+
+
+def normalize_accepted_activity_rows(
+    market_id: str,
+    commands: dict[str, dict[str, Any]],
+    orders: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Join accepted orders to their terminal events for analytics projections."""
+    del market_id
+
+    accepted_events_by_command: dict[str, dict[str, Any]] = {}
+    for event in events:
+        if str(event.get("eventType")) != "CommandAccepted":
+            continue
+        command_id = str(event.get("commandId"))
+        command = commands.get(command_id)
+        if not isinstance(command, dict):
+            continue
+        if str(command.get("commandType")) not in {"ProbabilityEdit", "EventTrade"}:
+            continue
+        accepted_events_by_command[command_id] = event
+
+    activity_rows: list[dict[str, Any]] = []
+    for order in orders:
+        command_id = str(order.get("commandId"))
+        command = commands.get(command_id)
+        event = accepted_events_by_command.get(command_id)
+        if not isinstance(command, dict) or not isinstance(event, dict):
+            continue
+
+        command_type = str(command.get("commandType"))
+        if command_type == "ProbabilityEdit":
+            volume = round_risk_value(float(order.get("impactScore", 0.0)))
+        elif command_type == "EventTrade":
+            volume = round_risk_value(float(order.get("notional", 0.0)))
+        else:
+            continue
+
+        activity_rows.append(
+            {
+                "commandId": command_id,
+                "orderId": str(order.get("id")),
+                "marketId": str(order.get("marketId")),
+                "accountId": str(order.get("accountId")),
+                "commandType": command_type,
+                "submittedAt": str(command.get("submittedAt")),
+                "acceptedAt": str(event.get("emittedAt")),
+                "seq": int(event.get("seq", 0)),
+                "eventId": str(event.get("eventId")),
+                "volume": volume,
+                "order": deepcopy(order),
+                "event": deepcopy(event),
+            }
+        )
+
+    activity_rows.sort(key=lambda row: (int(row["seq"]), str(row["eventId"])))
+    return activity_rows
+
+
+def build_market_price_series(
+    market: dict[str, Any],
+    commands: dict[str, dict[str, Any]],
+    orders: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build the unconditional per-outcome price history for one market."""
+    outcome_ids = [str(outcome["id"]) for outcome in market["outcomes"]]
+    outcome_names = {
+        str(outcome["id"]): str(outcome["name"])
+        for outcome in market["outcomes"]
+    }
+    series_points: dict[str, list[dict[str, Any]]] = {
+        outcome_id: []
+        for outcome_id in outcome_ids
+    }
+
+    accepted_orders_by_command = {
+        str(order["commandId"]): order
+        for order in orders
+    }
+    accepted_events = sorted(
+        (
+            event
+            for event in events
+            if str(event.get("eventType")) == "CommandAccepted"
+        ),
+        key=lambda event: (int(event["seq"]), str(event["eventId"])),
+    )
+
+    has_marginal_history = False
+    for event in accepted_events:
+        command = commands.get(str(event["commandId"]))
+        if not isinstance(command, dict):
+            continue
+
+        command_type = str(command.get("commandType"))
+        if command_type == "ProbabilityEdit":
+            order = accepted_orders_by_command.get(str(command["commandId"]))
+            if not isinstance(order, dict):
+                continue
+            payload = order.get("payload", {})
+            if isinstance(payload, dict) and payload.get("context"):
+                continue
+
+            has_marginal_history = True
+            for outcome_id in outcome_ids:
+                if outcome_id not in order["newMarginals"]:
+                    continue
+                series_points[outcome_id].append(
+                    {
+                        "seq": int(event["seq"]),
+                        "emittedAt": str(event["emittedAt"]),
+                        "probability": round_risk_value(float(order["newMarginals"][outcome_id])),
+                    }
+                )
+            continue
+
+        if command_type == "AdminOp" and command.get("payload", {}).get("kind") == "ResolveMarket":
+            has_marginal_history = True
+            resolution_marginals = build_market_resolution_marginals(
+                market,
+                str(command["payload"]["outcomeId"]),
+            )
+            for outcome_id in outcome_ids:
+                series_points[outcome_id].append(
+                    {
+                        "seq": int(event["seq"]),
+                        "emittedAt": str(event["emittedAt"]),
+                        "probability": round_risk_value(float(resolution_marginals[outcome_id])),
+                    }
+                )
+
+    baseline_market = INITIAL_MARKETS.get(str(market["id"]))
+    if baseline_market is None and not has_marginal_history:
+        baseline_market = market
+
+    if isinstance(baseline_market, dict):
+        baseline_emitted_at = str(baseline_market["created_at"])
+        for outcome_id in outcome_ids:
+            if outcome_id not in baseline_market["marginals"]:
+                continue
+            series_points[outcome_id].insert(
+                0,
+                {
+                    "seq": 0,
+                    "emittedAt": baseline_emitted_at,
+                    "probability": round_risk_value(float(baseline_market["marginals"][outcome_id])),
+                },
+            )
+
+    return [
+        {
+            "outcomeId": outcome_id,
+            "outcomeName": outcome_names[outcome_id],
+            "points": series_points[outcome_id],
+        }
+        for outcome_id in outcome_ids
+    ]
+
+
+def bucket_events_by_interval(activity_rows: list[dict[str, Any]], interval: str) -> list[dict[str, Any]]:
+    """Aggregate accepted activity into sparse UTC time buckets."""
+    buckets: dict[datetime, dict[str, Any]] = {}
+    for row in activity_rows:
+        accepted_at = parse_iso_timestamp(str(row["acceptedAt"]))
+        if interval == "hour":
+            bucket_start = accepted_at.replace(minute=0, second=0, microsecond=0)
+            bucket_end = bucket_start + timedelta(hours=1)
+        else:
+            bucket_start = accepted_at.replace(hour=0, minute=0, second=0, microsecond=0)
+            bucket_end = bucket_start + timedelta(days=1)
+
+        bucket = buckets.get(bucket_start)
+        if bucket is None:
+            bucket = {
+                "bucketStart": format_iso_timestamp(bucket_start),
+                "bucketEnd": format_iso_timestamp(bucket_end),
+                "tradeCount": 0,
+                "volume": 0.0,
+            }
+            buckets[bucket_start] = bucket
+
+        bucket["tradeCount"] += 1
+        bucket["volume"] = round_risk_value(float(bucket["volume"]) + float(row["volume"]))
+
+    return [buckets[key] for key in sorted(buckets)]
+
+
+def rank_traders_by_volume(activity_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rank traders by accepted activity volume with deterministic tie-breaking."""
+    traders: dict[str, dict[str, Any]] = {}
+    for row in activity_rows:
+        account_id = str(row["accountId"])
+        trader = traders.get(account_id)
+        if trader is None:
+            trader = {
+                "accountId": account_id,
+                "tradeCount": 0,
+                "volume": 0.0,
+                "lastActivityAt": str(row["acceptedAt"]),
+            }
+            traders[account_id] = trader
+
+        trader["tradeCount"] += 1
+        trader["volume"] = round_risk_value(float(trader["volume"]) + float(row["volume"]))
+        if str(row["acceptedAt"]) > str(trader["lastActivityAt"]):
+            trader["lastActivityAt"] = str(row["acceptedAt"])
+
+    ranked = sorted(
+        traders.values(),
+        key=lambda trader: (
+            -float(trader["volume"]),
+            -parse_iso_timestamp(str(trader["lastActivityAt"])).timestamp(),
+            str(trader["accountId"]),
+        ),
+    )
+    return [
+        {
+            "accountId": str(trader["accountId"]),
+            "tradeCount": int(trader["tradeCount"]),
+            "volume": round_risk_value(float(trader["volume"])),
+        }
+        for trader in ranked
+    ]
+
+
+def get_market_analytics(
+    market_id: str,
+    query: dict[str, list[str]] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Return the market analytics projection for one market."""
+    normalized_query = query or {}
+    interval = parse_analytics_interval_query(normalized_query)
+    snapshot = snapshot_market_analytics_state(market_id)
+    activity_rows = normalize_accepted_activity_rows(
+        market_id,
+        snapshot["commands"],
+        snapshot["orders"],
+        snapshot["events"],
+    )
+    price_series = build_market_price_series(
+        snapshot["market"],
+        snapshot["commands"],
+        snapshot["orders"],
+        snapshot["events"],
+    )
+
+    accepted_event_times = [
+        str(event["emittedAt"])
+        for event in snapshot["events"]
+        if str(event.get("eventType")) == "CommandAccepted"
+    ]
+    total_volume = round_risk_value(sum(float(row["volume"]) for row in activity_rows))
+
+    return {
+        "marketId": market_id,
+        "summary": {
+            "totalTrades": len(activity_rows),
+            "totalVolume": total_volume,
+            "uniqueTraders": len({str(row["accountId"]) for row in activity_rows}),
+            "bucketInterval": interval,
+            "lastUpdated": max(accepted_event_times) if accepted_event_times else str(snapshot["market"]["created_at"]),
+        },
+        "priceSeries": price_series,
+        "volumeBuckets": bucket_events_by_interval(activity_rows, interval),
+        "topTraders": rank_traders_by_volume(activity_rows),
+        "meta": make_meta(interval=interval),
+    }, 200
+
+
+def snapshot_account_pnl_state(account_id: str) -> dict[str, Any]:
+    """Snapshot the mutable state needed to compute one account's P&L."""
+    orders_snapshot = ORDERS.copy()
+    account_orders = [
+        deepcopy(order)
+        for order in orders_snapshot.values()
+        if str(order.get("accountId")) == account_id
+    ]
+    market_ids = sorted({str(order["marketId"]) for order in account_orders})
+
+    locks = [get_market_write_lock(market_id) for market_id in market_ids]
+    for lock in locks:
+        lock.acquire()
+
+    try:
+        markets = {
+            market_id: deepcopy(MARKETS[market_id])
+            for market_id in market_ids
+            if market_id in MARKETS
+        }
+        conditional_marginals = {
+            market_id: deepcopy(CONDITIONAL_MARGINALS.get(market_id, {}))
+            for market_id in markets
+        }
+        account = deepcopy(ACCOUNT_RISK.get(account_id))
+        with _EVENTS_LOCK:
+            events_snapshot = EVENTS.copy()
+    finally:
+        for lock in reversed(locks):
+            lock.release()
+
+    relevant_market_ids = frozenset(markets)
+    relevant_events = [
+        deepcopy(event)
+        for event in events_snapshot.values()
+        if str(event.get("marketId")) in relevant_market_ids
+    ]
+
+    return {
+        "account": account,
+        "orders": account_orders,
+        "markets": markets,
+        "conditionalMarginals": conditional_marginals,
+        "events": relevant_events,
+    }
+
+
+def valuation_distribution_for_slice(
+    market: dict[str, Any],
+    conditional_marginals: dict[str, dict[str, float]],
+    context_key: str,
+) -> dict[str, float]:
+    """Resolve the current valuation distribution for one probability-edit slice."""
+    if str(market.get("status")) == "resolved" and isinstance(market.get("resolution"), str):
+        return build_market_resolution_marginals(market, str(market["resolution"]))
+
+    if context_key:
+        conditional = conditional_marginals.get(context_key)
+        if isinstance(conditional, dict):
+            return deepcopy(conditional)
+
+    return deepcopy(market["marginals"])
+
+
+def ensure_account_pnl_position(
+    positions: dict[str, dict[str, Any]],
+    market: dict[str, Any],
+) -> dict[str, Any]:
+    """Ensure the public P&L row exists for one market."""
+    market_id = str(market["id"])
+    position = positions.get(market_id)
+    if position is None:
+        position = {
+            "marketId": market_id,
+            "marketTitle": str(market["title"]),
+            "marketStatus": str(market["status"]),
+            "realizedPnl": 0.0,
+            "unrealizedPnl": 0.0,
+            "costBasis": 0.0,
+            "markedValue": 0.0,
+        }
+        positions[market_id] = position
+    else:
+        position["marketTitle"] = str(market["title"])
+        position["marketStatus"] = str(market["status"])
+    return position
+
+
+def accumulate_account_pnl_position(
+    position: dict[str, Any],
+    *,
+    cost_basis: float,
+    marked_value: float,
+    realized_pnl: float,
+    unrealized_pnl: float,
+) -> None:
+    """Accumulate one valuation leg into a market-level P&L row."""
+    position["costBasis"] = round_risk_value(float(position["costBasis"]) + float(cost_basis))
+    position["markedValue"] = round_risk_value(float(position["markedValue"]) + float(marked_value))
+    position["realizedPnl"] = round_risk_value(float(position["realizedPnl"]) + float(realized_pnl))
+    position["unrealizedPnl"] = round_risk_value(float(position["unrealizedPnl"]) + float(unrealized_pnl))
+
+
+def compute_account_pnl(account_id: str) -> dict[str, Any]:
+    """Compute per-market and total account P&L by replaying accepted orders."""
+    snapshot = snapshot_account_pnl_state(account_id)
+    account = snapshot["account"]
+    account_orders = snapshot["orders"]
+
+    if not account_orders and account is None:
+        raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
+
+    positions: dict[str, dict[str, Any]] = {}
+    probability_slices: dict[str, dict[str, Any]] = {}
+    probability_orders = sorted(
+        (
+            order
+            for order in account_orders
+            if str(order.get("type")) == "ProbabilityEdit"
+        ),
+        key=lambda order: (str(order["filledAt"]), str(order["id"])),
+    )
+    for order in probability_orders:
+        market_id = str(order["marketId"])
+        market = snapshot["markets"].get(market_id)
+        if not isinstance(market, dict):
+            continue
+
+        payload = order.get("payload", {})
+        context = deepcopy(payload.get("context", [])) if isinstance(payload, dict) else []
+        context_key = context_state_key(context)
+        slice_key = account_lmsr_slice_key(market_id, context)
+        slice_state = probability_slices.get(slice_key)
+        if slice_state is None:
+            slice_state = {
+                "marketId": market_id,
+                "contextKey": context_key,
+                "scoreByOutcome": {},
+                "costBasis": 0.0,
+            }
+            probability_slices[slice_key] = slice_state
+
+        score_delta = _round_score_by_outcome(
+            lmsr.lmsr_score_delta(
+                order["previousMarginals"],
+                order["newMarginals"],
+                float(market["liquidity"]),
+            )
+        )
+        slice_state["scoreByOutcome"] = _accumulate_score_by_outcome(slice_state["scoreByOutcome"], score_delta)
+        slice_state["costBasis"] = round_risk_value(float(slice_state["costBasis"]) + float(order["impactScore"]))
+
+    for slice_state in probability_slices.values():
+        market_id = str(slice_state["marketId"])
+        market = snapshot["markets"].get(market_id)
+        if not isinstance(market, dict):
+            continue
+
+        valuation_distribution = valuation_distribution_for_slice(
+            market,
+            snapshot["conditionalMarginals"].get(market_id, {}),
+            str(slice_state["contextKey"]),
+        )
+        marked_value = round_risk_value(
+            sum(
+                float(valuation_distribution.get(outcome_id, 0.0)) * float(score)
+                for outcome_id, score in slice_state["scoreByOutcome"].items()
+            )
+        )
+        cost_basis = round_risk_value(float(slice_state["costBasis"]))
+        net_pnl = round_risk_value(marked_value - cost_basis)
+        position = ensure_account_pnl_position(positions, market)
+        if str(market["status"]) == "resolved":
+            accumulate_account_pnl_position(
+                position,
+                cost_basis=cost_basis,
+                marked_value=marked_value,
+                realized_pnl=net_pnl,
+                unrealized_pnl=0.0,
+            )
+        else:
+            accumulate_account_pnl_position(
+                position,
+                cost_basis=cost_basis,
+                marked_value=marked_value,
+                realized_pnl=0.0,
+                unrealized_pnl=net_pnl,
+            )
+
+    event_trade_orders = sorted(
+        (
+            order
+            for order in account_orders
+            if str(order.get("type")) == "EventTrade"
+        ),
+        key=lambda order: (str(order["filledAt"]), str(order["id"])),
+    )
+    for order in event_trade_orders:
+        market_id = str(order["marketId"])
+        market = snapshot["markets"].get(market_id)
+        if not isinstance(market, dict):
+            continue
+
+        signed_size = float(order["size"]) if str(order["side"]) == "buy" else -float(order["size"])
+        cost_basis = round_risk_value(signed_size * float(order["price"]))
+        if str(market["status"]) == "resolved" and isinstance(market.get("resolution"), str):
+            marked_probability = 1.0 if str(order["targetOutcomeId"]) == str(market["resolution"]) else 0.0
+        else:
+            marked_probability = float(market["marginals"].get(str(order["targetOutcomeId"]), 0.0))
+
+        marked_value = round_risk_value(signed_size * marked_probability)
+        net_pnl = round_risk_value(marked_value - cost_basis)
+        position = ensure_account_pnl_position(positions, market)
+        if str(market["status"]) == "resolved":
+            accumulate_account_pnl_position(
+                position,
+                cost_basis=cost_basis,
+                marked_value=marked_value,
+                realized_pnl=net_pnl,
+                unrealized_pnl=0.0,
+            )
+        else:
+            accumulate_account_pnl_position(
+                position,
+                cost_basis=cost_basis,
+                marked_value=marked_value,
+                realized_pnl=0.0,
+                unrealized_pnl=net_pnl,
+            )
+
+    ordered_positions = [positions[market_id] for market_id in sorted(positions)]
+    totals = {
+        "costBasis": round_risk_value(sum(float(position["costBasis"]) for position in ordered_positions)),
+        "markedValue": round_risk_value(sum(float(position["markedValue"]) for position in ordered_positions)),
+        "realizedPnl": round_risk_value(sum(float(position["realizedPnl"]) for position in ordered_positions)),
+        "unrealizedPnl": round_risk_value(sum(float(position["unrealizedPnl"]) for position in ordered_positions)),
+    }
+    totals["netPnl"] = round_risk_value(float(totals["realizedPnl"]) + float(totals["unrealizedPnl"]))
+
+    updated_at_candidates = [
+        str(order["filledAt"])
+        for order in account_orders
+    ]
+    updated_at_candidates.extend(
+        str(event["emittedAt"])
+        for event in snapshot["events"]
+        if str(event.get("eventType")) == "CommandAccepted"
+    )
+    if isinstance(account, dict) and isinstance(account.get("updatedAt"), str):
+        updated_at_candidates.append(str(account["updatedAt"]))
+
+    return {
+        "account": {
+            "id": account_id,
+            "pnl": {
+                "totals": totals,
+                "positions": ordered_positions,
+                "updatedAt": max(updated_at_candidates) if updated_at_candidates else utc_timestamp(),
+            },
+        },
+        "meta": make_meta(),
+    }
+
+
+def get_account_pnl(account_id: str) -> tuple[dict[str, Any], int]:
+    """Return the replayed P&L projection for one account."""
+    return compute_account_pnl(account_id), 200
 
 
 def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
@@ -2844,7 +3462,7 @@ def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None
         )
 
     parts = [part for part in path.split("/") if part]
-    if len(parts) == 4 and parts[:2] == ["v1", "accounts"] and parts[3] == "risk":
+    if len(parts) == 4 and parts[:2] == ["v1", "accounts"] and parts[3] in {"risk", "pnl"}:
         account_id = parts[2]
         if method != "GET":
             raise ApiError(
@@ -2853,7 +3471,9 @@ def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None
                 f"{method} is not allowed for this resource",
                 {"method": method, "path": path},
             )
-        return get_account_risk(account_id)
+        if parts[3] == "risk":
+            return get_account_risk(account_id)
+        return get_account_pnl(account_id)
 
     if len(parts) >= 3 and parts[:2] == ["v1", "markets"]:
         market_id = parts[2]
@@ -2876,6 +3496,16 @@ def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None
                     {"method": method, "path": path},
                 )
             return get_market_engine_stats(market_id)
+
+        if len(parts) == 4 and parts[3] == "analytics":
+            if method != "GET":
+                raise ApiError(
+                    405,
+                    "method_not_allowed",
+                    f"{method} is not allowed for this resource",
+                    {"method": method, "path": path},
+                )
+            return get_market_analytics(market_id, parse_qs(parsed.query, keep_blank_values=True))
 
         if len(parts) == 4 and parts[3] == "events":
             if method != "GET":
