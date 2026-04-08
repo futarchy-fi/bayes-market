@@ -2247,16 +2247,18 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_probability_edit_rejects_unconditional_min_asset_violation_without_side_effects(self):
         preview_delta, low_min_asset = seed_low_headroom_account("acct_low")
-        payload, status = server.route_request(
-            "POST",
-            "/v1/markets/m1/orders/probability-edit",
-            {
-                "accountId": "acct_low",
-                "variableId": "eth_price_gt_3000_mar15",
-                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
-                "context": [],
-            },
-        )
+        with patch.object(server, "create_probability_edit_order", autospec=True) as create_order_mock:
+            with patch.object(server, "sync_account_risk_state", autospec=True) as sync_risk_mock:
+                payload, status = server.route_request(
+                    "POST",
+                    "/v1/markets/m1/orders/probability-edit",
+                    {
+                        "accountId": "acct_low",
+                        "variableId": "eth_price_gt_3000_mar15",
+                        "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                        "context": [],
+                    },
+                )
 
         self.assertEqual(status, 409)
         self.assertEqual(payload["error"]["code"], "min_asset_violation")
@@ -2284,6 +2286,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             server.ACCOUNT_RISK["acct_low"],
             expected_seeded_account_state("acct_low", low_min_asset),
         )
+        create_order_mock.assert_not_called()
+        sync_risk_mock.assert_not_called()
         self.assertEqual(len(server.COMMANDS), 1)
         self.assertEqual(len(server.EVENTS), 1)
 
