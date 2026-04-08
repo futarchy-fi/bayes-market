@@ -15,6 +15,21 @@ export default function MarketList() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-lg)" }}>
         <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>Markets</h1>
+        <div style={{ display: "flex", gap: "var(--space-sm)", alignItems: "center" }}>
+          <Link
+            to="/markets/new"
+            style={{
+              padding: "6px 14px",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--color-primary)",
+              color: "#fff",
+              fontSize: "0.875rem",
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
+          >
+            + New Market
+          </Link>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -31,6 +46,7 @@ export default function MarketList() {
             <option key={s} value={s}>{s || "All statuses"}</option>
           ))}
         </select>
+        </div>
       </div>
 
       {isLoading && <LoadingPage />}

@@ -398,7 +398,8 @@ def service_index_payload() -> dict[str, Any]:
         "routes": {
             "health": ["/health", "/healthz"],
             "markets": [
-                "/v1/markets",
+                "GET /v1/markets",
+                "POST /v1/markets",
                 "/v1/markets/{id}",
                 "/v1/markets/{id}/events",
                 "/v1/markets/{id}/engine-stats",
@@ -1004,6 +1005,75 @@ def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
         "count": len(summaries),
         "meta": make_meta(filters={"status": status}),
     }, 200
+
+
+def create_market(body: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
+    """Create a new market from a POST payload."""
+    if not body:
+        raise ApiError(400, "invalid_payload", "Request body is required")
+
+    title = body.get("title")
+    description = body.get("description", "")
+    outcomes = body.get("outcomes")
+    expires_at = body.get("expires_at")
+    liquidity = body.get("liquidity", 10000.0)
+
+    if not title or not isinstance(title, str):
+        raise ApiError(400, "invalid_payload", "title is required and must be a string")
+    if not outcomes or not isinstance(outcomes, list) or len(outcomes) < 2:
+        raise ApiError(400, "invalid_payload", "outcomes must be a list with at least 2 entries")
+    for o in outcomes:
+        if not isinstance(o, dict) or "id" not in o or "name" not in o:
+            raise ApiError(400, "invalid_payload", "each outcome must have id and name")
+    if not expires_at or not isinstance(expires_at, str):
+        raise ApiError(400, "invalid_payload", "expires_at is required (ISO 8601 string)")
+
+    # Check for duplicate outcome IDs
+    outcome_ids = [o["id"] for o in outcomes]
+    if len(outcome_ids) != len(set(outcome_ids)):
+        raise ApiError(400, "invalid_payload", "outcome IDs must be unique")
+
+    # Generate market ID
+    market_num = len(MARKETS) + 1
+    market_id = f"m{market_num}"
+    while market_id in MARKETS:
+        market_num += 1
+        market_id = f"m{market_num}"
+
+    # Generate variable ID from title
+    variable_id = title.lower().replace(" ", "_")[:40]
+
+    # Uniform prior
+    uniform_p = round(1.0 / len(outcomes), 6)
+    marginals = {}
+    for i, o in enumerate(outcomes):
+        if i < len(outcomes) - 1:
+            marginals[o["id"]] = uniform_p
+        else:
+            marginals[o["id"]] = round(1.0 - uniform_p * (len(outcomes) - 1), 6)
+
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    market: dict[str, Any] = {
+        "id": market_id,
+        "title": title,
+        "description": description,
+        "variableId": variable_id,
+        "status": "active",
+        "outcomes": [{"id": o["id"], "name": o["name"]} for o in outcomes],
+        "marginals": marginals,
+        "liquidity": float(liquidity),
+        "volume": 0.0,
+        "created_at": now,
+        "expires_at": expires_at,
+    }
+
+    MARKETS[market_id] = market
+    ensure_market_engine_state(market_id)
+
+    return {
+        "market": deepcopy(market),
+        "meta": make_meta(),
+    }, 201
 
 
 def get_market_detail(market_id: str) -> tuple[dict[str, Any], int]:
@@ -2257,14 +2327,16 @@ def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None
         return health_payload(), 200
 
     if path == "/v1/markets":
-        if method != "GET":
-            raise ApiError(
-                405,
-                "method_not_allowed",
-                f"{method} is not allowed for this resource",
-                {"method": method, "path": path},
-            )
-        return list_markets(parse_qs(parsed.query, keep_blank_values=True))
+        if method == "GET":
+            return list_markets(parse_qs(parsed.query, keep_blank_values=True))
+        if method == "POST":
+            return create_market(body)
+        raise ApiError(
+            405,
+            "method_not_allowed",
+            f"{method} is not allowed for this resource",
+            {"method": method, "path": path},
+        )
 
     parts = [part for part in path.split("/") if part]
     if len(parts) == 4 and parts[:2] == ["v1", "accounts"] and parts[3] == "risk":
@@ -2365,6 +2437,22 @@ def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None
     raise ApiError(404, "not_found", "Not found", {"path": path})
 
 
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+MIME_TYPES: dict[str, str] = {
+    ".html": "text/html",
+    ".js": "application/javascript",
+    ".css": "text/css",
+    ".json": "application/json",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
+    ".ttf": "font/ttf",
+}
+
+
 class BayesHandler(BaseHTTPRequestHandler):
     """HTTP handler that exposes the Bayes Market API over JSON."""
 
@@ -2435,9 +2523,47 @@ class BayesHandler(BaseHTTPRequestHandler):
                 extra_headers.update(rate_limit_headers(str(exc.details.get("agentId", ""))))
         self.send_json(payload, status, extra_headers=extra_headers)
 
+    def _serve_static(self, url_path: str) -> bool:
+        """Try to serve a static file from frontend/dist/. Return True if served."""
+        if not FRONTEND_DIST.is_dir():
+            return False
+
+        clean = url_path.split("?")[0].split("#")[0]
+        if clean == "/":
+            clean = "/index.html"
+
+        candidate = (FRONTEND_DIST / clean.lstrip("/")).resolve()
+        if not str(candidate).startswith(str(FRONTEND_DIST)):
+            return False
+
+        if not candidate.is_file():
+            candidate = FRONTEND_DIST / "index.html"
+            if not candidate.is_file():
+                return False
+
+        content = candidate.read_bytes()
+        ext = candidate.suffix.lower()
+        mime = MIME_TYPES.get(ext, "application/octet-stream")
+        self.send_response(200)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(content)))
+        if ext in {".js", ".css", ".woff2", ".woff", ".ttf"}:
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        self.end_headers()
+        self.wfile.write(content)
+        return True
+
     def do_GET(self) -> None:  # noqa: N802
-        """Serve an HTTP GET request."""
-        self.handle_api("GET")
+        """Serve API routes first, fall back to static frontend files."""
+        path = normalize_path(urlparse(self.path).path)
+        if path.startswith("/v1/") or path in {"/health", "/healthz"}:
+            self.handle_api("GET")
+            return
+        if path == "/" and "application/json" in (self.headers.get("Accept") or ""):
+            self.handle_api("GET")
+            return
+        if not self._serve_static(self.path):
+            self.handle_api("GET")
 
     def do_POST(self) -> None:  # noqa: N802
         """Serve an HTTP POST request."""

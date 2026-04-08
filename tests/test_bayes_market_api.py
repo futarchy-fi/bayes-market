@@ -1952,13 +1952,30 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.MARKETS["m3"]["marginals"], {"yes": 0.12, "no": 0.88})
         self.assertEqual(len(server.ORDERS), 0)
 
-    def test_post_to_markets_collection_is_method_not_allowed(self):
-        with self.assertRaises(server.ApiError) as ctx:
-            server.route_request("POST", "/v1/markets", {})
+    def test_create_market_returns_201_with_valid_payload(self):
+        payload, status = server.route_request("POST", "/v1/markets", {
+            "title": "Test Market",
+            "description": "A test market",
+            "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+            "expires_at": "2026-12-31T23:59:59Z",
+        })
+        self.assertEqual(status, 201)
+        self.assertIn("market", payload)
+        m = payload["market"]
+        self.assertEqual(m["title"], "Test Market")
+        self.assertEqual(m["status"], "active")
+        self.assertEqual(len(m["outcomes"]), 2)
+        self.assertAlmostEqual(m["marginals"]["yes"], 0.5, places=4)
+        self.assertAlmostEqual(m["marginals"]["no"], 0.5, places=4)
+        server.MARKETS.pop(m["id"], None)
 
-        error = ctx.exception
-        self.assertEqual(error.status, 405)
-        self.assertEqual(error.code, "method_not_allowed")
+    def test_create_market_rejects_missing_title(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", "/v1/markets", {
+                "outcomes": [{"id": "a", "name": "A"}, {"id": "b", "name": "B"}],
+                "expires_at": "2026-12-31T23:59:59Z",
+            })
+        self.assertEqual(ctx.exception.status, 400)
 
     def test_event_formula_normalizes_literals_and_preserves_clause_order(self):
         normalized = server.normalize_event_formula(
