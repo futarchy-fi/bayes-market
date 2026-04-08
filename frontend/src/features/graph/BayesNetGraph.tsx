@@ -30,7 +30,7 @@ const NODE_W = 160;
 const NODE_H = 72;
 const PADDING = 40;
 
-function layoutNodes(markets: MarketSummary[], focusId?: string): GraphNode[] {
+function layoutNodes(markets: MarketSummary[]): GraphNode[] {
   // Arrange in a circle for small N, grid for larger
   const n = markets.length;
   if (n === 0) return [];
@@ -232,7 +232,7 @@ export function BayesNetGraph({
   const { data: engineStats } = useEngineStats(focusMarketId ?? "", { enabled: !!focusMarketId });
 
   const markets = marketsData?.markets ?? [];
-  const nodes = useMemo(() => layoutNodes(markets, focusMarketId), [markets, focusMarketId]);
+  const nodes = useMemo(() => layoutNodes(markets), [markets]);
   const cliques = engineStats?.cliques.cliques ?? [];
 
   if (isLoading) {
