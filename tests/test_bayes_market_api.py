@@ -12,6 +12,7 @@ import unittest
 from copy import deepcopy
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
+from urllib.parse import urlencode
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "backend" / "server.py"
 spec = importlib.util.spec_from_file_location("bayes_market_server", MODULE_PATH)
@@ -174,6 +175,13 @@ def assert_marginals_close(
     test_case.assertEqual(set(actual), set(expected))
     for outcome_id, expected_probability in expected.items():
         test_case.assertAlmostEqual(actual[outcome_id], expected_probability, delta=delta)
+
+
+def build_market_context_query_string(context: list[dict[str, str]]) -> str:
+    return urlencode(
+        [("context", f"{assignment['variableId']}={assignment['outcomeId']}") for assignment in context],
+        doseq=True,
+    )
 
 
 def expected_seeded_account_state(account_id: str, min_asset: float) -> dict[str, object]:
@@ -4208,6 +4216,63 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["service"], "bayes-market")
         self.assertEqual(payload["status"], "ok")
         self.assertTrue(payload["timestamp"].endswith("Z"))
+
+    def test_market_detail_http_returns_conditional_marginals_for_context_query(self):
+        context = [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}]
+        post_status, post_payload = self.request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_http_conditional_market_read",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": deepcopy(context),
+            },
+        )
+        unconditional_status, unconditional_payload = self.request("GET", "/v1/markets/m1")
+        contextual_status, contextual_payload = self.request(
+            "GET",
+            f"/v1/markets/m1?{build_market_context_query_string(context)}",
+        )
+
+        self.assertEqual(post_status, 201)
+        self.assertEqual(unconditional_status, 200)
+        self.assertEqual(contextual_status, 200)
+        self.assertEqual(unconditional_payload["market"]["marginals"], {"yes": 0.65, "no": 0.35})
+        self.assertEqual(contextual_payload["market"]["marginals"], post_payload["order"]["newMarginals"])
+        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
+        self.assertEqual(
+            server.CONDITIONAL_MARGINALS["m1"][server.context_state_key(context)],
+            post_payload["order"]["newMarginals"],
+        )
+
+    def test_market_detail_http_canonicalizes_context_query_order(self):
+        canonical_context = [
+            {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
+            {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no"},
+        ]
+        server.CONDITIONAL_MARGINALS["m1"] = {
+            server.context_state_key(canonical_context): {"yes": 0.91, "no": 0.09}
+        }
+
+        status, payload = self.request(
+            "GET",
+            "/v1/markets/m1?"
+            + build_market_context_query_string(list(reversed(canonical_context))),
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["market"]["marginals"], {"yes": 0.91, "no": 0.09})
+        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
+
+    def test_market_detail_http_rejects_malformed_context_query(self):
+        status, payload = self.request("GET", "/v1/markets/m1?context=btc_etf_approval_week")
+
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"]["code"], "invalid_query")
+        self.assertEqual(payload["error"]["details"]["parameter"], "context")
+        self.assertEqual(payload["error"]["details"]["index"], 0)
+        self.assertEqual(payload["error"]["details"]["received"], "btc_etf_approval_week")
 
     def test_probability_edit_route_uses_market_scoped_path(self):
         status, payload = self.request(

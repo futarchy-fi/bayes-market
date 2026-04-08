@@ -1076,14 +1076,62 @@ def create_market(body: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
     }, 201
 
 
-def get_market_detail(market_id: str) -> tuple[dict[str, Any], int]:
+def parse_market_context_query(
+    query: dict[str, list[str]],
+    *,
+    target_variable_id: str,
+) -> list[dict[str, str]]:
+    """Parse repeated context query params into normalized condition assignments."""
+    raw_context_values = query.get("context", [])
+    if not raw_context_values:
+        return []
+
+    context_assignments: list[dict[str, str]] = []
+    for index, raw_context in enumerate(raw_context_values):
+        variable_id, separator, outcome_id = raw_context.partition("=")
+        if not separator or not variable_id.strip() or not outcome_id.strip():
+            raise ApiError(
+                400,
+                "invalid_query",
+                "context entries must use variableId=outcomeId",
+                {
+                    "parameter": "context",
+                    "index": index,
+                    "received": raw_context,
+                },
+            )
+        context_assignments.append(
+            {
+                "variableId": variable_id,
+                "outcomeId": outcome_id,
+            }
+        )
+
+    try:
+        return normalize_context_assignments(target_variable_id, context_assignments)
+    except ApiError as exc:
+        if exc.code != "invalid_probability_edit":
+            raise
+        details = {"parameter": "context", **exc.details}
+        raise ApiError(400, "invalid_query", exc.message, details) from exc
+
+
+def get_market_detail(
+    market_id: str,
+    query: dict[str, list[str]] | None = None,
+) -> tuple[dict[str, Any], int]:
     """Return the full market payload for one market id."""
     market = MARKETS.get(market_id)
     if not market:
         raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
 
+    market_payload = deepcopy(market)
+    context = parse_market_context_query(query or {}, target_variable_id=str(market["variableId"]))
+    if context:
+        market_payload["marginals"] = query_market_marginals_for_inference(market_id, context)
+
     return {
-        "market": deepcopy(market),
+        "market": market_payload,
         "meta": make_meta(),
     }, 200
 
@@ -2360,7 +2408,7 @@ def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None
                     f"{method} is not allowed for this resource",
                     {"method": method, "path": path},
                 )
-            return get_market_detail(market_id)
+            return get_market_detail(market_id, parse_qs(parsed.query, keep_blank_values=True))
 
         if len(parts) == 4 and parts[3] == "engine-stats":
             if method != "GET":
