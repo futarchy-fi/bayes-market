@@ -1,0 +1,55 @@
+[
+  {
+    "id": "analysis-scope-and-contract",
+    "title": "Freeze T556 scope and compatibility boundary",
+    "description": "Resolve the gap between the task title (LMSR cost function) and the epic wording (per-user asset model transformation), confirm that existing HTTP/event/risk envelopes stay stable during the migration, and lock in market.liquidity as the LMSR b parameter.",
+    "dependsOn": [],
+    "level": "analysis"
+  },
+  {
+    "id": "analysis-account-state-shape",
+    "title": "Define deterministic LMSR account-state shape",
+    "description": "Specify the internal per-account LMSR-backed state that T556 will persist so later solvency tasks can compute min-assets without reverse-engineering them from legacy scalar fields.",
+    "dependsOn": [
+      "analysis-scope-and-contract"
+    ],
+    "level": "analysis"
+  },
+  {
+    "id": "task-lmsr-math-primitives",
+    "title": "Add pure LMSR pricing helpers",
+    "description": "Introduce dedicated, testable LMSR helpers for liquidity-aware cost calculations and probability-edit transitions instead of continuing to compute order cost directly from KL divergence inside server.py.",
+    "dependsOn": [
+      "analysis-scope-and-contract"
+    ],
+    "level": "task"
+  },
+  {
+    "id": "task-account-lmsr-ledger",
+    "title": "Persist LMSR-backed account state",
+    "description": "Extend the account risk/asset storage layer to record the deterministic LMSR-backed state and any compatibility metadata needed to keep current read models functioning until later GS-specific solvency work lands.",
+    "dependsOn": [
+      "analysis-account-state-shape"
+    ],
+    "level": "task"
+  },
+  {
+    "id": "task-probability-edit-cost-integration",
+    "title": "Wire LMSR cost into ProbabilityEdit",
+    "description": "Replace the KL-based preview and order-cost path with the new LMSR primitives, thread the new math through unconditional and accepted conditional edits, and preserve idempotency, command/event emission, and current response field names.",
+    "dependsOn": [
+      "task-lmsr-math-primitives",
+      "task-account-lmsr-ledger"
+    ],
+    "level": "task"
+  },
+  {
+    "id": "task-regression-coverage",
+    "title": "Refresh math and contract regression coverage",
+    "description": "Update the affected unit, property, and HTTP integration tests so they assert liquidity-aware LMSR pricing behavior while preserving the existing route, replay, and terminal-event contracts.",
+    "dependsOn": [
+      "task-probability-edit-cost-integration"
+    ],
+    "level": "task"
+  }
+]
