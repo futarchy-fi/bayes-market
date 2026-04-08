@@ -96,6 +96,7 @@ def rescale_probability_edit(
     outcome_id: str,
     target_probability: float,
 ) -> dict[str, float]:
+    """Rescale a distribution so one outcome reaches a target probability."""
     normalized_previous = _validate_distribution(
         previous,
         name="previous",
@@ -135,6 +136,7 @@ def lmsr_score_delta(
     updated: Mapping[str, Any],
     liquidity: float,
 ) -> dict[str, float]:
+    """Compute the per-outcome LMSR score delta for a probability edit."""
     normalized_previous, normalized_updated = _validate_quote_inputs(previous, updated)
     normalized_liquidity = _validate_liquidity(liquidity)
     return {
@@ -148,6 +150,7 @@ def lmsr_expected_edit_cost(
     updated: Mapping[str, Any],
     liquidity: float,
 ) -> float:
+    """Compute the expected LMSR cost of moving between two distributions."""
     normalized_previous, normalized_updated = _validate_quote_inputs(previous, updated)
     normalized_liquidity = _validate_liquidity(liquidity)
     return sum(
@@ -164,6 +167,7 @@ def quote_probability_edit(
     target_probability: float,
     liquidity: float,
 ) -> dict[str, Any]:
+    """Return the updated distribution, score deltas, and total edit cost."""
     updated = rescale_probability_edit(previous, outcome_id, target_probability)
     score_delta = lmsr_score_delta(previous, updated, liquidity)
     return {
