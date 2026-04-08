@@ -1786,6 +1786,7 @@ def create_probability_edit_order(
             marginals=previous_marginals,
         )
         market_conditionals[context_key] = deepcopy(updated_marginals)
+        impact_score = kl_divergence(previous_marginals, updated_marginals)
     else:
         if preview is None:
             preview = preview_unconditional_probability_edit(
@@ -1796,6 +1797,7 @@ def create_probability_edit_order(
         previous_marginals = deepcopy(preview["previousMarginals"])
         updated_marginals = deepcopy(preview["newMarginals"])
         market["marginals"] = deepcopy(updated_marginals)
+        impact_score = round_risk_value(float(preview["impactScore"]))
 
     timestamp = utc_timestamp()
     order = {
@@ -1809,11 +1811,7 @@ def create_probability_edit_order(
         "payload": deepcopy(payload),
         "previousMarginals": previous_marginals,
         "newMarginals": deepcopy(updated_marginals),
-        "impactScore": (
-            round_risk_value(float(preview["impactScore"]))
-            if preview is not None
-            else kl_divergence(previous_marginals, updated_marginals)
-        ),
+        "impactScore": impact_score,
         "createdAt": timestamp,
         "filledAt": timestamp,
     }

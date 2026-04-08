@@ -1818,6 +1818,81 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             ],
         )
 
+    def test_create_probability_edit_order_ignores_unconditional_preview_on_contextual_path(self):
+        class StubQueryBackend:
+            def __init__(self) -> None:
+                self.contexts: list[dict[str, str] | None] = []
+
+            def query_marginals(
+                self,
+                compile_result: object,
+                *,
+                context: dict[str, str] | None = None,
+            ) -> object:
+                self.contexts.append(deepcopy(context))
+                if context is None:
+                    return type("MarginalResult", (), {"marginals": {"yes": 0.65, "no": 0.35}})()
+                return type("MarginalResult", (), {"marginals": {"yes": 0.2, "no": 0.8}})()
+
+        original_backend = server.CURRENT_MODEL_QUERY_BACKEND
+        stub_backend = StubQueryBackend()
+        server.CURRENT_MODEL_QUERY_BACKEND = stub_backend
+
+        try:
+            unconditional_body = {
+                "accountId": "acct_contextual_preview_guard",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": [],
+            }
+            unconditional_payload = server.normalize_probability_edit_payload("m1", unconditional_body)
+            unconditional_preview = server.preview_unconditional_probability_edit(
+                "m1",
+                unconditional_payload,
+                "acct_contextual_preview_guard",
+            )
+
+            contextual_payload = server.normalize_probability_edit_payload(
+                "m1",
+                {
+                    "accountId": "acct_contextual_preview_guard",
+                    "variableId": "eth_price_gt_3000_mar15",
+                    "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.5},
+                    "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+                },
+            )
+            command = server.materialize_probability_edit_command(
+                market_id="m1",
+                normalized_payload=contextual_payload,
+                account_id="acct_contextual_preview_guard",
+                command_id="cmd_contextual_preview_guard",
+                submitted_at="2026-04-08T00:00:00Z",
+            )
+            order = server.create_probability_edit_order(command, preview=unconditional_preview)
+        finally:
+            server.CURRENT_MODEL_QUERY_BACKEND = original_backend
+
+        expected_previous = {"yes": 0.2, "no": 0.8}
+        expected_new = {"yes": 0.5, "no": 0.5}
+        expected_impact = server.kl_divergence(expected_previous, expected_new)
+
+        self.assertNotEqual(unconditional_preview["impactScore"], expected_impact)
+        self.assertEqual(order["payload"]["context"], [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}])
+        self.assertEqual(order["previousMarginals"], expected_previous)
+        self.assertEqual(order["newMarginals"], expected_new)
+        self.assertEqual(order["impactScore"], expected_impact)
+        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
+        self.assertEqual(server.CONDITIONAL_MARGINALS["m1"]["btc_etf_approval_week=yes"], expected_new)
+        self.assertEqual(
+            stub_backend.contexts,
+            [
+                None,
+                None,
+                {"btc_etf_approval_week": "yes"},
+                {"btc_etf_approval_week": "yes"},
+            ],
+        )
+
     def test_probability_edit_with_context_updates_account_risk(self):
         payload, status = server.route_request(
             "POST",
