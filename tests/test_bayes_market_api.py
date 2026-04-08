@@ -837,6 +837,93 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             },
         )
 
+    def test_probability_edit_acceptance_threads_unconditional_effects_into_audit_and_read_models(self):
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_test",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": [],
+            },
+        )
+
+        self.assertEqual(status, 201)
+        impact_score = payload["order"]["impactScore"]
+        after_min_asset = round(100.0 - impact_score, 6)
+        event = server.EVENTS[payload["result"]["eventId"]]
+        slice_key = server.account_lmsr_slice_key("m1", [])
+
+        self.assertEqual(
+            event["payload"],
+            {
+                "effects": {
+                    "marginalDelta": [
+                        {
+                            "variableId": "eth_price_gt_3000_mar15",
+                            "outcomeId": "yes",
+                            "before": 0.65,
+                            "after": 0.8,
+                        }
+                    ],
+                    "assetDelta": [
+                        {
+                            "accountId": "acct_test",
+                            "marketId": "m1",
+                            "beforeMinAsset": 100.0,
+                            "afterMinAsset": after_min_asset,
+                        }
+                    ],
+                },
+                "pricing": {
+                    "cost": impact_score,
+                    "fee": 0.0,
+                },
+                "replayStateHash": server.market_replay_state_hash("m1"),
+            },
+        )
+        self.assertEqual(
+            server.ACCOUNT_RISK["acct_test"],
+            server.build_account_risk_state(
+                "acct_test",
+                payload["order"]["filledAt"],
+                min_asset=after_min_asset,
+                markets={
+                    "m1": {
+                        "marketId": "m1",
+                        "minAsset": after_min_asset,
+                        "capacityConsumed": impact_score,
+                        "utilization": round(impact_score / 100.0, 6),
+                        "commandCount": 1,
+                        "updatedAt": payload["order"]["filledAt"],
+                        "lastOrderId": payload["order"]["id"],
+                        "lastCommandId": payload["order"]["commandId"],
+                    }
+                },
+                lmsr_state=server.build_account_lmsr_state(
+                    {
+                        slice_key: {
+                            "marketId": "m1",
+                            "variableId": "eth_price_gt_3000_mar15",
+                            "context": [],
+                            "contextKey": "",
+                            "liquidity": 150000.0,
+                            "scoreByOutcome": rounded_score_delta(
+                                payload["order"]["previousMarginals"],
+                                payload["order"]["newMarginals"],
+                                server.MARKETS["m1"]["liquidity"],
+                            ),
+                            "commandCount": 1,
+                            "updatedAt": payload["order"]["filledAt"],
+                            "lastOrderId": payload["order"]["id"],
+                            "lastCommandId": payload["order"]["commandId"],
+                        }
+                    }
+                ),
+            ),
+        )
+
     def test_probability_edit_conditional_lmsr_ledger_keeps_separate_context_slices(self):
         first_payload, first_status = server.route_request(
             "POST",
