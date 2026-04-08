@@ -8,6 +8,7 @@ from typing import Any, Callable, Optional
 
 MAX_EVENT_FORMULA_CLAUSES = 16
 MAX_EVENT_FORMULA_CLAUSE_LITERALS = 8
+EVENT_FORMULA_LITERAL_FIELDS = frozenset({"negated", "outcomeId", "variableId"})
 
 MarketLookup = Callable[[str], Optional[dict[str, Any]]]
 ErrorFactory = Callable[[int, str, str, Optional[dict[str, Any]]], Exception]
@@ -170,6 +171,22 @@ def normalize_event_formula(
                     "invalid_event_formula",
                     "negated must be a boolean",
                     {"field": f"{literal_field}.negated", "received": negated},
+                )
+
+            unexpected_fields = sorted(
+                str(field_name) for field_name in literal if str(field_name) not in EVENT_FORMULA_LITERAL_FIELDS
+            )
+            if unexpected_fields:
+                _raise(
+                    error_factory,
+                    400,
+                    "invalid_event_formula",
+                    "formula literals contain unexpected fields",
+                    {
+                        "field": literal_field,
+                        "allowed": sorted(EVENT_FORMULA_LITERAL_FIELDS),
+                        "unexpected": unexpected_fields,
+                    },
                 )
 
             normalized_literal = (
