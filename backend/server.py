@@ -149,6 +149,7 @@ MARKET_EVENT_SEQUENCES: dict[str, int] = {}
 LAST_EVENT_HASHES: dict[str, str] = {}
 MARKET_WRITE_LOCKS: dict[str, threading.Lock] = {}
 _LOCK_REGISTRY_LOCK = threading.Lock()
+_EVENTS_LOCK = threading.RLock()
 ACCOUNT_RISK: dict[str, dict[str, Any]] = {}
 MARKET_ENGINE_STATS: dict[str, dict[str, Any]] = {}
 _RATE_LIMIT_WINDOWS: dict[str, deque[float]] = {}
@@ -160,11 +161,11 @@ GENESIS_EVENT_HASH = f"sha256:{hashlib.sha256(b'').hexdigest()}"
 
 
 def get_market_write_lock(market_id: str) -> threading.Lock:
-    """Serialize same-market journal appends so seq and prevEventHash cannot fork."""
+    """Serialize same-market command lifecycles so state and journal heads stay coherent."""
     with _LOCK_REGISTRY_LOCK:
         lock = MARKET_WRITE_LOCKS.get(market_id)
         if lock is None:
-            lock = threading.Lock()
+            lock = threading.RLock()
             MARKET_WRITE_LOCKS[market_id] = lock
         return lock
 
@@ -200,7 +201,8 @@ def reset_state() -> None:
     CONDITIONAL_MARGINALS.clear()
     ORDERS.clear()
     COMMANDS.clear()
-    EVENTS.clear()
+    with _EVENTS_LOCK:
+        EVENTS.clear()
     TERMINAL_OUTCOMES.clear()
     IDEMPOTENCY_KEYS.clear()
     MARKET_EVENT_SEQUENCES.clear()
@@ -1034,15 +1036,30 @@ def create_market(body: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
     if len(outcome_ids) != len(set(outcome_ids)):
         raise ApiError(400, "invalid_payload", "outcome IDs must be unique")
 
+    # Generate variable ID from title
+    variable_id = title.lower().replace(" ", "_")[:40]
+    existing_market = next(
+        (market for market in MARKETS.values() if str(market.get("variableId")) == variable_id),
+        None,
+    )
+    if existing_market is not None:
+        raise ApiError(
+            409,
+            "market_already_exists",
+            "A market with this title already exists",
+            {
+                "title": title,
+                "variableId": variable_id,
+                "existingMarketId": str(existing_market["id"]),
+            },
+        )
+
     # Generate market ID
     market_num = len(MARKETS) + 1
     market_id = f"m{market_num}"
     while market_id in MARKETS:
         market_num += 1
         market_id = f"m{market_num}"
-
-    # Generate variable ID from title
-    variable_id = title.lower().replace(" ", "_")[:40]
 
     # Uniform prior
     uniform_p = round(1.0 / len(outcomes), 6)
@@ -1196,17 +1213,21 @@ def get_market_events(market_id: str, query: dict[str, list[str]]) -> tuple[dict
     from_seq = parse_integer_query_param(query, "fromSeq", default=1, minimum=1)
     limit = parse_integer_query_param(query, "limit", default=100, minimum=1, maximum=100)
 
-    market_events = sorted(
-        (
-            deepcopy(event)
-            for event in EVENTS.values()
-            if str(event["marketId"]) == market_id and int(event["seq"]) >= from_seq
-        ),
-        key=lambda event: int(event["seq"]),
-    )
-    page_events = market_events[:limit]
-    head_seq = MARKET_EVENT_SEQUENCES.get(market_id, 0)
-    head_hash = LAST_EVENT_HASHES.get(market_id, GENESIS_EVENT_HASH)
+    with get_market_write_lock(market_id):
+        with _EVENTS_LOCK:
+            event_records = list(EVENTS.values())
+        market_events = sorted(
+            (
+                deepcopy(event)
+                for event in event_records
+                if str(event["marketId"]) == market_id and int(event["seq"]) >= from_seq
+            ),
+            key=lambda event: int(event["seq"]),
+        )
+        page_events = market_events[:limit]
+        head_seq = MARKET_EVENT_SEQUENCES.get(market_id, 0)
+        head_hash = LAST_EVENT_HASHES.get(market_id, GENESIS_EVENT_HASH)
+
     next_from_seq = None
     if page_events:
         tail_seq = int(page_events[-1]["seq"])
@@ -2004,7 +2025,8 @@ def emit_terminal_event(command: dict[str, Any], event_type: str, payload: dict[
         event["eventHash"] = canonical_json_hash(event)
         MARKET_EVENT_SEQUENCES[market_id] = seq
         LAST_EVENT_HASHES[market_id] = str(event["eventHash"])
-        EVENTS[str(event["eventId"])] = deepcopy(event)
+        with _EVENTS_LOCK:
+            EVENTS[str(event["eventId"])] = deepcopy(event)
         return event
 
 
@@ -2449,74 +2471,75 @@ def handle_probability_edit(market_id: str, payload: dict[str, Any] | None) -> t
             )
         idempotency_key = idempotency_key.strip()
 
-    normalized_payload = normalize_probability_edit_payload(market_id, body)
     account_id = account_id.strip()
     scope_key = idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
-    if scope_key is not None:
-        existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
-        if existing_command_id is not None:
-            existing_command = COMMANDS[existing_command_id]
-            if existing_command["payload"] != normalized_payload:
-                return build_idempotency_conflict_response(
-                    existing_command_id,
-                    idempotency_key,
-                    market_id,
-                    account_id,
-                    "ProbabilityEdit",
-                )
-            return replay_terminal_outcome(existing_command_id)
+    with get_market_write_lock(market_id):
+        normalized_payload = normalize_probability_edit_payload(market_id, body)
+        if scope_key is not None:
+            existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
+            if existing_command_id is not None:
+                existing_command = COMMANDS[existing_command_id]
+                if existing_command["payload"] != normalized_payload:
+                    return build_idempotency_conflict_response(
+                        existing_command_id,
+                        idempotency_key,
+                        market_id,
+                        account_id,
+                        "ProbabilityEdit",
+                    )
+                return replay_terminal_outcome(existing_command_id)
 
-    submitted_at = utc_timestamp()
-    command = materialize_probability_edit_command(
-        market_id=market_id,
-        normalized_payload=normalized_payload,
-        account_id=account_id,
-        command_id=generate_command_id(),
-        submitted_at=submitted_at,
-        idempotency_key=idempotency_key,
-    )
-    market = MARKETS[market_id]
-    if market["status"] != "active":
-        return build_terminal_rejection_response(
-            command,
-            code="market_not_active",
-            message="ProbabilityEdit is only allowed for active markets",
-            details={
-                "marketId": market_id,
-                "status": market["status"],
-                "allowedStatus": "active",
-                "commandId": command["commandId"],
-            },
-            retry_hint="submit against an active market",
-            status=409,
-            scope_key=scope_key,
+        submitted_at = utc_timestamp()
+        command = materialize_probability_edit_command(
+            market_id=market_id,
+            normalized_payload=normalized_payload,
+            account_id=account_id,
+            command_id=generate_command_id(),
+            submitted_at=submitted_at,
+            idempotency_key=idempotency_key,
         )
-    preview: dict[str, Any] | None = None
-    if not normalized_payload["context"]:
-        preview = preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
-        asset_preview = preview["assetDelta"]
-        if asset_preview["afterMinAsset"] < 0:
+        market = MARKETS[market_id]
+        if market["status"] != "active":
             return build_terminal_rejection_response(
                 command,
-                code="min_asset_violation",
-                message="Edit would produce negative state-contingent assets",
+                code="market_not_active",
+                message="ProbabilityEdit is only allowed for active markets",
                 details={
-                    "accountId": account_id,
                     "marketId": market_id,
+                    "status": market["status"],
+                    "allowedStatus": "active",
                     "commandId": command["commandId"],
-                    "riskLimit": asset_preview["riskLimit"],
-                    "beforeMinAsset": asset_preview["beforeMinAsset"],
-                    "impactScore": asset_preview["impactScore"],
-                    "afterMinAsset": asset_preview["afterMinAsset"],
                 },
-                retry_hint="reduce probability target",
+                retry_hint="submit against an active market",
                 status=409,
                 scope_key=scope_key,
             )
+        preview: dict[str, Any] | None = None
+        if not normalized_payload["context"]:
+            preview = preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
+            asset_preview = preview["assetDelta"]
+            if asset_preview["afterMinAsset"] < 0:
+                return build_terminal_rejection_response(
+                    command,
+                    code="min_asset_violation",
+                    message="Edit would produce negative state-contingent assets",
+                    details={
+                        "accountId": account_id,
+                        "marketId": market_id,
+                        "commandId": command["commandId"],
+                        "riskLimit": asset_preview["riskLimit"],
+                        "beforeMinAsset": asset_preview["beforeMinAsset"],
+                        "impactScore": asset_preview["impactScore"],
+                        "afterMinAsset": asset_preview["afterMinAsset"],
+                    },
+                    retry_hint="reduce probability target",
+                    status=409,
+                    scope_key=scope_key,
+                )
 
-    order = create_probability_edit_order(command, preview=preview)
-    asset_delta = sync_account_risk_state(order)
-    return build_terminal_acceptance_response(command, order, asset_delta, scope_key)
+        order = create_probability_edit_order(command, preview=preview)
+        asset_delta = sync_account_risk_state(order)
+        return build_terminal_acceptance_response(command, order, asset_delta, scope_key)
 
 
 def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
@@ -2540,51 +2563,52 @@ def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[
             )
         idempotency_key = idempotency_key.strip()
 
-    normalized_payload = normalize_event_trade_payload(market_id, body)
     account_id = account_id.strip()
     scope_key = idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
-    if scope_key is not None:
-        existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
-        if existing_command_id is not None:
-            existing_command = COMMANDS[existing_command_id]
-            if existing_command["payload"] != normalized_payload:
-                return build_idempotency_conflict_response(
-                    existing_command_id,
-                    idempotency_key,
-                    market_id,
-                    account_id,
-                    "EventTrade",
-                )
-            return replay_terminal_outcome(existing_command_id)
+    with get_market_write_lock(market_id):
+        normalized_payload = normalize_event_trade_payload(market_id, body)
+        if scope_key is not None:
+            existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
+            if existing_command_id is not None:
+                existing_command = COMMANDS[existing_command_id]
+                if existing_command["payload"] != normalized_payload:
+                    return build_idempotency_conflict_response(
+                        existing_command_id,
+                        idempotency_key,
+                        market_id,
+                        account_id,
+                        "EventTrade",
+                    )
+                return replay_terminal_outcome(existing_command_id)
 
-    submitted_at = utc_timestamp()
-    command = materialize_event_trade_command(
-        market_id=market_id,
-        normalized_payload=normalized_payload,
-        account_id=account_id,
-        command_id=generate_command_id(),
-        submitted_at=submitted_at,
-        idempotency_key=idempotency_key,
-    )
-    market = MARKETS[market_id]
-    if market["status"] != "active":
-        return build_terminal_rejection_response(
-            command,
-            code="market_not_active",
-            message="EventTrade is only allowed for active markets",
-            details={
-                "marketId": market_id,
-                "status": market["status"],
-                "allowedStatus": "active",
-                "commandId": command["commandId"],
-            },
-            retry_hint="submit against an active market",
-            status=409,
-            scope_key=scope_key,
+        submitted_at = utc_timestamp()
+        command = materialize_event_trade_command(
+            market_id=market_id,
+            normalized_payload=normalized_payload,
+            account_id=account_id,
+            command_id=generate_command_id(),
+            submitted_at=submitted_at,
+            idempotency_key=idempotency_key,
         )
+        market = MARKETS[market_id]
+        if market["status"] != "active":
+            return build_terminal_rejection_response(
+                command,
+                code="market_not_active",
+                message="EventTrade is only allowed for active markets",
+                details={
+                    "marketId": market_id,
+                    "status": market["status"],
+                    "allowedStatus": "active",
+                    "commandId": command["commandId"],
+                },
+                retry_hint="submit against an active market",
+                status=409,
+                scope_key=scope_key,
+            )
 
-    order = create_event_trade_order(command)
-    return build_event_trade_acceptance_response(command, order, scope_key)
+        order = create_event_trade_order(command)
+        return build_event_trade_acceptance_response(command, order, scope_key)
 
 
 def handle_market_resolution(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:

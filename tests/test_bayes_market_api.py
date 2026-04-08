@@ -34,13 +34,18 @@ def build_unconditional_probability_edit_body(
     market_id: str,
     outcome_id: str,
     probability: float,
+    *,
+    idempotency_key: str | None = None,
 ) -> dict[str, object]:
-    return {
+    body: dict[str, object] = {
         "accountId": account_id,
         "variableId": server.MARKETS[market_id]["variableId"],
         "target": {"kind": "marginal", "outcomeId": outcome_id, "probability": probability},
         "context": [],
     }
+    if idempotency_key is not None:
+        body["idempotencyKey"] = idempotency_key
+    return body
 
 
 def build_event_trade_body(
@@ -76,6 +81,23 @@ def build_market_resolution_body(
     if idempotency_key is not None:
         body["idempotencyKey"] = idempotency_key
     return body
+
+
+def build_create_market_body(
+    *,
+    title: str = "Test Market",
+    description: str = "A test market",
+    outcomes: list[dict[str, str]] | None = None,
+    expires_at: str = "2026-12-31T23:59:59Z",
+    liquidity: float = 10000.0,
+) -> dict[str, object]:
+    return {
+        "title": title,
+        "description": description,
+        "outcomes": deepcopy(outcomes if outcomes is not None else [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}]),
+        "expires_at": expires_at,
+        "liquidity": liquidity,
+    }
 
 
 def snapshot_domain_state() -> dict[str, object]:
@@ -309,6 +331,62 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         self.assertEqual(server.MARKET_WRITE_LOCKS, {})
         self.assertIsNot(server.get_market_write_lock("m1"), original)
+
+    def test_get_market_events_serializes_cross_market_appends_while_snapshotting_events(self):
+        server.emit_terminal_event({"commandId": "cmd_m1_1", "marketId": "m1"}, "CommandAccepted", {"effects": {}})
+        server.emit_terminal_event({"commandId": "cmd_m1_2", "marketId": "m1"}, "CommandAccepted", {"effects": {}})
+
+        writer_errors: list[Exception] = []
+
+        def append_other_market_event() -> None:
+            try:
+                server.emit_terminal_event(
+                    {"commandId": "cmd_m2_1", "marketId": "m2"},
+                    "CommandAccepted",
+                    {"effects": {}},
+                )
+            except Exception as exc:
+                writer_errors.append(exc)
+
+        writer_thread = threading.Thread(target=append_other_market_event, daemon=True)
+
+        class CoordinatedEventValues:
+            def __init__(self, mapping: dict[str, dict[str, object]]) -> None:
+                self._mapping = mapping
+                self._started_writer = False
+
+            def __iter__(self):
+                iterator = iter(dict.values(self._mapping))
+                for event in iterator:
+                    if not self._started_writer:
+                        self._started_writer = True
+                        writer_thread.start()
+                        time.sleep(0.05)
+                    yield event
+
+        class CoordinatedEventsDict(dict[str, dict[str, object]]):
+            def values(self):
+                return CoordinatedEventValues(self)
+
+        original_events = server.EVENTS
+        coordinated_events = CoordinatedEventsDict(server.EVENTS)
+        server.EVENTS = coordinated_events
+
+        try:
+            payload, status = server.get_market_events("m1", {})
+            writer_thread.join(timeout=1)
+        finally:
+            original_events.clear()
+            original_events.update(coordinated_events)
+            server.EVENTS = original_events
+
+        self.assertEqual(status, 200)
+        self.assertEqual([event["seq"] for event in payload["events"]], [1, 2])
+        self.assertEqual(payload["chain"]["headSeq"], 2)
+        self.assertEqual(payload["chain"]["headHash"], payload["events"][-1]["eventHash"])
+        self.assertFalse(writer_errors)
+        self.assertFalse(writer_thread.is_alive(), "cross-market append should complete after the read snapshot releases")
+        self.assertEqual(len(server.EVENTS), 3)
 
     def test_root_route_returns_service_index(self):
         payload, status = server.route_request("GET", "/")
@@ -4271,6 +4349,14 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
             timeout=timeout,
         )
 
+    def event_trade(self, market_id: str, body: dict, *, timeout: float = 5):
+        return self.request(
+            "POST",
+            f"/v1/markets/{market_id}/orders/event-trade",
+            body,
+            timeout=timeout,
+        )
+
     def market_events(self, market_id: str, *, timeout: float = 5):
         return self.request("GET", f"/v1/markets/{market_id}/events", timeout=timeout)
 
@@ -4279,6 +4365,35 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
 
     def run_concurrent_probability_edits(
         self,
+        operations: list[tuple[str, dict[str, object]]],
+        *,
+        hash_delay: float = 0.0,
+        timeout: float = 5,
+    ) -> list[tuple[int, dict[str, object]]]:
+        return self.run_concurrent_requests(
+            self.probability_edit,
+            operations,
+            hash_delay=hash_delay,
+            timeout=timeout,
+        )
+
+    def run_concurrent_event_trades(
+        self,
+        operations: list[tuple[str, dict[str, object]]],
+        *,
+        hash_delay: float = 0.0,
+        timeout: float = 5,
+    ) -> list[tuple[int, dict[str, object]]]:
+        return self.run_concurrent_requests(
+            self.event_trade,
+            operations,
+            hash_delay=hash_delay,
+            timeout=timeout,
+        )
+
+    def run_concurrent_requests(
+        self,
+        request_fn,
         operations: list[tuple[str, dict[str, object]]],
         *,
         hash_delay: float = 0.0,
@@ -4299,7 +4414,7 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
         def worker(index: int, market_id: str, body: dict[str, object]) -> None:
             try:
                 barrier.wait(timeout=timeout)
-                results[index] = self.probability_edit(market_id, body, timeout=timeout)
+                results[index] = request_fn(market_id, body, timeout=timeout)
             except Exception as exc:
                 errors.append(f"{index}: {exc!r}")
 
@@ -4324,6 +4439,91 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
             self.fail("concurrent requests completed without producing full results")
 
         return [result for result in results if result is not None]
+
+    def test_concurrent_duplicate_probability_edit_idempotency_key_replays_without_double_append(self):
+        operations = [
+            (
+                "m1",
+                build_unconditional_probability_edit_body(
+                    "acct_concurrency_idem_probability",
+                    "m1",
+                    "yes",
+                    0.8,
+                    idempotency_key="idem-concurrency-probability",
+                ),
+            )
+            for _ in range(2)
+        ]
+
+        responses = self.run_concurrent_probability_edits(operations, hash_delay=0.01, timeout=10)
+        replayed_count = sum(1 for _, payload in responses if payload["meta"].get("replayed"))
+
+        for status, payload in responses:
+            self.assertEqual(status, 201)
+            self.assertEqual(payload["result"]["status"], "accepted")
+
+        self.assertEqual(replayed_count, 1)
+        self.assertEqual({payload["order"]["id"] for _, payload in responses}, {next(iter(server.ORDERS))})
+        self.assertEqual({payload["result"]["commandId"] for _, payload in responses}, set(server.COMMANDS))
+        self.assertEqual({payload["result"]["eventId"] for _, payload in responses}, set(server.EVENTS))
+        self.assertEqual(len(server.ORDERS), 1)
+        self.assertEqual(len(server.COMMANDS), 1)
+        self.assertEqual(len(server.EVENTS), 1)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
+        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.8, "no": 0.2})
+
+        risk_status, risk_payload = self.account_risk("acct_concurrency_idem_probability", timeout=10)
+        events_status, events_payload = self.market_events("m1", timeout=10)
+
+        self.assertEqual(risk_status, 200)
+        self.assertEqual(events_status, 200)
+        self.assertEqual(risk_payload["account"]["risk"]["minAssets"]["markets"][0]["commandCount"], 1)
+        self.assertEqual(events_payload["pagination"]["returned"], 1)
+        self.assertEqual(events_payload["chain"]["headSeq"], 1)
+        self.assertEqual(events_payload["events"][0]["seq"], 1)
+        self.assertEqual(events_payload["events"][0]["prevEventHash"], server.GENESIS_EVENT_HASH)
+        self.assertEqual(events_payload["chain"]["headHash"], events_payload["events"][0]["eventHash"])
+
+    def test_concurrent_duplicate_event_trade_idempotency_key_replays_without_double_append(self):
+        operations = [
+            (
+                "m1",
+                build_event_trade_body(
+                    "acct_concurrency_idem_event_trade",
+                    "m1",
+                    "yes",
+                    idempotency_key="idem-concurrency-event-trade",
+                ),
+            )
+            for _ in range(2)
+        ]
+
+        responses = self.run_concurrent_event_trades(operations, hash_delay=0.01, timeout=10)
+        replayed_count = sum(1 for _, payload in responses if payload["meta"].get("replayed"))
+
+        for status, payload in responses:
+            self.assertEqual(status, 201)
+            self.assertEqual(payload["result"]["status"], "accepted")
+
+        self.assertEqual(replayed_count, 1)
+        self.assertEqual({payload["order"]["id"] for _, payload in responses}, {next(iter(server.ORDERS))})
+        self.assertEqual({payload["result"]["commandId"] for _, payload in responses}, set(server.COMMANDS))
+        self.assertEqual({payload["result"]["eventId"] for _, payload in responses}, set(server.EVENTS))
+        self.assertEqual(len(server.ORDERS), 1)
+        self.assertEqual(len(server.COMMANDS), 1)
+        self.assertEqual(len(server.EVENTS), 1)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
+        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
+        self.assertEqual(server.ACCOUNT_RISK, {})
+
+        events_status, events_payload = self.market_events("m1", timeout=10)
+
+        self.assertEqual(events_status, 200)
+        self.assertEqual(events_payload["pagination"]["returned"], 1)
+        self.assertEqual(events_payload["chain"]["headSeq"], 1)
+        self.assertEqual(events_payload["events"][0]["seq"], 1)
+        self.assertEqual(events_payload["events"][0]["prevEventHash"], server.GENESIS_EVENT_HASH)
+        self.assertEqual(events_payload["chain"]["headHash"], events_payload["events"][0]["eventHash"])
 
     def test_concurrent_same_market_probability_edits_keep_contiguous_seq_and_chain_links(self):
         operations = [
@@ -4749,6 +4949,44 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         self.assertEqual(len(server.ORDERS), 4)
         self.assertEqual(len(server.EVENTS), 4)
 
+    def test_create_market_http_requires_agent_id_when_enabled(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+        body = build_create_market_body(title="HTTP Auth Create Market")
+
+        unauthorized_status, unauthorized_payload = self.request("POST", "/v1/markets", body)
+        authorized_status, authorized_payload = self.request(
+            "POST",
+            "/v1/markets",
+            body,
+            headers={server.AGENT_ID_HEADER: "agent-create-auth"},
+        )
+
+        self.assertEqual(unauthorized_status, 401)
+        self.assertEqual(unauthorized_payload["error"]["code"], "missing_agent_id")
+        self.assertEqual(unauthorized_payload["error"]["details"]["header"], server.AGENT_ID_HEADER)
+        self.assertEqual(authorized_status, 201)
+        self.assertEqual(authorized_payload["market"]["title"], body["title"])
+        self.assertEqual(len(server.MARKETS), len(server.INITIAL_MARKETS) + 1)
+
+    def test_market_resolve_http_requires_agent_id_when_enabled(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+        body = build_market_resolution_body("ops_http_auth", "yes")
+
+        unauthorized_status, unauthorized_payload = self.request("POST", "/v1/markets/m1/resolve", body)
+        authorized_status, authorized_payload = self.request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            body,
+            headers={server.AGENT_ID_HEADER: "agent-resolve-auth"},
+        )
+
+        self.assertEqual(unauthorized_status, 401)
+        self.assertEqual(unauthorized_payload["error"]["code"], "missing_agent_id")
+        self.assertEqual(unauthorized_payload["error"]["details"]["header"], server.AGENT_ID_HEADER)
+        self.assertEqual(authorized_status, 201)
+        self.assertEqual(authorized_payload["market"]["status"], "resolved")
+        self.assertEqual(authorized_payload["market"]["resolution"], "yes")
+
 
 class BayesMarketApiIntegrationTests(unittest.TestCase):
     @classmethod
@@ -4831,6 +5069,94 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["service"], "bayes-market")
         self.assertEqual(payload["status"], "ok")
         self.assertTrue(payload["timestamp"].endswith("Z"))
+
+    def test_create_market_http_returns_created_market_and_collection_entry(self):
+        body = build_create_market_body(
+            title="Solana ETF Approval in April",
+            description="Will a new Solana ETF be approved in April 2026?",
+            liquidity=42000.0,
+        )
+
+        status, payload = self.request("POST", "/v1/markets", body)
+        detail_status, detail_payload = self.request("GET", f"/v1/markets/{payload['market']['id']}")
+        list_status, list_payload = self.request("GET", "/v1/markets")
+
+        self.assertEqual(status, 201)
+        self.assertEqual(detail_status, 200)
+        self.assertEqual(list_status, 200)
+        self.assertEqual(payload["market"]["id"], "m4")
+        self.assertEqual(payload["market"]["title"], body["title"])
+        self.assertEqual(payload["market"]["description"], body["description"])
+        self.assertEqual(payload["market"]["variableId"], "solana_etf_approval_in_april")
+        self.assertEqual(payload["market"]["status"], "active")
+        self.assertEqual(payload["market"]["marginals"], {"yes": 0.5, "no": 0.5})
+        self.assertEqual(payload["market"]["liquidity"], 42000.0)
+        self.assertEqual(payload["market"]["volume"], 0.0)
+        self.assertEqual(detail_payload["market"], payload["market"])
+        self.assertEqual(list_payload["count"], len(server.INITIAL_MARKETS) + 1)
+        self.assertIn("m4", {market["id"] for market in list_payload["markets"]})
+
+    def test_create_market_http_rejects_invalid_payloads_without_side_effects(self):
+        cases = (
+            (
+                "missing_title",
+                {
+                    "description": "A test market",
+                    "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+                    "expires_at": "2026-12-31T23:59:59Z",
+                },
+                "title is required and must be a string",
+            ),
+            (
+                "duplicate_outcome_ids",
+                build_create_market_body(
+                    outcomes=[{"id": "yes", "name": "Yes"}, {"id": "yes", "name": "Still Yes"}],
+                ),
+                "outcome IDs must be unique",
+            ),
+            (
+                "missing_expires_at",
+                {
+                    "title": "No Expiry Market",
+                    "description": "A test market",
+                    "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+                },
+                "expires_at is required (ISO 8601 string)",
+            ),
+        )
+
+        for label, body, expected_message in cases:
+            with self.subTest(label=label):
+                before_state = snapshot_domain_state()
+
+                status, payload = self.request("POST", "/v1/markets", body)
+
+                self.assertEqual(status, 400)
+                self.assertEqual(payload["error"]["code"], "invalid_payload")
+                self.assertEqual(payload["error"]["message"], expected_message)
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_create_market_http_rejects_duplicate_market_variable_id(self):
+        body = build_create_market_body(title="Duplicate Collision Market")
+
+        first_status, first_payload = self.request("POST", "/v1/markets", body)
+        second_status, second_payload = self.request("POST", "/v1/markets", deepcopy(body))
+        list_status, list_payload = self.request("GET", "/v1/markets")
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 409)
+        self.assertEqual(list_status, 200)
+        self.assertEqual(second_payload["error"]["code"], "market_already_exists")
+        self.assertEqual(second_payload["error"]["message"], "A market with this title already exists")
+        self.assertEqual(
+            second_payload["error"]["details"],
+            {
+                "title": body["title"],
+                "variableId": first_payload["market"]["variableId"],
+                "existingMarketId": first_payload["market"]["id"],
+            },
+        )
+        self.assertEqual(list_payload["count"], len(server.INITIAL_MARKETS) + 1)
 
     def test_frontend_spa_routes_serve_index_html(self):
         status, body, headers = self.request_raw("GET", "/markets/m1")
@@ -5071,6 +5397,29 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
         self.assertTrue(second_payload["meta"]["replayed"])
         self.assertEqual(server.MARKETS["m3"]["marginals"], {"yes": 0.0, "no": 1.0})
+
+    def test_market_resolve_http_rejects_unknown_outcome_id(self):
+        before_state = snapshot_domain_state()
+
+        status, payload = self.request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_http", "maybe"),
+        )
+
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"]["code"], "invalid_market_resolution")
+        self.assertEqual(payload["error"]["message"], "outcomeId must match a known market outcome")
+        self.assertEqual(
+            payload["error"]["details"],
+            {
+                "field": "outcomeId",
+                "marketId": "m1",
+                "received": "maybe",
+                "allowed": ["no", "yes"],
+            },
+        )
+        assert_domain_state_unchanged(self, before_state)
 
     def test_market_resolve_http_settles_account_exposure(self):
         account_id = "acct_http_resolve_risk"
