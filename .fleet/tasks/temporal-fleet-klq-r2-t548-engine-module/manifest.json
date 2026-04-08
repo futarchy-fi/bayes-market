@@ -1,0 +1,26 @@
+{
+  "task_id": "temporal-fleet-klq-r2-t548-engine-module",
+  "harness_version": "v1",
+  "branch": "ff/Ttemporal-fleet-klq-r2-t548-engine-module",
+  "base_branch": "ff/Ttemporal-fleet-klq",
+  "base_commit": "3cbe3ded53fe6cbd370257ff3e84211faaa2437f",
+  "head_commit": "5c03d1481966b152d89a0e6965b769f78e71df13",
+  "changed_files": [
+    ".fleet/tasks/temporal-fleet-klq-r2-t548-engine-module/analysis.md",
+    ".fleet/tasks/temporal-fleet-klq-r2-t548-engine-module/review.json",
+    "backend/__init__.py",
+    "backend/inference/__init__.py",
+    "backend/inference/config.py",
+    "backend/inference/contracts.py",
+    "backend/inference/errors.py",
+    "backend/server.py",
+    "tests/test_bayes_market_inference_module.py"
+  ],
+  "lines_added": 581,
+  "lines_removed": 24,
+  "commit_count": 5,
+  "start_ts": "2026-04-08T12:39:37.070Z",
+  "end_ts": "2026-04-08T12:53:44.517Z",
+  "provider": "codex",
+  "status": "completed"
+}
