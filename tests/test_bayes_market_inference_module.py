@@ -3,16 +3,21 @@ from __future__ import annotations
 import importlib.util
 import pathlib
 import unittest
+from copy import deepcopy
 from dataclasses import FrozenInstanceError
 
 from backend.inference import (
     AtomicEventQueryResult,
+    CURRENT_MODEL_EXACT_ELIGIBILITY_REASON,
     CliqueSummary,
     CompileResult,
+    CurrentModelCompileArtifact,
+    CurrentModelCompiler,
     DEFAULT_ENGINE_CONFIG,
     EngineConfig,
     InferenceUnsupportedQueryError,
     MarginalQueryResult,
+    compile_current_market_artifact,
 )
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -125,6 +130,133 @@ class BayesMarketInferenceModuleTests(unittest.TestCase):
         finally:
             server.ENGINE_CONFIG = original_config
             server.reset_state()
+
+    def test_current_model_compiler_builds_truthful_singleton_artifact(self):
+        market_snapshot = deepcopy(server.MARKETS["m1"])
+        conditional_marginals = {
+            "btc_etf_approval_week=yes": {
+                "yes": 0.7,
+                "no": 0.3,
+            }
+        }
+
+        artifact = compile_current_market_artifact(
+            market_snapshot=market_snapshot,
+            conditional_marginals=conditional_marginals,
+        )
+
+        self.assertIsInstance(artifact, CurrentModelCompileArtifact)
+        self.assertEqual(artifact.market_id, "m1")
+        self.assertEqual(artifact.variable_id, server.MARKETS["m1"]["variableId"])
+        self.assertEqual(
+            artifact.source_state_hash,
+            server.canonical_json_hash(
+                {
+                    "market": market_snapshot,
+                    "conditionalMarginals": conditional_marginals,
+                }
+            ),
+        )
+        self.assertEqual(artifact.compile_id, f"comp-{artifact.source_state_hash.split(':', 1)[-1][:12]}")
+        self.assertEqual(artifact.compile_type, DEFAULT_ENGINE_CONFIG.compile_type)
+        self.assertEqual(
+            artifact.cliques,
+            (
+                CliqueSummary(
+                    id="m1-c1",
+                    nodes=(server.MARKETS["m1"]["variableId"],),
+                    size=1,
+                    states=len(server.MARKETS["m1"]["outcomes"]),
+                ),
+            ),
+        )
+        self.assertEqual(artifact.junction_tree_width, 0)
+        self.assertTrue(artifact.exact_eligible)
+        self.assertEqual(artifact.eligibility_reason, CURRENT_MODEL_EXACT_ELIGIBILITY_REASON)
+        self.assertEqual(artifact.memory_bytes, 128)
+        self.assertEqual(artifact.source_state_payload()["conditionalMarginals"], conditional_marginals)
+        self.assertEqual(
+            dict(artifact.conditional_marginals["btc_etf_approval_week=yes"]),
+            {"yes": 0.7, "no": 0.3},
+        )
+
+    def test_current_model_compiler_is_deterministic_for_equal_snapshots(self):
+        market_snapshot = deepcopy(server.MARKETS["m2"])
+        conditional_marginals = {
+            "eth_price_gt_3000_mar15=yes": {
+                "yes": 0.2,
+                "no": 0.7,
+                "delayed": 0.1,
+            }
+        }
+
+        first = compile_current_market_artifact(
+            market_snapshot=market_snapshot,
+            conditional_marginals=conditional_marginals,
+        )
+        second = compile_current_market_artifact(
+            market_snapshot=deepcopy(server.MARKETS["m2"]),
+            conditional_marginals=deepcopy(conditional_marginals),
+        )
+
+        self.assertEqual(first, second)
+
+    def test_current_model_compiler_changes_hash_when_source_state_changes(self):
+        baseline_market = deepcopy(server.MARKETS["m1"])
+        updated_market = deepcopy(server.MARKETS["m1"])
+        updated_market["marginals"] = {"yes": 0.55, "no": 0.45}
+
+        baseline = compile_current_market_artifact(market_snapshot=baseline_market)
+        updated = compile_current_market_artifact(market_snapshot=updated_market)
+
+        self.assertNotEqual(baseline.source_state_hash, updated.source_state_hash)
+        self.assertNotEqual(baseline.compile_id, updated.compile_id)
+
+    def test_current_model_compiler_freezes_nested_state(self):
+        artifact = compile_current_market_artifact(market_snapshot=deepcopy(server.MARKETS["m1"]))
+
+        with self.assertRaises(TypeError):
+            artifact.marginals["yes"] = 0.4  # type: ignore[index]
+
+        with self.assertRaises(TypeError):
+            artifact.source_state_inputs["market"]["marginals"]["yes"] = 0.4  # type: ignore[index]
+
+        with self.assertRaises(TypeError):
+            artifact.outcomes[0]["id"] = "maybe"  # type: ignore[index]
+
+        with self.assertRaises(FrozenInstanceError):
+            artifact.market_id = "m2"  # type: ignore[misc]
+
+    def test_current_model_compiler_can_emit_compile_result_with_artifact(self):
+        compiler = CurrentModelCompiler()
+        compile_result = compiler.compile_result(
+            market_snapshot=deepcopy(server.MARKETS["m1"]),
+            compile_time_ms=1.25,
+            last_updated="2026-04-08T00:00:00Z",
+        )
+
+        self.assertIsInstance(compile_result, CompileResult)
+        self.assertIsInstance(compile_result.artifact, CurrentModelCompileArtifact)
+        self.assertEqual(compile_result.compile_id, compile_result.artifact.compile_id)
+        self.assertEqual(compile_result.compile_type, compile_result.artifact.compile_type)
+        self.assertEqual(compile_result.source_state_hash, compile_result.artifact.source_state_hash)
+        self.assertEqual(compile_result.cliques, compile_result.artifact.cliques)
+        self.assertEqual(compile_result.memory_bytes, compile_result.artifact.memory_bytes)
+        self.assertEqual(compile_result.compile_time_ms, 1.25)
+        self.assertEqual(compile_result.last_updated, "2026-04-08T00:00:00Z")
+
+    def test_current_model_compiler_rejects_malformed_market_snapshots(self):
+        missing_variable_id = deepcopy(server.MARKETS["m1"])
+        del missing_variable_id["variableId"]
+
+        missing_outcome_probability = deepcopy(server.MARKETS["m1"])
+        missing_outcome_probability["marginals"] = {"yes": 1.0}
+
+        with self.assertRaises(server.InferenceCompileError):
+            compile_current_market_artifact(market_snapshot=missing_variable_id)
+
+        with self.assertRaises(server.InferenceCompileError):
+            compile_current_market_artifact(market_snapshot=missing_outcome_probability)
 
 
 if __name__ == "__main__":

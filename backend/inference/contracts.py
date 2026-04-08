@@ -44,6 +44,7 @@ class CompileResult:
     compile_time_ms: float = 0.0
     memory_bytes: int = 0
     last_updated: str = ""
+    artifact: Any | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "cliques", tuple(self.cliques))

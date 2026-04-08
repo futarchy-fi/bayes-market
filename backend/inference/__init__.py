@@ -9,6 +9,16 @@ from .contracts import (
     InferenceQueryBackend,
     MarginalQueryResult,
 )
+from .current_model import (
+    CURRENT_MODEL_COMPILER,
+    CURRENT_MODEL_EXACT_ELIGIBILITY_REASON,
+    CurrentModelCompileArtifact,
+    CurrentModelCompiler,
+    compile_current_market_artifact,
+    compile_current_market_result,
+    compile_current_model_artifact,
+    compile_current_model_result,
+)
 from .errors import (
     InferenceCompileError,
     InferenceError,
@@ -18,8 +28,12 @@ from .errors import (
 
 __all__ = [
     "AtomicEventQueryResult",
+    "CURRENT_MODEL_COMPILER",
+    "CURRENT_MODEL_EXACT_ELIGIBILITY_REASON",
     "CliqueSummary",
     "CompileResult",
+    "CurrentModelCompileArtifact",
+    "CurrentModelCompiler",
     "DEFAULT_ENGINE_CONFIG",
     "EngineConfig",
     "InferenceCompileError",
@@ -29,5 +43,8 @@ __all__ = [
     "InferenceQueryError",
     "InferenceUnsupportedQueryError",
     "MarginalQueryResult",
+    "compile_current_market_artifact",
+    "compile_current_market_result",
+    "compile_current_model_artifact",
+    "compile_current_model_result",
 ]
-
