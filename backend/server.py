@@ -101,7 +101,7 @@ INITIAL_MARKETS: dict[str, dict[str, Any]] = {
             {"id": "yes", "name": "Yes"},
             {"id": "no", "name": "No"},
         ],
-        "marginals": {"yes": 0.12, "no": 0.88},
+        "marginals": {"yes": 0.0, "no": 1.0},
         "liquidity": 200000.0,
         "volume": 120000.0,
         "created_at": "2026-02-15T00:00:00Z",
@@ -403,6 +403,7 @@ def service_index_payload() -> dict[str, Any]:
                 "/v1/markets/{id}",
                 "/v1/markets/{id}/events",
                 "/v1/markets/{id}/engine-stats",
+                "POST /v1/markets/{id}/resolve",
             ],
             "orders": [
                 "POST /v1/markets/{id}/orders/probability-edit",
@@ -1823,6 +1824,46 @@ def create_probability_edit_order(
     return order
 
 
+def build_market_resolution_marginals(market: dict[str, Any], outcome_id: str) -> dict[str, float]:
+    """Build a point-mass marginal distribution for a resolved market."""
+    outcome_ids = _market_outcome_ids(market)
+    if outcome_id not in outcome_ids:
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "outcomeId must match a known market outcome",
+            {
+                "field": "outcomeId",
+                "marketId": str(market["id"]),
+                "received": outcome_id,
+                "allowed": sorted(outcome_ids),
+            },
+        )
+
+    return {candidate: 1.0 if candidate == outcome_id else 0.0 for candidate in outcome_ids}
+
+
+def normalize_market_resolution_payload(market_id: str, payload: dict[str, Any]) -> dict[str, str]:
+    """Normalize and validate a market-resolution request body."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    if not isinstance(payload, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
+
+    raw_outcome_id = payload.get("outcomeId")
+    if not isinstance(raw_outcome_id, str) or not raw_outcome_id.strip():
+        raise ApiError(400, "invalid_market_resolution", "outcomeId is required", {"field": "outcomeId"})
+
+    outcome_id = raw_outcome_id.strip()
+    build_market_resolution_marginals(market, outcome_id)
+    return {
+        "kind": "ResolveMarket",
+        "outcomeId": outcome_id,
+    }
+
+
 def normalize_probability_edit_payload(market_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Normalize and validate a probability-edit request body."""
     market = MARKETS.get(market_id)
@@ -1905,6 +1946,34 @@ def materialize_probability_edit_command(
         "commandType": "ProbabilityEdit",
         "submittedAt": submitted_at,
         "payload": normalized_payload,
+        "meta": {
+            "source": "api",
+        },
+    }
+    if idempotency_key is not None:
+        command["idempotencyKey"] = idempotency_key
+
+    COMMANDS[command_id] = deepcopy(command)
+    return command
+
+
+def materialize_market_resolution_command(
+    market_id: str,
+    normalized_payload: dict[str, str],
+    account_id: str,
+    command_id: str,
+    submitted_at: str,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Build and persist an AdminOp command envelope for market resolution."""
+    command = {
+        "schemaVersion": "bayes-command/v1",
+        "commandId": command_id,
+        "marketId": market_id,
+        "accountId": account_id,
+        "commandType": "AdminOp",
+        "submittedAt": submitted_at,
+        "payload": deepcopy(normalized_payload),
         "meta": {
             "source": "api",
         },
@@ -2104,6 +2173,154 @@ def build_terminal_acceptance_response(
         status=201,
         response_fields={
             "order": deepcopy(order),
+        },
+        scope_key=scope_key,
+    )
+
+
+def settle_market_account_risk(market_id: str, timestamp: str) -> list[dict[str, Any]]:
+    """Release current market exposure from account risk and LMSR read models."""
+    asset_deltas: list[dict[str, Any]] = []
+
+    for account_id in sorted(ACCOUNT_RISK):
+        account = ACCOUNT_RISK[account_id]
+        markets = account.get("markets")
+        if not isinstance(markets, dict):
+            continue
+
+        removed_market = markets.pop(market_id, None)
+        lmsr_state = ensure_account_lmsr_state(account)
+        slices = lmsr_state["slices"]
+        slice_keys_to_remove = [
+            slice_key
+            for slice_key, slice_state in list(slices.items())
+            if isinstance(slice_state, dict) and str(slice_state.get("marketId")) == market_id
+        ]
+        for slice_key in slice_keys_to_remove:
+            del slices[slice_key]
+
+        if removed_market is None and not slice_keys_to_remove:
+            continue
+
+        before_min_asset = round_risk_value(float(account["minAsset"]))
+        risk_limit = round_risk_value(float(account["riskLimit"]))
+        remaining_consumed = round_risk_value(
+            sum(float(market_state["capacityConsumed"]) for market_state in markets.values())
+        )
+        after_min_asset = round_risk_value(risk_limit - remaining_consumed)
+        account["minAsset"] = after_min_asset
+        account["updatedAt"] = timestamp
+
+        if removed_market is not None:
+            asset_deltas.append(
+                {
+                    "accountId": account_id,
+                    "marketId": market_id,
+                    "beforeMinAsset": before_min_asset,
+                    "afterMinAsset": after_min_asset,
+                }
+            )
+
+    return asset_deltas
+
+
+def transition_market_to_resolved(
+    market_id: str,
+    outcome_id: str,
+    *,
+    resolved_at: str,
+) -> dict[str, Any]:
+    """Apply the replay-relevant market mutation for an accepted resolution."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    status = str(market["status"])
+    if status == "resolved":
+        raise ApiError(
+            409,
+            "market_already_resolved",
+            "Market is already resolved",
+            {
+                "marketId": market_id,
+                "status": status,
+                "currentResolution": market.get("resolution"),
+            },
+        )
+    if status not in {"active", "closed"}:
+        raise ApiError(
+            409,
+            "market_not_resolvable",
+            "Market can only be resolved from active or closed status",
+            {
+                "marketId": market_id,
+                "status": status,
+                "allowedStatuses": ["active", "closed"],
+            },
+        )
+
+    previous_marginals = deepcopy(market["marginals"])
+    new_marginals = build_market_resolution_marginals(market, outcome_id)
+    market["status"] = "resolved"
+    market["resolution"] = outcome_id
+    market["marginals"] = deepcopy(new_marginals)
+    CONDITIONAL_MARGINALS.pop(market_id, None)
+
+    return {
+        "market": deepcopy(market),
+        "previousMarginals": previous_marginals,
+        "newMarginals": deepcopy(new_marginals),
+        "resolvedAt": resolved_at,
+    }
+
+
+def resolve_market_command(command: dict[str, Any]) -> dict[str, Any]:
+    """Apply a market-resolution AdminOp and return the accepted event inputs."""
+    resolved_at = utc_timestamp()
+    resolution = transition_market_to_resolved(
+        str(command["marketId"]),
+        str(command["payload"]["outcomeId"]),
+        resolved_at=resolved_at,
+    )
+    resolution["assetDelta"] = settle_market_account_risk(str(command["marketId"]), resolved_at)
+    return resolution
+
+
+def build_market_resolution_acceptance_response(
+    command: dict[str, Any],
+    resolution: dict[str, Any],
+    scope_key: tuple[str, str, str] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Emit and persist a terminal acceptance response for a market resolution."""
+    market = MARKETS[str(command["marketId"])]
+    marginal_delta = [
+        {
+            "variableId": str(market["variableId"]),
+            "outcomeId": outcome_id,
+            "before": resolution["previousMarginals"][outcome_id],
+            "after": resolution["newMarginals"][outcome_id],
+        }
+        for outcome_id in _market_outcome_ids(market)
+        if resolution["previousMarginals"][outcome_id] != resolution["newMarginals"][outcome_id]
+    ]
+
+    return build_terminal_response(
+        command,
+        event_type="CommandAccepted",
+        event_payload={
+            "effects": {
+                "marginalDelta": marginal_delta,
+                "assetDelta": deepcopy(resolution["assetDelta"]),
+            },
+            "pricing": {
+                "cost": 0.0,
+                "fee": 0.0,
+            },
+            "replayStateHash": market_replay_state_hash(str(command["marketId"])),
+        },
+        status=201,
+        response_fields={
+            "market": deepcopy(resolution["market"]),
         },
         scope_key=scope_key,
     )
@@ -2372,6 +2589,89 @@ def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[
     return build_event_trade_acceptance_response(command, order, scope_key)
 
 
+def handle_market_resolution(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
+    """Handle the full AdminOp-backed market-resolution lifecycle for one market."""
+    body = payload if payload is not None else {}
+    if not isinstance(body, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
+
+    account_id = body.get("accountId")
+    if not isinstance(account_id, str) or not account_id.strip():
+        raise ApiError(400, "invalid_market_resolution", "accountId is required", {"field": "accountId"})
+
+    idempotency_key = body.get("idempotencyKey")
+    if idempotency_key is not None:
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise ApiError(
+                400,
+                "invalid_market_resolution",
+                "idempotencyKey must be a non-empty string when provided",
+                {"field": "idempotencyKey"},
+            )
+        idempotency_key = idempotency_key.strip()
+
+    normalized_payload = normalize_market_resolution_payload(market_id, body)
+    account_id = account_id.strip()
+    scope_key = idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
+    if scope_key is not None:
+        existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
+        if existing_command_id is not None:
+            existing_command = COMMANDS[existing_command_id]
+            if existing_command["payload"] != normalized_payload:
+                return build_idempotency_conflict_response(
+                    existing_command_id,
+                    idempotency_key,
+                    market_id,
+                    account_id,
+                    "AdminOp",
+                )
+            return replay_terminal_outcome(existing_command_id)
+
+    submitted_at = utc_timestamp()
+    command = materialize_market_resolution_command(
+        market_id=market_id,
+        normalized_payload=normalized_payload,
+        account_id=account_id,
+        command_id=generate_command_id(),
+        submitted_at=submitted_at,
+        idempotency_key=idempotency_key,
+    )
+    market = MARKETS[market_id]
+    if market["status"] == "resolved":
+        return build_terminal_rejection_response(
+            command,
+            code="market_already_resolved",
+            message="Market is already resolved",
+            details={
+                "marketId": market_id,
+                "status": market["status"],
+                "currentResolution": market.get("resolution"),
+                "commandId": command["commandId"],
+            },
+            retry_hint="reuse the original idempotency key to replay the prior outcome",
+            status=409,
+            scope_key=scope_key,
+        )
+    if market["status"] not in {"active", "closed"}:
+        return build_terminal_rejection_response(
+            command,
+            code="market_not_resolvable",
+            message="Market can only be resolved from active or closed status",
+            details={
+                "marketId": market_id,
+                "status": market["status"],
+                "allowedStatuses": ["active", "closed"],
+                "commandId": command["commandId"],
+            },
+            retry_hint="resolve an active or closed market",
+            status=409,
+            scope_key=scope_key,
+        )
+
+    resolution = resolve_market_command(command)
+    return build_market_resolution_acceptance_response(command, resolution, scope_key)
+
+
 def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None) -> tuple[dict[str, Any], int]:
     """Route one HTTP request into the backend's in-memory handlers."""
     parsed = urlparse(raw_path)
@@ -2438,6 +2738,33 @@ def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None
                     {"method": method, "path": path},
                 )
             return get_market_events(market_id, parse_qs(parsed.query, keep_blank_values=True))
+
+        if len(parts) == 4 and parts[3] == "resolve":
+            if method != "POST":
+                raise ApiError(
+                    405,
+                    "method_not_allowed",
+                    f"{method} is not allowed for this resource",
+                    {"method": method, "path": path},
+                )
+            started_at = time.perf_counter()
+            try:
+                payload, status = handle_market_resolution(market_id, body)
+            except ApiError:
+                if market_id in MARKETS:
+                    record_market_engine_request(
+                        market_id,
+                        (time.perf_counter() - started_at) * 1000.0,
+                        error=True,
+                    )
+                raise
+
+            if market_id in MARKETS:
+                duration_ms = (time.perf_counter() - started_at) * 1000.0
+                record_market_engine_request(market_id, duration_ms, error=status >= 400)
+                if status == 201:
+                    refresh_market_compile_snapshot(market_id, compile_time_ms=duration_ms)
+            return payload, status
 
         if len(parts) == 5 and parts[3:] == ["orders", "probability-edit"]:
             if method != "POST":

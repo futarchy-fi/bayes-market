@@ -62,6 +62,45 @@ def build_event_trade_body(
     return body
 
 
+def build_market_resolution_body(
+    account_id: str,
+    outcome_id: str,
+    *,
+    idempotency_key: str | None = None,
+) -> dict[str, object]:
+    body: dict[str, object] = {
+        "accountId": account_id,
+        "outcomeId": outcome_id,
+    }
+    if idempotency_key is not None:
+        body["idempotencyKey"] = idempotency_key
+    return body
+
+
+def snapshot_domain_state() -> dict[str, object]:
+    return {
+        "markets": deepcopy(server.MARKETS),
+        "conditional_marginals": deepcopy(server.CONDITIONAL_MARGINALS),
+        "orders": deepcopy(server.ORDERS),
+        "commands": deepcopy(server.COMMANDS),
+        "events": deepcopy(server.EVENTS),
+        "terminal_outcomes": deepcopy(server.TERMINAL_OUTCOMES),
+        "idempotency_keys": deepcopy(server.IDEMPOTENCY_KEYS),
+        "account_risk": deepcopy(server.ACCOUNT_RISK),
+    }
+
+
+def assert_domain_state_unchanged(test_case: unittest.TestCase, snapshot: dict[str, object]) -> None:
+    test_case.assertEqual(server.MARKETS, snapshot["markets"])
+    test_case.assertEqual(server.CONDITIONAL_MARGINALS, snapshot["conditional_marginals"])
+    test_case.assertEqual(server.ORDERS, snapshot["orders"])
+    test_case.assertEqual(server.COMMANDS, snapshot["commands"])
+    test_case.assertEqual(server.EVENTS, snapshot["events"])
+    test_case.assertEqual(server.TERMINAL_OUTCOMES, snapshot["terminal_outcomes"])
+    test_case.assertEqual(server.IDEMPOTENCY_KEYS, snapshot["idempotency_keys"])
+    test_case.assertEqual(server.ACCOUNT_RISK, snapshot["account_risk"])
+
+
 def pick_probability_distinct_from_current(market_id: str, outcome_id: str, rng: random.Random) -> float:
     current_probability = float(server.MARKETS[market_id]["marginals"][outcome_id])
     return rng.choice([candidate for candidate in PROPERTY_PROBABILITIES if candidate != current_probability])
@@ -159,7 +198,13 @@ def build_random_context(target_market_id: str, rng: random.Random) -> list[dict
     return [
         {
             "variableId": server.MARKETS[market_id]["variableId"],
-            "outcomeId": rng.choice([outcome["id"] for outcome in server.MARKETS[market_id]["outcomes"]]),
+            "outcomeId": rng.choice(
+                [
+                    outcome["id"]
+                    for outcome in server.MARKETS[market_id]["outcomes"]
+                    if float(server.MARKETS[market_id]["marginals"][outcome["id"]]) > 0.0
+                ]
+            ),
         }
         for market_id in sorted(selected_market_ids, key=lambda market_id: server.MARKETS[market_id]["variableId"])
     ]
@@ -274,6 +319,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["routes"]["accounts"], ["/v1/accounts/{id}/risk"])
         self.assertIn("/v1/markets/{id}/events", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/engine-stats", payload["routes"]["markets"])
+        self.assertIn("POST /v1/markets/{id}/resolve", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/orders/event-trade", payload["routes"]["orders"])
 
     def test_list_markets_returns_summary_shape(self):
@@ -552,6 +598,30 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertGreaterEqual(payload["diagnostics"]["compile_time_ms"], 0.0)
         self.assertGreater(payload["diagnostics"]["memory_bytes"], 0)
         self.assertTrue(payload["diagnostics"]["last_updated"].endswith("Z"))
+
+    def test_market_engine_stats_materializes_compile_snapshot_after_resolution(self):
+        context = [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}]
+        server.CONDITIONAL_MARGINALS["m1"] = {
+            server.context_state_key(context): {"yes": 0.7, "no": 0.3},
+        }
+
+        write_payload, write_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_engine_stats", "yes"),
+        )
+        payload, status = server.route_request("GET", "/v1/markets/m1/engine-stats")
+
+        self.assertEqual(write_status, 201)
+        self.assertEqual(write_payload["result"]["status"], "accepted")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["marketId"], "m1")
+        self.assertEqual(payload["engine"]["source_state_hash"], server.market_replay_state_hash("m1"))
+        self.assertEqual(
+            payload["engine"]["compile_id"],
+            f"comp-{payload['engine']['source_state_hash'].split(':', 1)[-1][:12]}",
+        )
+        self.assertNotIn("m1", server.CONDITIONAL_MARGINALS)
 
     def test_refresh_market_compile_snapshot_uses_current_model_compiler_adapter(self):
         class StubClique:
@@ -2202,8 +2272,247 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(command["marketId"], "m3")
         event = server.EVENTS[payload["result"]["eventId"]]
         self.assertEqual(event["payload"]["reasonCode"], "market_not_active")
-        self.assertEqual(server.MARKETS["m3"]["marginals"], {"yes": 0.12, "no": 0.88})
+        self.assertEqual(server.MARKETS["m3"]["marginals"], {"yes": 0.0, "no": 1.0})
         self.assertEqual(len(server.ORDERS), 0)
+
+    def test_market_resolution_accepts_admin_op_and_settles_account_exposure(self):
+        account_id = "acct_resolve_settlement"
+        first_order, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
+        )
+        conditional_order, conditional_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                **build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.7),
+                "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+            },
+        )
+        retained_order, retained_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/probability-edit",
+            build_unconditional_probability_edit_body(account_id, "m2", "yes", 0.4),
+        )
+        pre_resolution_risk, pre_resolution_risk_status = server.route_request("GET", f"/v1/accounts/{account_id}/risk")
+        pre_resolution_account_state = deepcopy(server.ACCOUNT_RISK[account_id])
+
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_admin", "yes", idempotency_key="idem-resolve-m1"),
+        )
+        post_resolution_risk, post_resolution_risk_status = server.route_request("GET", f"/v1/accounts/{account_id}/risk")
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(conditional_status, 201)
+        self.assertEqual(retained_status, 201)
+        self.assertEqual(pre_resolution_risk_status, 200)
+        self.assertEqual(status, 201)
+        self.assertEqual(post_resolution_risk_status, 200)
+        self.assertEqual(payload["market"]["id"], "m1")
+        self.assertEqual(payload["market"]["status"], "resolved")
+        self.assertEqual(payload["market"]["resolution"], "yes")
+        self.assertEqual(payload["market"]["marginals"], {"yes": 1.0, "no": 0.0})
+        self.assertEqual(payload["result"]["status"], "accepted")
+        self.assertEqual(payload["meta"]["idempotencyKeyEcho"], "idem-resolve-m1")
+
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        retained_market = post_resolution_risk["account"]["risk"]["minAssets"]["markets"][0]
+        retained_impact_score = retained_order["order"]["impactScore"]
+        expected_remaining_min_asset = round(100.0 - retained_impact_score, 6)
+        self.assertEqual(command["commandType"], "AdminOp")
+        self.assertEqual(command["payload"], {"kind": "ResolveMarket", "outcomeId": "yes"})
+        self.assertNotIn("m1", server.CONDITIONAL_MARGINALS)
+        self.assertEqual(post_resolution_risk["account"]["id"], account_id)
+        self.assertEqual(post_resolution_risk["account"]["risk"]["minAssets"]["overall"], expected_remaining_min_asset)
+        self.assertEqual(
+            post_resolution_risk["account"]["risk"]["capacityIndicators"],
+            {
+                "limit": 100.0,
+                "available": expected_remaining_min_asset,
+                "consumed": retained_impact_score,
+                "utilization": round(retained_impact_score / 100.0, 6),
+                "status": "healthy",
+            },
+        )
+        self.assertEqual(
+            post_resolution_risk["account"]["risk"]["minAssets"]["markets"],
+            [
+                {
+                    "marketId": "m2",
+                    "minAsset": expected_remaining_min_asset,
+                    "capacityConsumed": retained_impact_score,
+                    "utilization": round(retained_impact_score / 100.0, 6),
+                    "commandCount": 1,
+                    "lastOrderId": retained_order["order"]["id"],
+                    "lastCommandId": retained_order["order"]["commandId"],
+                    "updatedAt": retained_order["order"]["filledAt"],
+                }
+            ],
+        )
+        self.assertEqual(post_resolution_risk["account"]["risk"]["updatedAt"], server.ACCOUNT_RISK[account_id]["updatedAt"])
+        self.assertNotEqual(post_resolution_risk["account"]["risk"]["updatedAt"], pre_resolution_risk["account"]["risk"]["updatedAt"])
+        self.assertEqual(set(server.ACCOUNT_RISK[account_id]["markets"]), {"m2"})
+        self.assertEqual(server.ACCOUNT_RISK[account_id]["markets"]["m2"]["minAsset"], retained_market["minAsset"])
+        self.assertNotEqual(server.ACCOUNT_RISK[account_id], pre_resolution_account_state)
+        self.assertEqual(
+            set(server.ACCOUNT_RISK[account_id]["lmsrState"]["slices"]),
+            {
+                server.account_lmsr_slice_key("m2", []),
+            },
+        )
+
+        event = server.EVENTS[payload["result"]["eventId"]]
+        self.assertEqual(event["eventType"], "CommandAccepted")
+        self.assertEqual(
+            event["payload"]["effects"]["marginalDelta"],
+            [
+                {
+                    "variableId": "eth_price_gt_3000_mar15",
+                    "outcomeId": "yes",
+                    "before": 0.8,
+                    "after": 1.0,
+                },
+                {
+                    "variableId": "eth_price_gt_3000_mar15",
+                    "outcomeId": "no",
+                    "before": 0.2,
+                    "after": 0.0,
+                },
+            ],
+        )
+        self.assertEqual(
+            event["payload"]["effects"]["assetDelta"],
+            [
+                {
+                    "accountId": account_id,
+                    "marketId": "m1",
+                    "beforeMinAsset": pre_resolution_risk["account"]["risk"]["minAssets"]["overall"],
+                    "afterMinAsset": expected_remaining_min_asset,
+                }
+            ],
+        )
+        self.assertEqual(event["payload"]["pricing"], {"cost": 0.0, "fee": 0.0})
+        self.assertEqual(event["payload"]["replayStateHash"], server.market_replay_state_hash("m1"))
+
+    def test_market_resolution_accepts_closed_market(self):
+        server.MARKETS["m1"]["status"] = "closed"
+
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_admin", "yes", idempotency_key="idem-closed-resolve"),
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["id"], "m1")
+        self.assertEqual(payload["market"]["status"], "resolved")
+        self.assertEqual(payload["market"]["resolution"], "yes")
+        self.assertEqual(payload["market"]["marginals"], {"yes": 1.0, "no": 0.0})
+        self.assertEqual(payload["result"]["status"], "accepted")
+        self.assertEqual(server.MARKETS["m1"]["status"], "resolved")
+        self.assertEqual(server.MARKETS["m1"]["resolution"], "yes")
+
+    def test_market_resolution_rejects_draft_market_with_terminal_result(self):
+        server.MARKETS["m1"]["status"] = "draft"
+        baseline_market = deepcopy(server.MARKETS["m1"])
+
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_admin", "yes", idempotency_key="idem-draft-resolve"),
+        )
+
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"]["code"], "market_not_resolvable")
+        self.assertEqual(payload["result"]["status"], "rejected")
+        self.assertEqual(payload["result"]["eventType"], "CommandRejected")
+        self.assertEqual(payload["meta"]["idempotencyKeyEcho"], "idem-draft-resolve")
+        self.assertEqual(
+            payload["error"]["details"],
+            {
+                "marketId": "m1",
+                "status": "draft",
+                "allowedStatuses": ["active", "closed"],
+                "commandId": payload["result"]["commandId"],
+            },
+        )
+        self.assertEqual(server.MARKETS["m1"], baseline_market)
+        self.assertEqual(server.ORDERS, {})
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        self.assertEqual(command["commandType"], "AdminOp")
+        self.assertEqual(command["payload"], {"kind": "ResolveMarket", "outcomeId": "yes"})
+
+    def test_market_resolution_requires_account_id(self):
+        cases = (
+            ("missing", None),
+            ("blank", "   "),
+        )
+
+        for label, account_id in cases:
+            with self.subTest(label=label):
+                body = build_market_resolution_body("ops_admin", "yes")
+                if account_id is None:
+                    del body["accountId"]
+                else:
+                    body["accountId"] = account_id
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/resolve", body)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_resolution")
+                self.assertEqual(error.message, "accountId is required")
+                self.assertEqual(error.details["field"], "accountId")
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolution_requires_outcome_id(self):
+        cases = (
+            ("missing", None),
+            ("blank", "   "),
+        )
+
+        for label, outcome_id in cases:
+            with self.subTest(label=label):
+                body = build_market_resolution_body("ops_admin", "yes")
+                if outcome_id is None:
+                    del body["outcomeId"]
+                else:
+                    body["outcomeId"] = outcome_id
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/resolve", body)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_resolution")
+                self.assertEqual(error.message, "outcomeId is required")
+                self.assertEqual(error.details["field"], "outcomeId")
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolution_rejects_malformed_idempotency_key(self):
+        invalid_values = ("", "   ", 123)
+
+        for value in invalid_values:
+            with self.subTest(value=value):
+                body = build_market_resolution_body("ops_admin", "yes")
+                body["idempotencyKey"] = value
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/resolve", body)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_resolution")
+                self.assertEqual(error.message, "idempotencyKey must be a non-empty string when provided")
+                self.assertEqual(error.details["field"], "idempotencyKey")
+                assert_domain_state_unchanged(self, before_state)
 
     def test_create_market_returns_201_with_valid_payload(self):
         payload, status = server.route_request("POST", "/v1/markets", {
@@ -4455,6 +4764,194 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["order"]["accountId"], "acct_http")
         self.assertTrue(payload["order"]["commandId"].startswith("cmd_"))
         self.assertTrue(payload["order"]["submittedAt"].endswith("Z"))
+
+    def test_market_resolve_route_uses_market_scoped_path(self):
+        status, payload = self.request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_http", "yes"),
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["id"], "m1")
+        self.assertEqual(payload["market"]["status"], "resolved")
+        self.assertEqual(payload["market"]["resolution"], "yes")
+        self.assertEqual(payload["market"]["marginals"], {"yes": 1.0, "no": 0.0})
+        self.assertEqual(payload["result"]["status"], "accepted")
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        self.assertEqual(command["commandType"], "AdminOp")
+        self.assertEqual(command["payload"], {"kind": "ResolveMarket", "outcomeId": "yes"})
+
+    def test_market_resolve_route_is_method_not_allowed_for_get(self):
+        status, payload = self.request("GET", "/v1/markets/m1/resolve")
+
+        self.assertEqual(status, 405)
+        self.assertEqual(payload["error"]["code"], "method_not_allowed")
+        self.assertEqual(payload["error"]["details"]["method"], "GET")
+        self.assertEqual(payload["error"]["details"]["path"], "/v1/markets/m1/resolve")
+
+    def test_market_resolve_http_requires_account_id(self):
+        cases = (
+            ("missing", None),
+            ("blank", "   "),
+        )
+
+        for label, account_id in cases:
+            with self.subTest(label=label):
+                body = build_market_resolution_body("ops_http", "yes")
+                if account_id is None:
+                    del body["accountId"]
+                else:
+                    body["accountId"] = account_id
+                before_state = snapshot_domain_state()
+
+                status, payload = self.request("POST", "/v1/markets/m1/resolve", body)
+
+                self.assertEqual(status, 400)
+                self.assertEqual(payload["error"]["code"], "invalid_market_resolution")
+                self.assertEqual(payload["error"]["message"], "accountId is required")
+                self.assertEqual(payload["error"]["details"]["field"], "accountId")
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolve_http_requires_outcome_id(self):
+        cases = (
+            ("missing", None),
+            ("blank", "   "),
+        )
+
+        for label, outcome_id in cases:
+            with self.subTest(label=label):
+                body = build_market_resolution_body("ops_http", "yes")
+                if outcome_id is None:
+                    del body["outcomeId"]
+                else:
+                    body["outcomeId"] = outcome_id
+                before_state = snapshot_domain_state()
+
+                status, payload = self.request("POST", "/v1/markets/m1/resolve", body)
+
+                self.assertEqual(status, 400)
+                self.assertEqual(payload["error"]["code"], "invalid_market_resolution")
+                self.assertEqual(payload["error"]["message"], "outcomeId is required")
+                self.assertEqual(payload["error"]["details"]["field"], "outcomeId")
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolve_http_rejects_malformed_idempotency_key(self):
+        invalid_values = ("", "   ", 123)
+
+        for value in invalid_values:
+            with self.subTest(value=value):
+                body = build_market_resolution_body("ops_http", "yes")
+                body["idempotencyKey"] = value
+                before_state = snapshot_domain_state()
+
+                status, payload = self.request("POST", "/v1/markets/m1/resolve", body)
+
+                self.assertEqual(status, 400)
+                self.assertEqual(payload["error"]["code"], "invalid_market_resolution")
+                self.assertEqual(
+                    payload["error"]["message"],
+                    "idempotencyKey must be a non-empty string when provided",
+                )
+                self.assertEqual(payload["error"]["details"]["field"], "idempotencyKey")
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolve_http_replays_same_idempotency_key(self):
+        body = build_market_resolution_body("ops_http", "yes", idempotency_key="idem-http-resolve")
+
+        first_status, first_payload = self.request("POST", "/v1/markets/m1/resolve", body)
+        second_status, second_payload = self.request("POST", "/v1/markets/m1/resolve", body)
+        events_status, events_payload = self.request("GET", "/v1/markets/m1/events")
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        self.assertEqual(events_status, 200)
+        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
+        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(events_payload["events"], [server.EVENTS[first_payload["result"]["eventId"]]])
+        self.assertEqual(events_payload["chain"]["headSeq"], 1)
+
+    def test_market_resolve_http_rejects_already_resolved_market(self):
+        body = build_market_resolution_body("ops_http", "no", idempotency_key="idem-http-resolved")
+
+        first_status, first_payload = self.request("POST", "/v1/markets/m3/resolve", body)
+        second_status, second_payload = self.request("POST", "/v1/markets/m3/resolve", body)
+
+        self.assertEqual(first_status, 409)
+        self.assertEqual(second_status, 409)
+        self.assertEqual(first_payload["error"]["code"], "market_already_resolved")
+        self.assertEqual(first_payload["error"]["details"]["currentResolution"], "no")
+        self.assertEqual(first_payload["result"]["eventType"], "CommandRejected")
+        self.assertEqual(first_payload["meta"]["idempotencyKeyEcho"], "idem-http-resolved")
+        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
+        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(server.MARKETS["m3"]["marginals"], {"yes": 0.0, "no": 1.0})
+
+    def test_market_resolve_http_settles_account_exposure(self):
+        account_id = "acct_http_resolve_risk"
+        post_status, post_payload = self.request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
+        )
+        pre_resolution_risk_status, pre_resolution_risk_payload = self.request("GET", f"/v1/accounts/{account_id}/risk")
+        pre_resolution_account_state = deepcopy(server.ACCOUNT_RISK[account_id])
+        resolve_status, resolve_payload = self.request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_http", "yes"),
+        )
+        risk_status, risk_payload = self.request("GET", f"/v1/accounts/{account_id}/risk")
+
+        self.assertEqual(post_status, 201)
+        self.assertEqual(resolve_status, 201)
+        self.assertEqual(pre_resolution_risk_status, 200)
+        self.assertEqual(risk_status, 200)
+        self.assertEqual(resolve_payload["market"]["status"], "resolved")
+        self.assertEqual(risk_payload["account"]["id"], account_id)
+        self.assertEqual(
+            risk_payload["account"]["risk"]["minAssets"],
+            {
+                "overall": 100.0,
+                "markets": [],
+            },
+        )
+        self.assertEqual(
+            risk_payload["account"]["risk"]["capacityIndicators"],
+            {
+                "limit": 100.0,
+                "available": 100.0,
+                "consumed": 0.0,
+                "utilization": 0.0,
+                "status": "healthy",
+            },
+        )
+        self.assertEqual(risk_payload["account"]["risk"]["updatedAt"], server.ACCOUNT_RISK[account_id]["updatedAt"])
+        self.assertNotEqual(risk_payload["account"]["risk"]["updatedAt"], pre_resolution_risk_payload["account"]["risk"]["updatedAt"])
+        self.assertEqual(server.ACCOUNT_RISK[account_id]["markets"], {})
+        self.assertEqual(
+            server.ACCOUNT_RISK[account_id]["lmsrState"],
+            {
+                "version": server.ACCOUNT_LMSR_LEDGER_VERSION,
+                "riskReadModel": server.ACCOUNT_LMSR_RISK_READ_MODEL,
+                "slices": {},
+            },
+        )
+        self.assertNotEqual(server.ACCOUNT_RISK[account_id], pre_resolution_account_state)
+        event = server.EVENTS[resolve_payload["result"]["eventId"]]
+        self.assertEqual(
+            event["payload"]["effects"]["assetDelta"],
+            [
+                {
+                    "accountId": account_id,
+                    "marketId": "m1",
+                    "beforeMinAsset": pre_resolution_risk_payload["account"]["risk"]["minAssets"]["overall"],
+                    "afterMinAsset": 100.0,
+                }
+            ],
+        )
 
     def test_probability_edit_legacy_route_is_not_found(self):
         status, payload = self.request(
