@@ -20,9 +20,9 @@ export default function Portfolio() {
   if (!data) return null;
 
   const risk = data.account.risk;
-  const health = risk.capacityIndicators;
-  const healthColor = health.healthLabel === "healthy" ? "var(--color-success)"
-    : health.healthLabel === "warning" ? "var(--color-warning)"
+  const cap = risk.capacityIndicators;
+  const healthColor = cap.status === "healthy" ? "var(--color-success)"
+    : cap.status === "warning" ? "var(--color-warning)"
     : "var(--color-danger)";
 
   return (
@@ -30,10 +30,10 @@ export default function Portfolio() {
       <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>Portfolio</h1>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "var(--space-md)" }}>
-        <MetricCard label="Overall Min Asset" value={risk.minAssets.overall.toFixed(2)} />
-        <MetricCard label="Utilization" value={`${(health.utilization * 100).toFixed(1)}%`} />
-        <MetricCard label="Headroom" value={health.headroom.toFixed(2)} />
-        <MetricCard label="Health" value={health.healthLabel} color={healthColor} />
+        <MetricCard label="Available" value={cap.available.toFixed(2)} />
+        <MetricCard label="Consumed" value={cap.consumed.toFixed(2)} />
+        <MetricCard label="Utilization" value={`${(cap.utilization * 100).toFixed(1)}%`} />
+        <MetricCard label="Health" value={cap.status} color={healthColor} />
       </div>
 
       <div>

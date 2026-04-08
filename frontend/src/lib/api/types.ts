@@ -114,9 +114,11 @@ export interface MarketRisk {
 }
 
 export interface CapacityIndicators {
-  headroom: number;
+  limit: number;
+  available: number;
+  consumed: number;
   utilization: number;
-  healthLabel: string;
+  status: "healthy" | "warning" | "critical";
 }
 
 export interface AccountRiskResponse {
