@@ -1581,6 +1581,57 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             ],
         )
 
+    def test_probability_edit_without_context_reuses_previewed_adapter_rescale(self):
+        class StubQueryBackend:
+            def __init__(self) -> None:
+                self.contexts: list[dict[str, str] | None] = []
+
+            def query_marginals(
+                self,
+                compile_result: object,
+                *,
+                context: dict[str, str] | None = None,
+            ) -> object:
+                self.contexts.append(deepcopy(context))
+                return type("MarginalResult", (), {"marginals": {"yes": 0.2, "no": 0.3, "delayed": 0.5}})()
+
+        original_backend = server.CURRENT_MODEL_QUERY_BACKEND
+        stub_backend = StubQueryBackend()
+        server.CURRENT_MODEL_QUERY_BACKEND = stub_backend
+
+        try:
+            body = {
+                "accountId": "acct_adapter_reuse",
+                "variableId": "btc_etf_approval_week",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
+                "context": [],
+            }
+            normalized_payload = server.normalize_probability_edit_payload("m2", body)
+            preview = server.preview_unconditional_probability_edit("m2", normalized_payload, "acct_adapter_reuse")
+
+            payload, status = server.route_request(
+                "POST",
+                "/v1/markets/m2/orders/probability-edit",
+                body,
+            )
+        finally:
+            server.CURRENT_MODEL_QUERY_BACKEND = original_backend
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["order"]["previousMarginals"], preview["previousMarginals"])
+        self.assertEqual(payload["order"]["newMarginals"], preview["newMarginals"])
+        self.assertEqual(payload["order"]["impactScore"], preview["impactScore"])
+        self.assertEqual(server.MARKETS["m2"]["marginals"], preview["newMarginals"])
+        self.assertEqual(
+            stub_backend.contexts,
+            [
+                None,
+                None,
+                None,
+                None,
+            ],
+        )
+
     def test_probability_edit_with_context_updates_account_risk(self):
         payload, status = server.route_request(
             "POST",
