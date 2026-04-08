@@ -6,6 +6,7 @@ import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { formatCurrency, timeUntil, truncateHash, formatRelativeTime } from "@/lib/utils/format";
 import { TradingPanel } from "@/features/trading/TradingPanel";
 import { ConditionalEditor } from "@/features/trading/ConditionalEditor";
+import { BayesNetGraph } from "@/features/graph/BayesNetGraph";
 import { useState } from "react";
 
 export default function MarketDetail() {
@@ -40,6 +41,11 @@ export default function MarketDetail() {
 
       {m.status === "active" && <TradingPanel market={m} />}
       {m.status === "active" && <ConditionalEditor market={m} />}
+
+      <BayesNetGraph
+        focusMarketId={m.id}
+        engineStats={engine.data}
+      />
 
       {/* Event Journal */}
       <div>
