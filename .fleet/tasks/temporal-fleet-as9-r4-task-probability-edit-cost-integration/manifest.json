@@ -1,0 +1,19 @@
+{
+  "task_id": "temporal-fleet-as9-r4-task-probability-edit-cost-integration",
+  "harness_version": "v1",
+  "branch": "ff/Ttemporal-fleet-as9-r4-task-probability-edit-cost-integration",
+  "base_branch": "ff/Ttemporal-fleet-as9",
+  "base_commit": "01c06994b32c93d291b72e34de51574f6dcecb37",
+  "head_commit": "db9f586c63f2a8bb93980d233ed8b1296a653919",
+  "changed_files": [
+    ".fleet/tasks/temporal-fleet-as9-r4-task-probability-edit-cost-integration/analysis.md",
+    ".fleet/tasks/temporal-fleet-as9-r4-task-probability-edit-cost-integration/review.json"
+  ],
+  "lines_added": 151,
+  "lines_removed": 0,
+  "commit_count": 2,
+  "start_ts": "2026-04-08T13:27:36.750Z",
+  "end_ts": "2026-04-08T13:38:03.450Z",
+  "provider": "codex",
+  "status": "completed"
+}
