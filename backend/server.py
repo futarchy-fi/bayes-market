@@ -1962,6 +1962,15 @@ def build_terminal_result(event: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def terminal_response_meta_kwargs(command: dict[str, Any]) -> dict[str, Any]:
+    """Build response meta fields shared by all terminal command outcomes."""
+    meta_kwargs: dict[str, Any] = {}
+    idempotency_key = command.get("idempotencyKey")
+    if isinstance(idempotency_key, str):
+        meta_kwargs["idempotencyKeyEcho"] = idempotency_key
+    return meta_kwargs
+
+
 def record_terminal_outcome(
     command: dict[str, Any],
     event: dict[str, Any],
@@ -2013,6 +2022,24 @@ def build_idempotency_conflict_response(
     }, 409
 
 
+def build_terminal_response(
+    command: dict[str, Any],
+    *,
+    event_type: str,
+    event_payload: dict[str, Any],
+    status: int,
+    response_fields: dict[str, Any],
+    scope_key: tuple[str, str, str] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Emit, record, and return a terminal command response."""
+    event = emit_terminal_event(command, event_type, event_payload)
+    response = deepcopy(response_fields)
+    response["result"] = build_terminal_result(event)
+    response["meta"] = make_meta(**terminal_response_meta_kwargs(command))
+    record_terminal_outcome(command, event, status, response, scope_key)
+    return response, status
+
+
 def build_terminal_rejection_response(
     command: dict[str, Any],
     code: str,
@@ -2023,30 +2050,24 @@ def build_terminal_rejection_response(
     scope_key: tuple[str, str, str] | None = None,
 ) -> tuple[dict[str, Any], int]:
     """Emit and persist a terminal rejection response for a command."""
-    event = emit_terminal_event(
+    return build_terminal_response(
         command,
-        "CommandRejected",
-        {
+        event_type="CommandRejected",
+        event_payload={
             "reasonCode": code,
             "reason": message,
             "retryHint": retry_hint,
         },
-    )
-    meta_kwargs: dict[str, Any] = {}
-    idempotency_key = command.get("idempotencyKey")
-    if isinstance(idempotency_key, str):
-        meta_kwargs["idempotencyKeyEcho"] = idempotency_key
-    response = {
-        "error": {
-            "code": code,
-            "message": message,
-            "details": deepcopy(details),
+        status=status,
+        response_fields={
+            "error": {
+                "code": code,
+                "message": message,
+                "details": deepcopy(details),
+            },
         },
-        "result": build_terminal_result(event),
-        "meta": make_meta(**meta_kwargs),
-    }
-    record_terminal_outcome(command, event, status, response, scope_key)
-    return response, status
+        scope_key=scope_key,
+    )
 
 
 def build_terminal_acceptance_response(
@@ -2066,10 +2087,10 @@ def build_terminal_acceptance_response(
     if order["payload"]["context"]:
         delta["context"] = deepcopy(order["payload"]["context"])
 
-    event = emit_terminal_event(
+    return build_terminal_response(
         command,
-        "CommandAccepted",
-        {
+        event_type="CommandAccepted",
+        event_payload={
             "effects": {
                 "marginalDelta": [delta],
                 "assetDelta": [deepcopy(asset_delta)],
@@ -2080,18 +2101,12 @@ def build_terminal_acceptance_response(
             },
             "replayStateHash": market_replay_state_hash(str(command["marketId"])),
         },
+        status=201,
+        response_fields={
+            "order": deepcopy(order),
+        },
+        scope_key=scope_key,
     )
-    meta_kwargs: dict[str, Any] = {}
-    idempotency_key = command.get("idempotencyKey")
-    if isinstance(idempotency_key, str):
-        meta_kwargs["idempotencyKeyEcho"] = idempotency_key
-    response = {
-        "order": deepcopy(order),
-        "result": build_terminal_result(event),
-        "meta": make_meta(**meta_kwargs),
-    }
-    record_terminal_outcome(command, event, 201, response, scope_key)
-    return response, 201
 
 
 def materialize_event_trade_command(
@@ -2167,10 +2182,10 @@ def build_event_trade_acceptance_response(
 ) -> tuple[dict[str, Any], int]:
     """Emit and persist a terminal acceptance response for an event trade."""
     literal = order["payload"]["formula"][0][0]
-    event = emit_terminal_event(
+    return build_terminal_response(
         command,
-        "CommandAccepted",
-        {
+        event_type="CommandAccepted",
+        event_payload={
             "effects": {
                 "marginalDelta": [],
                 "assetDelta": [],
@@ -2190,18 +2205,12 @@ def build_event_trade_acceptance_response(
             },
             "replayStateHash": market_replay_state_hash(str(command["marketId"])),
         },
+        status=201,
+        response_fields={
+            "order": deepcopy(order),
+        },
+        scope_key=scope_key,
     )
-    meta_kwargs: dict[str, Any] = {}
-    idempotency_key = command.get("idempotencyKey")
-    if isinstance(idempotency_key, str):
-        meta_kwargs["idempotencyKeyEcho"] = idempotency_key
-    response = {
-        "order": deepcopy(order),
-        "result": build_terminal_result(event),
-        "meta": make_meta(**meta_kwargs),
-    }
-    record_terminal_outcome(command, event, 201, response, scope_key)
-    return response, 201
 
 
 def handle_probability_edit(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:

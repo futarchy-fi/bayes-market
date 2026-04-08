@@ -2492,6 +2492,52 @@ class BayesMarketEventTradeTests(unittest.TestCase):
         self.assertIsNone(stats_payload["engine"]["source_state_hash"])
         self.assertNotIn("compile_time_ms", stats_payload["diagnostics"])
 
+    def test_event_trade_acceptance_appends_after_existing_probability_edit_event(self):
+        first_payload, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_event_chain_setup", "m1", "yes", 0.8),
+        )
+        second_payload, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_event_chain_trade", "m1", "yes"),
+        )
+        events_payload, events_status = server.route_request("GET", "/v1/markets/m1/events")
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        self.assertEqual(events_status, 200)
+        self.assertEqual(
+            [event["eventId"] for event in events_payload["events"]],
+            [first_payload["result"]["eventId"], second_payload["result"]["eventId"]],
+        )
+        self.assertEqual([event["seq"] for event in events_payload["events"]], [1, 2])
+        self.assertEqual(events_payload["events"][0]["prevEventHash"], server.GENESIS_EVENT_HASH)
+        self.assertEqual(
+            events_payload["events"][1]["prevEventHash"],
+            events_payload["events"][0]["eventHash"],
+        )
+        self.assertEqual(
+            events_payload["events"][1]["payload"]["trade"],
+            {
+                "marketId": "m1",
+                "outcomeId": "yes",
+                "side": "buy",
+                "size": second_payload["order"]["size"],
+                "price": second_payload["order"]["price"],
+                "notional": second_payload["order"]["notional"],
+            },
+        )
+        self.assertEqual(
+            events_payload["chain"],
+            {
+                "genesisHash": server.GENESIS_EVENT_HASH,
+                "headSeq": 2,
+                "headHash": events_payload["events"][1]["eventHash"],
+            },
+        )
+
     def test_event_trade_prices_via_query_backend_adapter_with_internal_variable_id(self):
         class StubQueryBackend:
             def __init__(self) -> None:
@@ -2716,6 +2762,61 @@ class BayesMarketEventTradeTests(unittest.TestCase):
         self.assertEqual(len(server.ORDERS), 1)
         self.assertEqual(len(server.COMMANDS), 1)
         self.assertEqual(len(server.EVENTS), 1)
+
+    def test_event_trade_rejection_appends_once_and_replays_without_double_append(self):
+        body = build_event_trade_body(
+            "acct_event_trade_reject",
+            "m3",
+            "yes",
+            idempotency_key="idem-event-trade-reject",
+        )
+
+        first_payload, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m3/orders/event-trade",
+            body,
+        )
+        second_payload, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m3/orders/event-trade",
+            body,
+        )
+        events_payload, events_status = server.route_request("GET", "/v1/markets/m3/events")
+
+        self.assertEqual(first_status, 409)
+        self.assertEqual(second_status, 409)
+        self.assertEqual(events_status, 200)
+        self.assertEqual(first_payload["error"]["code"], "market_not_active")
+        self.assertEqual(first_payload["error"]["details"]["marketId"], "m3")
+        self.assertEqual(first_payload["result"]["status"], "rejected")
+        self.assertEqual(first_payload["result"]["eventType"], "CommandRejected")
+        self.assertEqual(first_payload["result"]["reasonCode"], "market_not_active")
+        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
+        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(len(server.COMMANDS), 1)
+        self.assertEqual(len(server.EVENTS), 1)
+
+        rejection_event = server.EVENTS[first_payload["result"]["eventId"]]
+        self.assertEqual(rejection_event["seq"], 1)
+        self.assertEqual(rejection_event["prevEventHash"], server.GENESIS_EVENT_HASH)
+        self.assertEqual(
+            rejection_event["payload"],
+            {
+                "reasonCode": "market_not_active",
+                "reason": "EventTrade is only allowed for active markets",
+                "retryHint": "submit against an active market",
+            },
+        )
+        self.assertEqual(events_payload["events"], [rejection_event])
+        self.assertEqual(
+            events_payload["chain"],
+            {
+                "genesisHash": server.GENESIS_EVENT_HASH,
+                "headSeq": 1,
+                "headHash": rejection_event["eventHash"],
+            },
+        )
 
 
 class BayesMarketApiPropertyTests(unittest.TestCase):
