@@ -1,1 +1,1 @@
-INTEGRATION_OK
+NEEDS_REDECOMP: checkpoint is missing the accepted http-contract-coverage changes, and the current branch still returns invalid_structure_preserving_edit instead of invalid_probability_edit when target.probability=1.0 is submitted against a malformed conditional slice; reconcile the r4 probability-edit test overlap and land the invariant boundary fix.

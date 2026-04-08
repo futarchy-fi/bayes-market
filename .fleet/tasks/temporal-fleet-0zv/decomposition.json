@@ -1,55 +1,9 @@
 [
   {
-    "id": "t551-boundary",
-    "title": "Freeze T551 validator boundary",
-    "description": "Define the structure-preserving ProbabilityEdit validator boundary: it runs after payload normalization and before command/order mutation, and it owns only normalized market/context/base-marginal preservation checks rather than generic payload validation or solvency.",
+    "id": "t551-probability-edit-conflict-reconciliation",
+    "title": "Reconcile T551 probability-edit coverage and boundary ordering",
+    "description": "Own backend/server.py and tests/test_bayes_market_api.py for the round-4 merge conflict. Starting from the checkpoint branch, merge the accepted coverage from ff/Ttemporal-fleet-0zv-r4-t551-http-contract-coverage and ff/Ttemporal-fleet-0zv-r4-t551-invariant-regression without dropping the unit-coverage tests already on the checkpoint. Preserve the no-write HTTP assertions for invalid_structure_preserving_edit failures, and fix the probability-edit validation order so target.probability outside (0,1) still surfaces invalid_probability_edit even when the referenced market or conditional slice is malformed. Re-run python3 -m unittest discover -s tests -p 'test_bayes_market_api.py' and python3 -m unittest discover -s tests -p 'test_bayes_market_formula_schema.py'.",
     "dependsOn": [],
-    "level": "analysis"
-  },
-  {
-    "id": "t551-core-validator",
-    "title": "Implement core structure-preserving validator",
-    "description": "Implement the validator logic that checks target outcome membership, normalized context references, base-marginal completeness, finite numeric values, non-negative probabilities, unit-sum mass, and safe renormalization for binary and multi-outcome edits, returning 400 invalid_structure_preserving_edit on violations.",
-    "dependsOn": [
-      "t551-boundary"
-    ],
-    "level": "task"
-  },
-  {
-    "id": "t551-base-slice-integration",
-    "title": "Wire validator to unconditional and conditional base slices",
-    "description": "Resolve the correct base marginals from current market state or an existing CONDITIONAL_MARGINALS slice via normalized context keys, then invoke the validator from ProbabilityEdit payload normalization before any command, order, or event side effects.",
-    "dependsOn": [
-      "t551-core-validator"
-    ],
-    "level": "task"
-  },
-  {
-    "id": "t551-unit-coverage",
-    "title": "Cover validator and normalization edge cases",
-    "description": "Add direct tests for accepted binary and three-outcome edits plus malformed marginals, missing or extra outcome mass, non-unit totals, invalid context references, and malformed conditional slices reused during payload normalization.",
-    "dependsOn": [
-      "t551-core-validator",
-      "t551-base-slice-integration"
-    ],
-    "level": "task"
-  },
-  {
-    "id": "t551-http-contract-coverage",
-    "title": "Cover HTTP surfacing of validator failures",
-    "description": "Add route-level tests proving POST /v1/markets/{id}/orders/probability-edit surfaces 400 invalid_structure_preserving_edit for malformed market state or malformed existing conditional slices and leaves write-side state untouched.",
-    "dependsOn": [
-      "t551-base-slice-integration"
-    ],
-    "level": "task"
-  },
-  {
-    "id": "t551-invariant-regression",
-    "title": "Protect accepted edits with inference invariants",
-    "description": "Keep brute-force tiny-net invariant coverage around accepted unconditional and contextual ProbabilityEdit requests so the validator does not over-reject valid edits and accepted updates still match the expected renormalized marginals.",
-    "dependsOn": [
-      "t551-base-slice-integration"
-    ],
-    "level": "task"
+    "level": 1
   }
 ]
