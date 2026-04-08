@@ -1158,6 +1158,40 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             ],
         )
 
+    def test_context_state_key_canonicalizes_assignment_order(self):
+        normalized_context = [
+            {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
+            {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no"},
+        ]
+        reversed_context = list(reversed(normalized_context))
+
+        self.assertEqual(
+            server.context_state_key(normalized_context),
+            "btc_etf_approval_week=yes|fed_rate_cut_mar_2026=no",
+        )
+        self.assertEqual(
+            server.context_state_key(reversed_context),
+            "btc_etf_approval_week=yes|fed_rate_cut_mar_2026=no",
+        )
+
+    def test_resolve_probability_edit_base_marginals_reuses_existing_conditional_slice_for_unordered_context(self):
+        canonical_context = [
+            {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
+            {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no"},
+        ]
+        expected_slice = {"yes": 0.8, "no": 0.2}
+        server.CONDITIONAL_MARGINALS["m1"] = {
+            server.context_state_key(canonical_context): deepcopy(expected_slice)
+        }
+
+        resolved = server.resolve_probability_edit_base_marginals("m1", list(reversed(canonical_context)))
+
+        self.assertEqual(resolved, expected_slice)
+        self.assertIsNot(
+            resolved,
+            server.CONDITIONAL_MARGINALS["m1"][server.context_state_key(canonical_context)],
+        )
+
     def test_probability_edit_rejects_conflicting_context_assignments(self):
         with self.assertRaises(server.ApiError) as ctx:
             server.route_request(
