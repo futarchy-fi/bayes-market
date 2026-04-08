@@ -1,0 +1,20 @@
+{
+  "task_id": "temporal-fleet-7op-r4-t549-unconditional-order-state",
+  "harness_version": "v1",
+  "branch": "ff/Ttemporal-fleet-7op-r4-t549-unconditional-order-state",
+  "base_branch": "ff/Ttemporal-fleet-7op",
+  "base_commit": "e988e6b13e818565918964340ac97f49d7c142bf",
+  "head_commit": "a0d7e988e5514b21fea0b3747910714da41c3167",
+  "changed_files": [
+    ".fleet/tasks/temporal-fleet-7op-r4-t549-unconditional-order-state/analysis.md",
+    ".fleet/tasks/temporal-fleet-7op-r4-t549-unconditional-order-state/review.json",
+    "tests/test_bayes_market_api.py"
+  ],
+  "lines_added": 128,
+  "lines_removed": 0,
+  "commit_count": 3,
+  "start_ts": "2026-04-08T14:17:14.422Z",
+  "end_ts": "2026-04-08T14:24:25.335Z",
+  "provider": "codex",
+  "status": "completed"
+}

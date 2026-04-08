@@ -729,6 +729,26 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         )
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.8, "no": 0.2})
 
+    def test_probability_edit_success_persists_unconditional_order_state(self):
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_test",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": [],
+            },
+        )
+
+        self.assertEqual(status, 201)
+        stored_order = server.ORDERS[payload["order"]["id"]]
+        self.assertEqual(stored_order["previousMarginals"], payload["order"]["previousMarginals"])
+        self.assertEqual(stored_order["newMarginals"], payload["order"]["newMarginals"])
+        self.assertEqual(stored_order["impactScore"], payload["order"]["impactScore"])
+        self.assertEqual(server.MARKETS["m1"]["marginals"], stored_order["newMarginals"])
+        self.assertEqual(server.CONDITIONAL_MARGINALS, {})
+
     def test_account_risk_read_model_updates_after_probability_edit(self):
         payload, status = server.route_request(
             "POST",
