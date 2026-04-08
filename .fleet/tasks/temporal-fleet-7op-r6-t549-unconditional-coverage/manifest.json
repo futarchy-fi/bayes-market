@@ -1,0 +1,18 @@
+{
+  "task_id": "temporal-fleet-7op-r6-t549-unconditional-coverage",
+  "harness_version": "v1",
+  "branch": "ff/Ttemporal-fleet-7op-r6-t549-unconditional-coverage",
+  "base_branch": "ff/Ttemporal-fleet-7op",
+  "base_commit": "44f85ead0e0a3ad65ca37b5adf1409ff94f02c30",
+  "head_commit": "c1b6d5f363504756d08a70bfcf57a48fa6812b8d",
+  "changed_files": [
+    ".fleet/tasks/temporal-fleet-7op-r6-t549-unconditional-coverage/analysis.md"
+  ],
+  "lines_added": 107,
+  "lines_removed": 0,
+  "commit_count": 1,
+  "start_ts": "2026-04-08T14:39:35.215Z",
+  "end_ts": "2026-04-08T14:50:27.289Z",
+  "provider": "codex",
+  "status": "completed"
+}

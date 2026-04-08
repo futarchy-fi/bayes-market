@@ -1,0 +1,9 @@
+{
+  "verdict": "approve",
+  "reason": "The diff adds focused regression coverage for the empty-context adapter path, and the new tests pass under the repository's unittest discovery command.",
+  "scores": {
+    "correctness": 9,
+    "style": 9,
+    "completeness": 9
+  }
+}
