@@ -12,6 +12,7 @@ import unittest
 from copy import deepcopy
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
+from unittest.mock import patch
 from urllib.parse import urlencode
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "backend" / "server.py"
@@ -2029,6 +2030,35 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(len(server.EVENTS), 1)
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.8, "no": 0.2})
 
+    def test_probability_edit_idempotent_replay_skips_unconditional_preview(self):
+        body = {
+            "accountId": "acct_test",
+            "idempotencyKey": "idem-preview-gate",
+            "variableId": "eth_price_gt_3000_mar15",
+            "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+            "context": [],
+        }
+
+        first_payload, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            body,
+        )
+
+        with patch.object(server, "preview_unconditional_probability_edit", autospec=True) as preview_mock:
+            second_payload, second_status = server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/probability-edit",
+                body,
+            )
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
+        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
+        preview_mock.assert_not_called()
+
     def test_account_risk_replay_does_not_double_count_capacity(self):
         body = {
             "accountId": "acct_test",
@@ -2274,6 +2304,25 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(event["payload"]["reasonCode"], "market_not_active")
         self.assertEqual(server.MARKETS["m3"]["marginals"], {"yes": 0.0, "no": 1.0})
         self.assertEqual(len(server.ORDERS), 0)
+
+    def test_probability_edit_non_active_market_skips_unconditional_preview(self):
+        with patch.object(server, "preview_unconditional_probability_edit", autospec=True) as preview_mock:
+            payload, status = server.route_request(
+                "POST",
+                "/v1/markets/m3/orders/probability-edit",
+                {
+                    "accountId": "acct_test",
+                    "idempotencyKey": "idem-resolved-preview-gate",
+                    "variableId": "fed_rate_cut_mar_2026",
+                    "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.2},
+                    "context": [],
+                },
+            )
+
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"]["code"], "market_not_active")
+        self.assertEqual(payload["result"]["reasonCode"], "market_not_active")
+        preview_mock.assert_not_called()
 
     def test_market_resolution_accepts_admin_op_and_settles_account_exposure(self):
         account_id = "acct_resolve_settlement"
