@@ -58,7 +58,7 @@ describe("MarketDetail", () => {
   it("renders market title and description", async () => {
     renderWithProviders(<MarketDetail />);
     await waitFor(() => {
-      expect(screen.getByText("ETH Price > $3000 on March 15")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("ETH Price > $3000 on March 15");
     });
     expect(screen.getByText("Will ETH trade above $3000?")).toBeInTheDocument();
   });
@@ -78,10 +78,10 @@ describe("MarketDetail", () => {
     expect(screen.getByText(/No 35\.0%/)).toBeInTheDocument();
   });
 
-  it("renders trading panel prompt when no account configured", async () => {
+  it("renders assumptions panel for active market", async () => {
     renderWithProviders(<MarketDetail />);
     await waitFor(() => {
-      expect(screen.getAllByText(/Set your Account ID/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText(/Variables & Assumptions/)).toBeInTheDocument();
     });
   });
 

@@ -4,8 +4,8 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ProbabilityBar } from "@/components/ui/ProbabilityBar";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { formatCurrency, timeUntil, truncateHash, formatRelativeTime } from "@/lib/utils/format";
-import { TradingPanel } from "@/features/trading/TradingPanel";
-import { ConditionalEditor } from "@/features/trading/ConditionalEditor";
+import { AssumptionProvider } from "@/features/assumptions/AssumptionContext";
+import { AssumptionPanel } from "@/features/assumptions/AssumptionPanel";
 import { BayesNetGraph } from "@/features/graph/BayesNetGraph";
 import { JunctionTreePanel } from "@/features/graph/JunctionTreePanel";
 
@@ -37,8 +37,11 @@ export default function MarketDetail() {
 
       <ProbabilityBar outcomes={m.outcomes} marginals={m.marginals} />
 
-      {m.status === "active" && <TradingPanel market={m} />}
-      {m.status === "active" && <ConditionalEditor market={m} />}
+      {m.status === "active" && (
+        <AssumptionProvider>
+          <AssumptionPanel market={m} />
+        </AssumptionProvider>
+      )}
 
       <BayesNetGraph focusMarketId={m.id} />
 
