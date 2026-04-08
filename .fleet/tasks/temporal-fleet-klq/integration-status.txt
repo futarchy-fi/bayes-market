@@ -1,1 +1,1 @@
-INTEGRATION_OK
+NEEDS_REDECOMP: unconditional ProbabilityEdit and EventTrade now fail with 500 internal_error when an unrelated malformed conditional slice exists for the same market because adapter reads compile the whole market state before serving direct marginals/prices.
