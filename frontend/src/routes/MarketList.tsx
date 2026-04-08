@@ -52,6 +52,14 @@ export default function MarketList() {
       {isLoading && <LoadingPage />}
       {error && <ErrorMessage message={error instanceof Error ? error.message : "Failed to load markets"} />}
 
+      {data && data.markets.length > 0 && (
+        <div style={{ display: "flex", gap: "var(--space-lg)", fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: "var(--space-md)" }}>
+          <span>{data.markets.length} market{data.markets.length !== 1 ? "s" : ""}</span>
+          <span>Total Volume: {formatCurrency(data.markets.reduce((s, m) => s + m.volume, 0))}</span>
+          <span>Total Liquidity: {formatCurrency(data.markets.reduce((s, m) => s + m.liquidity, 0))}</span>
+        </div>
+      )}
+
       {data && (
         <div style={{ display: "grid", gap: "var(--space-md)", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))" }}>
           {data.markets.map((m) => (
