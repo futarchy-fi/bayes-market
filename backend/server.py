@@ -26,11 +26,14 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from backend.inference import (
-    CliqueSummary,
+    CURRENT_MODEL_COMPILER,
+    CURRENT_MODEL_QUERY_BACKEND,
     CompileResult,
     DEFAULT_ENGINE_CONFIG,
     EngineConfig,
     InferenceCompileError,
+    InferenceQueryError,
+    InferenceUnsupportedQueryError,
 )
 
 FORMULA_SCHEMA_MODULE_PATH = Path(__file__).with_name("formula_schema.py")
@@ -424,6 +427,79 @@ def ensure_market_engine_state(market_id: str) -> dict[str, Any]:
     return state
 
 
+def raise_inference_adapter_error(market_id: str, operation: str, exc: Exception) -> None:
+    raise ApiError(
+        500,
+        "internal_error",
+        "Internal server error",
+        {"marketId": market_id, "operation": operation},
+    ) from exc
+
+
+def compile_market_for_inference(
+    market_id: str,
+    *,
+    compile_time_ms: float = 0.0,
+    last_updated: str | None = None,
+) -> CompileResult:
+    market = MARKETS.get(market_id)
+    if market is None:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    try:
+        return CURRENT_MODEL_COMPILER.compile_result(
+            market_snapshot=deepcopy(market),
+            conditional_marginals=deepcopy(CONDITIONAL_MARGINALS.get(market_id, {})),
+            compile_time_ms=round(float(compile_time_ms), 3),
+            last_updated=last_updated or utc_timestamp(),
+        )
+    except InferenceCompileError as exc:
+        raise_inference_adapter_error(market_id, "compile_market", exc)
+
+
+def context_mapping_from_assignments(context: list[dict[str, str]]) -> dict[str, str]:
+    return {
+        str(assignment["variableId"]): str(assignment["outcomeId"])
+        for assignment in context
+    }
+
+
+def query_market_marginals_for_inference(
+    market_id: str,
+    context: list[dict[str, str]],
+) -> dict[str, float]:
+    compile_result = compile_market_for_inference(market_id)
+    context_mapping = context_mapping_from_assignments(context) if context else None
+
+    try:
+        query_result = CURRENT_MODEL_QUERY_BACKEND.query_marginals(
+            compile_result,
+            context=context_mapping,
+        )
+    except (InferenceQueryError, InferenceUnsupportedQueryError) as exc:
+        raise_inference_adapter_error(market_id, "query_marginals", exc)
+
+    return deepcopy(dict(query_result.marginals))
+
+
+def query_market_atomic_probability_for_inference(market_id: str, outcome_id: str) -> float:
+    market = MARKETS.get(market_id)
+    if market is None:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    compile_result = compile_market_for_inference(market_id)
+    try:
+        query_result = CURRENT_MODEL_QUERY_BACKEND.query_atomic_event(
+            compile_result,
+            variable_id=str(market["variableId"]),
+            outcome_id=outcome_id,
+        )
+    except (InferenceQueryError, InferenceUnsupportedQueryError) as exc:
+        raise_inference_adapter_error(market_id, "query_atomic_event", exc)
+
+    return float(query_result.probability)
+
+
 def parse_context_key_variable_ids(context_key: str) -> list[str]:
     if not context_key:
         return []
@@ -477,36 +553,10 @@ def estimate_market_engine_memory_bytes(cliques: list[dict[str, Any]] | tuple[Cl
 
 
 def build_market_compile_result(market_id: str, *, compile_time_ms: float | None = None) -> CompileResult:
-    raw_cliques = build_market_cliques(market_id)
-    source_state_hash = market_replay_state_hash(market_id)
-    digest = source_state_hash.split(":", 1)[-1]
-    compile_id = f"comp-{digest[:12]}"
-    cliques = tuple(
-        CliqueSummary(
-            id=str(clique["id"]),
-            nodes=tuple(str(node) for node in clique["nodes"]),
-            size=int(clique["size"]),
-            states=int(clique["states"]),
-        )
-        for clique in raw_cliques
+    return compile_market_for_inference(
+        market_id,
+        compile_time_ms=float(compile_time_ms or 0.0),
     )
-
-    try:
-        return CompileResult(
-            compile_id=compile_id,
-            compile_type=ENGINE_CONFIG.compile_type,
-            source_state_hash=source_state_hash,
-            cliques=cliques,
-            compile_time_ms=round(float(compile_time_ms or 0.0), 3),
-            memory_bytes=estimate_market_engine_memory_bytes(cliques),
-            last_updated=utc_timestamp(),
-        )
-    except (TypeError, ValueError) as exc:
-        raise InferenceCompileError(
-            "Unable to synthesize market compile snapshot",
-            code="compile_snapshot_invalid",
-            details={"marketId": market_id},
-        ) from exc
 
 
 def refresh_market_compile_snapshot(market_id: str, *, compile_time_ms: float | None = None) -> None:
@@ -1256,6 +1306,13 @@ def resolve_probability_edit_base_marginals(
     market_id: str,
     context: list[dict[str, str]],
 ) -> dict[str, float]:
+    return query_market_marginals_for_inference(market_id, context)
+
+
+def fallback_probability_edit_base_marginals(
+    market_id: str,
+    context: list[dict[str, str]],
+) -> dict[str, float]:
     market = MARKETS[market_id]
     if not context:
         return deepcopy(market["marginals"])
@@ -1353,7 +1410,7 @@ def preview_unconditional_probability_edit(
         raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
 
     target = payload["target"]
-    previous_marginals = deepcopy(market["marginals"])
+    previous_marginals = resolve_probability_edit_base_marginals(market_id, [])
     updated_marginals = apply_probability_target(
         market,
         str(target["outcomeId"]),
@@ -1480,7 +1537,12 @@ def normalize_probability_edit_payload(market_id: str, payload: dict[str, Any]) 
         },
         "context": deepcopy(context),
     }
-    base_marginals = resolve_probability_edit_base_marginals(market_id, context)
+    try:
+        base_marginals = resolve_probability_edit_base_marginals(market_id, context)
+    except ApiError as exc:
+        if exc.status != 500 or exc.code != "internal_error":
+            raise
+        base_marginals = fallback_probability_edit_base_marginals(market_id, context)
     validate_structure_preserving_edit(market, normalized_payload, marginals=base_marginals)
     apply_probability_target(
         market,
@@ -1725,7 +1787,7 @@ def create_event_trade_order(command: dict[str, Any]) -> dict[str, Any]:
     payload = command["payload"]
     literal = payload["formula"][0][0]
     outcome_id = str(literal["outcomeId"])
-    price = round_risk_value(float(market["marginals"][outcome_id]))
+    price = round_risk_value(query_market_atomic_probability_for_inference(market_id, outcome_id))
     size = round_risk_value(float(payload["size"]))
     timestamp = utc_timestamp()
     order = {
