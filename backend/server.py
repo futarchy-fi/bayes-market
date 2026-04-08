@@ -529,8 +529,11 @@ def record_market_engine_request(market_id: str, duration_ms: float, *, error: b
 
     samples = state["inference_samples_ms"]
     samples.append(round(float(duration_ms), 3))
-    if len(samples) > ENGINE_CONFIG.inference_sample_limit:
-        del samples[:-ENGINE_CONFIG.inference_sample_limit]
+    limit = ENGINE_CONFIG.inference_sample_limit
+    if limit == 0:
+        samples.clear()
+    elif len(samples) > limit:
+        del samples[:-limit]
 
 
 def get_market_engine_stats(market_id: str) -> tuple[dict[str, Any], int]:

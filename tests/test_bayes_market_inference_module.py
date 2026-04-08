@@ -26,6 +26,9 @@ server_spec.loader.exec_module(server)
 
 
 class BayesMarketInferenceModuleTests(unittest.TestCase):
+    def setUp(self) -> None:
+        server.reset_state()
+
     def test_default_engine_config_matches_public_identity(self):
         self.assertIsInstance(DEFAULT_ENGINE_CONFIG, EngineConfig)
         self.assertEqual(DEFAULT_ENGINE_CONFIG.mode, "EXACT")
@@ -99,6 +102,29 @@ class BayesMarketInferenceModuleTests(unittest.TestCase):
         self.assertEqual(payload["engine"]["backend"], DEFAULT_ENGINE_CONFIG.backend)
         self.assertEqual(payload["engine"]["version"], DEFAULT_ENGINE_CONFIG.version)
         self.assertEqual(payload["engine"]["precision"], DEFAULT_ENGINE_CONFIG.precision)
+
+    def test_record_market_engine_request_discards_samples_when_limit_is_zero(self):
+        original_config = server.ENGINE_CONFIG
+        server.ENGINE_CONFIG = EngineConfig(
+            mode=original_config.mode,
+            backend=original_config.backend,
+            version=original_config.version,
+            precision=original_config.precision,
+            compile_type=original_config.compile_type,
+            inference_sample_limit=0,
+        )
+
+        try:
+            server.record_market_engine_request("m1", 1.234, error=False)
+            server.record_market_engine_request("m1", 5.678, error=True)
+
+            state = server.MARKET_ENGINE_STATS["m1"]
+            self.assertEqual(state["request_count"], 2)
+            self.assertEqual(state["error_count"], 1)
+            self.assertEqual(state["inference_samples_ms"], [])
+        finally:
+            server.ENGINE_CONFIG = original_config
+            server.reset_state()
 
 
 if __name__ == "__main__":
