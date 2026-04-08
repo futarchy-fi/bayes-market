@@ -175,14 +175,27 @@ def assert_marginals_close(
         test_case.assertAlmostEqual(actual[outcome_id], expected_probability, delta=delta)
 
 
-def seed_account_min_asset(account_id: str, min_asset: float) -> dict[str, object]:
-    account_state = {
-        "accountId": account_id,
-        "riskLimit": server.round_risk_value(server.ACCOUNT_RISK_LIMIT),
-        "minAsset": server.round_risk_value(min_asset),
-        "updatedAt": "2026-04-05T00:00:00Z",
-        "markets": {},
+def expected_seeded_account_state(account_id: str, min_asset: float) -> dict[str, object]:
+    return server.build_account_risk_state(
+        account_id,
+        "2026-04-05T00:00:00Z",
+        min_asset=min_asset,
+    )
+
+
+def rounded_score_delta(
+    previous: dict[str, float],
+    updated: dict[str, float],
+    liquidity: float,
+) -> dict[str, float]:
+    return {
+        outcome_id: server.round_risk_value(score)
+        for outcome_id, score in server.lmsr.lmsr_score_delta(previous, updated, liquidity).items()
     }
+
+
+def seed_account_min_asset(account_id: str, min_asset: float) -> dict[str, object]:
+    account_state = expected_seeded_account_state(account_id, min_asset)
     server.ACCOUNT_RISK[account_id] = deepcopy(account_state)
     return account_state
 
@@ -680,6 +693,191 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     "updatedAt": payload["order"]["filledAt"],
                 }
             ],
+        )
+
+    def test_probability_edit_acceptance_populates_lmsr_ledger_slice(self):
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_test",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": [],
+            },
+        )
+
+        self.assertEqual(status, 201)
+        account = server.ACCOUNT_RISK["acct_test"]
+        slice_key = server.account_lmsr_slice_key("m1", [])
+        self.assertEqual(
+            account["lmsrState"],
+            {
+                "version": server.ACCOUNT_LMSR_LEDGER_VERSION,
+                "riskReadModel": server.ACCOUNT_LMSR_RISK_READ_MODEL,
+                "slices": {
+                    slice_key: {
+                        "marketId": "m1",
+                        "variableId": "eth_price_gt_3000_mar15",
+                        "context": [],
+                        "contextKey": "",
+                        "liquidity": 150000.0,
+                        "scoreByOutcome": rounded_score_delta(
+                            payload["order"]["previousMarginals"],
+                            payload["order"]["newMarginals"],
+                            server.MARKETS["m1"]["liquidity"],
+                        ),
+                        "commandCount": 1,
+                        "updatedAt": payload["order"]["filledAt"],
+                        "lastOrderId": payload["order"]["id"],
+                        "lastCommandId": payload["order"]["commandId"],
+                    }
+                },
+            },
+        )
+
+    def test_probability_edit_conditional_lmsr_ledger_keeps_separate_context_slices(self):
+        first_payload, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_test",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": [],
+            },
+        )
+        second_payload, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_test",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.7},
+                "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+            },
+        )
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        slices = server.ACCOUNT_RISK["acct_test"]["lmsrState"]["slices"]
+        self.assertEqual(
+            set(slices),
+            {
+                server.account_lmsr_slice_key("m1", []),
+                server.account_lmsr_slice_key("m1", second_payload["order"]["payload"]["context"]),
+            },
+        )
+        self.assertEqual(
+            slices[server.account_lmsr_slice_key("m1", [])]["scoreByOutcome"],
+            rounded_score_delta(
+                first_payload["order"]["previousMarginals"],
+                first_payload["order"]["newMarginals"],
+                server.MARKETS["m1"]["liquidity"],
+            ),
+        )
+        self.assertEqual(
+            slices[server.account_lmsr_slice_key("m1", second_payload["order"]["payload"]["context"])],
+            {
+                "marketId": "m1",
+                "variableId": "eth_price_gt_3000_mar15",
+                "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+                "contextKey": "btc_etf_approval_week=yes",
+                "liquidity": 150000.0,
+                "scoreByOutcome": rounded_score_delta(
+                    second_payload["order"]["previousMarginals"],
+                    second_payload["order"]["newMarginals"],
+                    server.MARKETS["m1"]["liquidity"],
+                ),
+                "commandCount": 1,
+                "updatedAt": second_payload["order"]["filledAt"],
+                "lastOrderId": second_payload["order"]["id"],
+                "lastCommandId": second_payload["order"]["commandId"],
+            },
+        )
+
+    def test_probability_edit_replay_does_not_double_apply_lmsr_ledger_slice(self):
+        body = {
+            "accountId": "acct_test",
+            "idempotencyKey": "idem-lmsr-ledger",
+            "variableId": "eth_price_gt_3000_mar15",
+            "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+            "context": [],
+        }
+
+        first_payload, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            body,
+        )
+        post_first_account = deepcopy(server.ACCOUNT_RISK["acct_test"])
+        second_payload, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            body,
+        )
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(second_payload["order"]["id"], first_payload["order"]["id"])
+        self.assertEqual(server.ACCOUNT_RISK["acct_test"], post_first_account)
+        self.assertEqual(
+            server.ACCOUNT_RISK["acct_test"]["lmsrState"]["slices"][server.account_lmsr_slice_key("m1", [])]["commandCount"],
+            1,
+        )
+
+    def test_probability_edit_lmsr_ledger_accumulates_same_slice_score_by_outcome(self):
+        first_payload, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_test",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": [],
+            },
+        )
+        second_payload, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_test",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.7},
+                "context": [],
+            },
+        )
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        first_delta = rounded_score_delta(
+            first_payload["order"]["previousMarginals"],
+            first_payload["order"]["newMarginals"],
+            server.MARKETS["m1"]["liquidity"],
+        )
+        second_delta = rounded_score_delta(
+            second_payload["order"]["previousMarginals"],
+            second_payload["order"]["newMarginals"],
+            server.MARKETS["m1"]["liquidity"],
+        )
+        self.assertEqual(
+            server.ACCOUNT_RISK["acct_test"]["lmsrState"]["slices"][server.account_lmsr_slice_key("m1", [])],
+            {
+                "marketId": "m1",
+                "variableId": "eth_price_gt_3000_mar15",
+                "context": [],
+                "contextKey": "",
+                "liquidity": 150000.0,
+                "scoreByOutcome": {
+                    outcome_id: server.round_risk_value(first_delta[outcome_id] + second_delta[outcome_id])
+                    for outcome_id in first_delta
+                },
+                "commandCount": 2,
+                "updatedAt": second_payload["order"]["filledAt"],
+                "lastOrderId": second_payload["order"]["id"],
+                "lastCommandId": second_payload["order"]["commandId"],
+            },
         )
 
     def test_account_risk_aggregates_consumed_capacity_across_markets(self):
@@ -1307,13 +1505,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(
             server.ACCOUNT_RISK["acct_low"],
-            {
-                "accountId": "acct_low",
-                "riskLimit": 100.0,
-                "minAsset": low_min_asset,
-                "updatedAt": "2026-04-05T00:00:00Z",
-                "markets": {},
-            },
+            expected_seeded_account_state("acct_low", low_min_asset),
         )
         self.assertEqual(len(server.COMMANDS), 1)
         self.assertEqual(len(server.EVENTS), 1)
@@ -3708,13 +3900,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(
             server.ACCOUNT_RISK["acct_http_low"],
-            {
-                "accountId": "acct_http_low",
-                "riskLimit": 100.0,
-                "minAsset": low_min_asset,
-                "updatedAt": "2026-04-05T00:00:00Z",
-                "markets": {},
-            },
+            expected_seeded_account_state("acct_http_low", low_min_asset),
         )
         self.assertEqual(len(server.COMMANDS), 1)
         self.assertEqual(len(server.EVENTS), 1)
