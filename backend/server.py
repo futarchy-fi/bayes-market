@@ -29,6 +29,16 @@ if _FORMULA_SCHEMA_SPEC is None or _FORMULA_SCHEMA_SPEC.loader is None:
 formula_schema = importlib.util.module_from_spec(_FORMULA_SCHEMA_SPEC)
 _FORMULA_SCHEMA_SPEC.loader.exec_module(formula_schema)
 
+LMSR_MODULE_PATH = Path(__file__).with_name("lmsr.py")
+_LMSR_SPEC = importlib.util.spec_from_file_location(
+    "bayes_market_lmsr",
+    LMSR_MODULE_PATH,
+)
+if _LMSR_SPEC is None or _LMSR_SPEC.loader is None:
+    raise RuntimeError(f"Unable to load LMSR module from {LMSR_MODULE_PATH}")
+lmsr = importlib.util.module_from_spec(_LMSR_SPEC)
+_LMSR_SPEC.loader.exec_module(lmsr)
+
 INITIAL_MARKETS: dict[str, dict[str, Any]] = {
     "m1": {
         "id": "m1",
@@ -840,34 +850,21 @@ def _preview_probability_target_distribution(
     marginals: dict[str, float] | None = None,
 ) -> dict[str, float]:
     base_marginals = marginals if marginals is not None else market["marginals"]
-    if not isinstance(base_marginals, dict):
-        raise ValueError("market.marginals must be a dictionary")
-
     outcome_ids = _market_outcome_ids(market)
-    if outcome_id not in outcome_ids:
-        raise ValueError("target.outcomeId must match a known market outcome")
-    other_ids = [candidate for candidate in outcome_ids if candidate != outcome_id]
-    if not other_ids:
-        raise ValueError("market must have at least two outcomes")
     try:
-        previous_other_total = sum(float(base_marginals[candidate]) for candidate in other_ids)
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError("market.marginals must contain numeric values for all non-target outcomes") from exc
+        updated = lmsr.rescale_probability_edit(base_marginals, outcome_id, probability)
+    except ValueError as exc:
+        raise ValueError(str(exc).replace("previous", "market.marginals")) from exc
 
-    remaining = 1.0 - probability
-    if previous_other_total <= 0:
-        scaled_others = {candidate: round(remaining / len(other_ids), 12) for candidate in other_ids}
-    else:
-        scaled_others = {
-            candidate: round(float(base_marginals[candidate]) / previous_other_total * remaining, 12)
-            for candidate in other_ids
-        }
-
-    updated = {outcome_id: round(probability, 12), **scaled_others}
-    rounding_drift = round(1.0 - sum(updated.values()), 12)
+    ordered_outcome_ids = [outcome_id, *[candidate for candidate in outcome_ids if candidate != outcome_id]]
+    rounded = {candidate: round(updated[candidate], 12) for candidate in ordered_outcome_ids}
+    rounding_drift = round(1.0 - sum(rounded.values()), 12)
     if rounding_drift != 0:
-        updated[other_ids[-1]] = round(updated[other_ids[-1]] + rounding_drift, 12)
-    return updated
+        rounded_outcomes = [candidate for candidate in outcome_ids if candidate != outcome_id]
+        if not rounded_outcomes:
+            raise ValueError("market must have at least two outcomes")
+        rounded[rounded_outcomes[-1]] = round(rounded[rounded_outcomes[-1]] + rounding_drift, 12)
+    return rounded
 
 
 def _validated_market_marginals(
