@@ -8,6 +8,7 @@ import { AssumptionProvider } from "@/features/assumptions/AssumptionContext";
 import { AssumptionPanel } from "@/features/assumptions/AssumptionPanel";
 import { BayesNetGraph } from "@/features/graph/BayesNetGraph";
 import { JunctionTreePanel } from "@/features/graph/JunctionTreePanel";
+import { ResolveMarketPanel } from "@/features/market/ResolveMarketPanel";
 
 export default function MarketDetail() {
   const { marketId } = useParams<{ marketId: string }>();
@@ -36,6 +37,8 @@ export default function MarketDetail() {
       </div>
 
       <ProbabilityBar outcomes={m.outcomes} marginals={m.marginals} />
+
+      <ResolveMarketPanel market={m} />
 
       {m.status === "active" && (
         <AssumptionProvider>

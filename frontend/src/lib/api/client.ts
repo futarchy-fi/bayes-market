@@ -135,6 +135,40 @@ export function submitProbabilityEdit(
   );
 }
 
+export interface ResolveMarketPayload {
+  accountId: string;
+  outcomeId: string;
+  idempotencyKey?: string;
+}
+
+export interface ResolveMarketResponse {
+  market: import("./types").Market;
+  result: {
+    terminal: boolean;
+    status: string;
+    eventType: string;
+    eventId: string;
+    commandId: string;
+    emittedAt: string;
+  };
+  meta: import("./types").Meta;
+}
+
+export function resolveMarket(
+  marketId: string,
+  payload: ResolveMarketPayload,
+  session: Session,
+): Promise<ResolveMarketResponse> {
+  return request<ResolveMarketResponse>(
+    `/v1/markets/${encodeURIComponent(marketId)}/resolve`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    session,
+  );
+}
+
 export function submitEventTrade(
   marketId: string,
   payload: EventTradePayload,

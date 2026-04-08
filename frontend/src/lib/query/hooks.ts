@@ -74,6 +74,20 @@ export function useProbabilityEdit(marketId: string) {
   });
 }
 
+export function useResolveMarket(marketId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ payload, session }: { payload: api.ResolveMarketPayload; session: Session }) =>
+      api.resolveMarket(marketId, payload, session),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.market(marketId) });
+      void qc.invalidateQueries({ queryKey: queryKeys.marketEvents(marketId) });
+      void qc.invalidateQueries({ queryKey: queryKeys.engineStats(marketId) });
+      void qc.invalidateQueries({ queryKey: queryKeys.markets() });
+    },
+  });
+}
+
 export function useEventTrade(marketId: string) {
   const qc = useQueryClient();
   return useMutation({
