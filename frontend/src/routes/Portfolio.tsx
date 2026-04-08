@@ -1,11 +1,18 @@
+import { useMemo } from "react";
 import { useSession } from "@/features/session/context";
-import { useAccountRisk } from "@/lib/query/hooks";
+import { useAccountRisk, useMarkets } from "@/lib/query/hooks";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { Link } from "react-router-dom";
 
 export default function Portfolio() {
   const { session, isConfigured } = useSession();
   const { data, isLoading, error } = useAccountRisk(session.accountId);
+  const marketsQuery = useMarkets();
+  const marketTitles = useMemo(() => {
+    const map = new Map<string, string>();
+    marketsQuery.data?.markets.forEach((m) => map.set(m.id, m.title));
+    return map;
+  }, [marketsQuery.data]);
 
   if (!isConfigured) {
     return (
@@ -29,12 +36,19 @@ export default function Portfolio() {
     <div style={{ display: "grid", gap: "var(--space-lg)" }}>
       <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>Portfolio</h1>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "var(--space-md)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "var(--space-md)" }}>
+        <MetricCard label="Limit" value={cap.limit.toFixed(2)} />
         <MetricCard label="Available" value={cap.available.toFixed(2)} />
         <MetricCard label="Consumed" value={cap.consumed.toFixed(2)} />
         <MetricCard label="Utilization" value={`${(cap.utilization * 100).toFixed(1)}%`} />
         <MetricCard label="Health" value={cap.status} color={healthColor} />
+        <MetricCard label="Min Asset (Overall)" value={risk.minAssets.overall.toFixed(2)} />
       </div>
+      {risk.updatedAt && (
+        <div style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>
+          Last updated: {new Date(risk.updatedAt).toLocaleString()}
+        </div>
+      )}
 
       <div>
         <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--space-sm)" }}>Per-Market Positions</h2>
@@ -55,7 +69,9 @@ export default function Portfolio() {
                 {risk.minAssets.markets.map((mr) => (
                   <tr key={mr.marketId} style={{ borderTop: "1px solid var(--color-border)" }}>
                     <td style={tdStyle}>
-                      <Link to={`/markets/${mr.marketId}`}>{mr.marketId}</Link>
+                      <Link to={`/markets/${mr.marketId}`}>
+                        {marketTitles.get(mr.marketId) ?? mr.marketId}
+                      </Link>
                     </td>
                     <td style={tdStyle}>{mr.minAsset.toFixed(2)}</td>
                     <td style={tdStyle}>{(mr.utilization * 100).toFixed(1)}%</td>
