@@ -11,9 +11,11 @@ from .contracts import (
 )
 from .current_model import (
     CURRENT_MODEL_COMPILER,
+    CURRENT_MODEL_QUERY_BACKEND,
     CURRENT_MODEL_EXACT_ELIGIBILITY_REASON,
     CurrentModelCompileArtifact,
     CurrentModelCompiler,
+    CurrentModelQueryBackend,
     compile_current_market_artifact,
     compile_current_market_result,
     compile_current_model_artifact,
@@ -29,11 +31,13 @@ from .errors import (
 __all__ = [
     "AtomicEventQueryResult",
     "CURRENT_MODEL_COMPILER",
+    "CURRENT_MODEL_QUERY_BACKEND",
     "CURRENT_MODEL_EXACT_ELIGIBILITY_REASON",
     "CliqueSummary",
     "CompileResult",
     "CurrentModelCompileArtifact",
     "CurrentModelCompiler",
+    "CurrentModelQueryBackend",
     "DEFAULT_ENGINE_CONFIG",
     "EngineConfig",
     "InferenceCompileError",

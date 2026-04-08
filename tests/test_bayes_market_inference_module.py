@@ -4,10 +4,12 @@ import importlib.util
 import pathlib
 import unittest
 from copy import deepcopy
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 
 from backend.inference import (
     AtomicEventQueryResult,
+    CURRENT_MODEL_COMPILER,
+    CURRENT_MODEL_QUERY_BACKEND,
     CURRENT_MODEL_EXACT_ELIGIBILITY_REASON,
     CliqueSummary,
     CompileResult,
@@ -15,6 +17,7 @@ from backend.inference import (
     CurrentModelCompiler,
     DEFAULT_ENGINE_CONFIG,
     EngineConfig,
+    InferenceQueryError,
     InferenceUnsupportedQueryError,
     MarginalQueryResult,
     compile_current_market_artifact,
@@ -33,6 +36,18 @@ server_spec.loader.exec_module(server)
 class BayesMarketInferenceModuleTests(unittest.TestCase):
     def setUp(self) -> None:
         server.reset_state()
+
+    def build_compile_result(
+        self,
+        market_id: str = "m1",
+        *,
+        conditional_marginals: dict[str, dict[str, float]] | None = None,
+    ) -> CompileResult:
+        return CURRENT_MODEL_COMPILER.compile_result(
+            market_snapshot=deepcopy(server.MARKETS[market_id]),
+            conditional_marginals=conditional_marginals,
+            last_updated="2026-04-08T00:00:00Z",
+        )
 
     def test_default_engine_config_matches_public_identity(self):
         self.assertIsInstance(DEFAULT_ENGINE_CONFIG, EngineConfig)
@@ -244,6 +259,132 @@ class BayesMarketInferenceModuleTests(unittest.TestCase):
         self.assertEqual(compile_result.memory_bytes, compile_result.artifact.memory_bytes)
         self.assertEqual(compile_result.compile_time_ms, 1.25)
         self.assertEqual(compile_result.last_updated, "2026-04-08T00:00:00Z")
+
+    def test_current_model_query_backend_returns_unconditional_marginals(self):
+        compile_result = self.build_compile_result()
+
+        result = CURRENT_MODEL_QUERY_BACKEND.query_marginals(compile_result)
+
+        self.assertEqual(result.marginals, dict(server.MARKETS["m1"]["marginals"]))
+        self.assertEqual(result.compile_id, compile_result.compile_id)
+        self.assertFalse(result.cache_hit)
+        self.assertEqual(result.metadata["contextKey"], "")
+        self.assertEqual(result.metadata["resolutionSource"], "unconditional")
+        self.assertEqual(result.metadata["eligibilityReason"], CURRENT_MODEL_EXACT_ELIGIBILITY_REASON)
+
+    def test_current_model_query_backend_canonicalizes_context_keys_for_conditionals(self):
+        conditional_marginals = {
+            "btc_etf_approval_week=yes|fed_rate_cut_mar_2026=no": {
+                "yes": 0.7,
+                "no": 0.3,
+            }
+        }
+        compile_result = self.build_compile_result(conditional_marginals=conditional_marginals)
+
+        result = CURRENT_MODEL_QUERY_BACKEND.query_marginals(
+            compile_result,
+            context={
+                "fed_rate_cut_mar_2026": "no",
+                "btc_etf_approval_week": "yes",
+            },
+        )
+
+        self.assertEqual(
+            result.marginals,
+            conditional_marginals["btc_etf_approval_week=yes|fed_rate_cut_mar_2026=no"],
+        )
+        self.assertEqual(result.metadata["contextKey"], "btc_etf_approval_week=yes|fed_rate_cut_mar_2026=no")
+        self.assertEqual(result.metadata["resolutionSource"], "conditional")
+
+    def test_current_model_query_backend_falls_back_to_unconditional_marginals_for_unknown_context(self):
+        conditional_marginals = {
+            "btc_etf_approval_week=yes": {
+                "yes": 0.7,
+                "no": 0.3,
+            }
+        }
+        compile_result = self.build_compile_result(conditional_marginals=conditional_marginals)
+
+        result = CURRENT_MODEL_QUERY_BACKEND.query_marginals(
+            compile_result,
+            context={"btc_etf_approval_week": "no"},
+        )
+
+        self.assertEqual(result.marginals, dict(server.MARKETS["m1"]["marginals"]))
+        self.assertEqual(result.metadata["contextKey"], "btc_etf_approval_week=no")
+        self.assertEqual(result.metadata["resolutionSource"], "unconditional")
+
+    def test_current_model_query_backend_returns_atomic_event_probability(self):
+        compile_result = self.build_compile_result()
+
+        result = CURRENT_MODEL_QUERY_BACKEND.query_atomic_event(
+            compile_result,
+            variable_id=server.MARKETS["m1"]["variableId"],
+            outcome_id="yes",
+        )
+
+        self.assertEqual(result.variable_id, server.MARKETS["m1"]["variableId"])
+        self.assertEqual(result.outcome_id, "yes")
+        self.assertEqual(result.probability, server.MARKETS["m1"]["marginals"]["yes"])
+        self.assertEqual(result.compile_id, compile_result.compile_id)
+        self.assertFalse(result.cache_hit)
+        self.assertEqual(result.metadata["resolutionSource"], "unconditional")
+
+    def test_current_model_query_backend_rejects_other_variable_ids(self):
+        compile_result = self.build_compile_result()
+
+        with self.assertRaises(InferenceUnsupportedQueryError):
+            CURRENT_MODEL_QUERY_BACKEND.query_atomic_event(
+                compile_result,
+                variable_id=server.MARKETS["m2"]["variableId"],
+                outcome_id="yes",
+            )
+
+    def test_current_model_query_backend_rejects_unknown_outcome_ids(self):
+        compile_result = self.build_compile_result()
+
+        with self.assertRaises(InferenceQueryError):
+            CURRENT_MODEL_QUERY_BACKEND.query_atomic_event(
+                compile_result,
+                variable_id=server.MARKETS["m1"]["variableId"],
+                outcome_id="maybe",
+            )
+
+    def test_current_model_query_backend_rejects_negated_atomic_event_queries(self):
+        compile_result = self.build_compile_result()
+
+        with self.assertRaises(InferenceUnsupportedQueryError):
+            CURRENT_MODEL_QUERY_BACKEND.query_atomic_event(
+                compile_result,
+                variable_id=server.MARKETS["m1"]["variableId"],
+                outcome_id="yes",
+                negated=True,
+            )
+
+    def test_current_model_query_backend_requires_current_model_artifact(self):
+        compile_result = replace(self.build_compile_result(), artifact=None)
+
+        with self.assertRaises(InferenceQueryError):
+            CURRENT_MODEL_QUERY_BACKEND.query_marginals(compile_result)
+
+    def test_current_model_query_backend_rejects_mismatched_compile_result_metadata(self):
+        compile_result = replace(self.build_compile_result(), compile_id="comp-mismatch")
+
+        with self.assertRaises(InferenceQueryError):
+            CURRENT_MODEL_QUERY_BACKEND.query_marginals(compile_result)
+
+    def test_current_model_query_backend_rejects_ineligible_artifacts(self):
+        compile_result = self.build_compile_result()
+        ineligible_artifact = replace(
+            compile_result.artifact,
+            exact_eligible=False,
+            eligibility_reason="approximate_only",
+        )
+
+        with self.assertRaises(InferenceUnsupportedQueryError):
+            CURRENT_MODEL_QUERY_BACKEND.query_marginals(
+                replace(compile_result, artifact=ineligible_artifact),
+            )
 
     def test_current_model_compiler_rejects_malformed_market_snapshots(self):
         missing_variable_id = deepcopy(server.MARKETS["m1"])
