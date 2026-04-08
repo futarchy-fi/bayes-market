@@ -16,7 +16,7 @@ from collections import deque
 from copy import deepcopy
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -2510,6 +2510,16 @@ MIME_TYPES: dict[str, str] = {
 }
 
 
+def should_fallback_to_frontend_index(url_path: str) -> bool:
+    """Return whether a request path should load the SPA shell."""
+    clean = url_path.split("?")[0].split("#")[0] or "/"
+    if clean in {"/", "/index.html"}:
+        return True
+    if clean == "/assets" or clean.startswith("/assets/"):
+        return False
+    return PurePosixPath(clean).suffix == ""
+
+
 class BayesHandler(BaseHTTPRequestHandler):
     """HTTP handler that exposes the Bayes Market API over JSON."""
 
@@ -2589,12 +2599,17 @@ class BayesHandler(BaseHTTPRequestHandler):
         if clean == "/":
             clean = "/index.html"
 
-        candidate = (FRONTEND_DIST / clean.lstrip("/")).resolve()
-        if not str(candidate).startswith(str(FRONTEND_DIST)):
+        dist_root = FRONTEND_DIST.resolve()
+        candidate = (dist_root / clean.lstrip("/")).resolve()
+        try:
+            candidate.relative_to(dist_root)
+        except ValueError:
             return False
 
         if not candidate.is_file():
-            candidate = FRONTEND_DIST / "index.html"
+            if not should_fallback_to_frontend_index(clean):
+                return False
+            candidate = dist_root / "index.html"
             if not candidate.is_file():
                 return False
 
@@ -2604,7 +2619,9 @@ class BayesHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(len(content)))
-        if ext in {".js", ".css", ".woff2", ".woff", ".ttf"}:
+        if candidate == dist_root / "index.html":
+            self.send_header("Cache-Control", "no-store")
+        elif clean.startswith("/assets/") or ext in {".js", ".css", ".woff2", ".woff", ".ttf", ".png", ".svg", ".ico"}:
             self.send_header("Cache-Control", "public, max-age=31536000, immutable")
         self.end_headers()
         self.wfile.write(content)

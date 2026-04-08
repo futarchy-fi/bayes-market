@@ -4299,6 +4299,28 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             conn.close()
         return response.status, json.loads(response_body), response_headers
 
+    def request_raw(
+        self,
+        method: str,
+        path: str,
+        body: str | bytes | None = None,
+        *,
+        headers: dict[str, str] | None = None,
+    ):
+        conn = HTTPConnection("127.0.0.1", self.port, timeout=5)
+        request_headers = dict(headers or {})
+        request_body = body.encode("utf-8") if isinstance(body, str) else body
+        if request_body is not None:
+            request_headers.setdefault("Content-Type", "application/json")
+        try:
+            conn.request(method, path, body=request_body, headers=request_headers)
+            response = conn.getresponse()
+            response_body = response.read()
+            response_headers = {key: value for key, value in response.getheaders()}
+        finally:
+            conn.close()
+        return response.status, response_body, response_headers
+
     def request(
         self,
         method: str,
@@ -4317,6 +4339,46 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["service"], "bayes-market")
         self.assertEqual(payload["status"], "ok")
         self.assertTrue(payload["timestamp"].endswith("Z"))
+
+    def test_frontend_spa_routes_serve_index_html(self):
+        status, body, headers = self.request_raw("GET", "/markets/m1")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "text/html")
+        self.assertEqual(headers["Cache-Control"], "no-store")
+        self.assertIn(b'<div id="root"></div>', body)
+        self.assertIn(b'/assets/index-', body)
+
+    def test_frontend_asset_requests_serve_bundles_with_immutable_cache_headers(self):
+        asset_path = next((server.FRONTEND_DIST / "assets").glob("*.js"))
+
+        status, body, headers = self.request_raw("GET", f"/assets/{asset_path.name}")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "application/javascript")
+        self.assertEqual(headers["Cache-Control"], "public, max-age=31536000, immutable")
+        self.assertEqual(body, asset_path.read_bytes())
+
+    def test_missing_frontend_asset_does_not_fall_back_to_index_html(self):
+        status, body, headers = self.request_raw("GET", "/assets/does-not-exist.js")
+        payload = json.loads(body.decode("utf-8"))
+
+        self.assertEqual(status, 404)
+        self.assertEqual(headers["Content-Type"], "application/json")
+        self.assertEqual(payload["error"]["code"], "not_found")
+
+    def test_frontend_static_handler_blocks_path_traversal_outside_dist(self):
+        probe_path = server.FRONTEND_DIST.parent / f"{server.FRONTEND_DIST.name}-escape-probe.txt"
+        probe_path.write_text("static-traversal-probe", encoding="utf-8")
+        self.addCleanup(lambda: probe_path.unlink(missing_ok=True))
+
+        status, body, headers = self.request_raw("GET", f"/../{probe_path.name}")
+        payload = json.loads(body.decode("utf-8"))
+
+        self.assertEqual(status, 404)
+        self.assertEqual(headers["Content-Type"], "application/json")
+        self.assertEqual(payload["error"]["code"], "not_found")
+        self.assertNotIn(b"static-traversal-probe", body)
 
     def test_market_detail_http_returns_conditional_marginals_for_context_query(self):
         context = [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}]
