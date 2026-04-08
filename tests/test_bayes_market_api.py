@@ -2195,6 +2195,43 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(len(server.COMMANDS), 1)
         self.assertEqual(len(server.EVENTS), 1)
 
+    def test_probability_edit_replay_returns_stored_min_asset_rejection_contract(self):
+        seed_low_headroom_account("acct_low_replay_contract")
+        body = {
+            "accountId": "acct_low_replay_contract",
+            "idempotencyKey": "idem-low-replay-contract",
+            "variableId": "eth_price_gt_3000_mar15",
+            "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+            "context": [],
+        }
+
+        first_payload, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            body,
+        )
+        with patch.object(server, "preview_unconditional_probability_edit", autospec=True) as preview_mock:
+            second_payload, second_status = server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/probability-edit",
+                body,
+            )
+
+        self.assertEqual(first_status, 409)
+        self.assertEqual(second_status, 409)
+        preview_mock.assert_not_called()
+        self.assertEqual(second_payload["error"], first_payload["error"])
+        self.assertEqual(second_payload["result"], first_payload["result"])
+        self.assertEqual(second_payload["meta"]["idempotencyKeyEcho"], first_payload["meta"]["idempotencyKeyEcho"])
+        self.assertEqual(
+            {key: value for key, value in second_payload["meta"].items() if key != "replayed"},
+            first_payload["meta"],
+        )
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(len(server.COMMANDS), 1)
+        self.assertEqual(len(server.EVENTS), 1)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
+
     def test_probability_edit_replays_rejected_idempotent_submission(self):
         body = {
             "accountId": "acct_test",
@@ -5244,6 +5281,41 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             server.ACCOUNT_RISK["acct_http_low"],
             expected_seeded_account_state("acct_http_low", low_min_asset),
         )
+        self.assertEqual(len(server.COMMANDS), 1)
+        self.assertEqual(len(server.EVENTS), 1)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
+
+    def test_probability_edit_http_replay_preserves_min_asset_rejection_contract(self):
+        seed_low_headroom_account("acct_http_low_replay_contract")
+        body = {
+            "accountId": "acct_http_low_replay_contract",
+            "idempotencyKey": "idem-http-low-replay-contract",
+            "variableId": "eth_price_gt_3000_mar15",
+            "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+            "context": [],
+        }
+
+        first_status, first_payload = self.request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            body,
+        )
+        second_status, second_payload = self.request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            body,
+        )
+
+        self.assertEqual(first_status, 409)
+        self.assertEqual(second_status, 409)
+        self.assertEqual(second_payload["error"], first_payload["error"])
+        self.assertEqual(second_payload["result"], first_payload["result"])
+        self.assertEqual(second_payload["meta"]["idempotencyKeyEcho"], first_payload["meta"]["idempotencyKeyEcho"])
+        self.assertEqual(
+            {key: value for key, value in second_payload["meta"].items() if key != "replayed"},
+            first_payload["meta"],
+        )
+        self.assertTrue(second_payload["meta"]["replayed"])
         self.assertEqual(len(server.COMMANDS), 1)
         self.assertEqual(len(server.EVENTS), 1)
         self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
