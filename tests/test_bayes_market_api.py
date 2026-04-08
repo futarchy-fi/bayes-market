@@ -94,7 +94,9 @@ def build_create_market_body(
     return {
         "title": title,
         "description": description,
-        "outcomes": deepcopy(outcomes if outcomes is not None else [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}]),
+        "outcomes": deepcopy(
+            outcomes if outcomes is not None else [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}]
+        ),
         "expires_at": expires_at,
         "liquidity": liquidity,
     }
