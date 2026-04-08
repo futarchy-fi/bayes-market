@@ -5,14 +5,15 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import time
 from copy import deepcopy
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from .config import DEFAULT_ENGINE_CONFIG
-from .contracts import CliqueSummary, CompileResult
-from .errors import InferenceCompileError
+from .contracts import AtomicEventQueryResult, CliqueSummary, CompileResult, InferenceQueryBackend, MarginalQueryResult
+from .errors import InferenceCompileError, InferenceQueryError, InferenceUnsupportedQueryError
 
 CURRENT_MODEL_EXACT_ELIGIBILITY_REASON = "independent_market_baseline"
 _COMPILE_ERROR_CODE = "compile_snapshot_invalid"
@@ -172,6 +173,80 @@ def _compile_id_from_hash(source_state_hash: str) -> str:
     return f"comp-{digest[:12]}"
 
 
+def _require_current_model_artifact(compile_result: CompileResult) -> CurrentModelCompileArtifact:
+    artifact = compile_result.artifact
+    if artifact is None:
+        raise InferenceQueryError(
+            "Compile result does not include a queryable artifact",
+            details={"compileId": compile_result.compile_id},
+        )
+    if not isinstance(artifact, CurrentModelCompileArtifact):
+        raise InferenceQueryError(
+            "Compile result artifact is not a current-model artifact",
+            details={
+                "compileId": compile_result.compile_id,
+                "artifactType": type(artifact).__name__,
+            },
+        )
+    if compile_result.compile_id != artifact.compile_id:
+        raise InferenceQueryError(
+            "Compile result metadata does not match artifact compile_id",
+            details={
+                "compileId": compile_result.compile_id,
+                "artifactCompileId": artifact.compile_id,
+            },
+        )
+    if compile_result.source_state_hash != artifact.source_state_hash:
+        raise InferenceQueryError(
+            "Compile result metadata does not match artifact source_state_hash",
+            details={
+                "compileId": compile_result.compile_id,
+                "sourceStateHash": compile_result.source_state_hash,
+                "artifactSourceStateHash": artifact.source_state_hash,
+            },
+        )
+    if compile_result.compile_type != artifact.compile_type:
+        raise InferenceQueryError(
+            "Compile result metadata does not match artifact compile_type",
+            details={
+                "compileId": compile_result.compile_id,
+                "compileType": compile_result.compile_type,
+                "artifactCompileType": artifact.compile_type,
+            },
+        )
+    if not artifact.exact_eligible:
+        raise InferenceUnsupportedQueryError(
+            "Compiled artifact is not eligible for exact query execution",
+            details={
+                "compileId": compile_result.compile_id,
+                "eligibilityReason": artifact.eligibility_reason,
+            },
+        )
+    return artifact
+
+
+def _context_mapping_key(context: Mapping[str, str] | None) -> str:
+    if not context:
+        return ""
+
+    normalized_pairs: list[tuple[str, str]] = []
+    for raw_variable_id in sorted(context, key=str):
+        if not isinstance(raw_variable_id, str) or not raw_variable_id.strip():
+            raise InferenceQueryError(
+                "Query context variable ids must be non-empty strings",
+                details={"field": "context.variableId"},
+            )
+        raw_outcome_id = context[raw_variable_id]
+        if not isinstance(raw_outcome_id, str) or not raw_outcome_id.strip():
+            raise InferenceQueryError(
+                "Query context outcome ids must be non-empty strings",
+                details={"field": f"context[{raw_variable_id!r}]"},
+            )
+        normalized_pairs.append((raw_variable_id.strip(), raw_outcome_id.strip()))
+
+    return "|".join(f"{variable_id}={outcome_id}" for variable_id, outcome_id in normalized_pairs)
+
+
 @dataclass(frozen=True)
 class CurrentModelCompileArtifact:
     market_id: str
@@ -299,6 +374,97 @@ class CurrentModelCompiler:
 CURRENT_MODEL_COMPILER = CurrentModelCompiler()
 
 
+@dataclass(frozen=True)
+class CurrentModelQueryBackend(InferenceQueryBackend):
+    def query_marginals(
+        self,
+        compile_result: CompileResult,
+        *,
+        context: Mapping[str, str] | None = None,
+    ) -> MarginalQueryResult:
+        started_at = time.perf_counter()
+        artifact = _require_current_model_artifact(compile_result)
+        context_key = _context_mapping_key(context)
+
+        resolution_source = "unconditional"
+        marginals = artifact.marginals
+        if context_key:
+            conditional_marginals = artifact.conditional_marginals.get(context_key)
+            if conditional_marginals is not None:
+                resolution_source = "conditional"
+                marginals = conditional_marginals
+
+        return MarginalQueryResult(
+            marginals=marginals,
+            runtime_ms=round((time.perf_counter() - started_at) * 1000.0, 3),
+            cache_hit=False,
+            compile_id=compile_result.compile_id,
+            metadata={
+                "contextKey": context_key,
+                "resolutionSource": resolution_source,
+                "eligibilityReason": artifact.eligibility_reason,
+            },
+        )
+
+    def query_atomic_event(
+        self,
+        compile_result: CompileResult,
+        *,
+        variable_id: str,
+        outcome_id: str,
+        negated: bool = False,
+    ) -> AtomicEventQueryResult:
+        started_at = time.perf_counter()
+        artifact = _require_current_model_artifact(compile_result)
+
+        if not isinstance(variable_id, str) or not variable_id.strip():
+            raise InferenceQueryError("Atomic event query variable_id must be a non-empty string")
+        if not isinstance(outcome_id, str) or not outcome_id.strip():
+            raise InferenceQueryError("Atomic event query outcome_id must be a non-empty string")
+        if negated:
+            raise InferenceUnsupportedQueryError(
+                "Negated atomic event queries are not supported",
+                details={"variableId": variable_id, "outcomeId": outcome_id},
+            )
+
+        normalized_variable_id = variable_id.strip()
+        normalized_outcome_id = outcome_id.strip()
+
+        if normalized_variable_id != artifact.variable_id:
+            raise InferenceUnsupportedQueryError(
+                "Current-model query backend only supports the compiled market variable",
+                details={
+                    "variableId": normalized_variable_id,
+                    "compiledVariableId": artifact.variable_id,
+                },
+            )
+        if normalized_outcome_id not in artifact.marginals:
+            raise InferenceQueryError(
+                "Atomic event query outcome_id does not exist in the compiled market",
+                details={
+                    "variableId": normalized_variable_id,
+                    "outcomeId": normalized_outcome_id,
+                    "allowedOutcomeIds": sorted(artifact.marginals),
+                },
+            )
+
+        return AtomicEventQueryResult(
+            variable_id=normalized_variable_id,
+            outcome_id=normalized_outcome_id,
+            probability=float(artifact.marginals[normalized_outcome_id]),
+            runtime_ms=round((time.perf_counter() - started_at) * 1000.0, 3),
+            cache_hit=False,
+            compile_id=compile_result.compile_id,
+            metadata={
+                "resolutionSource": "unconditional",
+                "eligibilityReason": artifact.eligibility_reason,
+            },
+        )
+
+
+CURRENT_MODEL_QUERY_BACKEND = CurrentModelQueryBackend()
+
+
 def compile_current_market_artifact(
     *,
     market_snapshot: Mapping[str, Any],
@@ -353,9 +519,11 @@ def compile_current_model_result(
 
 __all__ = [
     "CURRENT_MODEL_COMPILER",
+    "CURRENT_MODEL_QUERY_BACKEND",
     "CURRENT_MODEL_EXACT_ELIGIBILITY_REASON",
     "CurrentModelCompileArtifact",
     "CurrentModelCompiler",
+    "CurrentModelQueryBackend",
     "canonical_json_hash",
     "compile_current_market_artifact",
     "compile_current_market_result",
