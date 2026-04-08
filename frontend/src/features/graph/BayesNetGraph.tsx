@@ -1,7 +1,7 @@
 import { useMemo } from "react";
-import { useMarkets, useMarket } from "@/lib/query/hooks";
+import { useMarkets, useMarket, useEngineStats } from "@/lib/query/hooks";
 import { formatProbability } from "@/lib/utils/format";
-import type { MarketSummary, EngineStatsResponse } from "@/lib/api/types";
+import type { MarketSummary } from "@/lib/api/types";
 
 interface GraphNode {
   id: string;
@@ -22,8 +22,6 @@ interface GraphEdge {
 interface BayesNetGraphProps {
   /** The currently viewed market — highlighted in the graph */
   focusMarketId?: string;
-  /** Engine stats for overlay (cliques, junction tree) */
-  engineStats?: EngineStatsResponse;
   /** Edges derived from conditional edits */
   conditionalEdges?: GraphEdge[];
 }
@@ -228,10 +226,10 @@ function NodeWithDetail({
 
 export function BayesNetGraph({
   focusMarketId,
-  engineStats,
   conditionalEdges = [],
 }: BayesNetGraphProps) {
   const { data: marketsData, isLoading } = useMarkets();
+  const { data: engineStats } = useEngineStats(focusMarketId ?? "", { enabled: !!focusMarketId });
 
   const markets = marketsData?.markets ?? [];
   const nodes = useMemo(() => layoutNodes(markets, focusMarketId), [markets, focusMarketId]);
