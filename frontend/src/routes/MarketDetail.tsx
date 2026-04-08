@@ -9,6 +9,7 @@ import { AssumptionPanel } from "@/features/assumptions/AssumptionPanel";
 import { BayesNetGraph } from "@/features/graph/BayesNetGraph";
 import { JunctionTreePanel } from "@/features/graph/JunctionTreePanel";
 import { ResolveMarketPanel } from "@/features/market/ResolveMarketPanel";
+import { EventTradePanel } from "@/features/trading/EventTradePanel";
 
 export default function MarketDetail() {
   const { marketId } = useParams<{ marketId: string }>();
@@ -45,6 +46,8 @@ export default function MarketDetail() {
           <AssumptionPanel market={m} />
         </AssumptionProvider>
       )}
+
+      <EventTradePanel market={m} />
 
       <BayesNetGraph focusMarketId={m.id} />
 
