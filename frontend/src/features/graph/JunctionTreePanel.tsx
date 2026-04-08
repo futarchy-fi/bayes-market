@@ -42,7 +42,7 @@ function InferenceDiagnostics({ stats }: { stats: EngineStatsResponse }) {
   const d = stats.diagnostics;
   const inf = d.inference;
   const cache = d.cache;
-  const hasLatency = (inf.sample_count ?? inf.count ?? 0) > 0;
+  const hasLatency = (inf.sample_count ?? 0) > 0;
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "var(--space-sm)" }}>
