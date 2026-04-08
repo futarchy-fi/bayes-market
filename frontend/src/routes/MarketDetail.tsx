@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useMarket, useMarketEvents } from "@/lib/query/hooks";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -10,6 +11,7 @@ import { BayesNetGraph } from "@/features/graph/BayesNetGraph";
 import { JunctionTreePanel } from "@/features/graph/JunctionTreePanel";
 import { ResolveMarketPanel } from "@/features/market/ResolveMarketPanel";
 import { EventTradePanel } from "@/features/trading/EventTradePanel";
+import type { MarketEvent } from "@/lib/api/types";
 
 export default function MarketDetail() {
   const { marketId } = useParams<{ marketId: string }>();
@@ -71,14 +73,7 @@ export default function MarketDetail() {
               </thead>
               <tbody>
                 {events.data.events.map((e) => (
-                  <tr key={e.eventId} style={{ borderTop: "1px solid var(--color-border)" }}>
-                    <td style={tdStyle}>{e.seq}</td>
-                    <td style={tdStyle}>{e.type}</td>
-                    <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>
-                      {truncateHash(e.eventHash)}
-                    </td>
-                    <td style={tdStyle}>{formatRelativeTime(e.timestamp)}</td>
-                  </tr>
+                  <EventRow key={e.eventId} event={e} />
                 ))}
               </tbody>
             </table>
@@ -91,5 +86,48 @@ export default function MarketDetail() {
   );
 }
 
+function EventRow({ event }: { event: MarketEvent }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasPayload = Object.keys(event.payload).length > 0;
+
+  return (
+    <>
+      <tr
+        onClick={() => hasPayload && setExpanded(!expanded)}
+        style={{ borderTop: "1px solid var(--color-border)", cursor: hasPayload ? "pointer" : "default" }}
+      >
+        <td style={tdStyle}>{event.seq}</td>
+        <td style={tdStyle}>
+          {hasPayload && <span style={{ marginRight: 4, fontSize: "0.65rem" }}>{expanded ? "\u25BC" : "\u25B6"}</span>}
+          {event.type}
+        </td>
+        <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>
+          {truncateHash(event.eventHash)}
+        </td>
+        <td style={tdStyle}>{formatRelativeTime(event.timestamp)}</td>
+      </tr>
+      {expanded && (
+        <tr>
+          <td colSpan={4} style={{ padding: "0 12px 8px 12px" }}>
+            <pre style={payloadStyle}>{JSON.stringify(event.payload, null, 2)}</pre>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
 const thStyle: React.CSSProperties = { textAlign: "left", padding: "6px 12px", fontWeight: 500 };
 const tdStyle: React.CSSProperties = { padding: "6px 12px" };
+
+const payloadStyle: React.CSSProperties = {
+  margin: 0,
+  padding: "var(--space-sm)",
+  borderRadius: "var(--radius-sm)",
+  background: "var(--color-bg)",
+  border: "1px solid var(--color-border)",
+  fontSize: "0.7rem",
+  fontFamily: "var(--font-mono)",
+  overflow: "auto",
+  maxHeight: 200,
+};

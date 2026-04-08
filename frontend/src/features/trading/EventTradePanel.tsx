@@ -1,7 +1,33 @@
 import { useState } from "react";
 import { useEventTrade } from "@/lib/query/hooks";
 import { useSession } from "@/features/session/context";
-import type { Market } from "@/lib/api/types";
+import type { Market, AssetDelta } from "@/lib/api/types";
+
+function TradeReceipt({ delta }: { delta: AssetDelta }) {
+  const impact = delta.impactScore;
+  const impactColor = impact > 0.5 ? "var(--color-danger)" : impact > 0.2 ? "var(--color-warning, orange)" : "var(--color-text-muted)";
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "var(--space-sm)", marginTop: "var(--space-xs)", fontSize: "0.75rem" }}>
+      <div>
+        <div style={{ color: "var(--color-text-muted)" }}>Before</div>
+        <div style={{ fontFamily: "var(--font-mono)" }}>{delta.beforeMinAsset.toFixed(2)}</div>
+      </div>
+      <div>
+        <div style={{ color: "var(--color-text-muted)" }}>After</div>
+        <div style={{ fontFamily: "var(--font-mono)" }}>{delta.afterMinAsset.toFixed(2)}</div>
+      </div>
+      <div>
+        <div style={{ color: "var(--color-text-muted)" }}>Impact</div>
+        <div style={{ fontFamily: "var(--font-mono)", color: impactColor }}>{(impact * 100).toFixed(1)}%</div>
+      </div>
+      <div>
+        <div style={{ color: "var(--color-text-muted)" }}>Limit</div>
+        <div style={{ fontFamily: "var(--font-mono)" }}>{delta.riskLimit.toFixed(2)}</div>
+      </div>
+    </div>
+  );
+}
 
 interface Props {
   market: Market;
@@ -105,7 +131,8 @@ export function EventTradePanel({ market }: Props) {
 
       {mutation.isSuccess && (
         <div style={successStyle}>
-          Trade accepted — Order {mutation.data.order.orderId}
+          <div>Trade accepted — Order {mutation.data.order.orderId}</div>
+          <TradeReceipt delta={mutation.data.assetDelta} />
         </div>
       )}
 
