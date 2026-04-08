@@ -1,9 +1,9 @@
 {
-  "verdict": "changes_requested",
-  "reason": "EngineConfig now permits inference_sample_limit=0, but record_market_engine_request trims with del samples[:-limit], which becomes del samples[:0] and leaves the history unbounded under that accepted configuration.",
+  "verdict": "approve",
+  "reason": "The extraction cleanly moves engine config and inference contracts behind a dedicated package seam while preserving the existing server behavior; the zero-sample-limit edge case is explicitly handled and the relevant Bayes market tests pass.",
   "scores": {
-    "correctness": 6,
-    "style": 8,
-    "completeness": 7
+    "correctness": 9,
+    "style": 9,
+    "completeness": 9
   }
 }
