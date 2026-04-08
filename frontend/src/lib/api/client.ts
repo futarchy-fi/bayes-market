@@ -169,6 +169,27 @@ export function resolveMarket(
   );
 }
 
+export interface HealthResponse {
+  service: string;
+  status: string;
+  timestamp: string;
+}
+
+export interface ServiceIndexResponse {
+  service: string;
+  status: string;
+  routes: Record<string, string[]>;
+  meta: import("./types").Meta;
+}
+
+export function getHealth(): Promise<HealthResponse> {
+  return request<HealthResponse>("/health");
+}
+
+export function getServiceIndex(): Promise<ServiceIndexResponse> {
+  return request<ServiceIndexResponse>("/");
+}
+
 export function submitEventTrade(
   marketId: string,
   payload: EventTradePayload,

@@ -8,6 +8,8 @@ export const queryKeys = {
   marketEvents: (id: string) => ["markets", id, "events"] as const,
   engineStats: (id: string) => ["markets", id, "engine-stats"] as const,
   accountRisk: (id: string) => ["accounts", id, "risk"] as const,
+  health: () => ["health"] as const,
+  serviceIndex: () => ["service-index"] as const,
 };
 
 export function useMarkets(status?: string) {
@@ -39,6 +41,22 @@ export function useEngineStats(marketId: string, opts?: { enabled?: boolean }) {
     queryKey: queryKeys.engineStats(marketId),
     queryFn: () => api.getEngineStats(marketId),
     enabled: opts?.enabled ?? true,
+  });
+}
+
+export function useHealth() {
+  return useQuery({
+    queryKey: queryKeys.health(),
+    queryFn: () => api.getHealth(),
+    refetchInterval: 10000,
+  });
+}
+
+export function useServiceIndex() {
+  return useQuery({
+    queryKey: queryKeys.serviceIndex(),
+    queryFn: () => api.getServiceIndex(),
+    staleTime: 60000,
   });
 }
 

@@ -18,6 +18,7 @@ export function AppLayout() {
         <nav style={{ display: "flex", gap: "var(--space-md)" }}>
           <NavLink to="/markets" style={navLinkStyle}>Markets</NavLink>
           <NavLink to="/portfolio" style={navLinkStyle}>Portfolio</NavLink>
+          <NavLink to="/system" style={navLinkStyle}>System</NavLink>
         </nav>
         <div style={{ marginLeft: "auto", display: "flex", gap: "var(--space-sm)", alignItems: "center" }}>
           <input
