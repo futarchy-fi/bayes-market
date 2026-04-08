@@ -1494,6 +1494,93 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             ],
         )
 
+    def test_preview_unconditional_probability_edit_reads_base_slice_via_query_backend_adapter(self):
+        class StubQueryBackend:
+            def __init__(self) -> None:
+                self.contexts: list[dict[str, str] | None] = []
+
+            def query_marginals(
+                self,
+                compile_result: object,
+                *,
+                context: dict[str, str] | None = None,
+            ) -> object:
+                self.contexts.append(deepcopy(context))
+                return type("MarginalResult", (), {"marginals": {"yes": 0.2, "no": 0.3, "delayed": 0.5}})()
+
+        original_backend = server.CURRENT_MODEL_QUERY_BACKEND
+        stub_backend = StubQueryBackend()
+        server.CURRENT_MODEL_QUERY_BACKEND = stub_backend
+
+        try:
+            normalized_payload = server.normalize_probability_edit_payload(
+                "m2",
+                {
+                    "accountId": "acct_adapter_preview",
+                    "variableId": "btc_etf_approval_week",
+                    "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
+                    "context": [],
+                },
+            )
+            preview = server.preview_unconditional_probability_edit("m2", normalized_payload, "acct_adapter_preview")
+        finally:
+            server.CURRENT_MODEL_QUERY_BACKEND = original_backend
+
+        self.assertEqual(preview["previousMarginals"], {"yes": 0.2, "no": 0.3, "delayed": 0.5})
+        self.assertEqual(preview["newMarginals"], {"yes": 0.4, "no": 0.225, "delayed": 0.375})
+        self.assertEqual(server.MARKETS["m2"]["marginals"], {"yes": 0.25, "no": 0.6, "delayed": 0.15})
+        self.assertEqual(
+            stub_backend.contexts,
+            [
+                None,
+                None,
+            ],
+        )
+
+    def test_probability_edit_without_context_reads_base_slice_via_query_backend_adapter(self):
+        class StubQueryBackend:
+            def __init__(self) -> None:
+                self.contexts: list[dict[str, str] | None] = []
+
+            def query_marginals(
+                self,
+                compile_result: object,
+                *,
+                context: dict[str, str] | None = None,
+            ) -> object:
+                self.contexts.append(deepcopy(context))
+                return type("MarginalResult", (), {"marginals": {"yes": 0.2, "no": 0.3, "delayed": 0.5}})()
+
+        original_backend = server.CURRENT_MODEL_QUERY_BACKEND
+        stub_backend = StubQueryBackend()
+        server.CURRENT_MODEL_QUERY_BACKEND = stub_backend
+
+        try:
+            payload, status = server.route_request(
+                "POST",
+                "/v1/markets/m2/orders/probability-edit",
+                {
+                    "accountId": "acct_adapter_unconditional",
+                    "variableId": "btc_etf_approval_week",
+                    "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
+                    "context": [],
+                },
+            )
+        finally:
+            server.CURRENT_MODEL_QUERY_BACKEND = original_backend
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["order"]["previousMarginals"], {"yes": 0.2, "no": 0.3, "delayed": 0.5})
+        self.assertEqual(payload["order"]["newMarginals"], {"yes": 0.4, "no": 0.225, "delayed": 0.375})
+        self.assertEqual(server.MARKETS["m2"]["marginals"], {"yes": 0.4, "no": 0.225, "delayed": 0.375})
+        self.assertEqual(
+            stub_backend.contexts,
+            [
+                None,
+                None,
+            ],
+        )
+
     def test_probability_edit_with_context_updates_account_risk(self):
         payload, status = server.route_request(
             "POST",
