@@ -1,0 +1,54 @@
+[
+  {
+    "id": "t549-boundary",
+    "title": "Freeze T549 unconditional ownership boundary",
+    "description": "Confirm that T549 owns only the empty-context soft-evidence application path, while T550 owns contextual slice mutation, T551 owns structure-preserving validation, T557 owns the unconditional min-asset gate, and T544/T1737 own the command/event envelopes.",
+    "dependsOn": [],
+    "level": "analysis"
+  },
+  {
+    "id": "t549-base-slice",
+    "title": "Resolve unconditional base marginals through the inference seam",
+    "description": "Use the exact-inference adapter to read the addressed market's current unconditional marginal slice and feed that slice into normalized ProbabilityEdit preview/application logic.",
+    "dependsOn": [
+      "t549-boundary"
+    ],
+    "level": "task"
+  },
+  {
+    "id": "t549-soft-evidence-rescale",
+    "title": "Apply deterministic soft-evidence rescaling",
+    "description": "Implement the unconditional ProbabilityEdit math by rescaling the targeted outcome to the requested probability and renormalizing the remaining outcomes deterministically, then compute the resulting impact score.",
+    "dependsOn": [
+      "t549-base-slice"
+    ],
+    "level": "task"
+  },
+  {
+    "id": "t549-unconditional-order-state",
+    "title": "Persist accepted unconditional edit state",
+    "description": "Materialize the accepted ProbabilityEdit order with previous/new marginals and impactScore, and mutate MARKETS[marketId][\"marginals\"] only for the empty-context acceptance path.",
+    "dependsOn": [
+      "t549-soft-evidence-rescale"
+    ],
+    "level": "task"
+  },
+  {
+    "id": "t549-unconditional-effects",
+    "title": "Thread unconditional edit results into audit and read models",
+    "description": "Publish the accepted unconditional edit through the existing terminal event, pricing payload, replay-state hash, account-risk read model, and LMSR ledger slice integrations.",
+    "dependsOn": [
+      "t549-unconditional-order-state"
+    ],
+    "level": "task"
+  },
+  {
+    "id": "t549-unconditional-coverage",
+    "title": "Lock the unconditional path with regression and invariant coverage",
+    "description": "Cover empty-context success, idempotent replay, market mutation, and brute-force/invariant agreement so the unconditional soft-evidence path remains deterministic under refactors.",
+    "dependsOn": [
+      "t549-unconditional-effects"
+    ],
+    "level": "task"
+  }
+]

@@ -729,6 +729,26 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         )
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.8, "no": 0.2})
 
+    def test_probability_edit_success_persists_unconditional_order_state(self):
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_test",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": [],
+            },
+        )
+
+        self.assertEqual(status, 201)
+        stored_order = server.ORDERS[payload["order"]["id"]]
+        self.assertEqual(stored_order["previousMarginals"], payload["order"]["previousMarginals"])
+        self.assertEqual(stored_order["newMarginals"], payload["order"]["newMarginals"])
+        self.assertEqual(stored_order["impactScore"], payload["order"]["impactScore"])
+        self.assertEqual(server.MARKETS["m1"]["marginals"], stored_order["newMarginals"])
+        self.assertEqual(server.CONDITIONAL_MARGINALS, {})
+
     def test_account_risk_read_model_updates_after_probability_edit(self):
         payload, status = server.route_request(
             "POST",
@@ -815,6 +835,93 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     }
                 },
             },
+        )
+
+    def test_probability_edit_acceptance_threads_unconditional_effects_into_audit_and_read_models(self):
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_test",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": [],
+            },
+        )
+
+        self.assertEqual(status, 201)
+        impact_score = payload["order"]["impactScore"]
+        after_min_asset = round(100.0 - impact_score, 6)
+        event = server.EVENTS[payload["result"]["eventId"]]
+        slice_key = server.account_lmsr_slice_key("m1", [])
+
+        self.assertEqual(
+            event["payload"],
+            {
+                "effects": {
+                    "marginalDelta": [
+                        {
+                            "variableId": "eth_price_gt_3000_mar15",
+                            "outcomeId": "yes",
+                            "before": 0.65,
+                            "after": 0.8,
+                        }
+                    ],
+                    "assetDelta": [
+                        {
+                            "accountId": "acct_test",
+                            "marketId": "m1",
+                            "beforeMinAsset": 100.0,
+                            "afterMinAsset": after_min_asset,
+                        }
+                    ],
+                },
+                "pricing": {
+                    "cost": impact_score,
+                    "fee": 0.0,
+                },
+                "replayStateHash": server.market_replay_state_hash("m1"),
+            },
+        )
+        self.assertEqual(
+            server.ACCOUNT_RISK["acct_test"],
+            server.build_account_risk_state(
+                "acct_test",
+                payload["order"]["filledAt"],
+                min_asset=after_min_asset,
+                markets={
+                    "m1": {
+                        "marketId": "m1",
+                        "minAsset": after_min_asset,
+                        "capacityConsumed": impact_score,
+                        "utilization": round(impact_score / 100.0, 6),
+                        "commandCount": 1,
+                        "updatedAt": payload["order"]["filledAt"],
+                        "lastOrderId": payload["order"]["id"],
+                        "lastCommandId": payload["order"]["commandId"],
+                    }
+                },
+                lmsr_state=server.build_account_lmsr_state(
+                    {
+                        slice_key: {
+                            "marketId": "m1",
+                            "variableId": "eth_price_gt_3000_mar15",
+                            "context": [],
+                            "contextKey": "",
+                            "liquidity": 150000.0,
+                            "scoreByOutcome": rounded_score_delta(
+                                payload["order"]["previousMarginals"],
+                                payload["order"]["newMarginals"],
+                                server.MARKETS["m1"]["liquidity"],
+                            ),
+                            "commandCount": 1,
+                            "updatedAt": payload["order"]["filledAt"],
+                            "lastOrderId": payload["order"]["id"],
+                            "lastCommandId": payload["order"]["commandId"],
+                        }
+                    }
+                ),
+            ),
         )
 
     def test_probability_edit_conditional_lmsr_ledger_keeps_separate_context_slices(self):
@@ -1491,6 +1598,144 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             [
                 {"btc_etf_approval_week": "yes"},
                 {"btc_etf_approval_week": "yes"},
+            ],
+        )
+
+    def test_preview_unconditional_probability_edit_reads_base_slice_via_query_backend_adapter(self):
+        class StubQueryBackend:
+            def __init__(self) -> None:
+                self.contexts: list[dict[str, str] | None] = []
+
+            def query_marginals(
+                self,
+                compile_result: object,
+                *,
+                context: dict[str, str] | None = None,
+            ) -> object:
+                self.contexts.append(deepcopy(context))
+                return type("MarginalResult", (), {"marginals": {"yes": 0.2, "no": 0.3, "delayed": 0.5}})()
+
+        original_backend = server.CURRENT_MODEL_QUERY_BACKEND
+        stub_backend = StubQueryBackend()
+        server.CURRENT_MODEL_QUERY_BACKEND = stub_backend
+
+        try:
+            normalized_payload = server.normalize_probability_edit_payload(
+                "m2",
+                {
+                    "accountId": "acct_adapter_preview",
+                    "variableId": "btc_etf_approval_week",
+                    "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
+                    "context": [],
+                },
+            )
+            preview = server.preview_unconditional_probability_edit("m2", normalized_payload, "acct_adapter_preview")
+        finally:
+            server.CURRENT_MODEL_QUERY_BACKEND = original_backend
+
+        self.assertEqual(preview["previousMarginals"], {"yes": 0.2, "no": 0.3, "delayed": 0.5})
+        self.assertEqual(preview["newMarginals"], {"yes": 0.4, "no": 0.225, "delayed": 0.375})
+        self.assertEqual(server.MARKETS["m2"]["marginals"], {"yes": 0.25, "no": 0.6, "delayed": 0.15})
+        self.assertEqual(
+            stub_backend.contexts,
+            [
+                None,
+                None,
+            ],
+        )
+
+    def test_probability_edit_without_context_reads_base_slice_via_query_backend_adapter(self):
+        class StubQueryBackend:
+            def __init__(self) -> None:
+                self.contexts: list[dict[str, str] | None] = []
+
+            def query_marginals(
+                self,
+                compile_result: object,
+                *,
+                context: dict[str, str] | None = None,
+            ) -> object:
+                self.contexts.append(deepcopy(context))
+                return type("MarginalResult", (), {"marginals": {"yes": 0.2, "no": 0.3, "delayed": 0.5}})()
+
+        original_backend = server.CURRENT_MODEL_QUERY_BACKEND
+        stub_backend = StubQueryBackend()
+        server.CURRENT_MODEL_QUERY_BACKEND = stub_backend
+
+        try:
+            payload, status = server.route_request(
+                "POST",
+                "/v1/markets/m2/orders/probability-edit",
+                {
+                    "accountId": "acct_adapter_unconditional",
+                    "variableId": "btc_etf_approval_week",
+                    "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
+                    "context": [],
+                },
+            )
+        finally:
+            server.CURRENT_MODEL_QUERY_BACKEND = original_backend
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["order"]["previousMarginals"], {"yes": 0.2, "no": 0.3, "delayed": 0.5})
+        self.assertEqual(payload["order"]["newMarginals"], {"yes": 0.4, "no": 0.225, "delayed": 0.375})
+        self.assertEqual(server.MARKETS["m2"]["marginals"], {"yes": 0.4, "no": 0.225, "delayed": 0.375})
+        self.assertEqual(
+            stub_backend.contexts,
+            [
+                None,
+                None,
+            ],
+        )
+
+    def test_probability_edit_without_context_reuses_previewed_adapter_rescale(self):
+        class StubQueryBackend:
+            def __init__(self) -> None:
+                self.contexts: list[dict[str, str] | None] = []
+
+            def query_marginals(
+                self,
+                compile_result: object,
+                *,
+                context: dict[str, str] | None = None,
+            ) -> object:
+                self.contexts.append(deepcopy(context))
+                return type("MarginalResult", (), {"marginals": {"yes": 0.2, "no": 0.3, "delayed": 0.5}})()
+
+        original_backend = server.CURRENT_MODEL_QUERY_BACKEND
+        stub_backend = StubQueryBackend()
+        server.CURRENT_MODEL_QUERY_BACKEND = stub_backend
+
+        try:
+            body = {
+                "accountId": "acct_adapter_reuse",
+                "variableId": "btc_etf_approval_week",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
+                "context": [],
+            }
+            normalized_payload = server.normalize_probability_edit_payload("m2", body)
+            preview = server.preview_unconditional_probability_edit("m2", normalized_payload, "acct_adapter_reuse")
+
+            payload, status = server.route_request(
+                "POST",
+                "/v1/markets/m2/orders/probability-edit",
+                body,
+            )
+        finally:
+            server.CURRENT_MODEL_QUERY_BACKEND = original_backend
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["order"]["previousMarginals"], preview["previousMarginals"])
+        self.assertEqual(payload["order"]["newMarginals"], preview["newMarginals"])
+        self.assertEqual(payload["order"]["impactScore"], preview["impactScore"])
+        self.assertEqual(server.MARKETS["m2"]["marginals"], preview["newMarginals"])
+        self.assertEqual(
+            stub_backend.contexts,
+            [
+                None,
+                None,
+                None,
+                None,
             ],
         )
 
