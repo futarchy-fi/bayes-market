@@ -1,0 +1,23 @@
+{
+  "task_id": "temporal-fleet-klq-r3-t548-compile-artifact",
+  "harness_version": "v1",
+  "branch": "ff/Ttemporal-fleet-klq-r3-t548-compile-artifact",
+  "base_branch": "ff/Ttemporal-fleet-klq",
+  "base_commit": "65f5dfc48f636a18a6a5e457587efcb6e189cf84",
+  "head_commit": "c2a0ea0142ac05859584b4518b6db4ed39a661ca",
+  "changed_files": [
+    ".fleet/tasks/temporal-fleet-klq-r3-t548-compile-artifact/analysis.md",
+    ".fleet/tasks/temporal-fleet-klq-r3-t548-compile-artifact/review.json",
+    "backend/inference/__init__.py",
+    "backend/inference/contracts.py",
+    "backend/inference/current_model.py",
+    "tests/test_bayes_market_inference_module.py"
+  ],
+  "lines_added": 734,
+  "lines_removed": 1,
+  "commit_count": 3,
+  "start_ts": "2026-04-08T12:56:58.144Z",
+  "end_ts": "2026-04-08T13:09:30.466Z",
+  "provider": "codex",
+  "status": "completed"
+}
