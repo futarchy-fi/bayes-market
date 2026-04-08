@@ -9,6 +9,7 @@ import importlib.util
 import json
 import math
 import os
+import sys
 import threading
 import time
 from collections import deque
@@ -18,6 +19,19 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
+
+BACKEND_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = str(BACKEND_DIR.parent)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from backend.inference import (
+    CliqueSummary,
+    CompileResult,
+    DEFAULT_ENGINE_CONFIG,
+    EngineConfig,
+    InferenceCompileError,
+)
 
 FORMULA_SCHEMA_MODULE_PATH = Path(__file__).with_name("formula_schema.py")
 _FORMULA_SCHEMA_SPEC = importlib.util.spec_from_file_location(
@@ -101,12 +115,13 @@ AUTH_REQUIRE_AGENT_ID_ENV = "BAYES_REQUIRE_AGENT_ID"
 RATE_LIMIT_PER_MIN_ENV = "BAYES_RATE_LIMIT_PER_MIN"
 RATE_LIMIT_POLICY_VERSION = "bayes-agent-id-v1"
 RATE_LIMIT_WINDOW_SECONDS = 60
-ENGINE_MODE = "EXACT"
-ENGINE_BACKEND = "junction_tree"
-ENGINE_VERSION = "0.1.0"
-ENGINE_PRECISION = "float64"
-ENGINE_COMPILE_TYPE = "junction_tree"
-ENGINE_INFERENCE_SAMPLE_LIMIT = 100
+ENGINE_CONFIG: EngineConfig = DEFAULT_ENGINE_CONFIG
+ENGINE_MODE = ENGINE_CONFIG.mode
+ENGINE_BACKEND = ENGINE_CONFIG.backend
+ENGINE_VERSION = ENGINE_CONFIG.version
+ENGINE_PRECISION = ENGINE_CONFIG.precision
+ENGINE_COMPILE_TYPE = ENGINE_CONFIG.compile_type
+ENGINE_INFERENCE_SAMPLE_LIMIT = ENGINE_CONFIG.inference_sample_limit
 
 MARKETS: dict[str, dict[str, Any]] = deepcopy(INITIAL_MARKETS)
 CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {}
@@ -448,22 +463,62 @@ def build_market_cliques(market_id: str) -> list[dict[str, Any]]:
     ]
 
 
-def estimate_market_engine_memory_bytes(cliques: list[dict[str, Any]]) -> int:
-    return sum(int(clique["states"]) * 32 + int(clique["size"]) * 64 for clique in cliques)
+def estimate_market_engine_memory_bytes(cliques: list[dict[str, Any]] | tuple[CliqueSummary, ...]) -> int:
+    total = 0
+    for clique in cliques:
+        if isinstance(clique, CliqueSummary):
+            states = int(clique.states)
+            size = int(clique.size)
+        else:
+            states = int(clique["states"])
+            size = int(clique["size"])
+        total += states * 32 + size * 64
+    return total
+
+
+def build_market_compile_result(market_id: str, *, compile_time_ms: float | None = None) -> CompileResult:
+    raw_cliques = build_market_cliques(market_id)
+    source_state_hash = market_replay_state_hash(market_id)
+    digest = source_state_hash.split(":", 1)[-1]
+    compile_id = f"comp-{digest[:12]}"
+    cliques = tuple(
+        CliqueSummary(
+            id=str(clique["id"]),
+            nodes=tuple(str(node) for node in clique["nodes"]),
+            size=int(clique["size"]),
+            states=int(clique["states"]),
+        )
+        for clique in raw_cliques
+    )
+
+    try:
+        return CompileResult(
+            compile_id=compile_id,
+            compile_type=ENGINE_CONFIG.compile_type,
+            source_state_hash=source_state_hash,
+            cliques=cliques,
+            compile_time_ms=round(float(compile_time_ms or 0.0), 3),
+            memory_bytes=estimate_market_engine_memory_bytes(cliques),
+            last_updated=utc_timestamp(),
+        )
+    except (TypeError, ValueError) as exc:
+        raise InferenceCompileError(
+            "Unable to synthesize market compile snapshot",
+            code="compile_snapshot_invalid",
+            details={"marketId": market_id},
+        ) from exc
 
 
 def refresh_market_compile_snapshot(market_id: str, *, compile_time_ms: float | None = None) -> None:
     state = ensure_market_engine_state(market_id)
-    cliques = build_market_cliques(market_id)
-    source_state_hash = market_replay_state_hash(market_id)
-    digest = source_state_hash.split(":", 1)[-1]
-    state["compile_id"] = f"comp-{digest[:12]}"
-    state["compile_type"] = ENGINE_COMPILE_TYPE
-    state["source_state_hash"] = source_state_hash
-    state["compile_time_ms"] = round(float(compile_time_ms or 0.0), 3)
-    state["memory_bytes"] = estimate_market_engine_memory_bytes(cliques)
-    state["last_updated"] = utc_timestamp()
-    state["cliques"] = cliques
+    compile_result = build_market_compile_result(market_id, compile_time_ms=compile_time_ms)
+    state["compile_id"] = compile_result.compile_id
+    state["compile_type"] = compile_result.compile_type
+    state["source_state_hash"] = compile_result.source_state_hash
+    state["compile_time_ms"] = round(float(compile_result.compile_time_ms), 3)
+    state["memory_bytes"] = int(compile_result.memory_bytes)
+    state["last_updated"] = compile_result.last_updated
+    state["cliques"] = [clique.to_dict() for clique in compile_result.cliques]
 
 
 def record_market_engine_request(market_id: str, duration_ms: float, *, error: bool) -> None:
@@ -474,8 +529,11 @@ def record_market_engine_request(market_id: str, duration_ms: float, *, error: b
 
     samples = state["inference_samples_ms"]
     samples.append(round(float(duration_ms), 3))
-    if len(samples) > ENGINE_INFERENCE_SAMPLE_LIMIT:
-        del samples[:-ENGINE_INFERENCE_SAMPLE_LIMIT]
+    limit = ENGINE_CONFIG.inference_sample_limit
+    if limit == 0:
+        samples.clear()
+    elif len(samples) > limit:
+        del samples[:-limit]
 
 
 def get_market_engine_stats(market_id: str) -> tuple[dict[str, Any], int]:
@@ -506,10 +564,10 @@ def get_market_engine_stats(market_id: str) -> tuple[dict[str, Any], int]:
     return {
         "marketId": market_id,
         "engine": {
-            "mode": ENGINE_MODE,
-            "backend": ENGINE_BACKEND,
-            "version": ENGINE_VERSION,
-            "precision": ENGINE_PRECISION,
+            "mode": ENGINE_CONFIG.mode,
+            "backend": ENGINE_CONFIG.backend,
+            "version": ENGINE_CONFIG.version,
+            "precision": ENGINE_CONFIG.precision,
             "compile_id": state["compile_id"] if state else None,
             "compile_type": state["compile_type"] if state else None,
             "source_state_hash": state["source_state_hash"] if state else None,
