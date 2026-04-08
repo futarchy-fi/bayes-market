@@ -1,1 +1,55 @@
-[{"id":"draft","title":"draft","description":"placeholder","dependsOn":[],"level":"task"}]
+[
+  {
+    "id": "t548-boundary",
+    "title": "Freeze exact-engine boundary",
+    "description": "Document that T548 owns the extraction of a real exact-inference module, compile artifact, and query seam for the current repo state while leaving soft-evidence mutation, cache invalidation, incremental compile hooks, and approximate fallback to their adjacent tasks.",
+    "dependsOn": [],
+    "level": "analysis"
+  },
+  {
+    "id": "t548-engine-module",
+    "title": "Extract inference package and interfaces",
+    "description": "Create a dedicated inference package with engine config, compile/query result types, and engine-specific exceptions so the backend stops treating exact inference as ad hoc helpers inside server.py.",
+    "dependsOn": [
+      "t548-boundary"
+    ],
+    "level": "task"
+  },
+  {
+    "id": "t548-compile-artifact",
+    "title": "Implement current-model compile artifact",
+    "description": "Compile the current market state into an immutable exact-engine artifact with source-state hashing inputs, truthful clique summaries, bounded-treewidth metadata, and eligibility fields for the repo's current independent-market model.",
+    "dependsOn": [
+      "t548-engine-module"
+    ],
+    "level": "task"
+  },
+  {
+    "id": "t548-query-backend",
+    "title": "Add exact query backend",
+    "description": "Implement exact query hooks on top of the compiled artifact for marginal lookup and atomic EventTrade pricing, while preserving the existing event_trade_inference_unavailable boundary for broader CNF shapes.",
+    "dependsOn": [
+      "t548-engine-module",
+      "t548-compile-artifact"
+    ],
+    "level": "task"
+  },
+  {
+    "id": "t548-server-adapter",
+    "title": "Wire server through the engine adapter",
+    "description": "Route engine-stats, probability-edit preview/base-slice reads, and EventTrade pricing through the new inference boundary without changing the frozen HTTP contracts or stealing ownership from later soft-evidence tasks.",
+    "dependsOn": [
+      "t548-query-backend"
+    ],
+    "level": "task"
+  },
+  {
+    "id": "t548-verification",
+    "title": "Add skeleton parity coverage",
+    "description": "Add unit and integration coverage for compile artifacts, engine-stats parity, and exact-query correctness against the existing brute-force tiny-net fixtures so T548 lands with a stable compatibility baseline.",
+    "dependsOn": [
+      "t548-server-adapter"
+    ],
+    "level": "task"
+  }
+]
