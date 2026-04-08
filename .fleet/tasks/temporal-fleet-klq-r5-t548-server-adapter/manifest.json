@@ -1,0 +1,21 @@
+{
+  "task_id": "temporal-fleet-klq-r5-t548-server-adapter",
+  "harness_version": "v1",
+  "branch": "ff/Ttemporal-fleet-klq-r5-t548-server-adapter",
+  "base_branch": "ff/Ttemporal-fleet-klq",
+  "base_commit": "8bb91f127dc8d13120881045928d125282263ec0",
+  "head_commit": "cda23e743caa3c8a3e1ff7de1ce3ac7c61fafd93",
+  "changed_files": [
+    ".fleet/tasks/temporal-fleet-klq-r5-t548-server-adapter/analysis.md",
+    ".fleet/tasks/temporal-fleet-klq-r5-t548-server-adapter/review.json",
+    "backend/server.py",
+    "tests/test_bayes_market_api.py"
+  ],
+  "lines_added": 450,
+  "lines_removed": 33,
+  "commit_count": 3,
+  "start_ts": "2026-04-08T13:25:30.564Z",
+  "end_ts": "2026-04-08T13:36:42.957Z",
+  "provider": "codex",
+  "status": "completed"
+}
