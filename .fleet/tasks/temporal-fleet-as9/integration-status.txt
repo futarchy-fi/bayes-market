@@ -1,0 +1,1 @@
+NEEDS_REDECOMP: round 4 ProbabilityEdit cost integration did not land; backend/server.py still computes impactScore via kl_divergence in preview_unconditional_probability_edit() and create_probability_edit_order(), and there is no code/test diff from ff/Ttemporal-fleet-as9-r3-task-account-lmsr-ledger outside .fleet metadata.

@@ -46,6 +46,16 @@ if _FORMULA_SCHEMA_SPEC is None or _FORMULA_SCHEMA_SPEC.loader is None:
 formula_schema = importlib.util.module_from_spec(_FORMULA_SCHEMA_SPEC)
 _FORMULA_SCHEMA_SPEC.loader.exec_module(formula_schema)
 
+LMSR_MODULE_PATH = Path(__file__).with_name("lmsr.py")
+_LMSR_SPEC = importlib.util.spec_from_file_location(
+    "bayes_market_lmsr",
+    LMSR_MODULE_PATH,
+)
+if _LMSR_SPEC is None or _LMSR_SPEC.loader is None:
+    raise RuntimeError(f"Unable to load LMSR module from {LMSR_MODULE_PATH}")
+lmsr = importlib.util.module_from_spec(_LMSR_SPEC)
+_LMSR_SPEC.loader.exec_module(lmsr)
+
 INITIAL_MARKETS: dict[str, dict[str, Any]] = {
     "m1": {
         "id": "m1",
@@ -110,6 +120,8 @@ MARKET_SUMMARY_FIELDS = (
 )
 
 ACCOUNT_RISK_LIMIT = 100.0
+ACCOUNT_LMSR_LEDGER_VERSION = "lmsr-ledger-v1"
+ACCOUNT_LMSR_RISK_READ_MODEL = "scalar-min-asset-v1"
 MAX_EVENT_FORMULA_CLAUSES = 16
 MAX_EVENT_FORMULA_CLAUSE_LITERALS = 8
 ALLOWED_EVENT_TRADE_SIDES = frozenset({"buy", "sell"})
@@ -661,17 +673,60 @@ def build_capacity_indicators(limit: float, min_asset: float) -> dict[str, Any]:
     }
 
 
+def build_account_lmsr_state(
+    slices: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return {
+        "version": ACCOUNT_LMSR_LEDGER_VERSION,
+        "riskReadModel": ACCOUNT_LMSR_RISK_READ_MODEL,
+        "slices": deepcopy(slices) if slices is not None else {},
+    }
+
+
+def build_account_risk_state(
+    account_id: str,
+    timestamp: str,
+    *,
+    risk_limit: float = ACCOUNT_RISK_LIMIT,
+    min_asset: float | None = None,
+    markets: dict[str, dict[str, Any]] | None = None,
+    lmsr_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_risk_limit = round_risk_value(risk_limit)
+    normalized_min_asset = normalized_risk_limit if min_asset is None else round_risk_value(min_asset)
+    return {
+        "accountId": account_id,
+        "riskLimit": normalized_risk_limit,
+        "minAsset": normalized_min_asset,
+        "updatedAt": timestamp,
+        "markets": deepcopy(markets) if markets is not None else {},
+        "lmsrState": deepcopy(lmsr_state) if lmsr_state is not None else build_account_lmsr_state(),
+    }
+
+
+def ensure_account_lmsr_state(account: dict[str, Any]) -> dict[str, Any]:
+    lmsr_state = account.get("lmsrState")
+    if not isinstance(lmsr_state, dict):
+        lmsr_state = build_account_lmsr_state()
+        account["lmsrState"] = lmsr_state
+        return lmsr_state
+
+    if not isinstance(lmsr_state.get("version"), str):
+        lmsr_state["version"] = ACCOUNT_LMSR_LEDGER_VERSION
+    if not isinstance(lmsr_state.get("riskReadModel"), str):
+        lmsr_state["riskReadModel"] = ACCOUNT_LMSR_RISK_READ_MODEL
+    if not isinstance(lmsr_state.get("slices"), dict):
+        lmsr_state["slices"] = {}
+    return lmsr_state
+
+
 def ensure_account_risk_state(account_id: str, timestamp: str) -> dict[str, Any]:
     account = ACCOUNT_RISK.get(account_id)
     if account is None:
-        account = {
-            "accountId": account_id,
-            "riskLimit": round_risk_value(ACCOUNT_RISK_LIMIT),
-            "minAsset": round_risk_value(ACCOUNT_RISK_LIMIT),
-            "updatedAt": timestamp,
-            "markets": {},
-        }
+        account = build_account_risk_state(account_id, timestamp)
         ACCOUNT_RISK[account_id] = account
+    else:
+        ensure_account_lmsr_state(account)
     return account
 
 
@@ -693,6 +748,90 @@ def preview_account_min_asset(account_id: str, impact_score: float) -> dict[str,
         "impactScore": impact_score,
         "afterMinAsset": after_min_asset,
     }
+
+
+def account_lmsr_slice_key(
+    market_id: str,
+    context: list[dict[str, str]],
+) -> str:
+    return f"{market_id}|{context_state_key(context)}"
+
+
+def _round_score_by_outcome(score_by_outcome: dict[str, float]) -> dict[str, float]:
+    return {
+        str(outcome_id): round_risk_value(score)
+        for outcome_id, score in score_by_outcome.items()
+    }
+
+
+def _accumulate_score_by_outcome(
+    score_by_outcome: dict[str, Any],
+    score_delta: dict[str, float],
+) -> dict[str, float]:
+    accumulated: dict[str, float] = {}
+    for outcome_id, score in score_by_outcome.items():
+        normalized_outcome_id = str(outcome_id)
+        accumulated[normalized_outcome_id] = round_risk_value(float(score))
+
+    for outcome_id, delta in score_delta.items():
+        normalized_outcome_id = str(outcome_id)
+        accumulated[normalized_outcome_id] = round_risk_value(
+            float(accumulated.get(normalized_outcome_id, 0.0)) + float(delta)
+        )
+    return accumulated
+
+
+def sync_probability_edit_lmsr_state(account: dict[str, Any], order: dict[str, Any]) -> None:
+    market_id = str(order["marketId"])
+    market = MARKETS.get(market_id)
+    if market is None:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    payload = order["payload"]
+    context = deepcopy(payload["context"])
+    context_key = context_state_key(context)
+    slice_key = account_lmsr_slice_key(market_id, context)
+    timestamp = str(order["filledAt"])
+    score_delta = _round_score_by_outcome(
+        lmsr.lmsr_score_delta(
+            order["previousMarginals"],
+            order["newMarginals"],
+            float(market["liquidity"]),
+        )
+    )
+
+    lmsr_state = ensure_account_lmsr_state(account)
+    slices = lmsr_state["slices"]
+    slice_state = slices.get(slice_key)
+    if not isinstance(slice_state, dict):
+        slice_state = {
+            "marketId": market_id,
+            "variableId": str(payload["variableId"]),
+            "context": context,
+            "contextKey": context_key,
+            "liquidity": round_risk_value(float(market["liquidity"])),
+            "scoreByOutcome": deepcopy(score_delta),
+            "commandCount": 1,
+            "updatedAt": timestamp,
+            "lastOrderId": str(order["id"]),
+            "lastCommandId": str(order["commandId"]),
+        }
+        slices[slice_key] = slice_state
+        return
+
+    slice_state["marketId"] = market_id
+    slice_state["variableId"] = str(payload["variableId"])
+    slice_state["context"] = context
+    slice_state["contextKey"] = context_key
+    slice_state["liquidity"] = round_risk_value(float(market["liquidity"]))
+    existing_scores = slice_state.get("scoreByOutcome", {})
+    if not isinstance(existing_scores, dict):
+        existing_scores = {}
+    slice_state["scoreByOutcome"] = _accumulate_score_by_outcome(existing_scores, score_delta)
+    slice_state["commandCount"] = int(slice_state.get("commandCount", 0)) + 1
+    slice_state["updatedAt"] = timestamp
+    slice_state["lastOrderId"] = str(order["id"])
+    slice_state["lastCommandId"] = str(order["commandId"])
 
 
 def sync_account_risk_state(order: dict[str, Any]) -> dict[str, Any]:
@@ -730,6 +869,9 @@ def sync_account_risk_state(order: dict[str, Any]) -> dict[str, Any]:
     market_risk["updatedAt"] = timestamp
     market_risk["lastOrderId"] = str(order["id"])
     market_risk["lastCommandId"] = str(order["commandId"])
+
+    if str(order["type"]) == "ProbabilityEdit":
+        sync_probability_edit_lmsr_state(account, order)
 
     return {
         "accountId": account_id,
@@ -948,34 +1090,21 @@ def _preview_probability_target_distribution(
     marginals: dict[str, float] | None = None,
 ) -> dict[str, float]:
     base_marginals = marginals if marginals is not None else market["marginals"]
-    if not isinstance(base_marginals, dict):
-        raise ValueError("market.marginals must be a dictionary")
-
     outcome_ids = _market_outcome_ids(market)
-    if outcome_id not in outcome_ids:
-        raise ValueError("target.outcomeId must match a known market outcome")
-    other_ids = [candidate for candidate in outcome_ids if candidate != outcome_id]
-    if not other_ids:
-        raise ValueError("market must have at least two outcomes")
     try:
-        previous_other_total = sum(float(base_marginals[candidate]) for candidate in other_ids)
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError("market.marginals must contain numeric values for all non-target outcomes") from exc
+        updated = lmsr.rescale_probability_edit(base_marginals, outcome_id, probability)
+    except ValueError as exc:
+        raise ValueError(str(exc).replace("previous", "market.marginals")) from exc
 
-    remaining = 1.0 - probability
-    if previous_other_total <= 0:
-        scaled_others = {candidate: round(remaining / len(other_ids), 12) for candidate in other_ids}
-    else:
-        scaled_others = {
-            candidate: round(float(base_marginals[candidate]) / previous_other_total * remaining, 12)
-            for candidate in other_ids
-        }
-
-    updated = {outcome_id: round(probability, 12), **scaled_others}
-    rounding_drift = round(1.0 - sum(updated.values()), 12)
+    ordered_outcome_ids = [outcome_id, *[candidate for candidate in outcome_ids if candidate != outcome_id]]
+    rounded = {candidate: round(updated[candidate], 12) for candidate in ordered_outcome_ids}
+    rounding_drift = round(1.0 - sum(rounded.values()), 12)
     if rounding_drift != 0:
-        updated[other_ids[-1]] = round(updated[other_ids[-1]] + rounding_drift, 12)
-    return updated
+        rounded_outcomes = [candidate for candidate in outcome_ids if candidate != outcome_id]
+        if not rounded_outcomes:
+            raise ValueError("market must have at least two outcomes")
+        rounded[rounded_outcomes[-1]] = round(rounded[rounded_outcomes[-1]] + rounding_drift, 12)
+    return rounded
 
 
 def _validated_market_marginals(
