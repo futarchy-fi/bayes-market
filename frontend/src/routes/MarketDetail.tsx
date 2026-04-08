@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { useMarket, useMarketEvents } from "@/lib/query/hooks";
+import { useMarket, useMarketEvents, useAccountRisk } from "@/lib/query/hooks";
+import { useSession } from "@/features/session/context";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ProbabilityBar } from "@/components/ui/ProbabilityBar";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
@@ -15,8 +16,10 @@ import type { MarketEvent } from "@/lib/api/types";
 
 export default function MarketDetail() {
   const { marketId } = useParams<{ marketId: string }>();
+  const { session, isConfigured } = useSession();
   const { data, isLoading, error } = useMarket(marketId!);
   const events = useMarketEvents(marketId!);
+  const accountRisk = useAccountRisk(session.accountId);
 
   if (isLoading) return <LoadingPage />;
   if (error) return <ErrorMessage message={error instanceof Error ? error.message : "Market not found"} />;
@@ -40,6 +43,8 @@ export default function MarketDetail() {
       </div>
 
       <ProbabilityBar outcomes={m.outcomes} marginals={m.marginals} />
+
+      <PositionCard marketId={m.id} accountRisk={accountRisk.data} isConfigured={isConfigured} />
 
       <ResolveMarketPanel market={m} />
 
@@ -86,6 +91,54 @@ export default function MarketDetail() {
   );
 }
 
+function PositionCard({
+  marketId,
+  accountRisk,
+  isConfigured,
+}: {
+  marketId: string;
+  accountRisk: import("@/lib/api/types").AccountRiskResponse | undefined;
+  isConfigured: boolean;
+}) {
+  if (!isConfigured || !accountRisk) return null;
+
+  const marketRisk = accountRisk.account.risk.minAssets.markets.find(
+    (mr) => mr.marketId === marketId,
+  );
+
+  if (!marketRisk) return null;
+
+  const utilColor = marketRisk.utilization > 0.8
+    ? "var(--color-danger)"
+    : marketRisk.utilization > 0.5
+      ? "var(--color-warning, orange)"
+      : "var(--color-text)";
+
+  return (
+    <div style={positionCardStyle}>
+      <div style={{ fontSize: "0.8rem", fontWeight: 600, marginBottom: "var(--space-xs)" }}>
+        Your Position
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "var(--space-sm)", fontSize: "0.8rem" }}>
+        <div>
+          <div style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Min Asset</div>
+          <div style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>{marketRisk.minAsset.toFixed(2)}</div>
+        </div>
+        <div>
+          <div style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Utilization</div>
+          <div style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: utilColor }}>
+            {(marketRisk.utilization * 100).toFixed(1)}%
+          </div>
+        </div>
+        <div>
+          <div style={{ color: "var(--color-text-muted)", fontSize: "0.7rem" }}>Trades</div>
+          <div style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>{marketRisk.commandCount}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EventRow({ event }: { event: MarketEvent }) {
   const [expanded, setExpanded] = useState(false);
   const hasPayload = Object.keys(event.payload).length > 0;
@@ -119,6 +172,13 @@ function EventRow({ event }: { event: MarketEvent }) {
 
 const thStyle: React.CSSProperties = { textAlign: "left", padding: "6px 12px", fontWeight: 500 };
 const tdStyle: React.CSSProperties = { padding: "6px 12px" };
+
+const positionCardStyle: React.CSSProperties = {
+  padding: "var(--space-sm) var(--space-md)",
+  borderRadius: "var(--radius-md)",
+  border: "1px solid var(--color-border)",
+  background: "var(--color-bg-surface)",
+};
 
 const payloadStyle: React.CSSProperties = {
   margin: 0,
