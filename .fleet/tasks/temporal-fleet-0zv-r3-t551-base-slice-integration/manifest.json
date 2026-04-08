@@ -1,0 +1,21 @@
+{
+  "task_id": "temporal-fleet-0zv-r3-t551-base-slice-integration",
+  "harness_version": "v1",
+  "branch": "ff/Ttemporal-fleet-0zv-r3-t551-base-slice-integration",
+  "base_branch": "ff/Ttemporal-fleet-0zv",
+  "base_commit": "e2d0939237e711522d081854f083c16679c069ef",
+  "head_commit": "771a361b349870691ca597e1e62dfec5a2e1de4a",
+  "changed_files": [
+    ".fleet/tasks/temporal-fleet-0zv-r3-t551-base-slice-integration/analysis.md",
+    ".fleet/tasks/temporal-fleet-0zv-r3-t551-base-slice-integration/review.json",
+    "backend/server.py",
+    "tests/test_bayes_market_api.py"
+  ],
+  "lines_added": 192,
+  "lines_removed": 1,
+  "commit_count": 3,
+  "start_ts": "2026-04-08T13:03:29.475Z",
+  "end_ts": "2026-04-08T13:10:01.632Z",
+  "provider": "codex",
+  "status": "completed"
+}

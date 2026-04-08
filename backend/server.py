@@ -1428,7 +1428,13 @@ def normalize_event_trade_payload(market_id: str, payload: dict[str, Any]) -> di
 
 
 def context_state_key(context: list[dict[str, str]]) -> str:
-    return "|".join(f"{assignment['variableId']}={assignment['outcomeId']}" for assignment in context)
+    canonical_assignments = sorted(
+        (
+            (str(assignment["variableId"]).strip(), str(assignment["outcomeId"]).strip())
+            for assignment in context
+        )
+    )
+    return "|".join(f"{variable_id}={outcome_id}" for variable_id, outcome_id in canonical_assignments)
 
 
 def resolve_probability_edit_base_marginals(

@@ -1,0 +1,9 @@
+[
+  {
+    "id": "t551-probability-edit-conflict-reconciliation",
+    "title": "Reconcile T551 probability-edit coverage and boundary ordering",
+    "description": "Own backend/server.py and tests/test_bayes_market_api.py for the round-4 merge conflict. Starting from the checkpoint branch, merge the accepted coverage from ff/Ttemporal-fleet-0zv-r4-t551-http-contract-coverage and ff/Ttemporal-fleet-0zv-r4-t551-invariant-regression without dropping the unit-coverage tests already on the checkpoint. Preserve the no-write HTTP assertions for invalid_structure_preserving_edit failures, and fix the probability-edit validation order so target.probability outside (0,1) still surfaces invalid_probability_edit even when the referenced market or conditional slice is malformed. Re-run python3 -m unittest discover -s tests -p 'test_bayes_market_api.py' and python3 -m unittest discover -s tests -p 'test_bayes_market_formula_schema.py'.",
+    "dependsOn": [],
+    "level": 1
+  }
+]
