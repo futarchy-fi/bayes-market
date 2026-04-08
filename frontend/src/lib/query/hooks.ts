@@ -18,11 +18,12 @@ export function useMarkets(status?: string) {
   });
 }
 
-export function useMarket(marketId: string) {
+export function useMarket(marketId: string, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.market(marketId),
     queryFn: () => api.getMarket(marketId),
     refetchInterval: 5000,
+    enabled: opts?.enabled ?? true,
   });
 }
 

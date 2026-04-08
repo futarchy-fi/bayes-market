@@ -5,6 +5,7 @@ import { ProbabilityBar } from "@/components/ui/ProbabilityBar";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { formatCurrency, timeUntil, truncateHash, formatRelativeTime } from "@/lib/utils/format";
 import { TradingPanel } from "@/features/trading/TradingPanel";
+import { ConditionalEditor } from "@/features/trading/ConditionalEditor";
 import { useState } from "react";
 
 export default function MarketDetail() {
@@ -38,6 +39,7 @@ export default function MarketDetail() {
       <ProbabilityBar outcomes={m.outcomes} marginals={m.marginals} />
 
       {m.status === "active" && <TradingPanel market={m} />}
+      {m.status === "active" && <ConditionalEditor market={m} />}
 
       {/* Event Journal */}
       <div>
