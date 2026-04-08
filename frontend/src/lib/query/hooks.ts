@@ -34,10 +34,11 @@ export function useMarketEvents(marketId: string) {
   });
 }
 
-export function useEngineStats(marketId: string) {
+export function useEngineStats(marketId: string, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.engineStats(marketId),
     queryFn: () => api.getEngineStats(marketId),
+    enabled: opts?.enabled ?? true,
   });
 }
 
