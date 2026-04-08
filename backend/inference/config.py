@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class EngineConfig:
+    """Describe the exported identity and runtime settings of the inference engine."""
+
     mode: str
     backend: str
     version: str
@@ -39,4 +41,3 @@ DEFAULT_ENGINE_CONFIG = EngineConfig(
 )
 
 __all__ = ["DEFAULT_ENGINE_CONFIG", "EngineConfig"]
-
