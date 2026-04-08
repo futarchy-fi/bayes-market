@@ -67,6 +67,24 @@ export function listMarkets(
   return request<MarketListResponse>(`/v1/markets${params}`);
 }
 
+export interface CreateMarketPayload {
+  title: string;
+  description: string;
+  outcomes: Array<{ id: string; name: string }>;
+  expires_at: string;
+  liquidity?: number;
+}
+
+export function createMarket(
+  payload: CreateMarketPayload,
+  session?: Session,
+): Promise<MarketDetailResponse> {
+  return request<MarketDetailResponse>(`/v1/markets`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }, session);
+}
+
 export function getMarket(
   marketId: string,
 ): Promise<MarketDetailResponse> {

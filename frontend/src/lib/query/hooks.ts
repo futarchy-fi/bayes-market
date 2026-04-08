@@ -50,6 +50,17 @@ export function useAccountRisk(accountId: string) {
   });
 }
 
+export function useCreateMarket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ payload, session }: { payload: api.CreateMarketPayload; session?: Session }) =>
+      api.createMarket(payload, session),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.markets() });
+    },
+  });
+}
+
 export function useProbabilityEdit(marketId: string) {
   const qc = useQueryClient();
   return useMutation({
