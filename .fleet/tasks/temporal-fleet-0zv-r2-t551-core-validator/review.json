@@ -1,0 +1,9 @@
+{
+  "verdict": "approve",
+  "reason": "The diff adds focused regression coverage for non-finite marginal values and documents the existing validator behavior without introducing correctness or isolation issues in the shown changes.",
+  "scores": {
+    "correctness": 10,
+    "style": 9,
+    "completeness": 10
+  }
+}

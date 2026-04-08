@@ -1,0 +1,22 @@
+{
+  "task_id": "temporal-fleet-as9-r2-task-lmsr-math-primitives",
+  "harness_version": "v1",
+  "branch": "ff/Ttemporal-fleet-as9-r2-task-lmsr-math-primitives",
+  "base_branch": "ff/Ttemporal-fleet-as9",
+  "base_commit": "7b392df52f0676b129b796dec8c98419602ef86b",
+  "head_commit": "79e1dbb89c3b506691e02d491289beba50d396fc",
+  "changed_files": [
+    ".fleet/tasks/temporal-fleet-as9-r2-task-lmsr-math-primitives/analysis.md",
+    ".fleet/tasks/temporal-fleet-as9-r2-task-lmsr-math-primitives/review.json",
+    "backend/lmsr.py",
+    "backend/server.py",
+    "tests/test_bayes_market_lmsr.py"
+  ],
+  "lines_added": 430,
+  "lines_removed": 24,
+  "commit_count": 3,
+  "start_ts": "2026-04-08T12:57:15.480Z",
+  "end_ts": "2026-04-08T13:09:50.728Z",
+  "provider": "codex",
+  "status": "completed"
+}

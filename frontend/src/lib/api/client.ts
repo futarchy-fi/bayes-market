@@ -1,0 +1,133 @@
+import type {
+  MarketListResponse,
+  MarketDetailResponse,
+  MarketEventsResponse,
+  EngineStatsResponse,
+  AccountRiskResponse,
+  OrderResponse,
+  ApiError,
+  ProbabilityEditPayload,
+  EventTradePayload,
+  Session,
+} from "./types";
+
+const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+
+export class BayesApiError extends Error {
+  constructor(
+    public status: number,
+    public code: string,
+    public details: Record<string, unknown> = {},
+  ) {
+    super(`${code}: ${status}`);
+    this.name = "BayesApiError";
+  }
+}
+
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  session?: Session,
+): Promise<T> {
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string>),
+  };
+
+  if (options.method && ["POST", "PUT", "PATCH"].includes(options.method)) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  if (session?.agentId) {
+    headers["X-Bayes-Agent-Id"] = session.agentId;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+  });
+
+  const body = await res.json();
+
+  if (!res.ok) {
+    const err = body as ApiError;
+    throw new BayesApiError(
+      res.status,
+      err.error?.code ?? "unknown_error",
+      err.error?.details ?? {},
+    );
+  }
+
+  return body as T;
+}
+
+export function listMarkets(
+  status?: string,
+): Promise<MarketListResponse> {
+  const params = status ? `?status=${encodeURIComponent(status)}` : "";
+  return request<MarketListResponse>(`/v1/markets${params}`);
+}
+
+export function getMarket(
+  marketId: string,
+): Promise<MarketDetailResponse> {
+  return request<MarketDetailResponse>(`/v1/markets/${encodeURIComponent(marketId)}`);
+}
+
+export function getMarketEvents(
+  marketId: string,
+  opts: { fromSeq?: number; limit?: number } = {},
+): Promise<MarketEventsResponse> {
+  const params = new URLSearchParams();
+  if (opts.fromSeq != null) params.set("fromSeq", String(opts.fromSeq));
+  if (opts.limit != null) params.set("limit", String(opts.limit));
+  const qs = params.toString();
+  return request<MarketEventsResponse>(
+    `/v1/markets/${encodeURIComponent(marketId)}/events${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export function getEngineStats(
+  marketId: string,
+): Promise<EngineStatsResponse> {
+  return request<EngineStatsResponse>(
+    `/v1/markets/${encodeURIComponent(marketId)}/engine-stats`,
+  );
+}
+
+export function getAccountRisk(
+  accountId: string,
+): Promise<AccountRiskResponse> {
+  return request<AccountRiskResponse>(
+    `/v1/accounts/${encodeURIComponent(accountId)}/risk`,
+  );
+}
+
+export function submitProbabilityEdit(
+  marketId: string,
+  payload: ProbabilityEditPayload,
+  session: Session,
+): Promise<OrderResponse> {
+  return request<OrderResponse>(
+    `/v1/markets/${encodeURIComponent(marketId)}/orders/probability-edit`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    session,
+  );
+}
+
+export function submitEventTrade(
+  marketId: string,
+  payload: EventTradePayload,
+  session: Session,
+): Promise<OrderResponse> {
+  return request<OrderResponse>(
+    `/v1/markets/${encodeURIComponent(marketId)}/orders/event-trade`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    session,
+  );
+}

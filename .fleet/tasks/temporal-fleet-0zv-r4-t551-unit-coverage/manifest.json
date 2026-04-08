@@ -1,0 +1,20 @@
+{
+  "task_id": "temporal-fleet-0zv-r4-t551-unit-coverage",
+  "harness_version": "v1",
+  "branch": "ff/Ttemporal-fleet-0zv-r4-t551-unit-coverage",
+  "base_branch": "ff/Ttemporal-fleet-0zv",
+  "base_commit": "c1f2d9bc9f5c502e98e9de449bd6b36935029141",
+  "head_commit": "f615039963e44376cc8956c6a8c36a5b2c9da28e",
+  "changed_files": [
+    ".fleet/tasks/temporal-fleet-0zv-r4-t551-unit-coverage/analysis.md",
+    ".fleet/tasks/temporal-fleet-0zv-r4-t551-unit-coverage/review.json",
+    "tests/test_bayes_market_api.py"
+  ],
+  "lines_added": 153,
+  "lines_removed": 0,
+  "commit_count": 3,
+  "start_ts": "2026-04-08T13:13:34.035Z",
+  "end_ts": "2026-04-08T13:20:58.827Z",
+  "provider": "codex",
+  "status": "completed"
+}

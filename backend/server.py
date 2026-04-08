@@ -9,6 +9,7 @@ import importlib.util
 import json
 import math
 import os
+import sys
 import threading
 import time
 from collections import deque
@@ -19,6 +20,22 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+BACKEND_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = str(BACKEND_DIR.parent)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from backend.inference import (
+    CURRENT_MODEL_COMPILER,
+    CURRENT_MODEL_QUERY_BACKEND,
+    CompileResult,
+    DEFAULT_ENGINE_CONFIG,
+    EngineConfig,
+    InferenceCompileError,
+    InferenceQueryError,
+    InferenceUnsupportedQueryError,
+)
+
 FORMULA_SCHEMA_MODULE_PATH = Path(__file__).with_name("formula_schema.py")
 _FORMULA_SCHEMA_SPEC = importlib.util.spec_from_file_location(
     "bayes_market_formula_schema",
@@ -28,6 +45,16 @@ if _FORMULA_SCHEMA_SPEC is None or _FORMULA_SCHEMA_SPEC.loader is None:
     raise RuntimeError(f"Unable to load formula schema module from {FORMULA_SCHEMA_MODULE_PATH}")
 formula_schema = importlib.util.module_from_spec(_FORMULA_SCHEMA_SPEC)
 _FORMULA_SCHEMA_SPEC.loader.exec_module(formula_schema)
+
+LMSR_MODULE_PATH = Path(__file__).with_name("lmsr.py")
+_LMSR_SPEC = importlib.util.spec_from_file_location(
+    "bayes_market_lmsr",
+    LMSR_MODULE_PATH,
+)
+if _LMSR_SPEC is None or _LMSR_SPEC.loader is None:
+    raise RuntimeError(f"Unable to load LMSR module from {LMSR_MODULE_PATH}")
+lmsr = importlib.util.module_from_spec(_LMSR_SPEC)
+_LMSR_SPEC.loader.exec_module(lmsr)
 
 INITIAL_MARKETS: dict[str, dict[str, Any]] = {
     "m1": {
@@ -93,6 +120,8 @@ MARKET_SUMMARY_FIELDS = (
 )
 
 ACCOUNT_RISK_LIMIT = 100.0
+ACCOUNT_LMSR_LEDGER_VERSION = "lmsr-ledger-v1"
+ACCOUNT_LMSR_RISK_READ_MODEL = "scalar-min-asset-v1"
 MAX_EVENT_FORMULA_CLAUSES = 16
 MAX_EVENT_FORMULA_CLAUSE_LITERALS = 8
 ALLOWED_EVENT_TRADE_SIDES = frozenset({"buy", "sell"})
@@ -101,12 +130,13 @@ AUTH_REQUIRE_AGENT_ID_ENV = "BAYES_REQUIRE_AGENT_ID"
 RATE_LIMIT_PER_MIN_ENV = "BAYES_RATE_LIMIT_PER_MIN"
 RATE_LIMIT_POLICY_VERSION = "bayes-agent-id-v1"
 RATE_LIMIT_WINDOW_SECONDS = 60
-ENGINE_MODE = "EXACT"
-ENGINE_BACKEND = "junction_tree"
-ENGINE_VERSION = "0.1.0"
-ENGINE_PRECISION = "float64"
-ENGINE_COMPILE_TYPE = "junction_tree"
-ENGINE_INFERENCE_SAMPLE_LIMIT = 100
+ENGINE_CONFIG: EngineConfig = DEFAULT_ENGINE_CONFIG
+ENGINE_MODE = ENGINE_CONFIG.mode
+ENGINE_BACKEND = ENGINE_CONFIG.backend
+ENGINE_VERSION = ENGINE_CONFIG.version
+ENGINE_PRECISION = ENGINE_CONFIG.precision
+ENGINE_COMPILE_TYPE = ENGINE_CONFIG.compile_type
+ENGINE_INFERENCE_SAMPLE_LIMIT = ENGINE_CONFIG.inference_sample_limit
 
 MARKETS: dict[str, dict[str, Any]] = deepcopy(INITIAL_MARKETS)
 CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {}
@@ -140,11 +170,21 @@ def get_market_write_lock(market_id: str) -> threading.Lock:
 
 
 def utc_timestamp() -> str:
+    """Return the current UTC timestamp in ISO-8601 Zulu form."""
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 class ApiError(Exception):
-    def __init__(self, status: int, code: str, message: str, details: dict[str, Any] | None = None):
+    """Represent an API error with an HTTP status and structured payload."""
+
+    def __init__(
+        self,
+        status: int,
+        code: str,
+        message: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        """Initialize an API error for downstream HTTP serialization."""
         super().__init__(message)
         self.status = status
         self.code = code
@@ -153,6 +193,7 @@ class ApiError(Exception):
 
 
 def reset_state() -> None:
+    """Reset all in-memory application state back to the initial fixtures."""
     global ORDER_COUNTER, COMMAND_COUNTER, EVENT_COUNTER
     MARKETS.clear()
     MARKETS.update(deepcopy(INITIAL_MARKETS))
@@ -174,35 +215,41 @@ def reset_state() -> None:
 
 
 def generate_order_id() -> str:
+    """Return a unique order identifier for the current process run."""
     global ORDER_COUNTER
     ORDER_COUNTER += 1
     return f"ord_{datetime.now(timezone.utc).strftime('%Y%m%d')}_{ORDER_COUNTER:06d}"
 
 
 def generate_command_id() -> str:
+    """Return a unique command identifier for the current process run."""
     global COMMAND_COUNTER
     COMMAND_COUNTER += 1
     return f"cmd_{datetime.now(timezone.utc).strftime('%Y%m%d')}_{COMMAND_COUNTER:06d}"
 
 
 def generate_event_id() -> str:
+    """Return a unique event identifier for the current process run."""
     global EVENT_COUNTER
     EVENT_COUNTER += 1
     return f"evt_{datetime.now(timezone.utc).strftime('%Y%m%d')}_{EVENT_COUNTER:06d}"
 
 
 def canonical_json_hash(data: object) -> str:
+    """Hash JSON-serializable data using the backend's canonical encoding."""
     encoded = json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
 
 
 def normalize_path(path: str) -> str:
+    """Normalize request paths by trimming a trailing slash when safe."""
     if path != "/" and path.endswith("/"):
         return path[:-1]
     return path
 
 
 def read_bool_env(name: str, default: bool) -> bool:
+    """Read a boolean environment variable with a permissive parser."""
     raw = (os.environ.get(name) or "").strip()
     if not raw:
         return default
@@ -215,6 +262,7 @@ def read_bool_env(name: str, default: bool) -> bool:
 
 
 def read_non_negative_int_env(name: str, default: int) -> int:
+    """Read a non-negative integer environment variable or fall back."""
     raw = (os.environ.get(name) or "").strip()
     if not raw:
         return default
@@ -230,15 +278,18 @@ RATE_LIMIT_PER_MIN = read_non_negative_int_env(RATE_LIMIT_PER_MIN_ENV, 0)
 
 
 def reset_rate_limit_state() -> None:
+    """Clear all in-memory agent rate-limit buckets."""
     with _RATE_LIMIT_LOCK:
         _RATE_LIMIT_WINDOWS.clear()
 
 
 def request_agent_id(headers: Any) -> str:
+    """Extract and normalize the Bayes agent id header value."""
     return (headers.get(AGENT_ID_HEADER) or "").strip()
 
 
 def enforce_agent_id(agent_id: str) -> None:
+    """Raise when write controls require an agent id and none is present."""
     if AUTH_REQUIRE_AGENT_ID and not agent_id:
         raise ApiError(
             401,
@@ -249,6 +300,7 @@ def enforce_agent_id(agent_id: str) -> None:
 
 
 def enforce_rate_limit(agent_id: str) -> None:
+    """Apply the configured per-agent sliding-window rate limit."""
     if RATE_LIMIT_PER_MIN <= 0 or not agent_id:
         return
 
@@ -283,6 +335,7 @@ def enforce_rate_limit(agent_id: str) -> None:
 
 
 def rate_limit_headers(agent_id: str) -> dict[str, str]:
+    """Build response headers describing the current agent rate-limit state."""
     if RATE_LIMIT_PER_MIN <= 0 or not agent_id:
         return {}
 
@@ -310,12 +363,14 @@ def rate_limit_headers(agent_id: str) -> dict[str, str]:
 
 
 def make_meta(**extra: object) -> dict[str, Any]:
+    """Build a response metadata object with a timestamp and extras."""
     meta: dict[str, Any] = {"timestamp": utc_timestamp()}
     meta.update(extra)
     return meta
 
 
 def error_payload(code: str, message: str, **details: object) -> dict[str, Any]:
+    """Build the standard JSON error envelope used by the API."""
     return {
         "error": {
             "code": code,
@@ -327,6 +382,7 @@ def error_payload(code: str, message: str, **details: object) -> dict[str, Any]:
 
 
 def health_payload() -> dict[str, Any]:
+    """Build the service health response payload."""
     return {
         "service": "bayes-market",
         "status": "ok",
@@ -335,6 +391,7 @@ def health_payload() -> dict[str, Any]:
 
 
 def service_index_payload() -> dict[str, Any]:
+    """Build the root index payload describing the public HTTP surface."""
     return {
         "service": "bayes-market",
         "status": "ok",
@@ -357,10 +414,12 @@ def service_index_payload() -> dict[str, Any]:
 
 
 def market_summary(market: dict[str, Any]) -> dict[str, Any]:
+    """Project a market record down to the list response fields."""
     return {field: market[field] for field in MARKET_SUMMARY_FIELDS}
 
 
 def percentile_ms(values: list[float], ratio: float) -> float:
+    """Return a rounded percentile value from a list of millisecond samples."""
     if not values:
         return 0.0
     ordered = sorted(values)
@@ -369,6 +428,7 @@ def percentile_ms(values: list[float], ratio: float) -> float:
 
 
 def inference_stats_payload(samples_ms: list[float]) -> dict[str, Any]:
+    """Summarize inference timing samples for diagnostics output."""
     if not samples_ms:
         return {
             "count": 0,
@@ -389,6 +449,7 @@ def inference_stats_payload(samples_ms: list[float]) -> dict[str, Any]:
 
 
 def ensure_market_engine_state(market_id: str) -> dict[str, Any]:
+    """Return the engine diagnostics bucket for a market, creating it if needed."""
     state = MARKET_ENGINE_STATS.get(market_id)
     if state is None:
         state = {
@@ -409,7 +470,86 @@ def ensure_market_engine_state(market_id: str) -> dict[str, Any]:
     return state
 
 
+def raise_inference_adapter_error(market_id: str, operation: str, exc: Exception) -> None:
+    """Wrap inference adapter failures in the API's internal-error response."""
+    raise ApiError(
+        500,
+        "internal_error",
+        "Internal server error",
+        {"marketId": market_id, "operation": operation},
+    ) from exc
+
+
+def compile_market_for_inference(
+    market_id: str,
+    *,
+    compile_time_ms: float = 0.0,
+    last_updated: str | None = None,
+) -> CompileResult:
+    """Compile a market snapshot for inference queries."""
+    market = MARKETS.get(market_id)
+    if market is None:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    try:
+        return CURRENT_MODEL_COMPILER.compile_result(
+            market_snapshot=deepcopy(market),
+            conditional_marginals=deepcopy(CONDITIONAL_MARGINALS.get(market_id, {})),
+            compile_time_ms=round(float(compile_time_ms), 3),
+            last_updated=last_updated or utc_timestamp(),
+        )
+    except InferenceCompileError as exc:
+        raise_inference_adapter_error(market_id, "compile_market", exc)
+
+
+def context_mapping_from_assignments(context: list[dict[str, str]]) -> dict[str, str]:
+    """Convert normalized context assignments into an inference lookup map."""
+    return {
+        str(assignment["variableId"]): str(assignment["outcomeId"])
+        for assignment in context
+    }
+
+
+def query_market_marginals_for_inference(
+    market_id: str,
+    context: list[dict[str, str]],
+) -> dict[str, float]:
+    """Query inferred market marginals under an optional context."""
+    compile_result = compile_market_for_inference(market_id)
+    context_mapping = context_mapping_from_assignments(context) if context else None
+
+    try:
+        query_result = CURRENT_MODEL_QUERY_BACKEND.query_marginals(
+            compile_result,
+            context=context_mapping,
+        )
+    except (InferenceQueryError, InferenceUnsupportedQueryError) as exc:
+        raise_inference_adapter_error(market_id, "query_marginals", exc)
+
+    return deepcopy(dict(query_result.marginals))
+
+
+def query_market_atomic_probability_for_inference(market_id: str, outcome_id: str) -> float:
+    """Query the inferred probability of a single market outcome."""
+    market = MARKETS.get(market_id)
+    if market is None:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    compile_result = compile_market_for_inference(market_id)
+    try:
+        query_result = CURRENT_MODEL_QUERY_BACKEND.query_atomic_event(
+            compile_result,
+            variable_id=str(market["variableId"]),
+            outcome_id=outcome_id,
+        )
+    except (InferenceQueryError, InferenceUnsupportedQueryError) as exc:
+        raise_inference_adapter_error(market_id, "query_atomic_event", exc)
+
+    return float(query_result.probability)
+
+
 def parse_context_key_variable_ids(context_key: str) -> list[str]:
+    """Extract variable ids from a serialized context-state key."""
     if not context_key:
         return []
 
@@ -422,6 +562,7 @@ def parse_context_key_variable_ids(context_key: str) -> list[str]:
 
 
 def clique_state_count(variable_ids: tuple[str, ...]) -> int:
+    """Estimate the discrete state count for a clique of market variables."""
     state_count = 1
     for variable_id in variable_ids:
         market = find_market_by_variable_id(variable_id)
@@ -431,6 +572,7 @@ def clique_state_count(variable_ids: tuple[str, ...]) -> int:
 
 
 def build_market_cliques(market_id: str) -> list[dict[str, Any]]:
+    """Build clique summaries implied by a market and its conditional contexts."""
     market = MARKETS[market_id]
     raw_cliques: set[tuple[str, ...]] = {(str(market["variableId"]),)}
     for context_key in CONDITIONAL_MARGINALS.get(market_id, {}):
@@ -448,25 +590,43 @@ def build_market_cliques(market_id: str) -> list[dict[str, Any]]:
     ]
 
 
-def estimate_market_engine_memory_bytes(cliques: list[dict[str, Any]]) -> int:
-    return sum(int(clique["states"]) * 32 + int(clique["size"]) * 64 for clique in cliques)
+def estimate_market_engine_memory_bytes(cliques: list[dict[str, Any]] | tuple[CliqueSummary, ...]) -> int:
+    """Estimate memory use for a compiled market from its clique summaries."""
+    total = 0
+    for clique in cliques:
+        if isinstance(clique, CliqueSummary):
+            states = int(clique.states)
+            size = int(clique.size)
+        else:
+            states = int(clique["states"])
+            size = int(clique["size"])
+        total += states * 32 + size * 64
+    return total
+
+
+def build_market_compile_result(market_id: str, *, compile_time_ms: float | None = None) -> CompileResult:
+    """Compile a market and normalize the optional compile-time measurement."""
+    return compile_market_for_inference(
+        market_id,
+        compile_time_ms=float(compile_time_ms or 0.0),
+    )
 
 
 def refresh_market_compile_snapshot(market_id: str, *, compile_time_ms: float | None = None) -> None:
+    """Refresh cached compile diagnostics for a market."""
     state = ensure_market_engine_state(market_id)
-    cliques = build_market_cliques(market_id)
-    source_state_hash = market_replay_state_hash(market_id)
-    digest = source_state_hash.split(":", 1)[-1]
-    state["compile_id"] = f"comp-{digest[:12]}"
-    state["compile_type"] = ENGINE_COMPILE_TYPE
-    state["source_state_hash"] = source_state_hash
-    state["compile_time_ms"] = round(float(compile_time_ms or 0.0), 3)
-    state["memory_bytes"] = estimate_market_engine_memory_bytes(cliques)
-    state["last_updated"] = utc_timestamp()
-    state["cliques"] = cliques
+    compile_result = build_market_compile_result(market_id, compile_time_ms=compile_time_ms)
+    state["compile_id"] = compile_result.compile_id
+    state["compile_type"] = compile_result.compile_type
+    state["source_state_hash"] = compile_result.source_state_hash
+    state["compile_time_ms"] = round(float(compile_result.compile_time_ms), 3)
+    state["memory_bytes"] = int(compile_result.memory_bytes)
+    state["last_updated"] = compile_result.last_updated
+    state["cliques"] = [clique.to_dict() for clique in compile_result.cliques]
 
 
 def record_market_engine_request(market_id: str, duration_ms: float, *, error: bool) -> None:
+    """Record one engine-facing request in the market diagnostics state."""
     state = ensure_market_engine_state(market_id)
     state["request_count"] += 1
     if error:
@@ -474,11 +634,15 @@ def record_market_engine_request(market_id: str, duration_ms: float, *, error: b
 
     samples = state["inference_samples_ms"]
     samples.append(round(float(duration_ms), 3))
-    if len(samples) > ENGINE_INFERENCE_SAMPLE_LIMIT:
-        del samples[:-ENGINE_INFERENCE_SAMPLE_LIMIT]
+    limit = ENGINE_CONFIG.inference_sample_limit
+    if limit == 0:
+        samples.clear()
+    elif len(samples) > limit:
+        del samples[:-limit]
 
 
 def get_market_engine_stats(market_id: str) -> tuple[dict[str, Any], int]:
+    """Return the engine diagnostics payload for a market."""
     market = MARKETS.get(market_id)
     if not market:
         raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
@@ -506,10 +670,10 @@ def get_market_engine_stats(market_id: str) -> tuple[dict[str, Any], int]:
     return {
         "marketId": market_id,
         "engine": {
-            "mode": ENGINE_MODE,
-            "backend": ENGINE_BACKEND,
-            "version": ENGINE_VERSION,
-            "precision": ENGINE_PRECISION,
+            "mode": ENGINE_CONFIG.mode,
+            "backend": ENGINE_CONFIG.backend,
+            "version": ENGINE_CONFIG.version,
+            "precision": ENGINE_CONFIG.precision,
             "compile_id": state["compile_id"] if state else None,
             "compile_type": state["compile_type"] if state else None,
             "source_state_hash": state["source_state_hash"] if state else None,
@@ -526,10 +690,12 @@ def get_market_engine_stats(market_id: str) -> tuple[dict[str, Any], int]:
 
 
 def round_risk_value(value: float) -> float:
+    """Round risk-model values to the backend's canonical precision."""
     return round(float(value), 6)
 
 
 def account_capacity_status(limit: float, min_asset: float) -> str:
+    """Classify capacity health from a risk limit and current minimum asset."""
     if min_asset <= 0:
         return "breached"
     utilization = 0.0 if limit <= 0 else (limit - min_asset) / limit
@@ -541,6 +707,7 @@ def account_capacity_status(limit: float, min_asset: float) -> str:
 
 
 def build_capacity_indicators(limit: float, min_asset: float) -> dict[str, Any]:
+    """Build capacity summary metrics for an account or market slice."""
     consumed = round_risk_value(limit - min_asset)
     available = round_risk_value(min_asset)
     utilization = 0.0 if limit <= 0 else round_risk_value(consumed / limit)
@@ -553,21 +720,69 @@ def build_capacity_indicators(limit: float, min_asset: float) -> dict[str, Any]:
     }
 
 
+def build_account_lmsr_state(
+    slices: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build the default LMSR ledger state for an account."""
+    return {
+        "version": ACCOUNT_LMSR_LEDGER_VERSION,
+        "riskReadModel": ACCOUNT_LMSR_RISK_READ_MODEL,
+        "slices": deepcopy(slices) if slices is not None else {},
+    }
+
+
+def build_account_risk_state(
+    account_id: str,
+    timestamp: str,
+    *,
+    risk_limit: float = ACCOUNT_RISK_LIMIT,
+    min_asset: float | None = None,
+    markets: dict[str, dict[str, Any]] | None = None,
+    lmsr_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the default account risk document."""
+    normalized_risk_limit = round_risk_value(risk_limit)
+    normalized_min_asset = normalized_risk_limit if min_asset is None else round_risk_value(min_asset)
+    return {
+        "accountId": account_id,
+        "riskLimit": normalized_risk_limit,
+        "minAsset": normalized_min_asset,
+        "updatedAt": timestamp,
+        "markets": deepcopy(markets) if markets is not None else {},
+        "lmsrState": deepcopy(lmsr_state) if lmsr_state is not None else build_account_lmsr_state(),
+    }
+
+
+def ensure_account_lmsr_state(account: dict[str, Any]) -> dict[str, Any]:
+    """Ensure an account carries a normalized LMSR state block."""
+    lmsr_state = account.get("lmsrState")
+    if not isinstance(lmsr_state, dict):
+        lmsr_state = build_account_lmsr_state()
+        account["lmsrState"] = lmsr_state
+        return lmsr_state
+
+    if not isinstance(lmsr_state.get("version"), str):
+        lmsr_state["version"] = ACCOUNT_LMSR_LEDGER_VERSION
+    if not isinstance(lmsr_state.get("riskReadModel"), str):
+        lmsr_state["riskReadModel"] = ACCOUNT_LMSR_RISK_READ_MODEL
+    if not isinstance(lmsr_state.get("slices"), dict):
+        lmsr_state["slices"] = {}
+    return lmsr_state
+
+
 def ensure_account_risk_state(account_id: str, timestamp: str) -> dict[str, Any]:
+    """Return an account risk record, creating a default one if absent."""
     account = ACCOUNT_RISK.get(account_id)
     if account is None:
-        account = {
-            "accountId": account_id,
-            "riskLimit": round_risk_value(ACCOUNT_RISK_LIMIT),
-            "minAsset": round_risk_value(ACCOUNT_RISK_LIMIT),
-            "updatedAt": timestamp,
-            "markets": {},
-        }
+        account = build_account_risk_state(account_id, timestamp)
         ACCOUNT_RISK[account_id] = account
+    else:
+        ensure_account_lmsr_state(account)
     return account
 
 
 def preview_account_min_asset(account_id: str, impact_score: float) -> dict[str, Any]:
+    """Preview the account-wide min-asset effect of a proposed impact score."""
     account = ACCOUNT_RISK.get(account_id)
     if account is None:
         risk_limit = round_risk_value(ACCOUNT_RISK_LIMIT)
@@ -587,7 +802,94 @@ def preview_account_min_asset(account_id: str, impact_score: float) -> dict[str,
     }
 
 
+def account_lmsr_slice_key(
+    market_id: str,
+    context: list[dict[str, str]],
+) -> str:
+    """Build the ledger key for one market/context LMSR slice."""
+    return f"{market_id}|{context_state_key(context)}"
+
+
+def _round_score_by_outcome(score_by_outcome: dict[str, float]) -> dict[str, float]:
+    return {
+        str(outcome_id): round_risk_value(score)
+        for outcome_id, score in score_by_outcome.items()
+    }
+
+
+def _accumulate_score_by_outcome(
+    score_by_outcome: dict[str, Any],
+    score_delta: dict[str, float],
+) -> dict[str, float]:
+    accumulated: dict[str, float] = {}
+    for outcome_id, score in score_by_outcome.items():
+        normalized_outcome_id = str(outcome_id)
+        accumulated[normalized_outcome_id] = round_risk_value(float(score))
+
+    for outcome_id, delta in score_delta.items():
+        normalized_outcome_id = str(outcome_id)
+        accumulated[normalized_outcome_id] = round_risk_value(
+            float(accumulated.get(normalized_outcome_id, 0.0)) + float(delta)
+        )
+    return accumulated
+
+
+def sync_probability_edit_lmsr_state(account: dict[str, Any], order: dict[str, Any]) -> None:
+    """Apply a probability-edit order to the account's LMSR ledger state."""
+    market_id = str(order["marketId"])
+    market = MARKETS.get(market_id)
+    if market is None:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    payload = order["payload"]
+    context = deepcopy(payload["context"])
+    context_key = context_state_key(context)
+    slice_key = account_lmsr_slice_key(market_id, context)
+    timestamp = str(order["filledAt"])
+    score_delta = _round_score_by_outcome(
+        lmsr.lmsr_score_delta(
+            order["previousMarginals"],
+            order["newMarginals"],
+            float(market["liquidity"]),
+        )
+    )
+
+    lmsr_state = ensure_account_lmsr_state(account)
+    slices = lmsr_state["slices"]
+    slice_state = slices.get(slice_key)
+    if not isinstance(slice_state, dict):
+        slice_state = {
+            "marketId": market_id,
+            "variableId": str(payload["variableId"]),
+            "context": context,
+            "contextKey": context_key,
+            "liquidity": round_risk_value(float(market["liquidity"])),
+            "scoreByOutcome": deepcopy(score_delta),
+            "commandCount": 1,
+            "updatedAt": timestamp,
+            "lastOrderId": str(order["id"]),
+            "lastCommandId": str(order["commandId"]),
+        }
+        slices[slice_key] = slice_state
+        return
+
+    slice_state["marketId"] = market_id
+    slice_state["variableId"] = str(payload["variableId"])
+    slice_state["context"] = context
+    slice_state["contextKey"] = context_key
+    slice_state["liquidity"] = round_risk_value(float(market["liquidity"]))
+    existing_scores = slice_state.get("scoreByOutcome", {})
+    if not isinstance(existing_scores, dict):
+        existing_scores = {}
+    slice_state["scoreByOutcome"] = _accumulate_score_by_outcome(existing_scores, score_delta)
+    slice_state["commandCount"] = int(slice_state.get("commandCount", 0)) + 1
+    slice_state["updatedAt"] = timestamp
+    slice_state["lastOrderId"] = str(order["id"])
+    slice_state["lastCommandId"] = str(order["commandId"])
+
+
 def sync_account_risk_state(order: dict[str, Any]) -> dict[str, Any]:
+    """Apply an accepted order to the stored account risk state."""
     account_id = str(order["accountId"])
     market_id = str(order["marketId"])
     timestamp = str(order["filledAt"])
@@ -623,6 +925,9 @@ def sync_account_risk_state(order: dict[str, Any]) -> dict[str, Any]:
     market_risk["lastOrderId"] = str(order["id"])
     market_risk["lastCommandId"] = str(order["commandId"])
 
+    if str(order["type"]) == "ProbabilityEdit":
+        sync_probability_edit_lmsr_state(account, order)
+
     return {
         "accountId": account_id,
         "marketId": market_id,
@@ -632,6 +937,7 @@ def sync_account_risk_state(order: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_account_risk(account_id: str) -> tuple[dict[str, Any], int]:
+    """Return the read model for one account's current risk state."""
     account = ACCOUNT_RISK.get(account_id)
     if account is None:
         raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
@@ -670,6 +976,7 @@ def get_account_risk(account_id: str) -> tuple[dict[str, Any], int]:
 
 
 def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
+    """Return the market collection, optionally filtered by status."""
     statuses = query.get("status", [])
     if len(statuses) > 1:
         raise ApiError(
@@ -700,6 +1007,7 @@ def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
 
 
 def get_market_detail(market_id: str) -> tuple[dict[str, Any], int]:
+    """Return the full market payload for one market id."""
     market = MARKETS.get(market_id)
     if not market:
         raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
@@ -718,6 +1026,7 @@ def parse_integer_query_param(
     minimum: int,
     maximum: int | None = None,
 ) -> int:
+    """Parse and validate an integer query parameter with bounds."""
     values = query.get(name, [])
     if len(values) > 1:
         raise ApiError(
@@ -761,6 +1070,7 @@ def parse_integer_query_param(
 
 
 def get_market_events(market_id: str, query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
+    """Return the paginated event journal for a market."""
     if market_id not in MARKETS:
         raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
 
@@ -803,6 +1113,7 @@ def get_market_events(market_id: str, query: dict[str, list[str]]) -> tuple[dict
 
 
 def kl_divergence(previous: dict[str, float], updated: dict[str, float]) -> float:
+    """Compute the KL divergence from one marginal distribution to another."""
     return round(
         sum(
             new * math.log(new / old)
@@ -814,6 +1125,7 @@ def kl_divergence(previous: dict[str, float], updated: dict[str, float]) -> floa
 
 
 def find_market_by_variable_id(variable_id: str) -> dict[str, Any] | None:
+    """Look up a market by its canonical variable id."""
     for market in MARKETS.values():
         if market["variableId"] == variable_id:
             return market
@@ -840,34 +1152,21 @@ def _preview_probability_target_distribution(
     marginals: dict[str, float] | None = None,
 ) -> dict[str, float]:
     base_marginals = marginals if marginals is not None else market["marginals"]
-    if not isinstance(base_marginals, dict):
-        raise ValueError("market.marginals must be a dictionary")
-
     outcome_ids = _market_outcome_ids(market)
-    if outcome_id not in outcome_ids:
-        raise ValueError("target.outcomeId must match a known market outcome")
-    other_ids = [candidate for candidate in outcome_ids if candidate != outcome_id]
-    if not other_ids:
-        raise ValueError("market must have at least two outcomes")
     try:
-        previous_other_total = sum(float(base_marginals[candidate]) for candidate in other_ids)
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError("market.marginals must contain numeric values for all non-target outcomes") from exc
+        updated = lmsr.rescale_probability_edit(base_marginals, outcome_id, probability)
+    except ValueError as exc:
+        raise ValueError(str(exc).replace("previous", "market.marginals")) from exc
 
-    remaining = 1.0 - probability
-    if previous_other_total <= 0:
-        scaled_others = {candidate: round(remaining / len(other_ids), 12) for candidate in other_ids}
-    else:
-        scaled_others = {
-            candidate: round(float(base_marginals[candidate]) / previous_other_total * remaining, 12)
-            for candidate in other_ids
-        }
-
-    updated = {outcome_id: round(probability, 12), **scaled_others}
-    rounding_drift = round(1.0 - sum(updated.values()), 12)
+    ordered_outcome_ids = [outcome_id, *[candidate for candidate in outcome_ids if candidate != outcome_id]]
+    rounded = {candidate: round(updated[candidate], 12) for candidate in ordered_outcome_ids}
+    rounding_drift = round(1.0 - sum(rounded.values()), 12)
     if rounding_drift != 0:
-        updated[other_ids[-1]] = round(updated[other_ids[-1]] + rounding_drift, 12)
-    return updated
+        rounded_outcomes = [candidate for candidate in outcome_ids if candidate != outcome_id]
+        if not rounded_outcomes:
+            raise ValueError("market must have at least two outcomes")
+        rounded[rounded_outcomes[-1]] = round(rounded[rounded_outcomes[-1]] + rounding_drift, 12)
+    return rounded
 
 
 def _validated_market_marginals(
@@ -980,6 +1279,7 @@ def normalize_context_assignments(
     variable_id: str,
     context: Any,
 ) -> list[dict[str, str]]:
+    """Normalize and validate probability-edit context assignments."""
     if not isinstance(context, list):
         raise ApiError(400, "invalid_probability_edit", "context must be an array", {"field": "context"})
 
@@ -1057,6 +1357,7 @@ def normalize_context_assignments(
 
 
 def normalize_event_formula(formula: Any) -> list[list[dict[str, Any]]]:
+    """Normalize an event formula against variable-id references."""
     return formula_schema.normalize_event_formula(
         formula,
         lookup_market_by_variable_id=find_market_by_variable_id,
@@ -1067,6 +1368,7 @@ def normalize_event_formula(formula: Any) -> list[list[dict[str, Any]]]:
 
 
 def validate_event_trade_formula_market_ids(formula: Any) -> None:
+    """Validate that market-id references in an event formula all exist."""
     formula_schema.validate_event_trade_formula_market_ids(
         formula,
         lookup_market_by_id=lambda market_id: MARKETS.get(market_id),
@@ -1075,6 +1377,7 @@ def validate_event_trade_formula_market_ids(formula: Any) -> None:
 
 
 def translate_event_trade_formula_for_validation(formula: Any) -> Any:
+    """Translate an event formula into the validation-friendly representation."""
     return formula_schema.translate_event_trade_formula_for_validation(
         formula,
         lookup_market_by_id=lambda market_id: MARKETS.get(market_id),
@@ -1084,6 +1387,7 @@ def translate_event_trade_formula_for_validation(formula: Any) -> Any:
 def restore_event_trade_formula_market_ids(
     normalized_formula: list[list[dict[str, Any]]],
 ) -> list[list[dict[str, Any]]]:
+    """Restore market ids into a normalized event formula representation."""
     return formula_schema.restore_event_trade_formula_market_ids(
         normalized_formula,
         lookup_market_by_variable_id=find_market_by_variable_id,
@@ -1091,6 +1395,7 @@ def restore_event_trade_formula_market_ids(
 
 
 def normalize_event_trade_formula(formula: Any) -> list[list[dict[str, Any]]]:
+    """Normalize an event-trade formula against market and variable references."""
     return formula_schema.normalize_event_trade_formula(
         formula,
         lookup_market_by_id=lambda market_id: MARKETS.get(market_id),
@@ -1102,6 +1407,7 @@ def normalize_event_trade_formula(formula: Any) -> list[list[dict[str, Any]]]:
 
 
 def normalize_event_trade_size(payload: dict[str, Any]) -> float:
+    """Normalize and validate the size field for an event trade request."""
     has_size = "size" in payload
     has_amount = "amount" in payload
     if not has_size and not has_amount:
@@ -1129,6 +1435,7 @@ def normalize_event_trade_size(payload: dict[str, Any]) -> float:
 
 
 def normalize_event_trade_side(payload: dict[str, Any]) -> str:
+    """Normalize and validate the side field for an event trade request."""
     raw_side = payload.get("side")
     if not isinstance(raw_side, str) or not raw_side.strip():
         raise ApiError(400, "invalid_event_trade", "side is required", {"field": "side"})
@@ -1145,6 +1452,7 @@ def normalize_event_trade_side(payload: dict[str, Any]) -> str:
 
 
 def require_atomic_event_trade_formula(formula: list[list[dict[str, Any]]]) -> dict[str, Any]:
+    """Require that an event-trade formula collapses to a single literal."""
     return formula_schema.require_atomic_event_trade_formula(
         formula,
         error_factory=ApiError,
@@ -1152,6 +1460,7 @@ def require_atomic_event_trade_formula(formula: list[list[dict[str, Any]]]) -> d
 
 
 def normalize_event_trade_payload(market_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize and validate an event-trade request body."""
     market = MARKETS.get(market_id)
     if market is None:
         raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
@@ -1191,13 +1500,29 @@ def normalize_event_trade_payload(market_id: str, payload: dict[str, Any]) -> di
 
 
 def context_state_key(context: list[dict[str, str]]) -> str:
-    return "|".join(f"{assignment['variableId']}={assignment['outcomeId']}" for assignment in context)
+    """Serialize context assignments into the canonical state-key format."""
+    canonical_assignments = sorted(
+        (
+            (str(assignment["variableId"]).strip(), str(assignment["outcomeId"]).strip())
+            for assignment in context
+        )
+    )
+    return "|".join(f"{variable_id}={outcome_id}" for variable_id, outcome_id in canonical_assignments)
 
 
 def resolve_probability_edit_base_marginals(
     market_id: str,
     context: list[dict[str, str]],
 ) -> dict[str, float]:
+    """Resolve the base marginals for a probability edit via the inference engine."""
+    return query_market_marginals_for_inference(market_id, context)
+
+
+def fallback_probability_edit_base_marginals(
+    market_id: str,
+    context: list[dict[str, str]],
+) -> dict[str, float]:
+    """Resolve the base marginals for a probability edit from stored state only."""
     market = MARKETS[market_id]
     if not context:
         return deepcopy(market["marginals"])
@@ -1208,10 +1533,12 @@ def resolve_probability_edit_base_marginals(
 
 
 def idempotency_scope_key(market_id: str, account_id: str, idempotency_key: str) -> tuple[str, str, str]:
+    """Build the idempotency namespace key for one request scope."""
     return market_id, account_id, idempotency_key
 
 
 def market_replay_state_hash(market_id: str) -> str:
+    """Hash the replay-relevant state for a market."""
     return canonical_json_hash(
         {
             "market": deepcopy(MARKETS[market_id]),
@@ -1226,6 +1553,7 @@ def apply_probability_target(
     probability: float,
     marginals: dict[str, float] | None = None,
 ) -> dict[str, float]:
+    """Apply a probability target to a market and return the new marginals."""
     outcome_ids = list(_market_outcome_ids(market))
     if outcome_id not in outcome_ids:
         raise ApiError(
@@ -1272,6 +1600,7 @@ def apply_probability_target(
 
 
 def normalize_probability_value(probability: Any) -> float:
+    """Normalize and validate a probability-edit target value."""
     if isinstance(probability, bool) or not isinstance(probability, (int, float)):
         raise ApiError(
             400,
@@ -1287,6 +1616,7 @@ def preview_unconditional_probability_edit(
     payload: dict[str, Any],
     account_id: str,
 ) -> dict[str, Any]:
+    """Preview the market and risk impact of an unconditional probability edit."""
     if payload["context"]:
         raise ValueError("preview_unconditional_probability_edit requires an empty context")
 
@@ -1295,7 +1625,7 @@ def preview_unconditional_probability_edit(
         raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
 
     target = payload["target"]
-    previous_marginals = deepcopy(market["marginals"])
+    previous_marginals = resolve_probability_edit_base_marginals(market_id, [])
     updated_marginals = apply_probability_target(
         market,
         str(target["outcomeId"]),
@@ -1315,6 +1645,7 @@ def create_probability_edit_order(
     command: dict[str, Any],
     preview: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Materialize and persist an accepted probability-edit order."""
     market_id = str(command["marketId"])
     market = MARKETS.get(market_id)
     if not market:
@@ -1375,6 +1706,7 @@ def create_probability_edit_order(
 
 
 def normalize_probability_edit_payload(market_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize and validate a probability-edit request body."""
     market = MARKETS.get(market_id)
     if not market:
         raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
@@ -1422,7 +1754,12 @@ def normalize_probability_edit_payload(market_id: str, payload: dict[str, Any]) 
         },
         "context": deepcopy(context),
     }
-    base_marginals = resolve_probability_edit_base_marginals(market_id, context)
+    try:
+        base_marginals = resolve_probability_edit_base_marginals(market_id, context)
+    except ApiError as exc:
+        if exc.status != 500 or exc.code != "internal_error":
+            raise
+        base_marginals = fallback_probability_edit_base_marginals(market_id, context)
     validate_structure_preserving_edit(market, normalized_payload, marginals=base_marginals)
     apply_probability_target(
         market,
@@ -1441,6 +1778,7 @@ def materialize_probability_edit_command(
     submitted_at: str,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
+    """Build and persist a probability-edit command envelope."""
     command = {
         "schemaVersion": "bayes-command/v1",
         "commandId": command_id,
@@ -1461,6 +1799,7 @@ def materialize_probability_edit_command(
 
 
 def emit_terminal_event(command: dict[str, Any], event_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Append a terminal event to the per-market event journal."""
     market_id = str(command["marketId"])
     with get_market_write_lock(market_id):
         seq = MARKET_EVENT_SEQUENCES.get(market_id, 0) + 1
@@ -1485,6 +1824,7 @@ def emit_terminal_event(command: dict[str, Any], event_type: str, payload: dict[
 
 
 def build_terminal_result(event: dict[str, Any]) -> dict[str, Any]:
+    """Build the terminal result block returned to API callers."""
     result = {
         "terminal": True,
         "status": "accepted" if event["eventType"] == "CommandAccepted" else "rejected",
@@ -1511,6 +1851,7 @@ def record_terminal_outcome(
     response: dict[str, Any],
     scope_key: tuple[str, str, str] | None = None,
 ) -> None:
+    """Persist the final response for a command, including idempotency binding."""
     command_id = str(command["commandId"])
     TERMINAL_OUTCOMES[command_id] = {
         "eventId": str(event["eventId"]),
@@ -1523,6 +1864,7 @@ def record_terminal_outcome(
 
 
 def replay_terminal_outcome(command_id: str) -> tuple[dict[str, Any], int]:
+    """Replay a previously persisted terminal command outcome."""
     outcome = TERMINAL_OUTCOMES[command_id]
     response = deepcopy(outcome["response"])
     response.setdefault("meta", {})
@@ -1537,6 +1879,7 @@ def build_idempotency_conflict_response(
     account_id: str,
     command_type: str,
 ) -> tuple[dict[str, Any], int]:
+    """Build the response for an idempotency-key payload mismatch."""
     return {
         "error": {
             "code": "idempotency_conflict",
@@ -1561,6 +1904,7 @@ def build_terminal_rejection_response(
     status: int,
     scope_key: tuple[str, str, str] | None = None,
 ) -> tuple[dict[str, Any], int]:
+    """Emit and persist a terminal rejection response for a command."""
     event = emit_terminal_event(
         command,
         "CommandRejected",
@@ -1593,6 +1937,7 @@ def build_terminal_acceptance_response(
     asset_delta: dict[str, Any],
     scope_key: tuple[str, str, str] | None = None,
 ) -> tuple[dict[str, Any], int]:
+    """Emit and persist a terminal acceptance response for a probability edit."""
     target = order["payload"]["target"]
     delta = {
         "variableId": order["payload"]["variableId"],
@@ -1639,6 +1984,7 @@ def materialize_event_trade_command(
     submitted_at: str,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
+    """Build and persist an event-trade command envelope."""
     command = {
         "schemaVersion": "bayes-command/v1",
         "commandId": command_id,
@@ -1659,6 +2005,7 @@ def materialize_event_trade_command(
 
 
 def create_event_trade_order(command: dict[str, Any]) -> dict[str, Any]:
+    """Materialize and persist an accepted event-trade order."""
     market_id = str(command["marketId"])
     market = MARKETS.get(market_id)
     if not market:
@@ -1667,7 +2014,7 @@ def create_event_trade_order(command: dict[str, Any]) -> dict[str, Any]:
     payload = command["payload"]
     literal = payload["formula"][0][0]
     outcome_id = str(literal["outcomeId"])
-    price = round_risk_value(float(market["marginals"][outcome_id]))
+    price = round_risk_value(query_market_atomic_probability_for_inference(market_id, outcome_id))
     size = round_risk_value(float(payload["size"]))
     timestamp = utc_timestamp()
     order = {
@@ -1700,6 +2047,7 @@ def build_event_trade_acceptance_response(
     order: dict[str, Any],
     scope_key: tuple[str, str, str] | None = None,
 ) -> tuple[dict[str, Any], int]:
+    """Emit and persist a terminal acceptance response for an event trade."""
     literal = order["payload"]["formula"][0][0]
     event = emit_terminal_event(
         command,
@@ -1739,6 +2087,7 @@ def build_event_trade_acceptance_response(
 
 
 def handle_probability_edit(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
+    """Handle the full ProbabilityEdit request lifecycle for one market."""
     body = payload if payload is not None else {}
     if not isinstance(body, dict):
         raise ApiError(400, "invalid_body", "payload must be an object")
@@ -1829,6 +2178,7 @@ def handle_probability_edit(market_id: str, payload: dict[str, Any] | None) -> t
 
 
 def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
+    """Handle the full EventTrade request lifecycle for one market."""
     body = payload if payload is not None else {}
     if not isinstance(body, dict):
         raise ApiError(400, "invalid_body", "payload must be an object")
@@ -1896,6 +2246,7 @@ def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[
 
 
 def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None) -> tuple[dict[str, Any], int]:
+    """Route one HTTP request into the backend's in-memory handlers."""
     parsed = urlparse(raw_path)
     path = normalize_path(parsed.path)
 
@@ -2015,7 +2366,10 @@ def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None
 
 
 class BayesHandler(BaseHTTPRequestHandler):
+    """HTTP handler that exposes the Bayes Market API over JSON."""
+
     def log_message(self, fmt: str, *args: object) -> None:
+        """Suppress the default BaseHTTPRequestHandler access log output."""
         return
 
     def send_json(
@@ -2024,6 +2378,7 @@ class BayesHandler(BaseHTTPRequestHandler):
         status: int = 200,
         extra_headers: dict[str, str] | None = None,
     ) -> None:
+        """Write a JSON response body with the standard headers."""
         body = json.dumps(data).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -2064,6 +2419,7 @@ class BayesHandler(BaseHTTPRequestHandler):
         return body
 
     def handle_api(self, method: str) -> None:
+        """Execute one API request and translate ApiError into JSON responses."""
         extra_headers: dict[str, str] | None = None
         try:
             body = self._read_json_body() if method in {"POST", "PUT", "PATCH"} else None
@@ -2080,19 +2436,24 @@ class BayesHandler(BaseHTTPRequestHandler):
         self.send_json(payload, status, extra_headers=extra_headers)
 
     def do_GET(self) -> None:  # noqa: N802
+        """Serve an HTTP GET request."""
         self.handle_api("GET")
 
     def do_POST(self) -> None:  # noqa: N802
+        """Serve an HTTP POST request."""
         self.handle_api("POST")
 
     def do_PUT(self) -> None:  # noqa: N802
+        """Serve an HTTP PUT request."""
         self.handle_api("PUT")
 
     def do_DELETE(self) -> None:  # noqa: N802
+        """Serve an HTTP DELETE request."""
         self.handle_api("DELETE")
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the standalone backend server."""
     parser = argparse.ArgumentParser(description="Bayes Market backend server")
     parser.add_argument("--host", default=os.environ.get("BAYES_MARKET_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("BAYES_MARKET_PORT", "3205")))
@@ -2100,10 +2461,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def run_server(host: str = "127.0.0.1", port: int = 3205) -> None:
+    """Start the HTTP server and block forever."""
     HTTPServer((host, port), BayesHandler).serve_forever()
 
 
 def main() -> int:
+    """Run the backend from the command line and return an exit code."""
     args = parse_args()
     run_server(host=args.host, port=args.port)
     return 0

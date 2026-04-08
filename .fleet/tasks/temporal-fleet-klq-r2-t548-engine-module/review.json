@@ -1,0 +1,9 @@
+{
+  "verdict": "approve",
+  "reason": "The extraction cleanly moves engine config and inference contracts behind a dedicated package seam while preserving the existing server behavior; the zero-sample-limit edge case is explicitly handled and the relevant Bayes market tests pass.",
+  "scores": {
+    "correctness": 9,
+    "style": 9,
+    "completeness": 9
+  }
+}

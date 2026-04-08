@@ -14,7 +14,16 @@ ErrorFactory = Callable[[int, str, str, Optional[dict[str, Any]]], Exception]
 
 
 class FormulaSchemaError(Exception):
-    def __init__(self, status: int, code: str, message: str, details: dict[str, Any] | None = None):
+    """Represent a formula validation error using the API-style error shape."""
+
+    def __init__(
+        self,
+        status: int,
+        code: str,
+        message: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        """Initialize a validation error with status, code, and optional details."""
         super().__init__(message)
         self.status = status
         self.code = code
@@ -44,6 +53,7 @@ def normalize_event_formula(
     max_clauses: int = MAX_EVENT_FORMULA_CLAUSES,
     max_clause_literals: int = MAX_EVENT_FORMULA_CLAUSE_LITERALS,
 ) -> list[list[dict[str, Any]]]:
+    """Normalize a CNF formula that references markets by variable id."""
     if not isinstance(formula, list):
         _raise(error_factory, 400, "invalid_event_formula", "formula must be an array", {"field": "formula"})
 
@@ -204,6 +214,7 @@ def validate_event_trade_formula_market_ids(
     lookup_market_by_id: MarketLookup,
     error_factory: ErrorFactory = FormulaSchemaError,
 ) -> None:
+    """Validate that any market-id references in a formula resolve successfully."""
     if not isinstance(formula, list):
         return
 
@@ -238,6 +249,7 @@ def translate_event_trade_formula_for_validation(
     *,
     lookup_market_by_id: MarketLookup,
 ) -> Any:
+    """Translate market-id literals into variable-id literals for validation."""
     if not isinstance(formula, list):
         return formula
 
@@ -270,6 +282,7 @@ def restore_event_trade_formula_market_ids(
     *,
     lookup_market_by_variable_id: MarketLookup,
 ) -> list[list[dict[str, Any]]]:
+    """Restore public market ids into a normalized formula representation."""
     restored_formula: list[list[dict[str, Any]]] = []
     for clause in normalized_formula:
         restored_clause: list[dict[str, Any]] = []
@@ -299,6 +312,7 @@ def normalize_event_trade_formula(
     max_clauses: int = MAX_EVENT_FORMULA_CLAUSES,
     max_clause_literals: int = MAX_EVENT_FORMULA_CLAUSE_LITERALS,
 ) -> list[list[dict[str, Any]]]:
+    """Normalize a public EventTrade formula that may reference market ids."""
     validate_event_trade_formula_market_ids(
         formula,
         lookup_market_by_id=lookup_market_by_id,
@@ -346,6 +360,7 @@ def require_atomic_event_trade_formula(
     *,
     error_factory: ErrorFactory = FormulaSchemaError,
 ) -> dict[str, Any]:
+    """Require that a normalized formula is one non-negated atomic literal."""
     clause_count = len(formula)
     literal_count = len(formula[0]) if clause_count == 1 else None
     negated = bool(formula[0][0]["negated"]) if clause_count == 1 and literal_count == 1 else None
@@ -376,7 +391,8 @@ class FormulaValidator:
         error_factory: ErrorFactory = FormulaSchemaError,
         max_clauses: int = MAX_EVENT_FORMULA_CLAUSES,
         max_clause_literals: int = MAX_EVENT_FORMULA_CLAUSE_LITERALS,
-    ):
+    ) -> None:
+        """Initialize a validator that works directly with variable ids."""
         self.lookup_market_by_variable_id = lookup_market_by_variable_id
         self.error_factory = error_factory
         self.max_clauses = max_clauses
@@ -386,6 +402,7 @@ class FormulaValidator:
         self.last_error: Exception | None = None
 
     def normalize(self, formula: Any) -> list[list[dict[str, Any]]]:
+        """Normalize a shared CNF formula or raise a schema error."""
         return normalize_event_formula(
             formula,
             lookup_market_by_variable_id=self.lookup_market_by_variable_id,
@@ -395,6 +412,7 @@ class FormulaValidator:
         )
 
     def validate(self, formula: Any) -> bool:
+        """Validate a formula and store any failure details on the instance."""
         self.errors = []
         self.warnings = []
         self.last_error = None
@@ -418,7 +436,8 @@ class EventTradeFormulaAdapter:
         error_factory: ErrorFactory = FormulaSchemaError,
         max_clauses: int = MAX_EVENT_FORMULA_CLAUSES,
         max_clause_literals: int = MAX_EVENT_FORMULA_CLAUSE_LITERALS,
-    ):
+    ) -> None:
+        """Initialize an adapter that accepts market ids at the API boundary."""
         self.lookup_market_by_id = lookup_market_by_id
         self.lookup_market_by_variable_id = lookup_market_by_variable_id
         self.error_factory = error_factory
@@ -429,6 +448,7 @@ class EventTradeFormulaAdapter:
         self.last_error: Exception | None = None
 
     def normalize(self, formula: Any) -> list[list[dict[str, Any]]]:
+        """Normalize a public EventTrade formula into canonical clause form."""
         return normalize_event_trade_formula(
             formula,
             lookup_market_by_id=self.lookup_market_by_id,
@@ -439,6 +459,7 @@ class EventTradeFormulaAdapter:
         )
 
     def validate(self, formula: Any) -> bool:
+        """Validate a public EventTrade formula and capture failure details."""
         self.errors = []
         self.warnings = []
         self.last_error = None
@@ -451,6 +472,7 @@ class EventTradeFormulaAdapter:
         return True
 
     def require_atomic(self, formula: list[list[dict[str, Any]]]) -> dict[str, Any]:
+        """Require that a public EventTrade formula resolves to one atomic literal."""
         return require_atomic_event_trade_formula(formula, error_factory=self.error_factory)
 
 

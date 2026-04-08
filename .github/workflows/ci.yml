@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main, futarchy-fleet]
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python test dependencies
+        run: pip install pytest
+
+      - name: Run backend tests
+        run: python3 -m pytest tests/ -v --tb=short
+        timeout-minutes: 5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm --dir frontend install
+
+      - name: Run frontend tests
+        run: pnpm --dir frontend test
+        timeout-minutes: 5
+
+      - name: Build frontend
+        run: pnpm --dir frontend build
+        timeout-minutes: 5

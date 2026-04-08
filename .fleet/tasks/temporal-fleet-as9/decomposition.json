@@ -1,0 +1,18 @@
+[
+  {
+    "id": "task-probability-edit-lmsr-cost-wiring",
+    "title": "Wire LMSR cost into ProbabilityEdit pricing",
+    "description": "Replace the remaining KL-based ProbabilityEdit quote path in backend/server.py with a shared LMSR quote helper that uses market.liquidity and lmsr_expected_edit_cost for unconditional previews and accepted conditional and unconditional orders, while preserving the existing HTTP, event, idempotency, and account-risk envelopes.",
+    "dependsOn": [],
+    "level": 1
+  },
+  {
+    "id": "task-probability-edit-lmsr-cost-regression-coverage",
+    "title": "Update ProbabilityEdit cost regression coverage",
+    "description": "Adjust and extend tests in tests/test_bayes_market_api.py so impactScore, pricing.cost, rejection previews, and conditional acceptance paths assert LMSR-backed cost instead of KL divergence, including preview and order consistency on the same marginal transition.",
+    "dependsOn": [
+      "task-probability-edit-lmsr-cost-wiring"
+    ],
+    "level": 2
+  }
+]

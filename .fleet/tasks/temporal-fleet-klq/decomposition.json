@@ -1,0 +1,9 @@
+[
+  {
+    "id": "t548-adapter-read-fallbacks",
+    "title": "Restore direct-read behavior when adapter compilation is blocked by unrelated conditional state",
+    "description": "Adjust server-side adapter integration so unconditional ProbabilityEdit previews and EventTrade pricing do not return 500 solely because an unrelated conditional slice for the same market is malformed. Preserve structural validation for the targeted context, but fall back to direct market marginals or narrower query inputs where the previous API contract tolerated unrelated conditional corruption. Add regression coverage for unconditional ProbabilityEdit and EventTrade requests with malformed same-market conditional state.",
+    "dependsOn": [],
+    "level": 0
+  }
+]

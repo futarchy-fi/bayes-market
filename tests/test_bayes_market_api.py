@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import itertools
 import json
+import math
 import pathlib
 import random
 import threading
@@ -175,14 +176,27 @@ def assert_marginals_close(
         test_case.assertAlmostEqual(actual[outcome_id], expected_probability, delta=delta)
 
 
-def seed_account_min_asset(account_id: str, min_asset: float) -> dict[str, object]:
-    account_state = {
-        "accountId": account_id,
-        "riskLimit": server.round_risk_value(server.ACCOUNT_RISK_LIMIT),
-        "minAsset": server.round_risk_value(min_asset),
-        "updatedAt": "2026-04-05T00:00:00Z",
-        "markets": {},
+def expected_seeded_account_state(account_id: str, min_asset: float) -> dict[str, object]:
+    return server.build_account_risk_state(
+        account_id,
+        "2026-04-05T00:00:00Z",
+        min_asset=min_asset,
+    )
+
+
+def rounded_score_delta(
+    previous: dict[str, float],
+    updated: dict[str, float],
+    liquidity: float,
+) -> dict[str, float]:
+    return {
+        outcome_id: server.round_risk_value(score)
+        for outcome_id, score in server.lmsr.lmsr_score_delta(previous, updated, liquidity).items()
     }
+
+
+def seed_account_min_asset(account_id: str, min_asset: float) -> dict[str, object]:
+    account_state = expected_seeded_account_state(account_id, min_asset)
     server.ACCOUNT_RISK[account_id] = deepcopy(account_state)
     return account_state
 
@@ -531,6 +545,86 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertGreater(payload["diagnostics"]["memory_bytes"], 0)
         self.assertTrue(payload["diagnostics"]["last_updated"].endswith("Z"))
 
+    def test_refresh_market_compile_snapshot_uses_current_model_compiler_adapter(self):
+        class StubClique:
+            def __init__(self, clique_id: str, nodes: tuple[str, ...], size: int, states: int):
+                self.id = clique_id
+                self.nodes = nodes
+                self.size = size
+                self.states = states
+
+            def to_dict(self) -> dict[str, object]:
+                return {
+                    "id": self.id,
+                    "nodes": list(self.nodes),
+                    "size": self.size,
+                    "states": self.states,
+                }
+
+        class StubCompiler:
+            def __init__(self) -> None:
+                self.calls: list[dict[str, object]] = []
+
+            def compile_result(
+                self,
+                *,
+                market_snapshot: dict[str, object],
+                conditional_marginals: dict[str, dict[str, float]] | None = None,
+                compile_time_ms: float = 0.0,
+                last_updated: str,
+            ) -> server.CompileResult:
+                self.calls.append(
+                    {
+                        "market_snapshot": market_snapshot,
+                        "conditional_marginals": conditional_marginals or {},
+                        "compile_time_ms": compile_time_ms,
+                        "last_updated": last_updated,
+                    }
+                )
+                return server.CompileResult(
+                    compile_id="comp-adapter-test",
+                    compile_type="junction_tree",
+                    source_state_hash="sha256:adapter",
+                    cliques=(StubClique("adapter-c1", ("eth_price_gt_3000_mar15",), 1, 2),),
+                    compile_time_ms=round(float(compile_time_ms), 3),
+                    memory_bytes=512,
+                    last_updated=last_updated,
+                )
+
+        original_compiler = server.CURRENT_MODEL_COMPILER
+        stub_compiler = StubCompiler()
+        server.CURRENT_MODEL_COMPILER = stub_compiler
+
+        try:
+            server.CONDITIONAL_MARGINALS["m1"] = {
+                "btc_etf_approval_week=yes": {"yes": 0.8, "no": 0.2}
+            }
+            server.refresh_market_compile_snapshot("m1", compile_time_ms=12.345)
+        finally:
+            server.CURRENT_MODEL_COMPILER = original_compiler
+
+        self.assertEqual(len(stub_compiler.calls), 1)
+        self.assertEqual(stub_compiler.calls[0]["market_snapshot"], server.MARKETS["m1"])
+        self.assertIsNot(stub_compiler.calls[0]["market_snapshot"], server.MARKETS["m1"])
+        self.assertEqual(
+            stub_compiler.calls[0]["conditional_marginals"],
+            server.CONDITIONAL_MARGINALS["m1"],
+        )
+        self.assertIsNot(
+            stub_compiler.calls[0]["conditional_marginals"],
+            server.CONDITIONAL_MARGINALS["m1"],
+        )
+        self.assertEqual(stub_compiler.calls[0]["compile_time_ms"], 12.345)
+
+        state = server.MARKET_ENGINE_STATS["m1"]
+        self.assertEqual(state["compile_id"], "comp-adapter-test")
+        self.assertEqual(state["source_state_hash"], "sha256:adapter")
+        self.assertEqual(state["memory_bytes"], 512)
+        self.assertEqual(
+            state["cliques"],
+            [{"id": "adapter-c1", "nodes": ["eth_price_gt_3000_mar15"], "size": 1, "states": 2}],
+        )
+
     def test_market_engine_stats_tracks_market_rejections_without_compile_snapshot(self):
         payload, status = server.route_request(
             "POST",
@@ -680,6 +774,191 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     "updatedAt": payload["order"]["filledAt"],
                 }
             ],
+        )
+
+    def test_probability_edit_acceptance_populates_lmsr_ledger_slice(self):
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_test",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": [],
+            },
+        )
+
+        self.assertEqual(status, 201)
+        account = server.ACCOUNT_RISK["acct_test"]
+        slice_key = server.account_lmsr_slice_key("m1", [])
+        self.assertEqual(
+            account["lmsrState"],
+            {
+                "version": server.ACCOUNT_LMSR_LEDGER_VERSION,
+                "riskReadModel": server.ACCOUNT_LMSR_RISK_READ_MODEL,
+                "slices": {
+                    slice_key: {
+                        "marketId": "m1",
+                        "variableId": "eth_price_gt_3000_mar15",
+                        "context": [],
+                        "contextKey": "",
+                        "liquidity": 150000.0,
+                        "scoreByOutcome": rounded_score_delta(
+                            payload["order"]["previousMarginals"],
+                            payload["order"]["newMarginals"],
+                            server.MARKETS["m1"]["liquidity"],
+                        ),
+                        "commandCount": 1,
+                        "updatedAt": payload["order"]["filledAt"],
+                        "lastOrderId": payload["order"]["id"],
+                        "lastCommandId": payload["order"]["commandId"],
+                    }
+                },
+            },
+        )
+
+    def test_probability_edit_conditional_lmsr_ledger_keeps_separate_context_slices(self):
+        first_payload, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_test",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": [],
+            },
+        )
+        second_payload, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_test",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.7},
+                "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+            },
+        )
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        slices = server.ACCOUNT_RISK["acct_test"]["lmsrState"]["slices"]
+        self.assertEqual(
+            set(slices),
+            {
+                server.account_lmsr_slice_key("m1", []),
+                server.account_lmsr_slice_key("m1", second_payload["order"]["payload"]["context"]),
+            },
+        )
+        self.assertEqual(
+            slices[server.account_lmsr_slice_key("m1", [])]["scoreByOutcome"],
+            rounded_score_delta(
+                first_payload["order"]["previousMarginals"],
+                first_payload["order"]["newMarginals"],
+                server.MARKETS["m1"]["liquidity"],
+            ),
+        )
+        self.assertEqual(
+            slices[server.account_lmsr_slice_key("m1", second_payload["order"]["payload"]["context"])],
+            {
+                "marketId": "m1",
+                "variableId": "eth_price_gt_3000_mar15",
+                "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+                "contextKey": "btc_etf_approval_week=yes",
+                "liquidity": 150000.0,
+                "scoreByOutcome": rounded_score_delta(
+                    second_payload["order"]["previousMarginals"],
+                    second_payload["order"]["newMarginals"],
+                    server.MARKETS["m1"]["liquidity"],
+                ),
+                "commandCount": 1,
+                "updatedAt": second_payload["order"]["filledAt"],
+                "lastOrderId": second_payload["order"]["id"],
+                "lastCommandId": second_payload["order"]["commandId"],
+            },
+        )
+
+    def test_probability_edit_replay_does_not_double_apply_lmsr_ledger_slice(self):
+        body = {
+            "accountId": "acct_test",
+            "idempotencyKey": "idem-lmsr-ledger",
+            "variableId": "eth_price_gt_3000_mar15",
+            "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+            "context": [],
+        }
+
+        first_payload, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            body,
+        )
+        post_first_account = deepcopy(server.ACCOUNT_RISK["acct_test"])
+        second_payload, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            body,
+        )
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(second_payload["order"]["id"], first_payload["order"]["id"])
+        self.assertEqual(server.ACCOUNT_RISK["acct_test"], post_first_account)
+        self.assertEqual(
+            server.ACCOUNT_RISK["acct_test"]["lmsrState"]["slices"][server.account_lmsr_slice_key("m1", [])]["commandCount"],
+            1,
+        )
+
+    def test_probability_edit_lmsr_ledger_accumulates_same_slice_score_by_outcome(self):
+        first_payload, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_test",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": [],
+            },
+        )
+        second_payload, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_test",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.7},
+                "context": [],
+            },
+        )
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        first_delta = rounded_score_delta(
+            first_payload["order"]["previousMarginals"],
+            first_payload["order"]["newMarginals"],
+            server.MARKETS["m1"]["liquidity"],
+        )
+        second_delta = rounded_score_delta(
+            second_payload["order"]["previousMarginals"],
+            second_payload["order"]["newMarginals"],
+            server.MARKETS["m1"]["liquidity"],
+        )
+        self.assertEqual(
+            server.ACCOUNT_RISK["acct_test"]["lmsrState"]["slices"][server.account_lmsr_slice_key("m1", [])],
+            {
+                "marketId": "m1",
+                "variableId": "eth_price_gt_3000_mar15",
+                "context": [],
+                "contextKey": "",
+                "liquidity": 150000.0,
+                "scoreByOutcome": {
+                    outcome_id: server.round_risk_value(first_delta[outcome_id] + second_delta[outcome_id])
+                    for outcome_id in first_delta
+                },
+                "commandCount": 2,
+                "updatedAt": second_payload["order"]["filledAt"],
+                "lastOrderId": second_payload["order"]["id"],
+                "lastCommandId": second_payload["order"]["commandId"],
+            },
         )
 
     def test_account_risk_aggregates_consumed_capacity_across_markets(self):
@@ -896,6 +1175,23 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.code, "invalid_structure_preserving_edit")
         self.assertEqual(error.details["field"], "context[0].variableId")
 
+    def test_validate_structure_preserving_edit_rejects_invalid_known_context_outcome(self):
+        normalized_payload = {
+            "variableId": "eth_price_gt_3000_mar15",
+            "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+            "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "invalid"}],
+        }
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.validate_structure_preserving_edit(server.MARKETS["m1"], normalized_payload)
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_structure_preserving_edit")
+        self.assertEqual(error.details["field"], "context[0].outcomeId")
+        self.assertEqual(error.details["variableId"], "btc_etf_approval_week")
+        self.assertEqual(error.details["received"], "invalid")
+
     def test_validate_structure_preserving_edit_rejects_impossible_renormalization_fixture(self):
         malformed_market = deepcopy(server.MARKETS["m2"])
         malformed_market["id"] = "m2_malformed"
@@ -972,6 +1268,25 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.details["marketId"], "m2_non_unit")
         self.assertIn("sum to 1.0", error.message)
 
+    def test_validate_structure_preserving_edit_rejects_non_finite_market_mass(self):
+        malformed_market = deepcopy(server.MARKETS["m2"])
+        malformed_market["id"] = "m2_non_finite"
+        malformed_market["marginals"] = {"yes": math.nan, "no": 0.6, "delayed": 0.4}
+        normalized_payload = {
+            "variableId": "btc_etf_approval_week",
+            "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
+            "context": [],
+        }
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.validate_structure_preserving_edit(malformed_market, normalized_payload)
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_structure_preserving_edit")
+        self.assertEqual(error.details["marketId"], "m2_non_finite")
+        self.assertIn("finite numeric values", error.message)
+
     def test_normalize_probability_edit_payload_uses_existing_conditional_slice_for_validation(self):
         context = [{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m2"] = {
@@ -1021,6 +1336,81 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(server.EVENTS, {})
 
+    def test_normalize_probability_edit_payload_rejects_non_finite_conditional_slice_mass(self):
+        context = [{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"}]
+        server.CONDITIONAL_MARGINALS["m2"] = {
+            server.context_state_key(context): {"yes": 0.25, "no": math.inf, "delayed": 0.15}
+        }
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.normalize_probability_edit_payload(
+                "m2",
+                {
+                    "accountId": "acct_conditional_validator",
+                    "variableId": "btc_etf_approval_week",
+                    "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
+                    "context": deepcopy(context),
+                },
+            )
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_structure_preserving_edit")
+        self.assertEqual(error.details["marketId"], "m2")
+        self.assertIn("finite numeric values", error.message)
+        self.assertEqual(server.ORDERS, {})
+        self.assertEqual(server.EVENTS, {})
+
+    def test_normalize_probability_edit_payload_rejects_conditional_slice_with_extra_outcome_mass(self):
+        context = [{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"}]
+        server.CONDITIONAL_MARGINALS["m2"] = {
+            server.context_state_key(context): {"yes": 0.25, "no": 0.45, "delayed": 0.15, "later": 0.15}
+        }
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.normalize_probability_edit_payload(
+                "m2",
+                {
+                    "accountId": "acct_conditional_validator",
+                    "variableId": "btc_etf_approval_week",
+                    "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
+                    "context": deepcopy(context),
+                },
+            )
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_structure_preserving_edit")
+        self.assertEqual(error.details["marketId"], "m2")
+        self.assertIn("exactly one value for each market outcome", error.message)
+        self.assertEqual(server.ORDERS, {})
+        self.assertEqual(server.EVENTS, {})
+
+    def test_normalize_probability_edit_payload_rejects_conditional_slice_with_non_unit_mass(self):
+        context = [{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"}]
+        server.CONDITIONAL_MARGINALS["m2"] = {
+            server.context_state_key(context): {"yes": 0.25, "no": 0.6, "delayed": 0.2}
+        }
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.normalize_probability_edit_payload(
+                "m2",
+                {
+                    "accountId": "acct_conditional_validator",
+                    "variableId": "btc_etf_approval_week",
+                    "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
+                    "context": deepcopy(context),
+                },
+            )
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_structure_preserving_edit")
+        self.assertEqual(error.details["marketId"], "m2")
+        self.assertIn("sum to 1.0", error.message)
+        self.assertEqual(server.ORDERS, {})
+        self.assertEqual(server.EVENTS, {})
+
     def test_probability_edit_rejects_wrong_variable_id(self):
         with self.assertRaises(server.ApiError) as ctx:
             server.route_request(
@@ -1060,6 +1450,49 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["order"]["newMarginals"], {"yes": 0.8, "no": 0.2})
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(server.CONDITIONAL_MARGINALS["m1"]["btc_etf_approval_week=yes"], {"yes": 0.8, "no": 0.2})
+
+    def test_probability_edit_with_context_reads_base_slice_via_query_backend_adapter(self):
+        class StubQueryBackend:
+            def __init__(self) -> None:
+                self.contexts: list[dict[str, str] | None] = []
+
+            def query_marginals(
+                self,
+                compile_result: object,
+                *,
+                context: dict[str, str] | None = None,
+            ) -> object:
+                self.contexts.append(deepcopy(context))
+                return type("MarginalResult", (), {"marginals": {"yes": 0.2, "no": 0.8}})()
+
+        original_backend = server.CURRENT_MODEL_QUERY_BACKEND
+        stub_backend = StubQueryBackend()
+        server.CURRENT_MODEL_QUERY_BACKEND = stub_backend
+
+        try:
+            payload, status = server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/probability-edit",
+                {
+                    "accountId": "acct_adapter_context",
+                    "variableId": "eth_price_gt_3000_mar15",
+                    "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.5},
+                    "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+                },
+            )
+        finally:
+            server.CURRENT_MODEL_QUERY_BACKEND = original_backend
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["order"]["previousMarginals"], {"yes": 0.2, "no": 0.8})
+        self.assertEqual(payload["order"]["newMarginals"], {"yes": 0.5, "no": 0.5})
+        self.assertEqual(
+            stub_backend.contexts,
+            [
+                {"btc_etf_approval_week": "yes"},
+                {"btc_etf_approval_week": "yes"},
+            ],
+        )
 
     def test_probability_edit_with_context_updates_account_risk(self):
         payload, status = server.route_request(
@@ -1111,6 +1544,40 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
                 {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no"},
             ],
+        )
+
+    def test_context_state_key_canonicalizes_assignment_order(self):
+        normalized_context = [
+            {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
+            {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no"},
+        ]
+        reversed_context = list(reversed(normalized_context))
+
+        self.assertEqual(
+            server.context_state_key(normalized_context),
+            "btc_etf_approval_week=yes|fed_rate_cut_mar_2026=no",
+        )
+        self.assertEqual(
+            server.context_state_key(reversed_context),
+            "btc_etf_approval_week=yes|fed_rate_cut_mar_2026=no",
+        )
+
+    def test_resolve_probability_edit_base_marginals_reuses_existing_conditional_slice_for_unordered_context(self):
+        canonical_context = [
+            {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
+            {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no"},
+        ]
+        expected_slice = {"yes": 0.8, "no": 0.2}
+        server.CONDITIONAL_MARGINALS["m1"] = {
+            server.context_state_key(canonical_context): deepcopy(expected_slice)
+        }
+
+        resolved = server.resolve_probability_edit_base_marginals("m1", list(reversed(canonical_context)))
+
+        self.assertEqual(resolved, expected_slice)
+        self.assertIsNot(
+            resolved,
+            server.CONDITIONAL_MARGINALS["m1"][server.context_state_key(canonical_context)],
         )
 
     def test_probability_edit_rejects_conflicting_context_assignments(self):
@@ -1307,13 +1774,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(
             server.ACCOUNT_RISK["acct_low"],
-            {
-                "accountId": "acct_low",
-                "riskLimit": 100.0,
-                "minAsset": low_min_asset,
-                "updatedAt": "2026-04-05T00:00:00Z",
-                "markets": {},
-            },
+            expected_seeded_account_state("acct_low", low_min_asset),
         )
         self.assertEqual(len(server.COMMANDS), 1)
         self.assertEqual(len(server.EVENTS), 1)
@@ -1760,6 +2221,43 @@ class BayesMarketEventTradeTests(unittest.TestCase):
         self.assertIsNone(stats_payload["engine"]["compile_type"])
         self.assertIsNone(stats_payload["engine"]["source_state_hash"])
         self.assertNotIn("compile_time_ms", stats_payload["diagnostics"])
+
+    def test_event_trade_prices_via_query_backend_adapter_with_internal_variable_id(self):
+        class StubQueryBackend:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, str, bool]] = []
+
+            def query_atomic_event(
+                self,
+                compile_result: object,
+                *,
+                variable_id: str,
+                outcome_id: str,
+                negated: bool = False,
+            ) -> object:
+                self.calls.append((variable_id, outcome_id, negated))
+                return type("AtomicResult", (), {"probability": 0.42})()
+
+        original_backend = server.CURRENT_MODEL_QUERY_BACKEND
+        stub_backend = StubQueryBackend()
+        server.CURRENT_MODEL_QUERY_BACKEND = stub_backend
+
+        try:
+            payload, status = server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/event-trade",
+                build_event_trade_body("acct_event_trade_adapter", "m1", "yes"),
+            )
+        finally:
+            server.CURRENT_MODEL_QUERY_BACKEND = original_backend
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["order"]["price"], 0.42)
+        self.assertEqual(payload["order"]["notional"], 5.25)
+        self.assertEqual(
+            stub_backend.calls,
+            [(server.MARKETS["m1"]["variableId"], "yes", False)],
+        )
 
     def test_event_trade_returns_501_for_multi_literal_clause(self):
         with self.assertRaises(server.ApiError) as ctx:
@@ -3708,13 +4206,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(
             server.ACCOUNT_RISK["acct_http_low"],
-            {
-                "accountId": "acct_http_low",
-                "riskLimit": 100.0,
-                "minAsset": low_min_asset,
-                "updatedAt": "2026-04-05T00:00:00Z",
-                "markets": {},
-            },
+            expected_seeded_account_state("acct_http_low", low_min_asset),
         )
         self.assertEqual(len(server.COMMANDS), 1)
         self.assertEqual(len(server.EVENTS), 1)
