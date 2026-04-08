@@ -48,6 +48,11 @@ describe("MarketDetail", () => {
     vi.mocked(api.getMarket).mockResolvedValue(mockMarket);
     vi.mocked(api.getMarketEvents).mockResolvedValue(mockEvents);
     vi.mocked(api.getEngineStats).mockResolvedValue(mockEngineStats);
+    vi.mocked(api.listMarkets).mockResolvedValue({
+      markets: [{ id: "m1", title: "ETH Price > $3000 on March 15", status: "active" as const, liquidity: 150000, volume: 45000, expires_at: "2026-12-31T23:59:59Z" }],
+      count: 1,
+      meta: { apiVersion: "1.0", timestamp: "2026-04-08T00:00:00Z" },
+    });
   });
 
   it("renders market title and description", async () => {
@@ -76,7 +81,7 @@ describe("MarketDetail", () => {
   it("renders trading panel prompt when no account configured", async () => {
     renderWithProviders(<MarketDetail />);
     await waitFor(() => {
-      expect(screen.getByText(/Set your Account ID/)).toBeInTheDocument();
+      expect(screen.getAllByText(/Set your Account ID/).length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -87,10 +92,10 @@ describe("MarketDetail", () => {
     });
   });
 
-  it("renders engine stats toggle", async () => {
+  it("renders junction tree panel", async () => {
     renderWithProviders(<MarketDetail />);
     await waitFor(() => {
-      expect(screen.getByText(/Engine Stats/)).toBeInTheDocument();
+      expect(screen.getByText(/Junction Tree & Inference/)).toBeInTheDocument();
     });
   });
 });
