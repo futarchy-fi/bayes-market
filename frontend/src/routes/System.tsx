@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { useHealth, useServiceIndex, useMarkets } from "@/lib/query/hooks";
 import { LoadingPage } from "@/components/ui/Spinner";
+import { formatCurrency } from "@/lib/utils/format";
 
 export default function System() {
   const health = useHealth();
@@ -13,6 +15,16 @@ export default function System() {
     },
     {} as Record<string, number>,
   ) ?? {};
+
+  const platformStats = useMemo(() => {
+    const markets = allMarkets.data?.markets ?? [];
+    return {
+      totalVolume: markets.reduce((s, m) => s + m.volume, 0),
+      totalLiquidity: markets.reduce((s, m) => s + m.liquidity, 0),
+      activeCount: markets.filter((m) => m.status === "active").length,
+      resolvedCount: markets.filter((m) => m.status === "resolved").length,
+    };
+  }, [allMarkets.data]);
 
   const isUp = health.data?.status === "ok";
 
@@ -45,6 +57,19 @@ export default function System() {
           </div>
         )}
       </div>
+
+      {/* Platform aggregate stats */}
+      {!allMarkets.isLoading && allMarkets.data && (
+        <div style={cardStyle}>
+          <h2 style={sectionTitle}>Platform Stats</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "var(--space-sm)" }}>
+            <CountCard label="Total Volume" value={formatCurrency(platformStats.totalVolume)} raw />
+            <CountCard label="Total Liquidity" value={formatCurrency(platformStats.totalLiquidity)} raw />
+            <CountCard label="Active" value={platformStats.activeCount} color="var(--color-success)" />
+            <CountCard label="Resolved" value={platformStats.resolvedCount} color="var(--color-primary)" />
+          </div>
+        </div>
+      )}
 
       {/* Market counts by status */}
       <div style={cardStyle}>
@@ -89,7 +114,7 @@ export default function System() {
   );
 }
 
-function CountCard({ label, value, color }: { label: string; value: number; color?: string }) {
+function CountCard({ label, value, color, raw }: { label: string; value: number | string; color?: string; raw?: boolean }) {
   return (
     <div style={{
       padding: "var(--space-sm)",
@@ -98,7 +123,7 @@ function CountCard({ label, value, color }: { label: string; value: number; colo
       background: "var(--color-bg)",
       textAlign: "center",
     }}>
-      <div style={{ fontSize: "1.5rem", fontWeight: 700, fontFamily: "var(--font-mono)", color: color ?? "var(--color-text)" }}>
+      <div style={{ fontSize: raw ? "1.1rem" : "1.5rem", fontWeight: 700, fontFamily: "var(--font-mono)", color: color ?? "var(--color-text)" }}>
         {value}
       </div>
       <div style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>{label}</div>

@@ -52,7 +52,7 @@ describe("System", () => {
     renderWithProviders(<System />);
     await waitFor(() => {
       expect(screen.getByText("Total")).toBeInTheDocument();
-      expect(screen.getByText("Active")).toBeInTheDocument();
+      expect(screen.getAllByText("Active").length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -60,6 +60,23 @@ describe("System", () => {
     renderWithProviders(<System />);
     await waitFor(() => {
       expect(screen.getByText("GET /v1/markets")).toBeInTheDocument();
+    });
+  });
+
+  it("shows platform aggregate stats", async () => {
+    mockClient.listMarkets.mockResolvedValue({
+      markets: [
+        { id: "m1", title: "A", status: "active", liquidity: 1000, volume: 500, expires_at: "2026-12-31T00:00:00Z" },
+        { id: "m2", title: "B", status: "resolved", liquidity: 2000, volume: 1500, expires_at: "2026-12-31T00:00:00Z" },
+      ],
+      count: 2,
+      meta: { apiVersion: "1.0.0", timestamp: "2026-04-08T12:00:00Z" },
+    });
+    renderWithProviders(<System />);
+    await waitFor(() => {
+      expect(screen.getByText("Platform Stats")).toBeInTheDocument();
+      expect(screen.getByText("Total Volume")).toBeInTheDocument();
+      expect(screen.getByText("Total Liquidity")).toBeInTheDocument();
     });
   });
 });
