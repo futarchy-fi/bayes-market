@@ -102,6 +102,50 @@ export interface EngineStatsResponse {
   meta: Meta;
 }
 
+export type AnalyticsInterval = "hour" | "day";
+
+export interface MarketAnalyticsPoint {
+  seq: number;
+  emittedAt: string;
+  probability: number;
+}
+
+export interface MarketAnalyticsSeries {
+  outcomeId: string;
+  outcomeName: string;
+  points: MarketAnalyticsPoint[];
+}
+
+export interface MarketAnalyticsVolumeBucket {
+  bucketStart: string;
+  bucketEnd: string;
+  tradeCount: number;
+  volume: number;
+}
+
+export interface MarketAnalyticsTraderRow {
+  accountId: string;
+  tradeCount: number;
+  volume: number;
+}
+
+export interface MarketAnalyticsSummary {
+  totalTrades: number;
+  totalVolume: number;
+  uniqueTraders: number;
+  bucketInterval: AnalyticsInterval;
+  lastUpdated: string;
+}
+
+export interface MarketAnalyticsResponse {
+  marketId: string;
+  summary: MarketAnalyticsSummary;
+  priceSeries: MarketAnalyticsSeries[];
+  volumeBuckets: MarketAnalyticsVolumeBucket[];
+  topTraders: MarketAnalyticsTraderRow[];
+  meta: Meta;
+}
+
 export interface MarketRisk {
   marketId: string;
   minAsset: number;
@@ -130,6 +174,36 @@ export interface AccountRiskResponse {
         markets: MarketRisk[];
       };
       capacityIndicators: CapacityIndicators;
+      updatedAt: string;
+    };
+  };
+  meta: Meta;
+}
+
+export interface AccountPnlTotals {
+  costBasis: number;
+  markedValue: number;
+  realizedPnl: number;
+  unrealizedPnl: number;
+  netPnl: number;
+}
+
+export interface AccountPnlPosition {
+  marketId: string;
+  marketTitle: string;
+  marketStatus: Market["status"];
+  realizedPnl: number;
+  unrealizedPnl: number;
+  costBasis: number;
+  markedValue: number;
+}
+
+export interface AccountPnlResponse {
+  account: {
+    id: string;
+    pnl: {
+      totals: AccountPnlTotals;
+      positions: AccountPnlPosition[];
       updatedAt: string;
     };
   };

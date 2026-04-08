@@ -3,9 +3,12 @@ import type {
   MarketDetailResponse,
   MarketEventsResponse,
   EngineStatsResponse,
+  MarketAnalyticsResponse,
   AccountRiskResponse,
+  AccountPnlResponse,
   OrderResponse,
   ApiError,
+  AnalyticsInterval,
   ProbabilityEditPayload,
   EventTradePayload,
   Session,
@@ -112,11 +115,36 @@ export function getEngineStats(
   );
 }
 
+export interface MarketAnalyticsOptions {
+  interval?: AnalyticsInterval;
+}
+
+export function getMarketAnalytics(
+  marketId: string,
+  opts: MarketAnalyticsOptions = {},
+): Promise<MarketAnalyticsResponse> {
+  const params = new URLSearchParams();
+  if (opts.interval) params.set("interval", opts.interval);
+  const qs = params.toString();
+
+  return request<MarketAnalyticsResponse>(
+    `/v1/markets/${encodeURIComponent(marketId)}/analytics${qs ? `?${qs}` : ""}`,
+  );
+}
+
 export function getAccountRisk(
   accountId: string,
 ): Promise<AccountRiskResponse> {
   return request<AccountRiskResponse>(
     `/v1/accounts/${encodeURIComponent(accountId)}/risk`,
+  );
+}
+
+export function getAccountPnl(
+  accountId: string,
+): Promise<AccountPnlResponse> {
+  return request<AccountPnlResponse>(
+    `/v1/accounts/${encodeURIComponent(accountId)}/pnl`,
   );
 }
 

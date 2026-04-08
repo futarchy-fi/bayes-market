@@ -1,13 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/lib/api/client";
-import type { ProbabilityEditPayload, EventTradePayload, Session } from "@/lib/api/types";
+import type {
+  AnalyticsInterval,
+  ProbabilityEditPayload,
+  EventTradePayload,
+  Session,
+} from "@/lib/api/types";
 
 export const queryKeys = {
   markets: (status?: string) => ["markets", { status }] as const,
   market: (id: string) => ["markets", id] as const,
   marketEvents: (id: string) => ["markets", id, "events"] as const,
   engineStats: (id: string) => ["markets", id, "engine-stats"] as const,
-  accountRisk: (id: string) => ["accounts", id, "risk"] as const,
+  marketAnalytics: (id: string, interval?: AnalyticsInterval) =>
+    [...queryKeys.market(id), "analytics", { interval: interval ?? null }] as const,
+  account: (id: string) => ["accounts", id] as const,
+  accountRisk: (id: string) => [...queryKeys.account(id), "risk"] as const,
+  accountPnl: (id: string) => [...queryKeys.account(id), "pnl"] as const,
   health: () => ["health"] as const,
   serviceIndex: () => ["service-index"] as const,
 };
@@ -44,6 +53,19 @@ export function useEngineStats(marketId: string, opts?: { enabled?: boolean }) {
   });
 }
 
+export function useMarketAnalytics(
+  marketId: string,
+  opts?: { enabled?: boolean; interval?: AnalyticsInterval },
+) {
+  return useQuery({
+    queryKey: queryKeys.marketAnalytics(marketId, opts?.interval),
+    queryFn: () => api.getMarketAnalytics(marketId, { interval: opts?.interval }),
+    enabled: marketId.length > 0 && (opts?.enabled ?? true),
+  });
+}
+
+export const useAnalytics = useMarketAnalytics;
+
 export function useHealth() {
   return useQuery({
     queryKey: queryKeys.health(),
@@ -68,6 +90,14 @@ export function useAccountRisk(accountId: string) {
   });
 }
 
+export function useAccountPnl(accountId: string) {
+  return useQuery({
+    queryKey: queryKeys.accountPnl(accountId),
+    queryFn: () => api.getAccountPnl(accountId),
+    enabled: accountId.length > 0,
+  });
+}
+
 export function useCreateMarket() {
   const qc = useQueryClient();
   return useMutation({
@@ -84,10 +114,9 @@ export function useProbabilityEdit(marketId: string) {
   return useMutation({
     mutationFn: ({ payload, session }: { payload: ProbabilityEditPayload; session: Session }) =>
       api.submitProbabilityEdit(marketId, payload, session),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void qc.invalidateQueries({ queryKey: queryKeys.market(marketId) });
-      void qc.invalidateQueries({ queryKey: queryKeys.marketEvents(marketId) });
-      void qc.invalidateQueries({ queryKey: queryKeys.engineStats(marketId) });
+      void qc.invalidateQueries({ queryKey: queryKeys.account(variables.payload.accountId) });
     },
   });
 }
@@ -97,10 +126,9 @@ export function useResolveMarket(marketId: string) {
   return useMutation({
     mutationFn: ({ payload, session }: { payload: api.ResolveMarketPayload; session: Session }) =>
       api.resolveMarket(marketId, payload, session),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void qc.invalidateQueries({ queryKey: queryKeys.market(marketId) });
-      void qc.invalidateQueries({ queryKey: queryKeys.marketEvents(marketId) });
-      void qc.invalidateQueries({ queryKey: queryKeys.engineStats(marketId) });
+      void qc.invalidateQueries({ queryKey: queryKeys.account(variables.payload.accountId) });
       void qc.invalidateQueries({ queryKey: queryKeys.markets() });
     },
   });
@@ -111,10 +139,9 @@ export function useEventTrade(marketId: string) {
   return useMutation({
     mutationFn: ({ payload, session }: { payload: EventTradePayload; session: Session }) =>
       api.submitEventTrade(marketId, payload, session),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void qc.invalidateQueries({ queryKey: queryKeys.market(marketId) });
-      void qc.invalidateQueries({ queryKey: queryKeys.marketEvents(marketId) });
-      void qc.invalidateQueries({ queryKey: queryKeys.engineStats(marketId) });
+      void qc.invalidateQueries({ queryKey: queryKeys.account(variables.payload.accountId) });
     },
   });
 }

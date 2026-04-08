@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { listMarkets, getMarket, getAccountRisk, BayesApiError } from "@/lib/api/client";
+import {
+  listMarkets,
+  getMarket,
+  getMarketAnalytics,
+  getAccountRisk,
+  getAccountPnl,
+  BayesApiError,
+} from "@/lib/api/client";
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
@@ -45,6 +52,27 @@ describe("API Client", () => {
     mockFetch.mockResolvedValue(jsonResponse(body));
     await getAccountRisk("a1");
     expect(mockFetch).toHaveBeenCalledWith("/v1/accounts/a1/risk", expect.any(Object));
+  });
+
+  it("getMarketAnalytics calls /v1/markets/{id}/analytics", async () => {
+    const body = { marketId: "m1", summary: {}, priceSeries: [], volumeBuckets: [], topTraders: [], meta: { apiVersion: "1.0", timestamp: "" } };
+    mockFetch.mockResolvedValue(jsonResponse(body));
+    await getMarketAnalytics("m1");
+    expect(mockFetch).toHaveBeenCalledWith("/v1/markets/m1/analytics", expect.any(Object));
+  });
+
+  it("getMarketAnalytics passes interval filter", async () => {
+    const body = { marketId: "m1", summary: {}, priceSeries: [], volumeBuckets: [], topTraders: [], meta: { apiVersion: "1.0", timestamp: "" } };
+    mockFetch.mockResolvedValue(jsonResponse(body));
+    await getMarketAnalytics("m1", { interval: "day" });
+    expect(mockFetch).toHaveBeenCalledWith("/v1/markets/m1/analytics?interval=day", expect.any(Object));
+  });
+
+  it("getAccountPnl calls /v1/accounts/{id}/pnl", async () => {
+    const body = { account: { id: "a1", pnl: {} }, meta: { apiVersion: "1.0", timestamp: "" } };
+    mockFetch.mockResolvedValue(jsonResponse(body));
+    await getAccountPnl("a1");
+    expect(mockFetch).toHaveBeenCalledWith("/v1/accounts/a1/pnl", expect.any(Object));
   });
 
   it("throws BayesApiError on non-ok response", async () => {
