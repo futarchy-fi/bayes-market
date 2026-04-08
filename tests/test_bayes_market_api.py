@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import itertools
 import json
+import math
 import pathlib
 import random
 import threading
@@ -972,6 +973,25 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.details["marketId"], "m2_non_unit")
         self.assertIn("sum to 1.0", error.message)
 
+    def test_validate_structure_preserving_edit_rejects_non_finite_market_mass(self):
+        malformed_market = deepcopy(server.MARKETS["m2"])
+        malformed_market["id"] = "m2_non_finite"
+        malformed_market["marginals"] = {"yes": math.nan, "no": 0.6, "delayed": 0.4}
+        normalized_payload = {
+            "variableId": "btc_etf_approval_week",
+            "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
+            "context": [],
+        }
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.validate_structure_preserving_edit(malformed_market, normalized_payload)
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_structure_preserving_edit")
+        self.assertEqual(error.details["marketId"], "m2_non_finite")
+        self.assertIn("finite numeric values", error.message)
+
     def test_normalize_probability_edit_payload_uses_existing_conditional_slice_for_validation(self):
         context = [{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m2"] = {
@@ -1018,6 +1038,31 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.code, "invalid_structure_preserving_edit")
         self.assertEqual(error.details["marketId"], "m2")
         self.assertIn("exactly one value for each market outcome", error.message)
+        self.assertEqual(server.ORDERS, {})
+        self.assertEqual(server.EVENTS, {})
+
+    def test_normalize_probability_edit_payload_rejects_non_finite_conditional_slice_mass(self):
+        context = [{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"}]
+        server.CONDITIONAL_MARGINALS["m2"] = {
+            server.context_state_key(context): {"yes": 0.25, "no": math.inf, "delayed": 0.15}
+        }
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.normalize_probability_edit_payload(
+                "m2",
+                {
+                    "accountId": "acct_conditional_validator",
+                    "variableId": "btc_etf_approval_week",
+                    "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
+                    "context": deepcopy(context),
+                },
+            )
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_structure_preserving_edit")
+        self.assertEqual(error.details["marketId"], "m2")
+        self.assertIn("finite numeric values", error.message)
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(server.EVENTS, {})
 
