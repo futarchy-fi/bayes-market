@@ -20,6 +20,7 @@ _COMPILE_ERROR_CODE = "compile_snapshot_invalid"
 
 
 def canonical_json_hash(data: object) -> str:
+    """Return a stable SHA-256 digest for JSON-serializable data."""
     encoded = json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
 
@@ -44,6 +45,7 @@ def _freeze_json_value(value: Any, *, path: str) -> Any:
 
 
 def thaw_json_value(value: Any) -> Any:
+    """Convert frozen JSON-like structures back into mutable Python containers."""
     if isinstance(value, Mapping):
         return {key: thaw_json_value(item) for key, item in value.items()}
     if isinstance(value, tuple):
@@ -249,6 +251,8 @@ def _context_mapping_key(context: Mapping[str, str] | None) -> str:
 
 @dataclass(frozen=True)
 class CurrentModelCompileArtifact:
+    """Immutable compile artifact for the current independent-market model."""
+
     market_id: str
     variable_id: str
     outcomes: tuple[Mapping[str, Any], ...]
@@ -286,9 +290,11 @@ class CurrentModelCompileArtifact:
             raise ValueError("Compile artifact must include eligibility_reason")
 
     def source_state_payload(self) -> dict[str, Any]:
+        """Return the thawed source-state payload used to build the artifact."""
         return thaw_json_value(self.source_state_inputs)
 
     def to_compile_result(self, *, compile_time_ms: float = 0.0, last_updated: str) -> CompileResult:
+        """Convert the artifact into the shared compile-result contract."""
         return CompileResult(
             compile_id=self.compile_id,
             compile_type=self.compile_type,
@@ -303,6 +309,8 @@ class CurrentModelCompileArtifact:
 
 @dataclass(frozen=True)
 class CurrentModelCompiler:
+    """Compile current-market snapshots into immutable query artifacts."""
+
     compile_type: str = DEFAULT_ENGINE_CONFIG.compile_type
     eligibility_reason: str = CURRENT_MODEL_EXACT_ELIGIBILITY_REASON
 
@@ -312,6 +320,7 @@ class CurrentModelCompiler:
         market_snapshot: Mapping[str, Any],
         conditional_marginals: Mapping[str, Mapping[str, float]] | None = None,
     ) -> CurrentModelCompileArtifact:
+        """Normalize a market snapshot into a frozen current-model artifact."""
         normalized_market = _require_mapping(market_snapshot, field="market")
         market_id = _require_string(normalized_market, "id")
         variable_id = _require_string(normalized_market, "variableId")
@@ -361,6 +370,7 @@ class CurrentModelCompiler:
         compile_time_ms: float = 0.0,
         last_updated: str,
     ) -> CompileResult:
+        """Compile a market snapshot and wrap it in the shared result contract."""
         artifact = self.compile_artifact(
             market_snapshot=market_snapshot,
             conditional_marginals=conditional_marginals,
@@ -376,12 +386,15 @@ CURRENT_MODEL_COMPILER = CurrentModelCompiler()
 
 @dataclass(frozen=True)
 class CurrentModelQueryBackend(InferenceQueryBackend):
+    """Execute exact marginal and atomic queries against current-model artifacts."""
+
     def query_marginals(
         self,
         compile_result: CompileResult,
         *,
         context: Mapping[str, str] | None = None,
     ) -> MarginalQueryResult:
+        """Return unconditional or conditional marginals for a compiled artifact."""
         started_at = time.perf_counter()
         artifact = _require_current_model_artifact(compile_result)
         context_key = _context_mapping_key(context)
@@ -414,6 +427,7 @@ class CurrentModelQueryBackend(InferenceQueryBackend):
         outcome_id: str,
         negated: bool = False,
     ) -> AtomicEventQueryResult:
+        """Return the probability of a single atomic event from the artifact."""
         started_at = time.perf_counter()
         artifact = _require_current_model_artifact(compile_result)
 
@@ -470,6 +484,7 @@ def compile_current_market_artifact(
     market_snapshot: Mapping[str, Any],
     conditional_marginals: Mapping[str, Mapping[str, float]] | None = None,
 ) -> CurrentModelCompileArtifact:
+    """Compile a market snapshot into a current-model artifact."""
     return CURRENT_MODEL_COMPILER.compile_artifact(
         market_snapshot=market_snapshot,
         conditional_marginals=conditional_marginals,
@@ -481,6 +496,7 @@ def compile_current_model_artifact(
     market_snapshot: Mapping[str, Any],
     conditional_marginals: Mapping[str, Mapping[str, float]] | None = None,
 ) -> CurrentModelCompileArtifact:
+    """Alias for compiling a market snapshot into a current-model artifact."""
     return compile_current_market_artifact(
         market_snapshot=market_snapshot,
         conditional_marginals=conditional_marginals,
@@ -494,6 +510,7 @@ def compile_current_market_result(
     compile_time_ms: float = 0.0,
     last_updated: str,
 ) -> CompileResult:
+    """Compile a market snapshot and return the exported result wrapper."""
     return CURRENT_MODEL_COMPILER.compile_result(
         market_snapshot=market_snapshot,
         conditional_marginals=conditional_marginals,
@@ -509,6 +526,7 @@ def compile_current_model_result(
     compile_time_ms: float = 0.0,
     last_updated: str,
 ) -> CompileResult:
+    """Alias for compiling a market snapshot into the exported result wrapper."""
     return compile_current_market_result(
         market_snapshot=market_snapshot,
         conditional_marginals=conditional_marginals,
