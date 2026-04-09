@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Backfill `build_account_exposure_state(...)`, `build_account_exposure_position(...)`, `ensure_account_exposure_state(...)`, and `ensure_account_exposure_position(...)` in `backend/server.py` before adding step-3 netting logic, and keep normalization responsibility in that `ensure_*` seam so the signed-size helpers can assume canonical exposure documents and rows.",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Assume another branch lands the missing step-2 helper seam first and plan only the netting helpers here.",
+        "Push exposure-document and position-row normalization into the signed-size helpers instead of the dedicated `ensure_*` seam."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Implement EventTrade signed-size arithmetic at the backend's canonical six-decimal precision by normalizing existing `netSize`, accepted-order `size`, and the resulting sum with `round_risk_value(...)`, and treat rounded `0.0` as the exact-zero deletion boundary.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Use raw Python float arithmetic from request payloads and compare against unrounded zero.",
+        "Round only when serializing the exposure response after storing higher-precision intermediate results."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Expose the arithmetic as a pure reusable helper that returns the current net size, signed delta, and resulting net size for one `(marketId, outcomeId)` slice, then have mutation-oriented exposure sync compose that helper so later limit-preview logic can share the exact same netting rules.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Duplicate buy/sell netting inline in preview and sync call sites.",
+        "Hide the arithmetic entirely inside a mutating helper that cannot be reused by future preview logic."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "When a rounded resulting net size remains non-zero, always advance the surviving position row's `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId` to the newest accepted trade regardless of whether it increases, reduces, or flips exposure; when the rounded result is zero, delete the row and prune the account if that was its final live position.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Refresh row metadata only when absolute exposure increases.",
+        "Keep zero-sized placeholder rows or empty exposure accounts and defer cleanup to serializers or later resolution logic."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Backfill the missing exposure builders and ensure helpers in `backend/server.py`, matching the planned flat composite-key `positions` map and confining exposure-document and row normalization to the `ensure_*` seam so later math can assume canonical state.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add a pure signed-size helper for EventTrade positions that reads one canonical exposure row plus an accepted order, computes buy-positive or sell-negative delta at `round_risk_value(...)` precision, and returns the current net size, signed delta, and resulting net size for that `(marketId, outcomeId)` slice.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Implement a mutation-oriented exposure sync helper in `backend/server.py` that composes `ensure_account_exposure_state(...)`, `ensure_account_exposure_position(...)`, and the pure arithmetic helper to either update `netSize` plus row metadata or delete the row on rounded-zero, then prune `ACCOUNT_EXPOSURE[accountId]` when no live positions remain and otherwise advance account `updatedAt`.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Keep the new helper seam write-oriented by treating missing exposure state as implicit zero outside `ensure_*`, so future position-limit preview can reuse the pure arithmetic helper without materializing empty accounts or rows as a side effect.",
+      "depends_on": [1, 2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Add focused regressions in `tests/test_bayes_market_api.py` covering six-decimal buy/sell netting, exact-zero row deletion, account pruning after the last live row is removed, metadata refresh on reducing or flipping trades, and the normalization boundary between the `ensure_*` helpers and the arithmetic helper.",
+      "depends_on": [1, 2, 3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
