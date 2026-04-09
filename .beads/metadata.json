@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "bayes_market",
+  "project_id": "dca6f69a-f6ca-420f-9104-ac0941f45d54"
+}
