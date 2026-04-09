@@ -1,0 +1,78 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Expose `GET /v1/markets/{id}/meta` as a public read route returning a normalized `preview` object with `marketId`, `title`, `description`, `url`, `siteName`, and `type`, plus the standard response `meta` envelope.",
+      "based_on": ["q1", "q7"],
+      "alternatives_rejected": [
+        "Return a raw map of HTML meta-tag names to values",
+        "Keep metadata generation as a backend-internal helper with no HTTP route"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use the stored market `title` and `description` as the canonical share-preview copy, without injecting live probabilities or resolution text into the generated preview fields.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Append volatile live-state text such as top probabilities",
+        "Special-case resolved markets with different preview copy"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Emit server-side `<title>`, `<meta name=\"description\">`, and Open Graph `og:title`, `og:description`, `og:type`, and `og:url` tags for SPA HTML responses, and skip `twitter:*` and `og:image` for this task.",
+      "based_on": ["q3", "q5"],
+      "alternatives_rejected": [
+        "Emit only JSON metadata without HTML head injection",
+        "Expand scope to Twitter tags and preview images now"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Resolve absolute preview URLs from a new `BAYES_PUBLIC_ORIGIN` config when present, otherwise fall back to request host/proto headers with a localhost default for non-requested code paths.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Hard-code a single production origin in source",
+        "Depend only on request headers with no explicit config override"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Preserve the existing SPA fallback for `/markets/{id}` and serve generic metadata when the requested market does not exist instead of returning an HTML 404.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Return a true HTML 404 for missing market deep links"
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add backend helpers for canonical public-origin resolution, normalized market preview payloads, and HTML head tag injection for SPA shell responses.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Register `GET /v1/markets/{id}/meta`, include it in the service index, and wire the request-aware origin into API and static HTML paths.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Expose the new preview contract in frontend API types/client and add request-level tests for the new route and HTML metadata behavior.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Update the frontend HTML template defaults if needed, rebuild committed dist assets, run targeted backend/frontend tests, and commit the final patch.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

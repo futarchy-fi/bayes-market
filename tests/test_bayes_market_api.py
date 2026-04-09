@@ -71,17 +71,27 @@ def build_event_trade_body(
 
 def build_market_resolution_body(
     account_id: str,
-    outcome_id: str,
+    outcome_id: str | None = None,
     *,
+    final_probabilities: dict[str, float] | None = None,
     idempotency_key: str | None = None,
 ) -> dict[str, object]:
-    body: dict[str, object] = {
-        "accountId": account_id,
-        "outcomeId": outcome_id,
-    }
+    body: dict[str, object] = {"accountId": account_id}
+    if outcome_id is not None:
+        body["outcomeId"] = outcome_id
+    if final_probabilities is not None:
+        body["finalProbabilities"] = deepcopy(final_probabilities)
     if idempotency_key is not None:
         body["idempotencyKey"] = idempotency_key
     return body
+
+
+def expected_market_resolution_payload(market_id: str, outcome_id: str) -> dict[str, object]:
+    return {
+        "kind": "ResolveMarket",
+        "outcomeId": outcome_id,
+        "finalProbabilities": server.build_market_resolution_marginals(server.MARKETS[market_id], outcome_id),
+    }
 
 
 def build_create_market_body(
@@ -439,6 +449,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             ["/v1/accounts/{id}/risk", "/v1/accounts/{id}/pnl"],
         )
         self.assertIn("GET /v1/markets/{id}/analytics", payload["routes"]["markets"])
+        self.assertIn("/v1/markets/{id}/meta", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/events", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/engine-stats", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/resolve", payload["routes"]["markets"])
@@ -998,6 +1009,29 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["market"]["id"], "m1")
         self.assertEqual(payload["market"]["variableId"], "eth_price_gt_3000_mar15")
         self.assertEqual(payload["market"]["marginals"], {"yes": 0.65, "no": 0.35})
+
+    def test_market_meta_returns_normalized_preview(self):
+        payload, status = server.route_request("GET", "/v1/markets/m1/meta")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            payload["preview"],
+            {
+                "marketId": "m1",
+                "title": "ETH Price > $3000 on March 15",
+                "description": "Will ETH trade above $3000 at any point on March 15, 2026?",
+                "url": f"{server.DEFAULT_PUBLIC_ORIGIN}/markets/m1",
+                "siteName": server.SITE_NAME,
+                "type": server.OPEN_GRAPH_TYPE,
+            },
+        )
+
+    def test_market_meta_prefers_configured_public_origin(self):
+        with patch.dict(server.os.environ, {server.PUBLIC_ORIGIN_ENV: "https://bayes.futarchy.ai/app/"}, clear=False):
+            payload, status = server.route_request("GET", "/v1/markets/m1/meta")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["preview"]["url"], "https://bayes.futarchy.ai/markets/m1")
 
     def test_market_events_returns_genesis_chain_for_existing_market_without_events(self):
         payload, status = server.route_request("GET", "/v1/markets/m1/events")
@@ -3131,6 +3165,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["market"]["id"], "m1")
         self.assertEqual(payload["market"]["status"], "resolved")
         self.assertEqual(payload["market"]["resolution"], "yes")
+        self.assertEqual(payload["market"]["resolutionProbabilities"], {"yes": 1.0, "no": 0.0})
         self.assertEqual(payload["market"]["marginals"], {"yes": 1.0, "no": 0.0})
         self.assertEqual(payload["result"]["status"], "accepted")
         self.assertEqual(payload["meta"]["idempotencyKeyEcho"], "idem-resolve-m1")
@@ -3140,7 +3175,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         retained_impact_score = retained_order["order"]["impactScore"]
         expected_remaining_min_asset = round(100.0 - retained_impact_score, 6)
         self.assertEqual(command["commandType"], "AdminOp")
-        self.assertEqual(command["payload"], {"kind": "ResolveMarket", "outcomeId": "yes"})
+        self.assertEqual(command["payload"], expected_market_resolution_payload("m1", "yes"))
         self.assertNotIn("m1", server.CONDITIONAL_MARGINALS)
         self.assertEqual(post_resolution_risk["account"]["id"], account_id)
         self.assertEqual(post_resolution_risk["account"]["risk"]["minAssets"]["overall"], expected_remaining_min_asset)
@@ -3183,6 +3218,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         event = server.EVENTS[payload["result"]["eventId"]]
         self.assertEqual(event["eventType"], "CommandAccepted")
+        self.assertEqual(event["payload"]["resolution"]["outcomeId"], "yes")
+        self.assertEqual(event["payload"]["resolution"]["finalProbabilities"], {"yes": 1.0, "no": 0.0})
+        self.assertTrue(event["payload"]["resolution"]["resolvedAt"].endswith("Z"))
         self.assertEqual(
             event["payload"]["effects"]["marginalDelta"],
             [
@@ -3227,10 +3265,123 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["market"]["id"], "m1")
         self.assertEqual(payload["market"]["status"], "resolved")
         self.assertEqual(payload["market"]["resolution"], "yes")
+        self.assertEqual(payload["market"]["resolutionProbabilities"], {"yes": 1.0, "no": 0.0})
         self.assertEqual(payload["market"]["marginals"], {"yes": 1.0, "no": 0.0})
         self.assertEqual(payload["result"]["status"], "accepted")
         self.assertEqual(server.MARKETS["m1"]["status"], "resolved")
         self.assertEqual(server.MARKETS["m1"]["resolution"], "yes")
+        self.assertEqual(server.MARKETS["m1"]["resolutionProbabilities"], {"yes": 1.0, "no": 0.0})
+
+    def test_market_resolution_accepts_final_probabilities_body_and_canonicalizes_command_payload(self):
+        final_probabilities = {"yes": 0.0, "no": 0.0, "delayed": 1.0}
+
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m2/resolve",
+            build_market_resolution_body("ops_admin", final_probabilities=final_probabilities),
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["id"], "m2")
+        self.assertEqual(payload["market"]["status"], "resolved")
+        self.assertEqual(payload["market"]["resolution"], "delayed")
+        self.assertEqual(payload["market"]["resolutionProbabilities"], final_probabilities)
+        self.assertEqual(payload["market"]["marginals"], final_probabilities)
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        self.assertEqual(command["payload"], expected_market_resolution_payload("m2", "delayed"))
+        event = server.EVENTS[payload["result"]["eventId"]]
+        self.assertEqual(event["payload"]["resolution"]["outcomeId"], "delayed")
+        self.assertEqual(event["payload"]["resolution"]["finalProbabilities"], final_probabilities)
+
+    def test_market_resolution_idempotency_replays_across_legacy_and_final_probability_shapes(self):
+        legacy_body = build_market_resolution_body("ops_admin", "yes", idempotency_key="idem-resolve-shape")
+        final_probabilities_body = build_market_resolution_body(
+            "ops_admin",
+            final_probabilities={"yes": 1.0, "no": 0.0},
+            idempotency_key="idem-resolve-shape",
+        )
+
+        first_payload, first_status = server.route_request("POST", "/v1/markets/m1/resolve", legacy_body)
+        second_payload, second_status = server.route_request("POST", "/v1/markets/m1/resolve", final_probabilities_body)
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
+        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(len(server.COMMANDS), 1)
+        self.assertEqual(len(server.EVENTS), 1)
+
+    def test_market_resolution_rejects_non_point_mass_final_probabilities(self):
+        before_state = snapshot_domain_state()
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request(
+                "POST",
+                "/v1/markets/m1/resolve",
+                build_market_resolution_body("ops_admin", final_probabilities={"yes": 0.6, "no": 0.4}),
+            )
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_market_resolution")
+        self.assertEqual(error.message, "finalProbabilities must encode a point-mass distribution")
+        self.assertEqual(
+            error.details,
+            {
+                "field": "finalProbabilities",
+                "marketId": "m1",
+            },
+        )
+        assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolution_rejects_final_probabilities_that_do_not_sum_to_one(self):
+        before_state = snapshot_domain_state()
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request(
+                "POST",
+                "/v1/markets/m1/resolve",
+                build_market_resolution_body("ops_admin", final_probabilities={"yes": 0.7, "no": 0.31}),
+            )
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_market_resolution")
+        self.assertEqual(error.message, "finalProbabilities must sum to 1.0")
+        self.assertEqual(error.details["field"], "finalProbabilities")
+        self.assertEqual(error.details["marketId"], "m1")
+        self.assertAlmostEqual(error.details["sum"], 1.01)
+        assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolution_rejects_mismatched_outcome_id_and_final_probabilities(self):
+        before_state = snapshot_domain_state()
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request(
+                "POST",
+                "/v1/markets/m1/resolve",
+                build_market_resolution_body(
+                    "ops_admin",
+                    "yes",
+                    final_probabilities={"yes": 0.0, "no": 1.0},
+                ),
+            )
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_market_resolution")
+        self.assertEqual(error.message, "outcomeId must match finalProbabilities when both are provided")
+        self.assertEqual(
+            error.details,
+            {
+                "field": "outcomeId",
+                "marketId": "m1",
+                "received": "yes",
+                "expected": "no",
+            },
+        )
+        assert_domain_state_unchanged(self, before_state)
 
     def test_market_resolution_rejects_draft_market_with_terminal_result(self):
         server.MARKETS["m1"]["status"] = "draft"
@@ -3260,7 +3411,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.ORDERS, {})
         command = server.COMMANDS[payload["result"]["commandId"]]
         self.assertEqual(command["commandType"], "AdminOp")
-        self.assertEqual(command["payload"], {"kind": "ResolveMarket", "outcomeId": "yes"})
+        self.assertEqual(command["payload"], expected_market_resolution_payload("m1", "yes"))
 
     def test_market_resolution_requires_account_id(self):
         cases = (
@@ -5308,13 +5459,14 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         market_id: str = "m1",
         account_id: str = "ops_http_auth",
         outcome_id: str = "yes",
+        final_probabilities: dict[str, float] | None = None,
         agent_id: str | None = None,
     ):
         headers = {} if agent_id is None else {server.AGENT_ID_HEADER: agent_id}
         return self.request_with_headers(
             "POST",
             f"/v1/markets/{market_id}/resolve",
-            build_market_resolution_body(account_id, outcome_id),
+            build_market_resolution_body(account_id, outcome_id, final_probabilities=final_probabilities),
             headers=headers,
         )
 
@@ -5879,6 +6031,60 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertIn(b'<div id="root"></div>', body)
         self.assertIn(b'/assets/index-', body)
 
+    def test_frontend_market_routes_emit_market_preview_meta_tags(self):
+        status, body, headers = self.request_raw(
+            "GET",
+            "/markets/m1",
+            headers={"Host": "share.example", "X-Forwarded-Proto": "https"},
+        )
+        html = body.decode("utf-8")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "text/html")
+        self.assertIn("<title>ETH Price &gt; $3000 on March 15</title>", html)
+        self.assertIn(
+            '<meta name="description" content="Will ETH trade above $3000 at any point on March 15, 2026?" />',
+            html,
+        )
+        self.assertIn(
+            '<meta property="og:title" content="ETH Price &gt; $3000 on March 15" />',
+            html,
+        )
+        self.assertIn(
+            '<meta property="og:url" content="https://share.example/markets/m1" />',
+            html,
+        )
+
+    def test_missing_market_frontend_route_keeps_generic_meta_tags(self):
+        status, body, _ = self.request_raw(
+            "GET",
+            "/markets/missing-market",
+            headers={"Host": "share.example", "X-Forwarded-Proto": "https"},
+        )
+        html = body.decode("utf-8")
+
+        self.assertEqual(status, 200)
+        self.assertIn(f"<title>{server.SITE_NAME}</title>", html)
+        self.assertIn(
+            '<meta property="og:url" content="https://share.example/markets/missing-market" />',
+            html,
+        )
+        self.assertIn(
+            f'<meta name="description" content="{server.SITE_DESCRIPTION}" />',
+            html,
+        )
+
+    def test_market_meta_http_route_uses_request_origin_when_unconfigured(self):
+        status, payload = self.request(
+            "GET",
+            "/v1/markets/m1/meta",
+            headers={"Host": "share.example:4444", "X-Forwarded-Proto": "https"},
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["preview"]["marketId"], "m1")
+        self.assertEqual(payload["preview"]["url"], "https://share.example:4444/markets/m1")
+
     def test_frontend_asset_requests_serve_bundles_with_immutable_cache_headers(self):
         asset_path = next((server.FRONTEND_DIST / "assets").glob("*.js"))
 
@@ -5997,11 +6203,31 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["market"]["id"], "m1")
         self.assertEqual(payload["market"]["status"], "resolved")
         self.assertEqual(payload["market"]["resolution"], "yes")
+        self.assertEqual(payload["market"]["resolutionProbabilities"], {"yes": 1.0, "no": 0.0})
         self.assertEqual(payload["market"]["marginals"], {"yes": 1.0, "no": 0.0})
         self.assertEqual(payload["result"]["status"], "accepted")
         command = server.COMMANDS[payload["result"]["commandId"]]
         self.assertEqual(command["commandType"], "AdminOp")
-        self.assertEqual(command["payload"], {"kind": "ResolveMarket", "outcomeId": "yes"})
+        self.assertEqual(command["payload"], expected_market_resolution_payload("m1", "yes"))
+
+    def test_market_resolve_route_accepts_final_probabilities_body(self):
+        status, payload = self.request(
+            "POST",
+            "/v1/markets/m2/resolve",
+            build_market_resolution_body(
+                "ops_http",
+                final_probabilities={"yes": 0.0, "no": 0.0, "delayed": 1.0},
+            ),
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["id"], "m2")
+        self.assertEqual(payload["market"]["status"], "resolved")
+        self.assertEqual(payload["market"]["resolution"], "delayed")
+        self.assertEqual(payload["market"]["resolutionProbabilities"], {"yes": 0.0, "no": 0.0, "delayed": 1.0})
+        self.assertEqual(payload["market"]["marginals"], {"yes": 0.0, "no": 0.0, "delayed": 1.0})
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        self.assertEqual(command["payload"], expected_market_resolution_payload("m2", "delayed"))
 
     def test_market_resolve_route_is_method_not_allowed_for_get(self):
         status, payload = self.request("GET", "/v1/markets/m1/resolve")

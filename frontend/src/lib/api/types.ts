@@ -29,6 +29,7 @@ export interface Market {
   variableId: string;
   status: MarketStatus;
   resolution?: string;
+  resolutionProbabilities?: Record<string, number>;
   outcomes: MarketOutcome[];
   marginals: Record<string, number>;
   liquidity: number;
@@ -45,6 +46,20 @@ export interface MarketListResponse {
 
 export interface MarketDetailResponse {
   market: Market;
+  meta: Meta;
+}
+
+export interface MarketPreview {
+  marketId: string;
+  title: string;
+  description: string;
+  url: string;
+  siteName: string;
+  type: string;
+}
+
+export interface MarketPreviewResponse {
+  preview: MarketPreview;
   meta: Meta;
 }
 

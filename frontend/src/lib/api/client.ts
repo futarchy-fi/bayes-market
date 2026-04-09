@@ -1,6 +1,7 @@
 import type {
   MarketListResponse,
   MarketDetailResponse,
+  MarketPreviewResponse,
   MarketEventsResponse,
   EngineStatsResponse,
   MarketAnalyticsResponse,
@@ -111,6 +112,12 @@ export function getMarket(
   return request<MarketDetailResponse>(`/v1/markets/${encodeURIComponent(marketId)}`);
 }
 
+export function getMarketPreview(
+  marketId: string,
+): Promise<MarketPreviewResponse> {
+  return request<MarketPreviewResponse>(`/v1/markets/${encodeURIComponent(marketId)}/meta`);
+}
+
 export function getMarketEvents(
   marketId: string,
   opts: { fromSeq?: number; limit?: number } = {},
@@ -182,7 +189,8 @@ export function submitProbabilityEdit(
 
 export interface ResolveMarketPayload {
   accountId: string;
-  outcomeId: string;
+  outcomeId?: string;
+  finalProbabilities?: Record<string, number>;
   idempotencyKey?: string;
 }
 

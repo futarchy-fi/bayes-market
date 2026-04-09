@@ -3,6 +3,7 @@ import {
   listMarkets,
   getMarket,
   getMarketAnalytics,
+  getMarketPreview,
   getAccountRisk,
   getAccountPnl,
   BayesApiError,
@@ -87,6 +88,24 @@ describe("API Client", () => {
     mockFetch.mockResolvedValue(jsonResponse(body));
     await getAccountPnl("a1");
     expect(mockFetch).toHaveBeenCalledWith("/v1/accounts/a1/pnl", expect.any(Object));
+  });
+
+  it("getMarketPreview calls /v1/markets/{id}/meta", async () => {
+    const body = {
+      preview: {
+        marketId: "m1",
+        title: "Market title",
+        description: "Market description",
+        url: "https://bayes.example/markets/m1",
+        siteName: "Bayes Market",
+        type: "website",
+      },
+      meta: { apiVersion: "1.0", timestamp: "" },
+    };
+    mockFetch.mockResolvedValue(jsonResponse(body));
+    const result = await getMarketPreview("m1");
+    expect(mockFetch).toHaveBeenCalledWith("/v1/markets/m1/meta", expect.any(Object));
+    expect(result.preview.marketId).toBe("m1");
   });
 
   it("throws BayesApiError on non-ok response", async () => {

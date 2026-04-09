@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import html
 import importlib.util
 import json
 import math
@@ -19,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path, PurePosixPath
 from typing import Any, NamedTuple
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 BACKEND_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = str(BACKEND_DIR.parent)
@@ -98,6 +99,7 @@ INITIAL_MARKETS: dict[str, dict[str, Any]] = {
         "variableId": "fed_rate_cut_mar_2026",
         "status": "resolved",
         "resolution": "no",
+        "resolutionProbabilities": {"yes": 0.0, "no": 1.0},
         "outcomes": [
             {"id": "yes", "name": "Yes"},
             {"id": "no", "name": "No"},
@@ -143,6 +145,18 @@ ENGINE_VERSION = ENGINE_CONFIG.version
 ENGINE_PRECISION = ENGINE_CONFIG.precision
 ENGINE_COMPILE_TYPE = ENGINE_CONFIG.compile_type
 ENGINE_INFERENCE_SAMPLE_LIMIT = ENGINE_CONFIG.inference_sample_limit
+PUBLIC_ORIGIN_ENV = "BAYES_PUBLIC_ORIGIN"
+DEFAULT_PUBLIC_ORIGIN = "http://localhost"
+SITE_NAME = "Bayes Market"
+SITE_DESCRIPTION = "Create, trade, and resolve Bayesian prediction markets."
+OPEN_GRAPH_TYPE = "website"
+FRONTEND_MARKET_DETAIL_RE = re.compile(r"^/markets/(?P<market_id>[^/]+)$")
+TITLE_TAG_RE = re.compile(r"<title>.*?</title>", re.IGNORECASE | re.DOTALL)
+DESCRIPTION_META_TAG_RE = re.compile(r"<meta\b[^>]*\bname=[\"']description[\"'][^>]*>", re.IGNORECASE)
+OG_TITLE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:title[\"'][^>]*>", re.IGNORECASE)
+OG_DESCRIPTION_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:description[\"'][^>]*>", re.IGNORECASE)
+OG_TYPE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:type[\"'][^>]*>", re.IGNORECASE)
+OG_URL_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:url[\"'][^>]*>", re.IGNORECASE)
 
 MARKETS: dict[str, dict[str, Any]] = deepcopy(INITIAL_MARKETS)
 CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {}
@@ -485,6 +499,172 @@ def make_meta(**extra: object) -> dict[str, Any]:
     return meta
 
 
+def normalize_public_origin(origin: str) -> str:
+    """Normalize a configured public origin down to scheme + authority."""
+    raw_origin = origin.strip()
+    if not raw_origin:
+        return ""
+
+    parsed = urlparse(raw_origin)
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    return f"{scheme}://{parsed.netloc}"
+
+
+def header_first_value(headers: Any | None, name: str) -> str:
+    """Return the first comma-delimited header value when present."""
+    if headers is None:
+        return ""
+
+    value = headers.get(name)
+    if value is None:
+        return ""
+    return str(value).split(",")[0].strip()
+
+
+def normalize_origin_host(host: str) -> str:
+    """Sanitize a host header value before using it in an absolute URL."""
+    candidate = host.strip()
+    if not candidate:
+        return ""
+    if any(character.isspace() for character in candidate):
+        return ""
+    if any(character in candidate for character in "/?#"):
+        return ""
+    return candidate
+
+
+def configured_public_origin() -> str:
+    """Return the configured canonical public origin when available."""
+    return normalize_public_origin(os.environ.get(PUBLIC_ORIGIN_ENV, ""))
+
+
+def request_public_origin(headers: Any | None) -> str:
+    """Derive a public origin from forwarded headers or the request host."""
+    forwarded_host = header_first_value(headers, "X-Forwarded-Host")
+    host = normalize_origin_host(forwarded_host or header_first_value(headers, "Host"))
+    if not host:
+        return ""
+
+    forwarded_proto = header_first_value(headers, "X-Forwarded-Proto").lower()
+    scheme = forwarded_proto if forwarded_proto in {"http", "https"} else "http"
+    return f"{scheme}://{host}"
+
+
+def resolve_public_origin(headers: Any | None = None) -> str:
+    """Resolve the canonical public origin for absolute preview URLs."""
+    return configured_public_origin() or request_public_origin(headers) or DEFAULT_PUBLIC_ORIGIN
+
+
+def absolute_public_url(path: str, *, headers: Any | None = None) -> str:
+    """Build an absolute public URL for one application path."""
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    return f"{resolve_public_origin(headers)}{normalized_path}"
+
+
+def build_market_preview(market: dict[str, Any], *, headers: Any | None = None) -> dict[str, str]:
+    """Build the normalized share-preview payload for one market."""
+    market_id = str(market["id"])
+    return {
+        "marketId": market_id,
+        "title": str(market["title"]),
+        "description": str(market["description"]),
+        "url": absolute_public_url(f"/markets/{quote(market_id, safe='')}", headers=headers),
+        "siteName": SITE_NAME,
+        "type": OPEN_GRAPH_TYPE,
+    }
+
+
+def normalize_frontend_page_path(url_path: str) -> str:
+    """Normalize a frontend route path for preview URL generation."""
+    clean = normalize_path(url_path.split("?")[0].split("#")[0] or "/")
+    if clean == "/index.html":
+        return "/"
+    return clean
+
+
+def frontend_market_id(url_path: str) -> str | None:
+    """Return the market id encoded in a frontend market-detail route."""
+    match = FRONTEND_MARKET_DETAIL_RE.match(normalize_frontend_page_path(url_path))
+    if match is None:
+        return None
+
+    market_id = match.group("market_id")
+    if market_id == "new":
+        return None
+    return market_id
+
+
+def build_default_preview(url_path: str, *, headers: Any | None = None) -> dict[str, str]:
+    """Build the generic SPA preview payload for non-market pages."""
+    normalized_path = normalize_frontend_page_path(url_path)
+    return {
+        "title": SITE_NAME,
+        "description": SITE_DESCRIPTION,
+        "url": absolute_public_url(normalized_path, headers=headers),
+        "siteName": SITE_NAME,
+        "type": OPEN_GRAPH_TYPE,
+    }
+
+
+def preview_for_frontend_path(url_path: str, *, headers: Any | None = None) -> dict[str, str]:
+    """Choose market-specific or generic preview metadata for one SPA route."""
+    market_id = frontend_market_id(url_path)
+    if market_id is not None:
+        market = MARKETS.get(market_id)
+        if market is not None:
+            return build_market_preview(market, headers=headers)
+    return build_default_preview(url_path, headers=headers)
+
+
+def replace_or_insert_head_tag(document: str, pattern: re.Pattern[str], replacement: str) -> str:
+    """Replace one existing head tag or insert it before the closing head tag."""
+    if pattern.search(document):
+        return pattern.sub(replacement, document, count=1)
+
+    if "</head>" in document:
+        return document.replace("</head>", f"    {replacement}\n  </head>", 1)
+    return f"{document}\n{replacement}"
+
+
+def render_frontend_index_html(document: str, url_path: str, *, headers: Any | None = None) -> bytes:
+    """Inject crawler-visible title and Open Graph tags into the SPA shell."""
+    preview = preview_for_frontend_path(url_path, headers=headers)
+    escaped_title = html.escape(preview["title"], quote=False)
+    escaped_description = html.escape(preview["description"], quote=True)
+    escaped_url = html.escape(preview["url"], quote=True)
+    escaped_type = html.escape(preview["type"], quote=True)
+
+    rendered = replace_or_insert_head_tag(document, TITLE_TAG_RE, f"<title>{escaped_title}</title>")
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        DESCRIPTION_META_TAG_RE,
+        f'<meta name="description" content="{escaped_description}" />',
+    )
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        OG_TITLE_META_TAG_RE,
+        f'<meta property="og:title" content="{escaped_title}" />',
+    )
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        OG_DESCRIPTION_META_TAG_RE,
+        f'<meta property="og:description" content="{escaped_description}" />',
+    )
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        OG_TYPE_META_TAG_RE,
+        f'<meta property="og:type" content="{escaped_type}" />',
+    )
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        OG_URL_META_TAG_RE,
+        f'<meta property="og:url" content="{escaped_url}" />',
+    )
+    return rendered.encode("utf-8")
+
+
 def error_payload(code: str, message: str, **details: object) -> dict[str, Any]:
     """Build the standard JSON error envelope used by the API."""
     return {
@@ -518,6 +698,7 @@ def service_index_payload() -> dict[str, Any]:
                 "POST /v1/markets",
                 "/v1/markets/{id}",
                 "GET /v1/markets/{id}/analytics",
+                "/v1/markets/{id}/meta",
                 "/v1/markets/{id}/events",
                 "/v1/markets/{id}/engine-stats",
                 "POST /v1/markets/{id}/resolve",
@@ -1946,6 +2127,22 @@ def get_market_detail(
     }, 200
 
 
+def get_market_preview_response(
+    market_id: str,
+    *,
+    headers: Any | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Return the normalized share-preview payload for one market id."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    return {
+        "preview": build_market_preview(market, headers=headers),
+        "meta": make_meta(),
+    }, 200
+
+
 def parse_integer_query_param(
     query: dict[str, list[str]],
     name: str,
@@ -2682,7 +2879,123 @@ def build_market_resolution_marginals(market: dict[str, Any], outcome_id: str) -
     return {candidate: 1.0 if candidate == outcome_id else 0.0 for candidate in outcome_ids}
 
 
-def normalize_market_resolution_payload(market_id: str, payload: dict[str, Any]) -> dict[str, str]:
+def normalize_market_resolution_probabilities(
+    market: dict[str, Any],
+    raw_final_probabilities: Any,
+) -> dict[str, float]:
+    """Normalize and validate an explicit market-resolution probability map."""
+    if not isinstance(raw_final_probabilities, dict):
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "finalProbabilities must be an object",
+            {"field": "finalProbabilities"},
+        )
+
+    market_id = str(market["id"])
+    outcome_ids = _market_outcome_ids(market)
+    missing_outcome_ids = [outcome_id for outcome_id in outcome_ids if outcome_id not in raw_final_probabilities]
+    unexpected_outcome_ids = sorted(str(outcome_id) for outcome_id in raw_final_probabilities if str(outcome_id) not in outcome_ids)
+    if missing_outcome_ids or unexpected_outcome_ids:
+        details: dict[str, Any] = {
+            "field": "finalProbabilities",
+            "marketId": market_id,
+        }
+        if missing_outcome_ids:
+            details["missing"] = missing_outcome_ids
+        if unexpected_outcome_ids:
+            details["unexpected"] = unexpected_outcome_ids
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "finalProbabilities must contain exactly one value for each market outcome",
+            details,
+        )
+
+    normalized: dict[str, float] = {}
+    for outcome_id in outcome_ids:
+        value = raw_final_probabilities[outcome_id]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+            raise ApiError(
+                400,
+                "invalid_market_resolution",
+                "finalProbabilities must contain finite numeric values for all market outcomes",
+                {
+                    "field": f"finalProbabilities.{outcome_id}",
+                    "marketId": market_id,
+                    "outcomeId": outcome_id,
+                },
+            )
+
+        normalized[outcome_id] = float(value)
+        if normalized[outcome_id] < 0:
+            raise ApiError(
+                400,
+                "invalid_market_resolution",
+                "finalProbabilities must preserve non-negative values for all outcomes",
+                {
+                    "field": f"finalProbabilities.{outcome_id}",
+                    "marketId": market_id,
+                    "outcomeId": outcome_id,
+                },
+            )
+
+    total_probability = sum(normalized.values())
+    if not math.isclose(total_probability, 1.0, abs_tol=1e-9):
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "finalProbabilities must sum to 1.0",
+            {
+                "field": "finalProbabilities",
+                "marketId": market_id,
+                "sum": total_probability,
+            },
+        )
+
+    return normalized
+
+
+def resolve_market_resolution_outcome_id(
+    market: dict[str, Any],
+    final_probabilities: dict[str, float],
+) -> str:
+    """Resolve a validated final-probabilities map to the current point-mass settlement outcome."""
+    point_mass_outcomes = [
+        outcome_id
+        for outcome_id, probability in final_probabilities.items()
+        if math.isclose(probability, 1.0, abs_tol=1e-9)
+    ]
+    if len(point_mass_outcomes) != 1:
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "finalProbabilities must encode a point-mass distribution",
+            {
+                "field": "finalProbabilities",
+                "marketId": str(market["id"]),
+            },
+        )
+
+    outcome_id = point_mass_outcomes[0]
+    expected_distribution = build_market_resolution_marginals(market, outcome_id)
+    if any(
+        not math.isclose(probability, expected_distribution[candidate], abs_tol=1e-9)
+        for candidate, probability in final_probabilities.items()
+    ):
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "finalProbabilities must encode a point-mass distribution",
+            {
+                "field": "finalProbabilities",
+                "marketId": str(market["id"]),
+            },
+        )
+    return outcome_id
+
+
+def normalize_market_resolution_payload(market_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Normalize and validate a market-resolution request body."""
     market = MARKETS.get(market_id)
     if not market:
@@ -2691,15 +3004,45 @@ def normalize_market_resolution_payload(market_id: str, payload: dict[str, Any])
     if not isinstance(payload, dict):
         raise ApiError(400, "invalid_body", "payload must be an object")
 
+    has_outcome_id = "outcomeId" in payload
     raw_outcome_id = payload.get("outcomeId")
-    if not isinstance(raw_outcome_id, str) or not raw_outcome_id.strip():
-        raise ApiError(400, "invalid_market_resolution", "outcomeId is required", {"field": "outcomeId"})
+    outcome_id: str | None = None
+    if has_outcome_id:
+        if not isinstance(raw_outcome_id, str) or not raw_outcome_id.strip():
+            raise ApiError(400, "invalid_market_resolution", "outcomeId is required", {"field": "outcomeId"})
+        outcome_id = raw_outcome_id.strip()
+        build_market_resolution_marginals(market, outcome_id)
 
-    outcome_id = raw_outcome_id.strip()
-    build_market_resolution_marginals(market, outcome_id)
+    has_final_probabilities = "finalProbabilities" in payload
+    if has_final_probabilities:
+        normalized_final_probabilities = normalize_market_resolution_probabilities(
+            market,
+            payload.get("finalProbabilities"),
+        )
+        resolved_outcome_id = resolve_market_resolution_outcome_id(market, normalized_final_probabilities)
+        if outcome_id is not None and outcome_id != resolved_outcome_id:
+            raise ApiError(
+                400,
+                "invalid_market_resolution",
+                "outcomeId must match finalProbabilities when both are provided",
+                {
+                    "field": "outcomeId",
+                    "marketId": market_id,
+                    "received": outcome_id,
+                    "expected": resolved_outcome_id,
+                },
+            )
+        outcome_id = resolved_outcome_id
+        final_probabilities = build_market_resolution_marginals(market, outcome_id)
+    else:
+        if outcome_id is None:
+            raise ApiError(400, "invalid_market_resolution", "outcomeId is required", {"field": "outcomeId"})
+        final_probabilities = build_market_resolution_marginals(market, outcome_id)
+
     return {
         "kind": "ResolveMarket",
         "outcomeId": outcome_id,
+        "finalProbabilities": final_probabilities,
     }
 
 
@@ -2798,7 +3141,7 @@ def materialize_probability_edit_command(
 
 def materialize_market_resolution_command(
     market_id: str,
-    normalized_payload: dict[str, str],
+    normalized_payload: dict[str, Any],
     account_id: str,
     command_id: str,
     submitted_at: str,
@@ -3067,6 +3410,7 @@ def settle_market_account_risk(market_id: str, timestamp: str) -> list[dict[str,
 def transition_market_to_resolved(
     market_id: str,
     outcome_id: str,
+    final_probabilities: dict[str, float],
     *,
     resolved_at: str,
 ) -> dict[str, Any]:
@@ -3100,9 +3444,10 @@ def transition_market_to_resolved(
         )
 
     previous_marginals = deepcopy(market["marginals"])
-    new_marginals = build_market_resolution_marginals(market, outcome_id)
+    new_marginals = deepcopy(final_probabilities)
     market["status"] = "resolved"
     market["resolution"] = outcome_id
+    market["resolutionProbabilities"] = deepcopy(new_marginals)
     market["marginals"] = deepcopy(new_marginals)
     CONDITIONAL_MARGINALS.pop(market_id, None)
 
@@ -3120,6 +3465,7 @@ def resolve_market_command(command: dict[str, Any]) -> dict[str, Any]:
     resolution = transition_market_to_resolved(
         str(command["marketId"]),
         str(command["payload"]["outcomeId"]),
+        deepcopy(command["payload"]["finalProbabilities"]),
         resolved_at=resolved_at,
     )
     resolution["assetDelta"] = settle_market_account_risk(str(command["marketId"]), resolved_at)
@@ -3148,6 +3494,11 @@ def build_market_resolution_acceptance_response(
         command,
         event_type="CommandAccepted",
         event_payload={
+            "resolution": {
+                "outcomeId": str(command["payload"]["outcomeId"]),
+                "finalProbabilities": deepcopy(command["payload"]["finalProbabilities"]),
+                "resolvedAt": str(resolution["resolvedAt"]),
+            },
             "effects": {
                 "marginalDelta": marginal_delta,
                 "assetDelta": deepcopy(resolution["assetDelta"]),
@@ -3500,7 +3851,12 @@ def handle_market_resolution(market_id: str, payload: dict[str, Any] | None) -> 
     return build_market_resolution_acceptance_response(command, resolution, scope_key)
 
 
-def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None) -> tuple[dict[str, Any], int]:
+def route_request(
+    method: str,
+    raw_path: str,
+    body: dict[str, Any] | None = None,
+    headers: Any | None = None,
+) -> tuple[dict[str, Any], int]:
     """Route one HTTP request into the backend's in-memory handlers."""
     parsed = urlparse(raw_path)
     path = normalize_path(parsed.path)
@@ -3548,6 +3904,16 @@ def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None
                     {"method": method, "path": path},
                 )
             return get_market_detail(market_id, parse_qs(parsed.query, keep_blank_values=True))
+
+        if len(parts) == 4 and parts[3] == "meta":
+            if method != "GET":
+                raise ApiError(
+                    405,
+                    "method_not_allowed",
+                    f"{method} is not allowed for this resource",
+                    {"method": method, "path": path},
+                )
+            return get_market_preview_response(market_id, headers=headers)
 
         if len(parts) == 4 and parts[3] == "engine-stats":
             if method != "GET":
@@ -3745,7 +4111,7 @@ class BayesHandler(BaseHTTPRequestHandler):
         try:
             body = self._read_json_body() if method in {"POST", "PUT", "PATCH"} else None
             agent_id = self._enforce_write_controls(method)
-            payload, status = route_request(method, self.path, body)
+            payload, status = route_request(method, self.path, body, headers=self.headers)
             if status < 400:
                 extra_headers = rate_limit_headers(agent_id)
         except ApiError as exc:
@@ -3761,7 +4127,8 @@ class BayesHandler(BaseHTTPRequestHandler):
         if not FRONTEND_DIST.is_dir():
             return False
 
-        clean = url_path.split("?")[0].split("#")[0]
+        requested_path = normalize_frontend_page_path(url_path)
+        clean = requested_path
         if clean == "/":
             clean = "/index.html"
 
@@ -3779,7 +4146,14 @@ class BayesHandler(BaseHTTPRequestHandler):
             if not candidate.is_file():
                 return False
 
-        content = candidate.read_bytes()
+        if candidate == dist_root / "index.html":
+            content = render_frontend_index_html(
+                candidate.read_text(encoding="utf-8"),
+                requested_path,
+                headers=self.headers,
+            )
+        else:
+            content = candidate.read_bytes()
         ext = candidate.suffix.lower()
         mime = MIME_TYPES.get(ext, "application/octet-stream")
         self.send_response(200)

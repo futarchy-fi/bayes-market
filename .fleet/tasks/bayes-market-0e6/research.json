@@ -1,0 +1,135 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Expose a normalized preview payload rather than a raw map of HTML meta-tag names. The existing API surface returns typed domain objects such as `market`, `markets`, and `routes`, and the frontend client/types mirror that shape; a raw `og:*`/`twitter:*` map would be the only endpoint that leaks HTML implementation details instead of domain data. The remaining open detail is whether the preview fields sit at the top level or under a `preview` object.",
+      "confidence": 0.84,
+      "evidence": [
+        "backend/server.py:508",
+        "backend/server.py:533",
+        "backend/server.py:1250",
+        "frontend/src/lib/api/types.ts:15",
+        "frontend/src/lib/api/client.ts:63"
+      ],
+      "uncertainty": "The endpoint does not exist yet, so the exact field names and envelope are still a design choice.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q2",
+      "answer": "Use the stored `title` and `description` as the canonical share-preview copy. They are the only authored text fields in the market model and they are the primary text rendered on the detail page. Status, probabilities, liquidity, and expiry exist in the read model, but the UI treats them as secondary stats. If any live state is added to preview text, the strongest candidate is resolved outcome for resolved markets; volatile top-probability text would make previews drift over time.",
+      "confidence": 0.74,
+      "evidence": [
+        "backend/server.py:63",
+        "backend/server.py:64",
+        "backend/server.py:99",
+        "backend/server.py:100",
+        "frontend/src/routes/MarketDetail.tsx:34",
+        "frontend/src/routes/MarketDetail.tsx:37",
+        "frontend/src/routes/MarketDetail.tsx:38"
+      ],
+      "uncertainty": "The codebase does not state whether resolved markets should append their resolution to preview copy.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q3",
+      "answer": "The minimum server-emitted tag set that fits the current codebase is `<title>`, `<meta name=\"description\">`, and the core Open Graph tags `og:title`, `og:description`, `og:type`, and `og:url`. The committed HTML shell currently has no social tags at all, and nothing in the frontend establishes a broader tag matrix. `twitter:*` tags can be added later as mirrors of the OG fields, while `og:image` should stay a separate scope decision.",
+      "confidence": 0.67,
+      "evidence": [
+        "frontend/index.html:3",
+        "frontend/index.html:6",
+        "frontend/dist/index.html:3",
+        "frontend/dist/index.html:6",
+        "backend/server.py:3208",
+        "tests/test_bayes_market_api.py:5444"
+      ],
+      "uncertainty": "There is no existing test or head-management contract that proves the exact required tag matrix.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q4",
+      "answer": "Prefer a new backend configuration value for the canonical public origin and derive `og:url` and any image URL from that. The repo does not already expose a public-origin setting, `route_request()` has no access to request headers, and the only existing origin-like setting is frontend `VITE_API_BASE`, which is API-only. Request-host derivation is possible only inside `BayesHandler`, so it is an implementation fallback rather than an established convention.",
+      "confidence": 0.78,
+      "evidence": [
+        "backend/server.py:2964",
+        "backend/server.py:3245",
+        "backend/server.py:3270",
+        "frontend/src/lib/api/client.ts:14"
+      ],
+      "uncertainty": "The deployment topology is not represented in the repo, so it is unclear whether request-derived host/proto values would be trustworthy behind proxies.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q5",
+      "answer": "`og:image` should not be treated as required for the initial task. The committed frontend shell only references JS and CSS bundles, and the repo has no checked-in Bayes Market logo/card asset or image-generation pipeline. If richer previews are desired later, the least disruptive path is a checked-in static image served by the existing static handler, not a new generation service.",
+      "confidence": 0.86,
+      "evidence": [
+        "frontend/dist/index.html:7",
+        "frontend/dist/index.html:8",
+        "backend/server.py:3115",
+        "backend/server.py:3237"
+      ],
+      "uncertainty": "A product decision could still choose to add a static preview image later for better social cards.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "Continue serving the SPA shell for direct `/markets/{id}` requests, even when the market is missing, and let the client show its existing error state. That behavior is already baked into the suffixless-route fallback and covered by HTTP tests. Returning a true HTML 404 for missing market deep links would be a deliberate routing change, not an incremental metadata change. The JSON API should remain the place that returns `404 market_not_found` for nonexistent ids.",
+      "confidence": 0.96,
+      "evidence": [
+        "backend/server.py:1255",
+        "backend/server.py:3129",
+        "backend/server.py:3224",
+        "backend/server.py:3245",
+        "tests/test_bayes_market_api.py:5444",
+        "frontend/src/app/router.tsx:16",
+        "frontend/src/routes/MarketDetail.tsx:25"
+      ],
+      "uncertainty": "Crawler-specific 404 semantics are not tested today, but the current route contract is clear.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q7",
+      "answer": "If `/v1/markets/{id}/meta` is added as an HTTP route, treat it as a public documented API surface: list it in `GET /` and expose shared client/types for it. The codebase already treats `GET /` as the public route catalog and the frontend renders that catalog directly. If the metadata lookup is meant to stay backend-internal, the more consistent design is to keep it as a Python helper and skip the HTTP route entirely.",
+      "confidence": 0.8,
+      "evidence": [
+        "backend/server.py:508",
+        "backend/server.py:515",
+        "frontend/src/routes/System.tsx:90",
+        "frontend/src/__tests__/System.test.tsx:21",
+        "frontend/src/lib/api/client.ts:190",
+        "frontend/src/lib/query/hooks.ts:55"
+      ],
+      "uncertainty": "The repo does not yet show whether the server-side HTML path will call shared logic directly or intentionally consume an HTTP endpoint.",
+      "decision_needed": true
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Deep-link routing already exists on both sides, so the task can focus on metadata injection instead of adding new market routes."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Crawler-visible market metadata has to be emitted from the backend-served HTML shell or another server-side layer; the current React app is client-rendered only."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.86,
+      "impact": "A `/v1/markets/{id}/meta` read route can be built from the current market read model without new persistence; the extra scope comes from copy rules, image policy, and canonical-origin decisions."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Any change to the HTML shell is likely to require updating committed `frontend/dist` artifacts because the backend serves those files directly and the API tests assert against that behavior."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
