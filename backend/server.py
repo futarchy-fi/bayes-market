@@ -98,6 +98,7 @@ INITIAL_MARKETS: dict[str, dict[str, Any]] = {
         "variableId": "fed_rate_cut_mar_2026",
         "status": "resolved",
         "resolution": "no",
+        "resolutionProbabilities": {"yes": 0.0, "no": 1.0},
         "outcomes": [
             {"id": "yes", "name": "Yes"},
             {"id": "no", "name": "No"},
@@ -1974,7 +1975,123 @@ def build_market_resolution_marginals(market: dict[str, Any], outcome_id: str) -
     return {candidate: 1.0 if candidate == outcome_id else 0.0 for candidate in outcome_ids}
 
 
-def normalize_market_resolution_payload(market_id: str, payload: dict[str, Any]) -> dict[str, str]:
+def normalize_market_resolution_probabilities(
+    market: dict[str, Any],
+    raw_final_probabilities: Any,
+) -> dict[str, float]:
+    """Normalize and validate an explicit market-resolution probability map."""
+    if not isinstance(raw_final_probabilities, dict):
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "finalProbabilities must be an object",
+            {"field": "finalProbabilities"},
+        )
+
+    market_id = str(market["id"])
+    outcome_ids = _market_outcome_ids(market)
+    missing_outcome_ids = [outcome_id for outcome_id in outcome_ids if outcome_id not in raw_final_probabilities]
+    unexpected_outcome_ids = sorted(str(outcome_id) for outcome_id in raw_final_probabilities if str(outcome_id) not in outcome_ids)
+    if missing_outcome_ids or unexpected_outcome_ids:
+        details: dict[str, Any] = {
+            "field": "finalProbabilities",
+            "marketId": market_id,
+        }
+        if missing_outcome_ids:
+            details["missing"] = missing_outcome_ids
+        if unexpected_outcome_ids:
+            details["unexpected"] = unexpected_outcome_ids
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "finalProbabilities must contain exactly one value for each market outcome",
+            details,
+        )
+
+    normalized: dict[str, float] = {}
+    for outcome_id in outcome_ids:
+        value = raw_final_probabilities[outcome_id]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+            raise ApiError(
+                400,
+                "invalid_market_resolution",
+                "finalProbabilities must contain finite numeric values for all market outcomes",
+                {
+                    "field": f"finalProbabilities.{outcome_id}",
+                    "marketId": market_id,
+                    "outcomeId": outcome_id,
+                },
+            )
+
+        normalized[outcome_id] = float(value)
+        if normalized[outcome_id] < 0:
+            raise ApiError(
+                400,
+                "invalid_market_resolution",
+                "finalProbabilities must preserve non-negative values for all outcomes",
+                {
+                    "field": f"finalProbabilities.{outcome_id}",
+                    "marketId": market_id,
+                    "outcomeId": outcome_id,
+                },
+            )
+
+    total_probability = sum(normalized.values())
+    if not math.isclose(total_probability, 1.0, abs_tol=1e-9):
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "finalProbabilities must sum to 1.0",
+            {
+                "field": "finalProbabilities",
+                "marketId": market_id,
+                "sum": total_probability,
+            },
+        )
+
+    return normalized
+
+
+def resolve_market_resolution_outcome_id(
+    market: dict[str, Any],
+    final_probabilities: dict[str, float],
+) -> str:
+    """Resolve a validated final-probabilities map to the current point-mass settlement outcome."""
+    point_mass_outcomes = [
+        outcome_id
+        for outcome_id, probability in final_probabilities.items()
+        if math.isclose(probability, 1.0, abs_tol=1e-9)
+    ]
+    if len(point_mass_outcomes) != 1:
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "finalProbabilities must encode a point-mass distribution",
+            {
+                "field": "finalProbabilities",
+                "marketId": str(market["id"]),
+            },
+        )
+
+    outcome_id = point_mass_outcomes[0]
+    expected_distribution = build_market_resolution_marginals(market, outcome_id)
+    if any(
+        not math.isclose(probability, expected_distribution[candidate], abs_tol=1e-9)
+        for candidate, probability in final_probabilities.items()
+    ):
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "finalProbabilities must encode a point-mass distribution",
+            {
+                "field": "finalProbabilities",
+                "marketId": str(market["id"]),
+            },
+        )
+    return outcome_id
+
+
+def normalize_market_resolution_payload(market_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Normalize and validate a market-resolution request body."""
     market = MARKETS.get(market_id)
     if not market:
@@ -1983,15 +2100,45 @@ def normalize_market_resolution_payload(market_id: str, payload: dict[str, Any])
     if not isinstance(payload, dict):
         raise ApiError(400, "invalid_body", "payload must be an object")
 
+    has_outcome_id = "outcomeId" in payload
     raw_outcome_id = payload.get("outcomeId")
-    if not isinstance(raw_outcome_id, str) or not raw_outcome_id.strip():
-        raise ApiError(400, "invalid_market_resolution", "outcomeId is required", {"field": "outcomeId"})
+    outcome_id: str | None = None
+    if has_outcome_id:
+        if not isinstance(raw_outcome_id, str) or not raw_outcome_id.strip():
+            raise ApiError(400, "invalid_market_resolution", "outcomeId is required", {"field": "outcomeId"})
+        outcome_id = raw_outcome_id.strip()
+        build_market_resolution_marginals(market, outcome_id)
 
-    outcome_id = raw_outcome_id.strip()
-    build_market_resolution_marginals(market, outcome_id)
+    has_final_probabilities = "finalProbabilities" in payload
+    if has_final_probabilities:
+        normalized_final_probabilities = normalize_market_resolution_probabilities(
+            market,
+            payload.get("finalProbabilities"),
+        )
+        resolved_outcome_id = resolve_market_resolution_outcome_id(market, normalized_final_probabilities)
+        if outcome_id is not None and outcome_id != resolved_outcome_id:
+            raise ApiError(
+                400,
+                "invalid_market_resolution",
+                "outcomeId must match finalProbabilities when both are provided",
+                {
+                    "field": "outcomeId",
+                    "marketId": market_id,
+                    "received": outcome_id,
+                    "expected": resolved_outcome_id,
+                },
+            )
+        outcome_id = resolved_outcome_id
+        final_probabilities = build_market_resolution_marginals(market, outcome_id)
+    else:
+        if outcome_id is None:
+            raise ApiError(400, "invalid_market_resolution", "outcomeId is required", {"field": "outcomeId"})
+        final_probabilities = build_market_resolution_marginals(market, outcome_id)
+
     return {
         "kind": "ResolveMarket",
         "outcomeId": outcome_id,
+        "finalProbabilities": final_probabilities,
     }
 
 
@@ -2090,7 +2237,7 @@ def materialize_probability_edit_command(
 
 def materialize_market_resolution_command(
     market_id: str,
-    normalized_payload: dict[str, str],
+    normalized_payload: dict[str, Any],
     account_id: str,
     command_id: str,
     submitted_at: str,
@@ -2359,6 +2506,7 @@ def settle_market_account_risk(market_id: str, timestamp: str) -> list[dict[str,
 def transition_market_to_resolved(
     market_id: str,
     outcome_id: str,
+    final_probabilities: dict[str, float],
     *,
     resolved_at: str,
 ) -> dict[str, Any]:
@@ -2392,9 +2540,10 @@ def transition_market_to_resolved(
         )
 
     previous_marginals = deepcopy(market["marginals"])
-    new_marginals = build_market_resolution_marginals(market, outcome_id)
+    new_marginals = deepcopy(final_probabilities)
     market["status"] = "resolved"
     market["resolution"] = outcome_id
+    market["resolutionProbabilities"] = deepcopy(new_marginals)
     market["marginals"] = deepcopy(new_marginals)
     CONDITIONAL_MARGINALS.pop(market_id, None)
 
@@ -2412,6 +2561,7 @@ def resolve_market_command(command: dict[str, Any]) -> dict[str, Any]:
     resolution = transition_market_to_resolved(
         str(command["marketId"]),
         str(command["payload"]["outcomeId"]),
+        deepcopy(command["payload"]["finalProbabilities"]),
         resolved_at=resolved_at,
     )
     resolution["assetDelta"] = settle_market_account_risk(str(command["marketId"]), resolved_at)
@@ -2440,6 +2590,11 @@ def build_market_resolution_acceptance_response(
         command,
         event_type="CommandAccepted",
         event_payload={
+            "resolution": {
+                "outcomeId": str(command["payload"]["outcomeId"]),
+                "finalProbabilities": deepcopy(command["payload"]["finalProbabilities"]),
+                "resolvedAt": str(resolution["resolvedAt"]),
+            },
             "effects": {
                 "marginalDelta": marginal_delta,
                 "assetDelta": deepcopy(resolution["assetDelta"]),
