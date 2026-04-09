@@ -111,6 +111,7 @@ INITIAL_MARKETS: dict[str, dict[str, Any]] = {
 }
 
 ALLOWED_MARKET_STATUSES = frozenset({"active", "resolved", "closed", "draft"})
+ALLOWED_MARKET_SORTS = frozenset({"volume", "liquidity", "created"})
 ALLOWED_ANALYTICS_INTERVALS = frozenset({"hour", "day"})
 MARKET_SUMMARY_FIELDS = (
     "id",
@@ -1139,6 +1140,66 @@ def parse_analytics_interval_query(query: dict[str, list[str]]) -> str:
     return interval
 
 
+def parse_market_list_query(query: dict[str, list[str]]) -> dict[str, str | None]:
+    """Parse and normalize the supported GET /v1/markets query parameters."""
+    status_values = query.get("status", [])
+    if len(status_values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "status must be provided at most once",
+            {"parameter": "status", "received": status_values},
+        )
+
+    sort_values = query.get("sort", [])
+    if len(sort_values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "sort must be provided at most once",
+            {"parameter": "sort", "received": sort_values},
+        )
+
+    query_values = query.get("q", [])
+    if len(query_values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "q must be provided at most once",
+            {"parameter": "q", "received": query_values},
+        )
+
+    status = status_values[0] if status_values else None
+    if status == "all":
+        status = None
+    elif status is not None and status not in ALLOWED_MARKET_STATUSES:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "status must be one of the supported market states",
+            {"parameter": "status", "received": status, "allowed": sorted(ALLOWED_MARKET_STATUSES | {'all'})},
+        )
+
+    sort = sort_values[0] if sort_values else None
+    if sort is not None and sort not in ALLOWED_MARKET_SORTS:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "sort must be one of the supported market sort orders",
+            {"parameter": "sort", "received": sort, "allowed": sorted(ALLOWED_MARKET_SORTS)},
+        )
+
+    title_query = query_values[0].strip() if query_values else None
+    if title_query == "":
+        title_query = None
+
+    return {
+        "status": status,
+        "sort": sort,
+        "q": title_query,
+    }
+
+
 def snapshot_market_analytics_state(market_id: str) -> dict[str, Any]:
     """Snapshot the mutable state needed to project one market analytics response."""
     with get_market_write_lock(market_id):
@@ -1710,33 +1771,34 @@ def get_account_pnl(account_id: str) -> tuple[dict[str, Any], int]:
 
 
 def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
-    """Return the market collection, optionally filtered by status."""
-    statuses = query.get("status", [])
-    if len(statuses) > 1:
-        raise ApiError(
-            400,
-            "invalid_query",
-            "status must be provided at most once",
-            {"parameter": "status", "received": statuses},
-        )
-
-    status = statuses[0] if statuses else None
+    """Return the market collection with optional status, title, and sort filters."""
+    filters = parse_market_list_query(query)
     markets = list(MARKETS.values())
+    status = filters["status"]
+    sort = filters["sort"]
+    title_query = filters["q"]
+
     if status is not None:
-        if status not in ALLOWED_MARKET_STATUSES:
-            raise ApiError(
-                400,
-                "invalid_query",
-                "status must be one of the supported market states",
-                {"parameter": "status", "received": status, "allowed": sorted(ALLOWED_MARKET_STATUSES)},
-            )
         markets = [market for market in markets if market["status"] == status]
+    if title_query is not None:
+        needle = title_query.casefold()
+        markets = [market for market in markets if needle in str(market["title"]).casefold()]
+    if sort == "volume":
+        markets = sorted(markets, key=lambda market: float(market["volume"]), reverse=True)
+    elif sort == "liquidity":
+        markets = sorted(markets, key=lambda market: float(market["liquidity"]), reverse=True)
+    elif sort == "created":
+        markets = sorted(
+            markets,
+            key=lambda market: parse_iso_timestamp(str(market["created_at"])),
+            reverse=True,
+        )
 
     summaries = [market_summary(market) for market in markets]
     return {
         "markets": summaries,
         "count": len(summaries),
-        "meta": make_meta(filters={"status": status}),
+        "meta": make_meta(filters=filters),
     }, 200
 
 
