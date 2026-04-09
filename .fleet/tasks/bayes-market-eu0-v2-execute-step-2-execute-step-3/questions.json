@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "When `handle_event_trade(...)` is refactored for fresh active submissions, should the canonical order now be `normalize -> idempotency replay/conflict -> active-market gate -> read-only exposure preview -> max-position validation -> command materialization -> order creation -> exposure sync -> acceptance response`, with command/order creation delayed until every fresh-submission preflight passes?",
+      "category": "design",
+      "why_it_matters": "The current handler in `backend/server.py` still materializes the EventTrade command before the active-market check and before any new position-limit preview. The exact sequencing determines which paths stay side-effect free and which existing replay contracts must be preserved."
+    },
+    {
+      "id": "q2",
+      "question": "To preserve the current `409 market_not_active` replay behavior, should inactive-market EventTrades still materialize and persist a rejected command/event after the handler determines the market is inactive, or is that rejection also supposed to move to the new side-effect-free pre-command style?",
+      "category": "requirements",
+      "why_it_matters": "Unlike the planned `400 position_limit_exceeded` path, the existing inactive-market branch depends on a persisted command and terminal outcome for idempotent replay. This answer changes how the handler splits preflight logic from terminal rejection logic."
+    },
+    {
+      "id": "q3",
+      "question": "For the requirement that accepted EventTrades reuse the same netting projection as preflight validation, is it sufficient for `sync_account_exposure_state(...)` to recompute `currentNetSize`, `signedDelta`, and `resultingNetSize` through `build_event_trade_position_net_change(...)`, or should the accepted path thread a richer precomputed projection object into sync?",
+      "category": "design",
+      "why_it_matters": "This decides whether the refactor can stay centered on the existing pure netting helper or whether preview needs a wider return contract so accepted-path mutation can avoid re-deriving identifiers and row state."
+    },
+    {
+      "id": "q4",
+      "question": "When an accepted buy or sell reduces or flips an existing live position but leaves a non-zero row alive, should `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId` always advance to that newest trade even when absolute exposure shrinks or the net sign crosses through zero?",
+      "category": "requirements",
+      "why_it_matters": "The current tests cover initial buys and full offset-to-zero cleanup, but they do not pin the metadata contract for surviving reducing or sign-flipping rows. That semantics choice directly controls the accepted-path sync logic and regression expectations."
+    },
+    {
+      "id": "q5",
+      "question": "Is this step expected to land focused backend coverage for the new accepted-path ordering and exposure-sync edge cases, specifically surviving sells, zero-crossing survivors, exact-zero cleanup, and unchanged `/risk` behavior, or can some of that proof wait for the later regression step in the parent plan?",
+      "category": "requirements",
+      "why_it_matters": "The current suite already covers helper-level preview math and full-account pruning, but it does not yet pin the branch ordering or surviving-row metadata semantics that this refactor touches. Knowing the intended test boundary changes the size of this implementation step."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The `position_limit_exceeded` path remains a side-effect-free `400` `ApiError` raised before any EventTrade command, order, event, terminal outcome, or idempotency binding is created, with the strict boundary `abs(resultingNetSize) > max_position_size`.",
+      "confidence": 0.99,
+      "if_wrong": "The handler refactor would need different persistence and replay behavior, and the accepted-path ordering in this step would no longer be the only mutation boundary that matters."
+    },
+    {
+      "id": "a2",
+      "assumption": "The single source of truth for EventTrade netting remains `build_event_trade_position_net_change(...)`, so preview and accepted-trade sync should share that arithmetic rather than duplicate buy/sell rounding logic.",
+      "confidence": 0.99,
+      "if_wrong": "Preview validation and live exposure mutation could drift on signed delta, six-decimal rounding, or the `-0.0` to `0.0` collapse, producing inconsistent limit checks and stored positions."
+    },
+    {
+      "id": "a3",
+      "assumption": "Fresh `market_not_active` EventTrades are still intended to stay on the existing replayable terminal `409` path, so moving command/order creation later applies to successful active submissions and the new limit-validation path, not to every rejection shape.",
+      "confidence": 0.93,
+      "if_wrong": "The refactor would need to convert another established rejection path from persisted terminal outcomes into side-effect-free validation errors, widening scope beyond the current plan."
+    },
+    {
+      "id": "a4",
+      "assumption": "This step must stay confined to `ACCOUNT_EXPOSURE` updates on accepted EventTrades; `ACCOUNT_RISK`, `sync_account_risk_state(...)`, and `/v1/accounts/{id}/risk` should remain behaviorally unchanged.",
+      "confidence": 0.99,
+      "if_wrong": "The work would expand into the stable risk projection and public `/risk` contract, requiring broader state changes and additional regression coverage."
+    },
+    {
+      "id": "a5",
+      "assumption": "Live EventTrade exposure is still one signed row per `(accountId, marketId, outcomeId)` composite key, with exact-zero row deletion and full-account pruning handled inside `sync_account_exposure_state(...)` rather than by later read-time cleanup.",
+      "confidence": 0.98,
+      "if_wrong": "The accepted-path sync helper would need a different storage model, such as retained zero rows, separate long/short buckets, or deferred cleanup outside the mutation seam."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
