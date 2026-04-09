@@ -1,0 +1,191 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The codebase points to create/read only. The public surface and router are fully explicit: `service_index_payload()` lists concrete market routes, `resolve_write_route_category()` only recognizes `POST /v1/markets`, `/resolve`, `/orders/probability-edit`, and `/orders/event-trade`, and `route_request()` has no generic resource layer for update/delete. So if the brief only names `GET/POST /v1/markets/{id}/comments`, \"CRUD\" should be read as tests for create/read on that pair; true update/delete would be additional scope.",
+      "confidence": 0.87,
+      "evidence": [
+        "backend/server.py:359",
+        "backend/server.py:687",
+        "backend/server.py:3253",
+        "backend/server.py:3290",
+        "frontend/src/lib/api/client.ts:64"
+      ],
+      "uncertainty": "The wording \"CRUD\" is still ambiguous at the product level; if stakeholders literally want edit/delete, that is a broader API and UI expansion than the named route pair.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q2",
+      "answer": "The existing identity model points to a comment write shaped like `{accountId, body, idempotencyKey?}` and attribution by `accountId`. Every implemented write payload requires `accountId`; persisted command envelopes store `accountId` but not `agentId`; frontend session state only knows `accountId` and `agentId`; and the client sends `agentId` only as the `X-Bayes-Agent-Id` header. There is no separate profile/display-name or anonymous-posting model in this repo.",
+      "confidence": 0.86,
+      "evidence": [
+        "backend/server.py:2431",
+        "backend/server.py:2460",
+        "backend/server.py:2943",
+        "frontend/src/lib/api/client.ts:41",
+        "frontend/src/lib/api/types.ts:200",
+        "frontend/src/features/session/context.tsx:11"
+      ],
+      "uncertainty": "The codebase does not define the exact field name for comment text (`body` vs `content`) or whether product wants a separate optional display label despite the lack of a profile model.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. Comment POSTs should inherit the existing protected-write behavior. `BayesHandler.handle_api()` applies agent-id validation and rate limiting before routing, and every current market-scoped POST is intentionally categorized into that path. If `/v1/markets/{id}/comments` is added without extending `resolve_write_route_category()`, it would become the only write-heavy market POST that bypasses `X-Bayes-Agent-Id` validation and per-agent throttling.",
+      "confidence": 0.93,
+      "evidence": [
+        "backend/server.py:359",
+        "backend/server.py:391",
+        "backend/server.py:430",
+        "backend/server.py:3396",
+        "backend/server.py:3423",
+        "docs/t538-scope-matrix.md:60"
+      ],
+      "uncertainty": "The only open implementation detail is whether comments should reuse `TRADE_WRITE_CATEGORY` or get a separate category with the same controls.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "There is no canonical comment type today. The least-disruptive inferred shape is `{commentId, marketId, seq, accountId, body, createdAt}`. Add `updatedAt` only if edit support is actually in scope; otherwise it would be dead weight. Keep idempotency/replay metadata on the POST response `meta`, not on each stored comment item, matching the current write-response convention. `accountId` is a better fit than `author` because the repo has no separate user/profile read model.",
+      "confidence": 0.76,
+      "evidence": [
+        "backend/server.py:1517",
+        "backend/server.py:2431",
+        "backend/server.py:2478",
+        "backend/server.py:2525",
+        "backend/server.py:2553",
+        "tests/test_bayes_market_api.py:6091"
+      ],
+      "uncertainty": "The exact text field name, whether `seq` should be exposed on every item, and whether future-proofing for edits warrants an `updatedAt` field are still design choices.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q5",
+      "answer": "The strongest precedent is to mirror `/v1/markets/{id}/events`: sequence-based pagination with `fromSeq`, `limit`, `returned`, and `nextFromSeq`, and comments returned oldest-first in ascending `seq`. That contract is already implemented and tested for the only paginated per-market collection in the repo, and it fits an append-only discussion thread cleanly.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:1517",
+        "tests/test_bayes_market_api.py:479",
+        "tests/test_bayes_market_api.py:504",
+        "tests/test_bayes_market_api.py:554",
+        "docs/t563-journal-read-surface-freeze.md:71"
+      ],
+      "uncertainty": "If product wants a reverse-chronological discussion UX, the client could still render newest-first, but that would be a deliberate departure from the repo's current collection contract.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q6",
+      "answer": "The codebase does not define a max-length rule for freeform text, so that part needs a new decision. The existing validation style does normalize and reject blank string identifiers, and duplicate-write handling is explicit `idempotencyKey` replay rather than fuzzy content dedupe. On rendering, the frontend has no Markdown or sanitization dependency, so plain text is the safest codebase-consistent choice. In practice: trim, reject empty-after-trim, optionally accept `idempotencyKey`, render as plain text, and choose a max length explicitly because nothing comparable is frozen today.",
+      "confidence": 0.79,
+      "evidence": [
+        "backend/server.py:2943",
+        "backend/server.py:2947",
+        "backend/server.py:3035",
+        "backend/server.py:3104",
+        "frontend/src/features/market/CreateMarketForm.tsx:62",
+        "frontend/package.json:14"
+      ],
+      "uncertainty": "There is no existing repo precedent for a specific maximum length, multiline policy, or whether duplicate text without an idempotency key should be specially rejected.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q7",
+      "answer": "Current precedent for participant writes is active-only. Both `ProbabilityEdit` and `EventTrade` reject non-active markets on the server, and the detail-page write panels are status-gated. The only exception is admin resolution, which is allowed on `closed` as well. So if comments are treated as ordinary participant writes, posting should likely be limited to `active` markets while reads stay available for all market statuses.",
+      "confidence": 0.84,
+      "evidence": [
+        "backend/server.py:2985",
+        "backend/server.py:3077",
+        "backend/server.py:3145",
+        "frontend/src/routes/MarketDetail.tsx:51",
+        "frontend/src/features/trading/EventTradePanel.tsx:42",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:32"
+      ],
+      "uncertainty": "Discussion after close or resolution may still be desirable as a product choice; the repo only shows the precedent for existing write types, not an explicit rule for social discussion.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q8",
+      "answer": "Comments should live in a separate per-market discussion store with their own sequencing and pagination, not in the existing event journal. The current journal is a canonical `bayes-event/v1` command history with hash-chain integrity, and the UI renders it as an audit table (`seq`, type, hash, time) rather than a social thread. Folding comments into that stream would either violate the current event contract or widen it substantially.",
+      "confidence": 0.88,
+      "evidence": [
+        "docs/t544-event-sourcing-contract.md:101",
+        "docs/t563-journal-read-surface-freeze.md:95",
+        "backend/server.py:1517",
+        "backend/server.py:2478",
+        "frontend/src/routes/MarketDetail.tsx:61"
+      ],
+      "uncertainty": "If product wants comments to be fully auditable in the command journal, that would need an explicit event-model expansion or a dual-write design; nothing like that exists yet.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q9",
+      "answer": "In-memory persistence is the existing norm and should be considered acceptable unless the brief explicitly asks for durability. Markets, commands, orders, events, risk, idempotency state, and rate-limit buckets are all process-local dictionaries, `reset_state()` clears them, and the test suite resets state before each case. Durable comments would introduce the first real persistence subsystem in this repo.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:159",
+        "backend/server.py:163",
+        "backend/server.py:165",
+        "backend/server.py:226",
+        "tests/test_bayes_market_api.py:326"
+      ],
+      "uncertainty": "The only uncertainty is whether external product requirements intentionally want comments to be the first durable resource despite the rest of the backend staying in-memory.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q10",
+      "answer": "On the market detail page, keep the thread readable for everyone and gate the composer on `session.accountId`. That matches the current session model: read queries run without session, `SessionProvider.isConfigured` is just `accountId.length > 0`, and detail-page write panels already hide themselves when no account is configured. The only alternative pattern in the repo is an inline 'Set your Account ID' prompt in `TradingPanel`, so the remaining UX choice is hidden composer vs disabled composer with guidance, not anonymous posting.",
+      "confidence": 0.87,
+      "evidence": [
+        "frontend/src/features/session/context.tsx:23",
+        "frontend/src/lib/query/hooks.ts:63",
+        "frontend/src/routes/MarketDetail.tsx:19",
+        "frontend/src/features/trading/EventTradePanel.tsx:37",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:36",
+        "frontend/src/features/trading/TradingPanel.tsx:18"
+      ],
+      "uncertainty": "The exact unauthenticated composer UX is not uniform across the repo today, so copy and visibility behavior still need a small product choice.",
+      "decision_needed": true
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Comments can follow the repo's existing in-memory dictionary plus `reset_state()` testing pattern instead of introducing new persistence infrastructure."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.87,
+      "impact": "Treating the feature as create/read keeps scope aligned with the named `GET/POST /v1/markets/{id}/comments` surface; edit/delete would be a separate expansion."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Using `accountId` for visible comment identity reuses the only participant identity already modeled in commands, client session, and request payloads."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Reusing the existing sequence-cursor pagination contract minimizes new API and frontend-query surface area and matches the repo's only existing paginated market collection."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.88,
+      "impact": "Keeping comments separate from the event journal preserves the current audit-stream contract and makes the feature a dedicated discussion thread rather than an event-model rewrite."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.87,
+      "impact": "Gating the composer on configured `accountId` preserves the repo's session-driven write behavior while still allowing the discussion thread to remain readable without login state."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
