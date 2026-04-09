@@ -123,6 +123,7 @@ MARKET_SUMMARY_FIELDS = (
 )
 
 ACCOUNT_RISK_LIMIT = 100.0
+max_position_size = 100.0
 ACCOUNT_LMSR_LEDGER_VERSION = "lmsr-ledger-v1"
 ACCOUNT_LMSR_RISK_READ_MODEL = "scalar-min-asset-v1"
 MAX_EVENT_FORMULA_CLAUSES = 16
@@ -174,6 +175,7 @@ _LOCK_REGISTRY_LOCK = threading.Lock()
 _EVENTS_LOCK = threading.RLock()
 _COMMENTS_LOCK = threading.RLock()
 ACCOUNT_RISK: dict[str, dict[str, Any]] = {}
+ACCOUNT_EXPOSURE: dict[str, dict[str, Any]] = {}
 MARKET_ENGINE_STATS: dict[str, dict[str, Any]] = {}
 _RATE_LIMIT_WINDOWS: dict[str, deque[float]] = {}
 _RATE_LIMIT_LOCK = threading.Lock()
@@ -249,6 +251,7 @@ def reset_state() -> None:
     LAST_EVENT_HASHES.clear()
     MARKET_WRITE_LOCKS.clear()
     ACCOUNT_RISK.clear()
+    ACCOUNT_EXPOSURE.clear()
     MARKET_ENGINE_STATS.clear()
     reset_rate_limit_state()
     ORDER_COUNTER = 0

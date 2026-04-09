@@ -123,6 +123,7 @@ def snapshot_domain_state() -> dict[str, object]:
         "terminal_outcomes": deepcopy(server.TERMINAL_OUTCOMES),
         "idempotency_keys": deepcopy(server.IDEMPOTENCY_KEYS),
         "account_risk": deepcopy(server.ACCOUNT_RISK),
+        "account_exposure": deepcopy(server.ACCOUNT_EXPOSURE),
     }
 
 
@@ -135,6 +136,7 @@ def assert_domain_state_unchanged(test_case: unittest.TestCase, snapshot: dict[s
     test_case.assertEqual(server.TERMINAL_OUTCOMES, snapshot["terminal_outcomes"])
     test_case.assertEqual(server.IDEMPOTENCY_KEYS, snapshot["idempotency_keys"])
     test_case.assertEqual(server.ACCOUNT_RISK, snapshot["account_risk"])
+    test_case.assertEqual(server.ACCOUNT_EXPOSURE, snapshot["account_exposure"])
 
 
 def pick_probability_distinct_from_current(market_id: str, outcome_id: str, rng: random.Random) -> float:
@@ -344,6 +346,25 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         self.assertEqual(server.MARKET_WRITE_LOCKS, {})
         self.assertIsNot(server.get_market_write_lock("m1"), original)
+
+    def test_reset_state_clears_account_exposure_projection(self):
+        server.ACCOUNT_EXPOSURE["acct_test"] = {
+            "accountId": "acct_test",
+            "positions": {
+                "m1|yes": {
+                    "marketId": "m1",
+                    "outcomeId": "yes",
+                    "netSize": 12.5,
+                }
+            },
+        }
+
+        self.assertEqual(server.max_position_size, 100.0)
+        self.assertIn("acct_test", server.ACCOUNT_EXPOSURE)
+
+        server.reset_state()
+
+        self.assertEqual(server.ACCOUNT_EXPOSURE, {})
 
     def test_get_market_events_serializes_cross_market_appends_while_snapshotting_events(self):
         server.emit_terminal_event({"commandId": "cmd_m1_1", "marketId": "m1"}, "CommandAccepted", {"effects": {}})
