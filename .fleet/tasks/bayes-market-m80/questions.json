@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should `POST /v1/markets/{id}/resolve` keep the current point-mass settlement model (`outcomeId`, or `finalProbabilities` only when it encodes a single winning outcome), or should it be expanded to accept any final distribution that sums to `1.0`?",
+      "category": "requirements",
+      "why_it_matters": "The route already exists in `backend/server.py`, and today it validates `finalProbabilities` sum-to-one but then rejects any non-point-mass distribution. This is the main contract boundary between a narrow validation tweak and a broader settlement-model change."
+    },
+    {
+      "id": "q2",
+      "question": "What exactly should 'calculate final payouts' produce in this codebase: realized account balances/P&L, per-order payout records, per-account settlement events, or is the current behavior of releasing `ACCOUNT_RISK` and clearing LMSR slices considered the intended payout effect?",
+      "category": "design",
+      "why_it_matters": "The repo has account risk and an LMSR slice read model, but no cash ledger, holdings ledger, or payout record model. Without a canonical payout artifact, the backend can change state but still fail the intended business outcome."
+    },
+    {
+      "id": "q3",
+      "question": "If non-point-mass final probabilities are allowed, how should a resolved market be represented on read surfaces: should `market.resolution` remain required, should it become optional, and should `market.marginals` and `market.resolutionProbabilities` both hold the final distribution?",
+      "category": "design",
+      "why_it_matters": "The frontend and tests currently assume a single winning outcome via `market.resolution`, while the API types also expose `resolutionProbabilities`. A probabilistic resolution needs an explicit read-model rule to avoid inconsistent backend and UI behavior."
+    },
+    {
+      "id": "q4",
+      "question": "What admin-auth behavior is actually required for this endpoint: is the existing protected-write `X-Bayes-Agent-Id` check sufficient, or do we need a true admin authorization concept such as an allowlist, secret, role claim, or separate header?",
+      "category": "requirements",
+      "why_it_matters": "The route is already categorized as `market_admin` and can require an agent id when auth is enabled, but the codebase does not currently model admin roles. The implementation differs materially between 'require an agent id' and 'verify the caller is an admin'."
+    },
+    {
+      "id": "q5",
+      "question": "Should `accountId` remain part of the resolve request body if admin auth is added, or should operator identity come entirely from the auth layer for market resolution commands?",
+      "category": "design",
+      "why_it_matters": "Current resolve requests require `accountId` even though resolution is an operator action, not a user trade. That choice affects the public contract, command envelope contents, and how auditability is modeled in tests and events."
+    },
+    {
+      "id": "q6",
+      "question": "What cases must be covered by 'invalid payouts' for this task: only distributions whose total is not `1.0`, or also missing outcomes, unexpected outcomes, negative values, non-numeric values, and mismatched `outcomeId` versus `finalProbabilities`?",
+      "category": "requirements",
+      "why_it_matters": "The current normalizer already enforces several invalid-shape rules around `finalProbabilities`, not just sum validation. The exact negative-test boundary determines whether we preserve that stricter contract or intentionally narrow it."
+    },
+    {
+      "id": "q7",
+      "question": "For the double-resolve guard, should the existing behavior remain canonical: `409 market_already_resolved` plus terminal-event persistence and idempotent replay when the same idempotency key is reused?",
+      "category": "codebase",
+      "why_it_matters": "That flow is already implemented and tested on the route. Confirming whether it stays frozen prevents accidental regressions in event journaling and replay semantics while changing resolution behavior."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The task is intended to modify the existing resolve path in `backend/server.py`, not add a second resolution endpoint.",
+      "confidence": 0.99,
+      "if_wrong": "Work could be mis-scoped around the wrong handler or duplicate an API surface that already exists."
+    },
+    {
+      "id": "a2",
+      "assumption": "The current `409 market_already_resolved` guard and same-key idempotent replay semantics should remain unless the requirements explicitly replace them.",
+      "confidence": 0.88,
+      "if_wrong": "The implementation and tests would need broader changes to terminal-event and replay behavior, not just payout validation."
+    },
+    {
+      "id": "a3",
+      "assumption": "The repository does not yet have a true payout ledger; today 'settlement' means releasing account risk exposure and removing LMSR slices for the resolved market.",
+      "confidence": 0.97,
+      "if_wrong": "There may already be a hidden persistence surface for payouts that should be reused instead of adding new settlement state."
+    },
+    {
+      "id": "a4",
+      "assumption": "A real admin guard would require new authorization logic beyond the current agent-id presence/format validation, because the existing code distinguishes write categories but not caller roles.",
+      "confidence": 0.93,
+      "if_wrong": "The requested auth work may already be satisfied by the present route-level agent-id checks, and adding role logic would be unnecessary."
+    },
+    {
+      "id": "a5",
+      "assumption": "If arbitrary final distributions are allowed, frontend client/types and the resolve UI will also need changes because the current panel only submits a single `outcomeId`.",
+      "confidence": 0.94,
+      "if_wrong": "The scope could stay backend-only, and the current frontend contract would remain valid."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

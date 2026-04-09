@@ -1,0 +1,66 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep market resolution on the existing point-mass settlement model. `finalProbabilities` remains an alternate request shape that must resolve to a single winning outcome and is canonicalized back to the one-hot distribution stored on the command and market read model.",
+      "based_on": ["q1", "q6", "q7"],
+      "alternatives_rejected": [
+        "Expand `/v1/markets/{id}/resolve` to accept arbitrary final distributions that sum to 1.0."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Treat resolution payout effects as release of account-risk exposure and LMSR slice cleanup only. Do not introduce a new cash ledger or payout-record model in this task.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Add realized-balance, P&L, or per-order payout persistence as part of market resolution."
+      ],
+      "reversibility": "hard"
+    },
+    {
+      "id": "d3",
+      "decision": "Preserve the current resolve auth and command contract: protected writes continue to rely on the existing `X-Bayes-Agent-Id` gate when enabled, `accountId` stays in the request body, and the existing `409 market_already_resolved` plus same-key idempotent replay behavior remains canonical.",
+      "based_on": ["q4", "q5", "q7"],
+      "alternatives_rejected": [
+        "Introduce a new admin role or secret for this task.",
+        "Derive operator identity entirely from auth and remove `accountId` from the resolve payload."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Harden resolution integrity by validating the resolved outcome and final probability map at the command-application boundary in addition to the HTTP normalization path, and add explicit regression coverage for invalid outcome-map cases.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Rely only on route-level validation and assume all callers provide a normalized resolve payload."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Write the execution plan and confirm the scope stays on point-mass market resolution with existing settlement and auth/idempotency contracts.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Patch the backend resolution path so command application revalidates the outcome and final probability map before mutating market state, while preserving the existing one-hot read-model representation and settlement effects.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add regression tests for invalid final probability maps and direct command-level resolution validation to prevent malformed outcomes from reaching market state.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Run the relevant backend test suites, review the resulting diff, and commit the completed worktree with the requested commit message.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
