@@ -1,0 +1,71 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Implement comments as create/read only via explicit GET/POST /v1/markets/{id}/comments routes, backed by a dedicated per-market discussion store rather than extending the event journal.",
+      "based_on": ["q1", "q8", "q9"],
+      "alternatives_rejected": [
+        "Adding update/delete endpoints as part of this task",
+        "Folding comments into the existing bayes-event journal",
+        "Introducing durable storage just for comments"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Use a plain-text comment schema of {commentId, marketId, seq, accountId, body, createdAt}; accept POST bodies shaped as {accountId, body, idempotencyKey?}; trim whitespace, reject blank bodies, and cap body length at 2000 characters.",
+      "based_on": ["q2", "q4", "q6"],
+      "alternatives_rejected": [
+        "Introducing a separate author/display-name model",
+        "Supporting Markdown or rich text formatting",
+        "Adding updatedAt before edit support exists"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Make comment POSTs inherit the existing protected-write flow and rate limiting through the trade_write category, allow reads for all market statuses, and allow posting only while a market is active.",
+      "based_on": ["q3", "q7"],
+      "alternatives_rejected": [
+        "Bypassing X-Bayes-Agent-Id validation and rate limiting for comments",
+        "Allowing posting on resolved, closed, or draft markets"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Mirror the market event pagination contract for comments with ascending seq order and {fromSeq, limit, returned, nextFromSeq}, and render the discussion thread directly on the market detail page with a session-gated composer.",
+      "based_on": ["q5", "q10"],
+      "alternatives_rejected": [
+        "A reverse-chronological comments API",
+        "Hiding the entire discussion section when no accountId is configured"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add backend comment storage, ids/sequences, request validation, GET/POST handlers, service index updates, and protected-write category coverage.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Extend frontend API types, client methods, and React Query hooks for fetching and posting market comments.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add a discussion thread and composer to the market detail page, including active/read-only session states and mutation success/error handling.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Add backend and frontend tests for comment routes, pagination, validation, idempotency, and market-detail rendering, then run the relevant suites.",
+      "depends_on": [1, 2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

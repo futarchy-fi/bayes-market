@@ -3,10 +3,13 @@ import type {
   MarketDetailResponse,
   MarketPreviewResponse,
   MarketEventsResponse,
+  MarketCommentsResponse,
   EngineStatsResponse,
   AccountRiskResponse,
   OrderResponse,
+  CommentResponse,
   ApiError,
+  CommentPayload,
   ProbabilityEditPayload,
   EventTradePayload,
   Session,
@@ -111,6 +114,19 @@ export function getMarketEvents(
   );
 }
 
+export function getMarketComments(
+  marketId: string,
+  opts: { fromSeq?: number; limit?: number } = {},
+): Promise<MarketCommentsResponse> {
+  const params = new URLSearchParams();
+  if (opts.fromSeq != null) params.set("fromSeq", String(opts.fromSeq));
+  if (opts.limit != null) params.set("limit", String(opts.limit));
+  const qs = params.toString();
+  return request<MarketCommentsResponse>(
+    `/v1/markets/${encodeURIComponent(marketId)}/comments${qs ? `?${qs}` : ""}`,
+  );
+}
+
 export function getEngineStats(
   marketId: string,
 ): Promise<EngineStatsResponse> {
@@ -205,6 +221,21 @@ export function submitEventTrade(
 ): Promise<OrderResponse> {
   return request<OrderResponse>(
     `/v1/markets/${encodeURIComponent(marketId)}/orders/event-trade`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    session,
+  );
+}
+
+export function submitMarketComment(
+  marketId: string,
+  payload: CommentPayload,
+  session: Session,
+): Promise<CommentResponse> {
+  return request<CommentResponse>(
+    `/v1/markets/${encodeURIComponent(marketId)}/comments`,
     {
       method: "POST",
       body: JSON.stringify(payload),
