@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact JSON contract should `GET /v1/markets/{id}/meta` expose: a normalized preview object (for example `title`, `description`, `url`, `image`, `siteName`) or a raw map of HTML meta-tag names to values?",
+      "category": "requirements",
+      "why_it_matters": "The endpoint does not exist yet, and the task only names the route. The response shape determines the backend handler, frontend types/client surface, and the test contract."
+    },
+    {
+      "id": "q2",
+      "question": "What should the share-preview copy actually contain for a market: just the stored `title` and `description`, or should it include live state such as status, top probabilities, resolution, or expiry in the generated description/title?",
+      "category": "design",
+      "why_it_matters": "The current market model already has several candidate fields for preview text. Without a canonical rule, the OG tags and `/v1/markets/{id}/meta` payload could drift or produce weak previews."
+    },
+    {
+      "id": "q3",
+      "question": "Which meta tags are required for `/markets/{id}` HTML: only core Open Graph tags (`og:title`, `og:description`, `og:type`, `og:url`), or also `twitter:*`, standard `<meta name=\"description\">`, and `og:image`?",
+      "category": "requirements",
+      "why_it_matters": "There is no existing head-management layer in the frontend, so the implementation and test matrix depend on the minimum tag set that must be emitted server-side."
+    },
+    {
+      "id": "q4",
+      "question": "How should absolute URLs be derived for preview metadata, especially `og:url` and any image URL: from the incoming request host/proto headers, from a fixed public origin such as `https://bayes.futarchy.ai`, or by some new config value?",
+      "category": "design",
+      "why_it_matters": "Link-preview crawlers generally need absolute URLs, but the codebase does not currently expose a canonical public-origin configuration for market pages."
+    },
+    {
+      "id": "q5",
+      "question": "Is an `og:image` required for this task, and if so, what asset or generation strategy should be used given that the repo currently has no checked-in image assets for Bayes Market?",
+      "category": "requirements",
+      "why_it_matters": "An image materially affects link previews, but there is no existing logo/card asset or image-generation path in the repo. That choice changes both implementation scope and test expectations."
+    },
+    {
+      "id": "q6",
+      "question": "What should a direct request to `/markets/{id}` do when the market id does not exist: continue serving the SPA shell with generic metadata so the client shows its current error state, or return a true HTTP 404 HTML/JSON response?",
+      "category": "requirements",
+      "why_it_matters": "The backend currently falls back to `frontend/dist/index.html` for suffixless routes, so missing-market deep links already return the SPA shell. Changing that behavior affects UX, crawler behavior, and backend integration tests."
+    },
+    {
+      "id": "q7",
+      "question": "Should the new meta endpoint be treated as a fully public documented API surface, meaning `GET /` should list it and the frontend API client/types should expose it, or is it only an internal helper for server-side HTML metadata generation?",
+      "category": "codebase",
+      "why_it_matters": "The backend maintains a tested service-index route for public endpoints, and exposing the endpoint in shared client/types is a different contract commitment from keeping it backend-internal."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Deep linking at the routing level already exists: the backend serves `frontend/dist/index.html` for `/markets/{id}` and the React router already defines `markets/:marketId`.",
+      "confidence": 0.99,
+      "if_wrong": "The task would require new routing work instead of preserving the current SPA fallback and adding metadata on top of it."
+    },
+    {
+      "id": "a2",
+      "assumption": "Market-specific OG tags need to be injected by the backend HTTP layer rather than by React alone, because the frontend is a client-only Vite app with no SSR/head management and crawlers will not wait for client-side fetches.",
+      "confidence": 0.98,
+      "if_wrong": "A different server or rendering layer would own previews, and work in `backend/server.py` would be the wrong boundary."
+    },
+    {
+      "id": "a3",
+      "assumption": "The new `/v1/markets/{id}/meta` route can be derived from the existing market read model (`id`, `title`, `description`, `status`, `outcomes`, `marginals`, `expires_at`) without introducing new persistence or inference primitives.",
+      "confidence": 0.85,
+      "if_wrong": "Implementation scope expands beyond a thin read endpoint and HTML-tag generation into new data derivation or storage work."
+    },
+    {
+      "id": "a4",
+      "assumption": "Checked-in `frontend/dist/` artifacts are part of the tested runtime surface and may need to remain updated if the HTML template changes, because backend integration tests currently serve those committed files directly.",
+      "confidence": 0.88,
+      "if_wrong": "The change can stay source-only and rely on a build step outside this repo state, which would simplify the patch and reduce committed output churn."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { listMarkets, getMarket, getAccountRisk, BayesApiError } from "@/lib/api/client";
+import { listMarkets, getMarket, getMarketPreview, getAccountRisk, BayesApiError } from "@/lib/api/client";
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
@@ -45,6 +45,24 @@ describe("API Client", () => {
     mockFetch.mockResolvedValue(jsonResponse(body));
     await getAccountRisk("a1");
     expect(mockFetch).toHaveBeenCalledWith("/v1/accounts/a1/risk", expect.any(Object));
+  });
+
+  it("getMarketPreview calls /v1/markets/{id}/meta", async () => {
+    const body = {
+      preview: {
+        marketId: "m1",
+        title: "Market title",
+        description: "Market description",
+        url: "https://bayes.example/markets/m1",
+        siteName: "Bayes Market",
+        type: "website",
+      },
+      meta: { apiVersion: "1.0", timestamp: "" },
+    };
+    mockFetch.mockResolvedValue(jsonResponse(body));
+    const result = await getMarketPreview("m1");
+    expect(mockFetch).toHaveBeenCalledWith("/v1/markets/m1/meta", expect.any(Object));
+    expect(result.preview.marketId).toBe("m1");
   });
 
   it("throws BayesApiError on non-ok response", async () => {
