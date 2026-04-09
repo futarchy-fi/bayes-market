@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Inside each account-keyed exposure document, should live EventTrade positions be stored in a flat composite-key map such as `(marketId|outcomeId) -> position`, or in a nested market/outcome structure that mirrors `ACCOUNT_RISK[accountId][\"markets\"]` more closely?",
+      "category": "design",
+      "why_it_matters": "The parent plans freeze an account-keyed top-level store, but not the per-account position container. That internal shape determines how `build_account_exposure_state(...)`, `build_account_exposure_position(...)`, later lexical `(marketId, outcomeId)` serialization, and market-scoped cleanup helpers fit together."
+    },
+    {
+      "id": "q2",
+      "question": "Should the new `ensure_account_exposure_state(...)` and position ensure helpers be treated as mutation-only seams for accepted trades, with later position-limit preview reading missing accounts as implicit zero exposure without materializing them?",
+      "category": "codebase",
+      "why_it_matters": "The existing `ensure_account_risk_state(...)` pattern mutates global state on demand, but the next rollout step needs a pre-acceptance EventTrade preview and the exposure route is planned to return `404` when no live document exists. If preview code calls `ensure_*` directly, it could create empty exposure accounts as a side effect and break those semantics."
+    },
+    {
+      "id": "q3",
+      "question": "For the internal exposure projection, should derived values such as `absSize` and account-level `maxPositionSize` be serialized from canonical stored fields (`netSize`, timestamps, ids, last trade price), or should the builders persist those derived values inside the account and position documents themselves?",
+      "category": "design",
+      "why_it_matters": "This step includes both builders and response serializers. Persisting redundant derived fields can simplify some reads but creates drift risk when signed-size math or cleanup mutates a position; deriving them at serialization time keeps the projection smaller but constrains the helper interfaces."
+    },
+    {
+      "id": "q4",
+      "question": "What should the exposure account's `updatedAt` mean once cleanup lands: only the timestamp of the latest accepted EventTrade, or the latest live-projection mutation including market-resolution removal of positions?",
+      "category": "requirements",
+      "why_it_matters": "The planned public contract includes account-level `updatedAt`, and the existing risk-settlement path advances `ACCOUNT_RISK[accountId][\"updatedAt\"]` when resolution removes exposure. Freezing the same freshness rule for the new exposure document avoids incompatible helper behavior between trade sync and later resolution cleanup."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The exposure projection remains a separate in-memory store from `ACCOUNT_RISK`, and these builders are additive helpers for live EventTrade state only.",
+      "confidence": 0.99,
+      "if_wrong": "This step would need to reshape existing account-risk documents or `/risk` serialization instead of introducing dedicated exposure primitives."
+    },
+    {
+      "id": "a2",
+      "assumption": "The top-level exposure store is already frozen as account-keyed, so the only structural flexibility left in this step is the per-account position container.",
+      "confidence": 0.97,
+      "if_wrong": "The helper signatures and cleanup approach chosen here could target the wrong global state layout."
+    },
+    {
+      "id": "a3",
+      "assumption": "Live positions are still netted per `(accountId, marketId, outcomeId)` with buys adding positive size, sells adding negative size, exact-zero positions deleted, and empty exposure accounts pruned.",
+      "confidence": 0.98,
+      "if_wrong": "Both the position builder shape and the later sync math would need a different ledger model, such as separate long/short buckets or retained zero rows."
+    },
+    {
+      "id": "a4",
+      "assumption": "The future public exposure response remains `{account, meta}` with an `account.exposure` block containing `maxPositionSize`, `updatedAt`, and a flat lexically sorted positions list.",
+      "confidence": 0.96,
+      "if_wrong": "The serializers built on top of these helpers would be targeting the wrong contract and would need to be replaced once routing lands."
+    },
+    {
+      "id": "a5",
+      "assumption": "Accepted EventTrade orders already expose the full mutation payload needed by these builders and later sync logic: `targetOutcomeId`, `side`, `size`, `price`, `filledAt`, `id`, and `commandId`.",
+      "confidence": 0.99,
+      "if_wrong": "The order creation path would need additional persistence changes before exposure helpers could be used safely."
+    },
+    {
+      "id": "a6",
+      "assumption": "Derived read-model values should probably follow the existing `/risk` precedent and be computed from canonical stored state where practical, rather than duplicated inside the live projection.",
+      "confidence": 0.77,
+      "if_wrong": "The account and position builders should persist more denormalized fields up front, and later sync helpers must keep those redundant values in lockstep."
+    },
+    {
+      "id": "a7",
+      "assumption": "Pre-acceptance position-limit preview should stay side-effect free, so missing exposure state must be treated as implicit zero rather than being created through `ensure_*` helpers.",
+      "confidence": 0.84,
+      "if_wrong": "The later validation step would either leak empty exposure documents into the projection or need a second set of helper semantics to unwind those side effects."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Represent each account's live EventTrade positions inside `ACCOUNT_EXPOSURE[accountId]` as a flat `positions` map keyed by a composite `(marketId|outcomeId)` string, and build the new account/position helpers around that internal shape instead of mirroring `ACCOUNT_RISK[accountId][\"markets\"]` nesting.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Use a nested `markets[marketId][outcomeId]` structure inside each exposure account.",
+        "Flatten exposure rows at the top level instead of keeping one account document per `accountId`."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep `ensure_account_exposure_state(...)` and the position ensure helper mutation-only, so they materialize or normalize live exposure documents for accepted-trade sync and later cleanup while preview-style reads continue to treat missing exposure as implicit zero through plain lookups.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Call `ensure_*` from pre-acceptance preview code and create empty exposure accounts as a side effect.",
+        "Collapse read and write access behind one helper that always creates missing state."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Persist only canonical mutable exposure fields in the builder layer: account `accountId`, `updatedAt`, and `positions`, plus per-position `marketId`, `outcomeId`, `netSize`, `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId`; derive `absSize` and account-level `maxPositionSize` later in serializers.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Store `absSize` redundantly inside each position row.",
+        "Persist `maxPositionSize` or other presentation-only derived fields inside the account document."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Treat the exposure account's `updatedAt` as the timestamp of the latest live-projection mutation, so the default account builder and ensure helpers stay compatible with both accepted EventTrade sync and later cleanup that removes resolved-market positions.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Define account `updatedAt` as accepted-trade-only freshness.",
+        "Delay account-level `updatedAt` semantics until the cleanup step lands."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add the missing exposure helper primitives in `backend/server.py` beside the existing risk-state builders: a composite position-key helper if needed, `build_account_exposure_position(...)`, and `build_account_exposure_state(...)` with canonical default fields and defensive copy behavior consistent with the current in-memory read-model builders.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Implement `ensure_account_exposure_state(...)` so it mirrors `ensure_account_risk_state(...)`: create a default exposure account on first accepted-trade mutation, otherwise normalize the existing document by ensuring a dict-backed `positions` container without changing unrelated read-model state.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add `ensure_account_exposure_position(...)` for mutation callers, resolving one `(marketId, outcomeId)` composite key, returning the existing live position when present, and otherwise materializing a canonical row that stores only mutable projection facts needed by later netting and serialization work.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Keep the new helper seam write-only by structuring it around accepted-trade sync and cleanup callers only, with no preview-time materialization path; later position-limit preview should read `ACCOUNT_EXPOSURE` and missing composite-key rows as implicit zero rather than invoking `ensure_*`.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Add focused backend tests in `tests/test_bayes_market_api.py` for default builder output, flat composite-key position storage, ensure-time normalization of existing exposure documents, and the canonical stored-field shape needed by the next exposure math and serializer steps.",
+      "depends_on": [1, 2, 3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
