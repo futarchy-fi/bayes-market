@@ -1,0 +1,84 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat this step as a route-level integration on top of step 3's market-price subscription contract, but make the missing step-3 hook/types an explicit prerequisite in this checkout before editing `MarketDetail`.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Rebuild a parallel WebSocket client stack inside `MarketDetail` just for this route",
+        "Ignore the missing step-3 prerequisite and plan only the JSX wiring"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Start the live subscription only after `useMarket(marketId)` has loaded an `active` market from REST; inactive, loading, error, and terminal markets stay on the existing REST query path with no socket connect attempt.",
+      "based_on": ["q2", "q5"],
+      "alternatives_rejected": [
+        "Open the socket immediately from the route param before the initial REST read resolves",
+        "Keep reconnecting after the market cache flips to `resolved` or `closed`"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep the route's render source of truth as the existing React Query market data, with the subscription hook patching that cache and invalidating dependent queries; `MarketDetail` itself should not introduce duplicate local market state.",
+      "based_on": ["q4", "q6"],
+      "alternatives_rejected": [
+        "Mirror market status and marginals into route-local `useState`",
+        "Limit live sync to the probability bar while leaving the rest of the route on stale query data"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Interpret the fallback requirement as WebSocket transport/session disconnect behavior rather than `SessionProvider` account configuration, so anonymous viewers still receive the same public REST detail page and account-only panels remain independently gated by `isConfigured`.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Tie the public market-price subscription to `session.accountId` presence",
+        "Suppress route-level live wiring for users without a configured account session"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Add route-focused frontend tests that verify active-only subscription wiring, inactive-market no-op behavior, anonymous-session rendering, and disconnect fallback without trying to re-test the lower-level socket protocol in the route suite.",
+      "based_on": ["q7"],
+      "alternatives_rejected": [
+        "Rely only on hook-level tests from step 3",
+        "Test only the happy path active-market render and skip fallback cases"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Import or backfill the missing step-3 frontend prerequisite in this branch so `frontend/src/lib/query/hooks.ts` exposes the market-price subscription hook and supporting cache-sync behavior that step 4 is meant to consume.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Update `frontend/src/routes/MarketDetail.tsx` to derive an `isActiveMarket` subscription gate from the REST-loaded market data and invoke the subscription hook only when the loaded market is active, while leaving the existing `useMarket`, `useMarketEvents`, and `useAccountRisk` reads in place.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Keep the route rendering entirely query-driven so live status and marginal updates flow through the existing `m = data.market` path, terminal updates automatically hide active-only panels, and disconnect/reconnect states fall back to the current REST query state without adding route-local reset logic.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Extend `frontend/src/__tests__/MarketDetail.test.tsx` and any shared test helpers to mock the subscription hook/WebSocket behavior and assert four route scenarios: active markets subscribe, inactive markets do not subscribe, anonymous/no-account sessions still render the REST detail view, and disconnect paths preserve the last REST-backed rendering.",
+      "depends_on": [1, 2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Run the targeted frontend route tests for `MarketDetail` to verify the new integration contract and then commit the completed plan/implementation work for this task.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
