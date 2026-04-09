@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Add a dedicated read-only EventTrade exposure preview helper in `backend/server.py` that looks up `ACCOUNT_EXPOSURE[accountId]` and one `(marketId|outcomeId)` row directly, treats missing state as zero, and reuses `build_event_trade_position_net_change(...)` for the six-decimal current/resulting net-size math.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Call `ensure_account_exposure_state(...)` or `ensure_account_exposure_position(...)` during preview and create empty exposure documents on rejected requests.",
+        "Duplicate separate preview math in `handle_event_trade(...)` instead of sharing the existing net-change helper."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Treat an over-limit EventTrade as a new `400` validation failure with code `position_limit_exceeded`, message `Trade would exceed max position size`, and a strict `abs(resultingNetSize) > max_position_size` boundary so trades that land exactly on the limit still pass.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Reuse `invalid_event_trade` for the new limit path.",
+        "Reject at `>= max_position_size` instead of only when the post-trade absolute net size exceeds the cap."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep the new position-limit check after idempotency replay/conflict lookup but before EventTrade command, order, event, terminal-outcome, or idempotency-key persistence so an over-limit request remains side-effect free and the same `idempotencyKey` can be retried later against changed exposure.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Persist a rejected command or terminal outcome for limit breaches and replay it later.",
+        "Run the limit preview before idempotency replay handling and force revalidation on already-persisted submissions."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Have accepted EventTrades sync `ACCOUNT_EXPOSURE` from the same net-position projection used for preflight validation, while keeping the preview scalars internal and leaving `ACCOUNT_RISK` plus `/v1/accounts/{id}/risk` behavior unchanged in this step.",
+      "based_on": ["q2", "q4"],
+      "alternatives_rejected": [
+        "Widen accepted EventTrade responses or journal events to expose `currentNetSize` and `resultingNetSize` now.",
+        "Extend `/risk` or `ACCOUNT_RISK` as part of this write-path patch."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add a small read-only exposure-preview seam in `backend/server.py` for EventTrade writes: resolve the composite `(marketId|outcomeId)` slice from `ACCOUNT_EXPOSURE` without `ensure_*` helpers, default missing state to zero, and return the shared `currentNetSize`, `signedDelta`, and `resultingNetSize` projection for one normalized payload.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Refactor `handle_event_trade(...)` so the flow becomes: normalize payload, replay or conflict-check idempotency, verify market status, run the new preview, and raise a `400 ApiError` with the frozen `position_limit_exceeded` contract when `abs(resultingNetSize)` exceeds `max_position_size`, before any EventTrade command is materialized.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Adjust the accepted EventTrade mutation path so command/order creation still happens only after the preflight passes, and make `sync_account_exposure_state(...)` reuse the same netting projection cleanly for accepted buys, sells, zero-crossing cleanup, and last-trade metadata updates without touching `/risk` code paths.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Add focused backend regression coverage in `tests/test_bayes_market_api.py` for buy/sell preview math at the exact-cap boundary, side-effect-free over-limit `400` responses and unbound idempotency keys, accepted-trade exposure sync after the new ordering, and unchanged replay behavior for already-persisted accepted or terminally rejected EventTrades.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Run the targeted backend test slice for EventTrade and exposure behavior, review the resulting diff for persistence-order correctness, and land the step-2 implementation patch without altering `/v1/accounts/{id}/risk` contracts.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
