@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The branch already has `get_account_exposure(...)`, but `route_request(...)` still only dispatches `/v1/accounts/{id}/risk` and `service_index_payload()` lists only that account route. Should step 3 expose `/v1/accounts/{id}/exposure` in `routes.accounts` as the same bare path style used for `/risk`, or should the service index switch to a method-qualified `GET /v1/accounts/{id}/exposure` entry for the new route?",
+      "category": "requirements",
+      "why_it_matters": "The root-route regression pins the exact service-index contract, and the current index mixes bare paths and method-qualified entries depending on the group."
+    },
+    {
+      "id": "q2",
+      "question": "The task asks for a market-resolution cleanup regression, but `resolve_market_command(...)` currently only calls `settle_market_account_risk(...)` and there is no exposure-cleanup helper or wiring for `ACCOUNT_EXPOSURE`. Should this step absorb that missing production cleanup implementation in the same patch, or is a prerequisite branch expected to land first and this step should stay route-and-test only?",
+      "category": "codebase",
+      "why_it_matters": "Without settling that dependency, the requested cleanup regression is either impossible to land green or risks duplicating work that another branch is supposed to provide."
+    },
+    {
+      "id": "q3",
+      "question": "For the required buy/sell netting, limit-breach side-effect, and idempotent-replay regressions, should step 3 primarily assert the public `/v1/accounts/{id}/exposure` read contract after writes, or is it acceptable to keep those behaviors pinned only through direct `ACCOUNT_EXPOSURE` and domain-store assertions in the EventTrade-focused tests?",
+      "category": "design",
+      "why_it_matters": "This is the first routing step for exposure, so the regression can either freeze the public read model end-to-end or continue treating exposure as an internal projection with only indirect route coverage."
+    },
+    {
+      "id": "q4",
+      "question": "Should the empty-account `404 account_not_found` regression explicitly cover accounts that still exist in other read models, such as an account with only `/risk` state or one whose final live exposure was removed by market resolution, or is the plain never-traded-account case the only contract that must be pinned in this step?",
+      "category": "requirements",
+      "why_it_matters": "The current exposure getter defines 'account not found' relative to the live exposure projection, which is narrower than global account existence and affects how much cross-read-model behavior the tests need to freeze."
+    },
+    {
+      "id": "q5",
+      "question": "Should the backend regression gate for this step stop at direct `tests/test_bayes_market_api.py` router/getter coverage, or should it also add threaded HTTP assertions for `GET /v1/accounts/{id}/exposure` alongside the existing `/risk` HTTP suite?",
+      "category": "codebase",
+      "why_it_matters": "The repository already keeps both direct `route_request(...)` tests and end-to-end HTTP contract tests, and the task wording does not say which layer is the minimum required gate for the new route."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The intended backend seam for the new route is the existing `get_account_exposure(account_id)` helper, mirroring how `/v1/accounts/{id}/risk` dispatches to `get_account_risk(account_id)`.",
+      "confidence": 0.98,
+      "if_wrong": "Step 3 would need a different route adapter or a changed response shape instead of a thin router/service-index registration."
+    },
+    {
+      "id": "a2",
+      "assumption": "The account routes remain additive and read-only: `/v1/accounts/{id}/risk` stays unchanged, and `/v1/accounts/{id}/exposure` is introduced as a new `GET` surface rather than a replacement or shared polymorphic route.",
+      "confidence": 0.97,
+      "if_wrong": "The routing, service-index, and backend tests would need to be redesigned around a broader account-API contract change."
+    },
+    {
+      "id": "a3",
+      "assumption": "For `/v1/accounts/{id}/exposure`, `404 account_not_found` continues to mean 'no live exposure projection exists' even when the same account still has state in `ACCOUNT_RISK` or other read models.",
+      "confidence": 0.93,
+      "if_wrong": "The route would need cross-projection existence checks or a `200` empty response contract that the current getter does not implement."
+    },
+    {
+      "id": "a4",
+      "assumption": "Accepted EventTrade netting, side-effect-free `400 position_limit_exceeded`, and no-double-apply idempotent replay semantics are already frozen by the current write-path behavior; this step mainly needs to expose and verify those outcomes through the account-exposure route.",
+      "confidence": 0.89,
+      "if_wrong": "Step 3 is not just route registration plus regressions; it would also need to reopen the EventTrade write path before the new route tests can be trusted."
+    },
+    {
+      "id": "a5",
+      "assumption": "Because the branch still lacks market-resolution exposure cleanup, this step is allowed to backfill that production wiring if needed to satisfy the requested regression, rather than treating it as out of scope once the route work starts.",
+      "confidence": 0.76,
+      "if_wrong": "The work would block on a prerequisite rebase or would have to defer the cleanup regression despite the task description explicitly asking for it."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
