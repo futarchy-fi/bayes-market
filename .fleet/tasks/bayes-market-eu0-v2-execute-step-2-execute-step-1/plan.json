@@ -1,0 +1,69 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Freeze the new read-only EventTrade preview seam in `backend/server.py` as a helper that accepts `(account_id, market_id, normalized_payload)` and resolves the atomic literal plus composite `(marketId|outcomeId)` lookup internally, instead of widening the caller contract to pass a pre-resolved `outcome_id` or exposure row.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Require callers to extract `formula[0][0]` and pass `outcome_id` into a narrower helper.",
+        "Push the helper down to a row-only utility and duplicate normalized-payload decoding at each call site."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Make the seam purely read-only by resolving `ACCOUNT_EXPOSURE[accountId][\"positions\"][marketId|outcomeId]` through direct lookups, collapsing missing or malformed account, `positions`, or row state to implicit zero exposure instead of calling `ensure_account_exposure_state(...)` or `ensure_account_exposure_position(...)`.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Use the mutation-oriented `ensure_*` helpers during preview and materialize empty exposure state as a side effect.",
+        "Raise preview-time errors when tests or fixtures seeded non-canonical in-memory exposure documents."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep the helper's return shape to the shared scalar projection only: `currentNetSize`, `signedDelta`, and `resultingNetSize`, with the actual arithmetic delegated to `build_event_trade_position_net_change(...)` so preview and accepted-trade sync continue to share one six-decimal netting primitive.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Return an enriched preview object that also carries `accountId`, `marketId`, and `outcomeId`.",
+        "Add separate preview-only arithmetic instead of reusing `build_event_trade_position_net_change(...)`."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep this step internal and preparatory: land only the helper seam in `backend/server.py`, leave HTTP behavior and write-path wiring for the later EventTrade steps, and defer focused helper/regression coverage to the planned step-4 test slice.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Expand this phase to also refactor `handle_event_trade(...)` or the accepted-trade sync path immediately.",
+        "Add a standalone helper-test matrix in this seam-only step before the caller changes land."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Place a new preview helper alongside the existing exposure and EventTrade netting helpers in `backend/server.py`, keeping it near `build_event_trade_position_net_change(...)` so the later `handle_event_trade(...)` refactor can consume a clearly shared seam.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Implement the helper to read one normalized EventTrade payload, extract the validated atomic literal's `outcomeId`, derive the `marketId|outcomeId` key with `account_exposure_position_key(...)`, and resolve the existing exposure row through defensive direct lookups over `ACCOUNT_EXPOSURE` without mutating any account or position state.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Feed the resolved row or `None` plus the normalized payload into `build_event_trade_position_net_change(...)`, returning only `currentNetSize`, `signedDelta`, and `resultingNetSize` so preview and accepted-trade sync stay pinned to the same rounding and buy/sell sign rules.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Verify the new seam stays read-only and internal by avoiding any `ensure_*` calls, persistence changes, or route-wiring edits in this patch, leaving step-2 limit validation and step-3 exposure-sync adoption to the downstream tasks already planned.",
+      "depends_on": [2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
