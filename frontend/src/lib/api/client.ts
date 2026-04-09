@@ -1,6 +1,7 @@
 import type {
   MarketListResponse,
   MarketDetailResponse,
+  MarketPreviewResponse,
   MarketEventsResponse,
   EngineStatsResponse,
   AccountRiskResponse,
@@ -89,6 +90,12 @@ export function getMarket(
   marketId: string,
 ): Promise<MarketDetailResponse> {
   return request<MarketDetailResponse>(`/v1/markets/${encodeURIComponent(marketId)}`);
+}
+
+export function getMarketPreview(
+  marketId: string,
+): Promise<MarketPreviewResponse> {
+  return request<MarketPreviewResponse>(`/v1/markets/${encodeURIComponent(marketId)}/meta`);
 }
 
 export function getMarketEvents(

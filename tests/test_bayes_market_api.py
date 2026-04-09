@@ -409,6 +409,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertIn("routes", payload)
         self.assertEqual(payload["routes"]["accounts"], ["/v1/accounts/{id}/risk"])
+        self.assertIn("/v1/markets/{id}/meta", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/events", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/engine-stats", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/resolve", payload["routes"]["markets"])
@@ -451,6 +452,29 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["market"]["id"], "m1")
         self.assertEqual(payload["market"]["variableId"], "eth_price_gt_3000_mar15")
         self.assertEqual(payload["market"]["marginals"], {"yes": 0.65, "no": 0.35})
+
+    def test_market_meta_returns_normalized_preview(self):
+        payload, status = server.route_request("GET", "/v1/markets/m1/meta")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            payload["preview"],
+            {
+                "marketId": "m1",
+                "title": "ETH Price > $3000 on March 15",
+                "description": "Will ETH trade above $3000 at any point on March 15, 2026?",
+                "url": f"{server.DEFAULT_PUBLIC_ORIGIN}/markets/m1",
+                "siteName": server.SITE_NAME,
+                "type": server.OPEN_GRAPH_TYPE,
+            },
+        )
+
+    def test_market_meta_prefers_configured_public_origin(self):
+        with patch.dict(server.os.environ, {server.PUBLIC_ORIGIN_ENV: "https://bayes.futarchy.ai/app/"}, clear=False):
+            payload, status = server.route_request("GET", "/v1/markets/m1/meta")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["preview"]["url"], "https://bayes.futarchy.ai/markets/m1")
 
     def test_market_events_returns_genesis_chain_for_existing_market_without_events(self):
         payload, status = server.route_request("GET", "/v1/markets/m1/events")
@@ -5449,6 +5473,60 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(headers["Cache-Control"], "no-store")
         self.assertIn(b'<div id="root"></div>', body)
         self.assertIn(b'/assets/index-', body)
+
+    def test_frontend_market_routes_emit_market_preview_meta_tags(self):
+        status, body, headers = self.request_raw(
+            "GET",
+            "/markets/m1",
+            headers={"Host": "share.example", "X-Forwarded-Proto": "https"},
+        )
+        html = body.decode("utf-8")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "text/html")
+        self.assertIn("<title>ETH Price &gt; $3000 on March 15</title>", html)
+        self.assertIn(
+            '<meta name="description" content="Will ETH trade above $3000 at any point on March 15, 2026?" />',
+            html,
+        )
+        self.assertIn(
+            '<meta property="og:title" content="ETH Price &gt; $3000 on March 15" />',
+            html,
+        )
+        self.assertIn(
+            '<meta property="og:url" content="https://share.example/markets/m1" />',
+            html,
+        )
+
+    def test_missing_market_frontend_route_keeps_generic_meta_tags(self):
+        status, body, _ = self.request_raw(
+            "GET",
+            "/markets/missing-market",
+            headers={"Host": "share.example", "X-Forwarded-Proto": "https"},
+        )
+        html = body.decode("utf-8")
+
+        self.assertEqual(status, 200)
+        self.assertIn(f"<title>{server.SITE_NAME}</title>", html)
+        self.assertIn(
+            '<meta property="og:url" content="https://share.example/markets/missing-market" />',
+            html,
+        )
+        self.assertIn(
+            f'<meta name="description" content="{server.SITE_DESCRIPTION}" />',
+            html,
+        )
+
+    def test_market_meta_http_route_uses_request_origin_when_unconfigured(self):
+        status, payload = self.request(
+            "GET",
+            "/v1/markets/m1/meta",
+            headers={"Host": "share.example:4444", "X-Forwarded-Proto": "https"},
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["preview"]["marketId"], "m1")
+        self.assertEqual(payload["preview"]["url"], "https://share.example:4444/markets/m1")
 
     def test_frontend_asset_requests_serve_bundles_with_immutable_cache_headers(self):
         asset_path = next((server.FRONTEND_DIST / "assets").glob("*.js"))

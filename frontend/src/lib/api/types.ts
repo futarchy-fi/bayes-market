@@ -39,6 +39,20 @@ export interface MarketDetailResponse {
   meta: Meta;
 }
 
+export interface MarketPreview {
+  marketId: string;
+  title: string;
+  description: string;
+  url: string;
+  siteName: string;
+  type: string;
+}
+
+export interface MarketPreviewResponse {
+  preview: MarketPreview;
+  meta: Meta;
+}
+
 export interface MarketEvent {
   eventId: string;
   marketId: string;
