@@ -133,6 +133,7 @@ AUTH_REQUIRE_AGENT_ID_ENV = "BAYES_REQUIRE_AGENT_ID"
 RATE_LIMIT_PER_MIN_ENV = "BAYES_RATE_LIMIT_PER_MIN"
 RATE_LIMIT_POLICY_VERSION = "bayes-agent-id-v1"
 RATE_LIMIT_WINDOW_SECONDS = 60
+MAX_COMMENT_BODY_LENGTH = 2000
 AGENT_ID_TOKEN_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 MARKET_ADMIN_WRITE_CATEGORY = "market_admin"
 TRADE_WRITE_CATEGORY = "trade_write"
@@ -161,13 +162,17 @@ CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {}
 ORDERS: dict[str, dict[str, Any]] = {}
 COMMANDS: dict[str, dict[str, Any]] = {}
 EVENTS: dict[str, dict[str, Any]] = {}
+COMMENTS: dict[str, dict[str, Any]] = {}
 TERMINAL_OUTCOMES: dict[str, dict[str, Any]] = {}
+COMMENT_POST_OUTCOMES: dict[str, dict[str, Any]] = {}
 IDEMPOTENCY_KEYS: dict[tuple[str, str, str], str] = {}
 MARKET_EVENT_SEQUENCES: dict[str, int] = {}
+MARKET_COMMENT_SEQUENCES: dict[str, int] = {}
 LAST_EVENT_HASHES: dict[str, str] = {}
 MARKET_WRITE_LOCKS: dict[str, threading.Lock] = {}
 _LOCK_REGISTRY_LOCK = threading.Lock()
 _EVENTS_LOCK = threading.RLock()
+_COMMENTS_LOCK = threading.RLock()
 ACCOUNT_RISK: dict[str, dict[str, Any]] = {}
 MARKET_ENGINE_STATS: dict[str, dict[str, Any]] = {}
 _RATE_LIMIT_WINDOWS: dict[str, deque[float]] = {}
@@ -175,6 +180,7 @@ _RATE_LIMIT_LOCK = threading.Lock()
 ORDER_COUNTER = 0
 COMMAND_COUNTER = 0
 EVENT_COUNTER = 0
+COMMENT_COUNTER = 0
 GENESIS_EVENT_HASH = f"sha256:{hashlib.sha256(b'').hexdigest()}"
 WRITE_ROUTE_POLICIES: dict[str, dict[str, bool]] = {
     MARKET_ADMIN_WRITE_CATEGORY: {"requires_agent_id": True},
@@ -225,7 +231,7 @@ class ApiError(Exception):
 
 def reset_state() -> None:
     """Reset all in-memory application state back to the initial fixtures."""
-    global ORDER_COUNTER, COMMAND_COUNTER, EVENT_COUNTER
+    global ORDER_COUNTER, COMMAND_COUNTER, EVENT_COUNTER, COMMENT_COUNTER
     MARKETS.clear()
     MARKETS.update(deepcopy(INITIAL_MARKETS))
     CONDITIONAL_MARGINALS.clear()
@@ -233,9 +239,13 @@ def reset_state() -> None:
     COMMANDS.clear()
     with _EVENTS_LOCK:
         EVENTS.clear()
+    with _COMMENTS_LOCK:
+        COMMENTS.clear()
     TERMINAL_OUTCOMES.clear()
+    COMMENT_POST_OUTCOMES.clear()
     IDEMPOTENCY_KEYS.clear()
     MARKET_EVENT_SEQUENCES.clear()
+    MARKET_COMMENT_SEQUENCES.clear()
     LAST_EVENT_HASHES.clear()
     MARKET_WRITE_LOCKS.clear()
     ACCOUNT_RISK.clear()
@@ -244,6 +254,7 @@ def reset_state() -> None:
     ORDER_COUNTER = 0
     COMMAND_COUNTER = 0
     EVENT_COUNTER = 0
+    COMMENT_COUNTER = 0
 
 
 def generate_order_id() -> str:
@@ -265,6 +276,13 @@ def generate_event_id() -> str:
     global EVENT_COUNTER
     EVENT_COUNTER += 1
     return f"evt_{datetime.now(timezone.utc).strftime('%Y%m%d')}_{EVENT_COUNTER:06d}"
+
+
+def generate_comment_id() -> str:
+    """Return a unique comment identifier for the current process run."""
+    global COMMENT_COUNTER
+    COMMENT_COUNTER += 1
+    return f"cmt_{datetime.now(timezone.utc).strftime('%Y%m%d')}_{COMMENT_COUNTER:06d}"
 
 
 def canonical_json_hash(data: object) -> str:
@@ -372,6 +390,8 @@ def resolve_write_route_category(method: str, raw_path: str) -> str | None:
 
     if len(parts) == 4 and parts[3] == "resolve":
         return MARKET_ADMIN_WRITE_CATEGORY
+    if len(parts) == 4 and parts[3] == "comments":
+        return TRADE_WRITE_CATEGORY
     if len(parts) == 5 and parts[3:] in (["orders", "probability-edit"], ["orders", "event-trade"]):
         return TRADE_WRITE_CATEGORY
     return None
@@ -697,6 +717,8 @@ def service_index_payload() -> dict[str, Any]:
                 "/v1/markets/{id}",
                 "/v1/markets/{id}/meta",
                 "/v1/markets/{id}/events",
+                "GET /v1/markets/{id}/comments",
+                "POST /v1/markets/{id}/comments",
                 "/v1/markets/{id}/engine-stats",
                 "POST /v1/markets/{id}/resolve",
             ],
@@ -1555,6 +1577,47 @@ def get_market_events(market_id: str, query: dict[str, list[str]]) -> tuple[dict
             "fromSeq": from_seq,
             "limit": limit,
             "returned": len(page_events),
+            "nextFromSeq": next_from_seq,
+        },
+        "meta": make_meta(),
+    }, 200
+
+
+def get_market_comments(market_id: str, query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
+    """Return the paginated discussion thread for a market."""
+    if market_id not in MARKETS:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    from_seq = parse_integer_query_param(query, "fromSeq", default=1, minimum=1)
+    limit = parse_integer_query_param(query, "limit", default=100, minimum=1, maximum=100)
+
+    with get_market_write_lock(market_id):
+        with _COMMENTS_LOCK:
+            comment_records = list(COMMENTS.values())
+        market_comments = sorted(
+            (
+                deepcopy(comment)
+                for comment in comment_records
+                if str(comment["marketId"]) == market_id and int(comment["seq"]) >= from_seq
+            ),
+            key=lambda comment: int(comment["seq"]),
+        )
+        page_comments = market_comments[:limit]
+        head_seq = MARKET_COMMENT_SEQUENCES.get(market_id, 0)
+
+    next_from_seq = None
+    if page_comments:
+        tail_seq = int(page_comments[-1]["seq"])
+        if tail_seq < head_seq:
+            next_from_seq = tail_seq + 1
+
+    return {
+        "marketId": market_id,
+        "comments": page_comments,
+        "pagination": {
+            "fromSeq": from_seq,
+            "limit": limit,
+            "returned": len(page_comments),
             "nextFromSeq": next_from_seq,
         },
         "meta": make_meta(),
@@ -2475,6 +2538,34 @@ def materialize_market_resolution_command(
     return command
 
 
+def materialize_comment_post_command(
+    market_id: str,
+    normalized_payload: dict[str, Any],
+    account_id: str,
+    command_id: str,
+    submitted_at: str,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Build and persist a comment-post command envelope for idempotent replay."""
+    command = {
+        "schemaVersion": "bayes-command/v1",
+        "commandId": command_id,
+        "marketId": market_id,
+        "accountId": account_id,
+        "commandType": "CommentPost",
+        "submittedAt": submitted_at,
+        "payload": deepcopy(normalized_payload),
+        "meta": {
+            "source": "api",
+        },
+    }
+    if idempotency_key is not None:
+        command["idempotencyKey"] = idempotency_key
+
+    COMMANDS[command_id] = deepcopy(command)
+    return command
+
+
 def emit_terminal_event(command: dict[str, Any], event_type: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Append a terminal event to the per-market event journal."""
     market_id = str(command["marketId"])
@@ -2522,8 +2613,8 @@ def build_terminal_result(event: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def terminal_response_meta_kwargs(command: dict[str, Any]) -> dict[str, Any]:
-    """Build response meta fields shared by all terminal command outcomes."""
+def command_response_meta_kwargs(command: dict[str, Any]) -> dict[str, Any]:
+    """Build response meta fields shared by idempotent command responses."""
     meta_kwargs: dict[str, Any] = {}
     idempotency_key = command.get("idempotencyKey")
     if isinstance(idempotency_key, str):
@@ -2553,6 +2644,31 @@ def record_terminal_outcome(
 def replay_terminal_outcome(command_id: str) -> tuple[dict[str, Any], int]:
     """Replay a previously persisted terminal command outcome."""
     outcome = TERMINAL_OUTCOMES[command_id]
+    response = deepcopy(outcome["response"])
+    response.setdefault("meta", {})
+    response["meta"]["replayed"] = True
+    return response, int(outcome["status"])
+
+
+def record_comment_post_outcome(
+    command: dict[str, Any],
+    status: int,
+    response: dict[str, Any],
+    scope_key: tuple[str, str, str] | None = None,
+) -> None:
+    """Persist the final response for a comment post, including idempotency binding."""
+    command_id = str(command["commandId"])
+    COMMENT_POST_OUTCOMES[command_id] = {
+        "status": status,
+        "response": deepcopy(response),
+    }
+    if scope_key is not None:
+        IDEMPOTENCY_KEYS[scope_key] = command_id
+
+
+def replay_comment_post_outcome(command_id: str) -> tuple[dict[str, Any], int]:
+    """Replay a previously persisted comment-post outcome."""
+    outcome = COMMENT_POST_OUTCOMES[command_id]
     response = deepcopy(outcome["response"])
     response.setdefault("meta", {})
     response["meta"]["replayed"] = True
@@ -2595,7 +2711,7 @@ def build_terminal_response(
     event = emit_terminal_event(command, event_type, event_payload)
     response = deepcopy(response_fields)
     response["result"] = build_terminal_result(event)
-    response["meta"] = make_meta(**terminal_response_meta_kwargs(command))
+    response["meta"] = make_meta(**command_response_meta_kwargs(command))
     record_terminal_outcome(command, event, status, response, scope_key)
     return response, status
 
@@ -2934,6 +3050,152 @@ def build_event_trade_acceptance_response(
     )
 
 
+def normalize_comment_post_payload(market_id: str, body: dict[str, Any]) -> dict[str, str]:
+    """Normalize one comment-post payload."""
+    if market_id not in MARKETS:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    comment_body = body.get("body")
+    if not isinstance(comment_body, str):
+        raise ApiError(400, "invalid_comment", "body is required", {"field": "body"})
+
+    normalized_body = comment_body.strip()
+    if not normalized_body:
+        raise ApiError(400, "invalid_comment", "body is required", {"field": "body"})
+    if len(normalized_body) > MAX_COMMENT_BODY_LENGTH:
+        raise ApiError(
+            400,
+            "invalid_comment",
+            f"body must be at most {MAX_COMMENT_BODY_LENGTH} characters",
+            {"field": "body", "maximum": MAX_COMMENT_BODY_LENGTH},
+        )
+
+    return {"body": normalized_body}
+
+
+def create_market_comment(command: dict[str, Any]) -> dict[str, Any]:
+    """Materialize and persist a market comment."""
+    market_id = str(command["marketId"])
+    seq = MARKET_COMMENT_SEQUENCES.get(market_id, 0) + 1
+    comment = {
+        "commentId": generate_comment_id(),
+        "marketId": market_id,
+        "seq": seq,
+        "accountId": str(command["accountId"]),
+        "body": str(command["payload"]["body"]),
+        "createdAt": str(command["submittedAt"]),
+    }
+    MARKET_COMMENT_SEQUENCES[market_id] = seq
+    with _COMMENTS_LOCK:
+        COMMENTS[str(comment["commentId"])] = deepcopy(comment)
+    return comment
+
+
+def build_comment_post_acceptance_response(
+    command: dict[str, Any],
+    comment: dict[str, Any],
+    scope_key: tuple[str, str, str] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Persist and return an accepted comment-post response."""
+    response = {
+        "comment": deepcopy(comment),
+        "meta": make_meta(**command_response_meta_kwargs(command)),
+    }
+    record_comment_post_outcome(command, 201, response, scope_key)
+    return response, 201
+
+
+def build_comment_post_rejection_response(
+    command: dict[str, Any],
+    *,
+    code: str,
+    message: str,
+    details: dict[str, Any],
+    status: int,
+    scope_key: tuple[str, str, str] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Persist and return a rejected comment-post response."""
+    response = {
+        "error": {
+            "code": code,
+            "message": message,
+            "details": deepcopy(details),
+        },
+        "meta": make_meta(**command_response_meta_kwargs(command)),
+    }
+    record_comment_post_outcome(command, status, response, scope_key)
+    return response, status
+
+
+def handle_comment_post(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
+    """Handle the full comment-post request lifecycle for one market."""
+    body = payload if payload is not None else {}
+    if not isinstance(body, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
+
+    account_id = body.get("accountId")
+    if not isinstance(account_id, str) or not account_id.strip():
+        raise ApiError(400, "invalid_comment", "accountId is required", {"field": "accountId"})
+
+    idempotency_key = body.get("idempotencyKey")
+    if idempotency_key is not None:
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise ApiError(
+                400,
+                "invalid_comment",
+                "idempotencyKey must be a non-empty string when provided",
+                {"field": "idempotencyKey"},
+            )
+        idempotency_key = idempotency_key.strip()
+
+    account_id = account_id.strip()
+    scope_key = idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
+
+    with get_market_write_lock(market_id):
+        normalized_payload = normalize_comment_post_payload(market_id, body)
+        if scope_key is not None:
+            existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
+            if existing_command_id is not None:
+                existing_command = COMMANDS[existing_command_id]
+                if existing_command["commandType"] != "CommentPost" or existing_command["payload"] != normalized_payload:
+                    return build_idempotency_conflict_response(
+                        existing_command_id,
+                        idempotency_key,
+                        market_id,
+                        account_id,
+                        "CommentPost",
+                    )
+                return replay_comment_post_outcome(existing_command_id)
+
+        submitted_at = utc_timestamp()
+        command = materialize_comment_post_command(
+            market_id=market_id,
+            normalized_payload=normalized_payload,
+            account_id=account_id,
+            command_id=generate_command_id(),
+            submitted_at=submitted_at,
+            idempotency_key=idempotency_key,
+        )
+        market = MARKETS[market_id]
+        if market["status"] != "active":
+            return build_comment_post_rejection_response(
+                command,
+                code="market_not_active",
+                message="Comments are only allowed for active markets",
+                details={
+                    "marketId": market_id,
+                    "status": market["status"],
+                    "allowedStatus": "active",
+                    "commandId": command["commandId"],
+                },
+                status=409,
+                scope_key=scope_key,
+            )
+
+        comment = create_market_comment(command)
+        return build_comment_post_acceptance_response(command, comment, scope_key)
+
+
 def handle_probability_edit(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
     """Handle the full ProbabilityEdit request lifecycle for one market."""
     body = payload if payload is not None else {}
@@ -3259,6 +3521,18 @@ def route_request(
                     {"method": method, "path": path},
                 )
             return get_market_events(market_id, parse_qs(parsed.query, keep_blank_values=True))
+
+        if len(parts) == 4 and parts[3] == "comments":
+            if method == "GET":
+                return get_market_comments(market_id, parse_qs(parsed.query, keep_blank_values=True))
+            if method == "POST":
+                return handle_comment_post(market_id, body)
+            raise ApiError(
+                405,
+                "method_not_allowed",
+                f"{method} is not allowed for this resource",
+                {"method": method, "path": path},
+            )
 
         if len(parts) == 4 and parts[3] == "resolve":
             if method != "POST":

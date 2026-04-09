@@ -69,6 +69,29 @@ export interface MarketEventsResponse {
   meta: Meta;
 }
 
+export interface MarketComment {
+  commentId: string;
+  marketId: string;
+  seq: number;
+  accountId: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface PaginatedCollection {
+  fromSeq: number;
+  limit: number;
+  returned: number;
+  nextFromSeq: number | null;
+}
+
+export interface MarketCommentsResponse {
+  marketId: string;
+  comments: MarketComment[];
+  pagination: PaginatedCollection;
+  meta: Meta;
+}
+
 export interface EngineInfo {
   mode: string;
   backend: string;
@@ -214,6 +237,20 @@ export interface EventTradePayload {
   formula: Array<Array<{ variableId: string; outcomeId: string; negated: boolean }>>;
   side: "buy" | "sell";
   idempotencyKey?: string;
+}
+
+export interface CommentPayload {
+  accountId: string;
+  body: string;
+  idempotencyKey?: string;
+}
+
+export interface CommentResponse {
+  comment: MarketComment;
+  meta: Meta & {
+    idempotencyKeyEcho?: string;
+    replayed?: boolean;
+  };
 }
 
 export interface Session {

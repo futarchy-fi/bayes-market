@@ -1,11 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/lib/api/client";
-import type { ProbabilityEditPayload, EventTradePayload, Session } from "@/lib/api/types";
+import type { ProbabilityEditPayload, EventTradePayload, CommentPayload, Session } from "@/lib/api/types";
 
 export const queryKeys = {
   markets: (status?: string) => ["markets", { status }] as const,
   market: (id: string) => ["markets", id] as const,
   marketEvents: (id: string) => ["markets", id, "events"] as const,
+  marketComments: (id: string) => ["markets", id, "comments"] as const,
   engineStats: (id: string) => ["markets", id, "engine-stats"] as const,
   accountRisk: (id: string) => ["accounts", id, "risk"] as const,
   health: () => ["health"] as const,
@@ -33,6 +34,13 @@ export function useMarketEvents(marketId: string) {
   return useQuery({
     queryKey: queryKeys.marketEvents(marketId),
     queryFn: () => api.getMarketEvents(marketId),
+  });
+}
+
+export function useMarketComments(marketId: string) {
+  return useQuery({
+    queryKey: queryKeys.marketComments(marketId),
+    queryFn: () => api.getMarketComments(marketId),
   });
 }
 
@@ -115,6 +123,17 @@ export function useEventTrade(marketId: string) {
       void qc.invalidateQueries({ queryKey: queryKeys.market(marketId) });
       void qc.invalidateQueries({ queryKey: queryKeys.marketEvents(marketId) });
       void qc.invalidateQueries({ queryKey: queryKeys.engineStats(marketId) });
+    },
+  });
+}
+
+export function usePostMarketComment(marketId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ payload, session }: { payload: CommentPayload; session: Session }) =>
+      api.submitMarketComment(marketId, payload, session),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.marketComments(marketId) });
     },
   });
 }
