@@ -1,0 +1,128 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. For fresh active submissions, the canonical EventTrade path should be `normalize -> idempotency replay/conflict -> active-market gate -> read-only exposure preview -> max-position validation -> command materialization -> order creation -> exposure sync -> acceptance response`, with command and order creation delayed until every fresh-submission preflight check has passed. The current handler still materializes the command before the market-status gate, but the recorded step-2 plans explicitly move fresh accepted-path mutation behind the active-market and preview/limit gates.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:53",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:58",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:6",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:53",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:58",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:63",
+        "backend/server.py:3559",
+        "backend/server.py:3574",
+        "backend/server.py:3584",
+        "backend/server.py:3600"
+      ],
+      "uncertainty": "The only nuance is that inactive-market fresh submissions are a special rejection path rather than part of the active happy path; that exception is addressed separately in q2.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Inactive-market EventTrades should stay on the existing replayable terminal `409 market_not_active` path. The more specific execute-step-2 sub-plan says to move the active-market gate earlier while still keeping inactive markets on the persisted terminal-rejection contract, and the current code/tests already depend on a stored rejected command/event plus idempotent replay for that branch. So the new side-effect-free pre-command style is for `position_limit_exceeded`, not for `market_not_active`.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:53",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:68",
+        "backend/server.py:2869",
+        "backend/server.py:2963",
+        "backend/server.py:3574",
+        "backend/server.py:3584",
+        "tests/test_bayes_market_api.py:3635",
+        "tests/test_bayes_market_api.py:3655",
+        "tests/test_bayes_market_api.py:3663",
+        "tests/test_bayes_market_api.py:3666"
+      ],
+      "uncertainty": "Implementing that earlier gate may require a small restructure so the handler can still materialize the rejected command after determining the market is inactive. The contract choice itself is already pinned by the task artifacts.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "It is sufficient for `sync_account_exposure_state(...)` to recompute `currentNetSize`, `signedDelta`, and `resultingNetSize` through `build_event_trade_position_net_change(...)`; the accepted path does not need a richer precomputed preview object threaded into sync. The frozen requirement is that preflight preview and accepted mutation share the same netting arithmetic, and the code already has that pure helper at the center of both seams. Sync can keep deriving ids and mutable row state locally while reusing the same scalar projection.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:63",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-3/plan.json:26",
+        "backend/server.py:1201",
+        "backend/server.py:1226",
+        "backend/server.py:1248",
+        "backend/server.py:1257"
+      ],
+      "uncertainty": "A later cleanup could still thread a precomputed object into sync as an implementation convenience or micro-optimization, but the current plan does not require widening the helper contract for that.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. When an accepted buy or sell leaves a non-zero row alive, `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId` should always advance to the newest accepted trade even if the trade reduces absolute exposure or crosses through zero before ending on the opposite sign. Earlier exposure-sync planning already froze that rule, and the current sync helper implementation matches it by updating metadata on every non-zero survivor and deleting the row only at exact rounded zero.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-3/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-3/plan.json:58",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-3/research.json:49",
+        "backend/server.py:1261",
+        "backend/server.py:1268",
+        "backend/server.py:1273",
+        "tests/test_bayes_market_api.py:3853",
+        "tests/test_bayes_market_api.py:3891"
+      ],
+      "uncertainty": "The current test suite does not yet have a survivor-specific regression that distinguishes reducing or sign-flipping metadata updates from exact-zero deletion, so the contract is frozen more by the prior plan/research than by existing tests.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "This execute-step-3 change can stay focused on the backend mutation refactor itself; the parent step-2 plan assigns the focused regression coverage to the later regression step after the ordering and sync changes land. That later step is expected to add coverage for exact-cap preview math, side-effect-free over-limit failures, accepted-trade sync after the new ordering, unchanged replay for persisted `market_not_active` rejections, and the survivor/zero-crossing cleanup branches this refactor touches. The current suite already covers preview math, malformed-state zero-default preview, full offset-to-zero pruning, and the fact that accepted EventTrades do not mutate `ACCOUNT_RISK`, but it does not yet pin the new ordering or surviving-row metadata semantics.",
+      "confidence": 0.91,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:62",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:68",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:67",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:73",
+        "tests/test_bayes_market_api.py:3320",
+        "tests/test_bayes_market_api.py:3354",
+        "tests/test_bayes_market_api.py:3765",
+        "tests/test_bayes_market_api.py:3853",
+        "tests/test_bayes_market_api.py:3891"
+      ],
+      "uncertainty": "If implementation and regression work are batched into one patch, landing some of those tests early would still be acceptable. The recorded step boundary, however, puts the focused coverage in the later regression step rather than making it mandatory inside this mutation-only step.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The accepted-path refactor can treat `position_limit_exceeded` as the only new side-effect-free validation boundary: reject before command/order/event/idempotency persistence and use the strict `abs(resultingNetSize) > max_position_size` comparison."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Preview validation and accepted exposure mutation should keep sharing `build_event_trade_position_net_change(...)`, which avoids drift in signed-delta, six-decimal rounding, and `-0.0` collapse behavior."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The handler restructure should preserve replayable terminal `409 market_not_active` storage while moving only active fresh submissions and the new limit gate into the delayed command/order creation flow."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "This step should remain scoped to `ACCOUNT_EXPOSURE` and EventTrade ordering/sync; `ACCOUNT_RISK`, `sync_account_risk_state(...)`, and `/v1/accounts/{id}/risk` stay behaviorally unchanged."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The accepted-path sync can continue using one signed row per `(accountId, marketId, outcomeId)` composite key, deleting exact-zero rows and pruning the account inside `sync_account_exposure_state(...)` rather than deferring cleanup to read time."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
