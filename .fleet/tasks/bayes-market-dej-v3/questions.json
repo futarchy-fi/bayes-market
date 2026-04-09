@@ -1,0 +1,87 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact wire contract should `/ws/markets/{id}/prices` emit: a full price snapshot, a trade-result event, or a typed stream that can carry both, and which fields are required beyond `seq`/timestamp/`approxFlag` (for example `eventId`, `commandId`, `orderId`, `marginals`, `marketId`, `status`)?",
+      "category": "requirements",
+      "why_it_matters": "There is no existing realtime payload type in the repo. The message shape determines the backend broadcaster, frontend client/types, and the contract tests."
+    },
+    {
+      "id": "q2",
+      "question": "Should this price stream broadcast only accepted `EventTrade` results, or any accepted command that changes displayed prices on the market detail page, including `ProbabilityEdit` and market resolution events?",
+      "category": "requirements",
+      "why_it_matters": "The current UI reads `market.marginals`, and those can already change through probability edits and resolution. Limiting the stream to trades only may leave the live price surface stale relative to existing write paths."
+    },
+    {
+      "id": "q3",
+      "question": "What reconnect/resume contract is expected: should clients simply reconnect and refetch the latest REST market state, or should the WebSocket support sequence-aware recovery of missed updates using the existing per-market event chain?",
+      "category": "design",
+      "why_it_matters": "The backend already maintains monotonic per-market `seq`, `headSeq`, and hash-chain metadata through `/v1/markets/{id}/events`. Reconnect behavior decides whether the WS layer is a lightweight live hint or a resumable ordered stream."
+    },
+    {
+      "id": "q4",
+      "question": "What should the server do for non-active markets on `/ws/markets/{id}/prices`: reject the connection, allow subscription but emit no updates, or continue streaming terminal events such as resolution for markets that transition out of `active` after connect?",
+      "category": "requirements",
+      "why_it_matters": "The task title scopes live price updates to active markets, but the backend already exposes resolved/closed markets on read routes and the stream needs an explicit status policy for connect-time and post-connect transitions."
+    },
+    {
+      "id": "q5",
+      "question": "Is the new WebSocket endpoint intended to be a public read surface like the existing GET APIs, or should it carry any auth/origin policy such as `X-Bayes-Agent-Id`, account binding, or explicit origin checks?",
+      "category": "requirements",
+      "why_it_matters": "Current protected-write logic only applies to mutating routes. A read-only public socket versus a gated socket changes the handshake, browser client code, and failure-path testing."
+    },
+    {
+      "id": "q6",
+      "question": "What runtime boundary is acceptable for adding WebSocket support in this repo: extend the current custom `BaseHTTPRequestHandler`/`HTTPServer` stack directly, switch the server entrypoint to a different Python HTTP runtime, or add a new third-party WebSocket dependency?",
+      "category": "codebase",
+      "why_it_matters": "The backend is a single-file custom HTTP server with no existing WS framework or dependency manifest. This choice materially affects implementation scope, test strategy, and how much infrastructure churn is acceptable."
+    },
+    {
+      "id": "q7",
+      "question": "On the frontend, should the market detail page replace the current 5-second polling of `useMarket(...)` with WebSocket-driven state, or keep polling as a fallback/backstop while the socket is connected or reconnecting?",
+      "category": "design",
+      "why_it_matters": "The current React Query hooks poll `GET /v1/markets/{id}` every 5 seconds and invalidate after local writes. A WS-first design versus hybrid polling changes cache updates, reconnection behavior, and the user-visible freshness model."
+    },
+    {
+      "id": "q8",
+      "question": "What level of verification is expected for 'test connection and reconnection': backend integration tests against a real socket server, frontend unit tests with a mocked `WebSocket`, or both?",
+      "category": "requirements",
+      "why_it_matters": "The repo already has two separate test styles: Python backend tests around the custom HTTP server and Vitest frontend tests around mocked API clients. The required coverage boundary determines where the reconnection logic should live and how much harness work is needed."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "There is no pre-existing WebSocket or SSE infrastructure in the checkout, so this feature will be greenfield transport work rather than incremental reuse.",
+      "confidence": 0.99,
+      "if_wrong": "I would be overestimating implementation risk and might miss an existing realtime abstraction or dependency that should own the feature."
+    },
+    {
+      "id": "a2",
+      "assumption": "The existing per-market journal sequence (`seq`, `approxFlag`, `headSeq`, `headHash`) is the intended ordering primitive for any live market stream and for reconnect bookkeeping.",
+      "confidence": 0.88,
+      "if_wrong": "The WS channel may need a separate sequence model or looser best-effort semantics, which would change both payload design and reconnection tests."
+    },
+    {
+      "id": "a3",
+      "assumption": "The frontend scope is limited to the market detail route and its current probability/trade UI, because the brief only names that page even though broader realtime channels are mentioned in project docs.",
+      "confidence": 0.97,
+      "if_wrong": "Implementation would need to expand into additional surfaces such as market lists, analytics, or portfolio views in the same task."
+    },
+    {
+      "id": "a4",
+      "assumption": "The new `/ws/markets/{id}/prices` stream is meant to represent unconditional public market prices, not context-specific conditional marginals, because the path has no query surface for assumptions/context.",
+      "confidence": 0.81,
+      "if_wrong": "The transport contract would need to encode context or support multiple subscriptions per page, which is a larger API-design problem."
+    },
+    {
+      "id": "a5",
+      "assumption": "The safest integration path is WebSocket as the primary live signal with REST invalidation/refetch fallback on reconnect, rather than removing the existing REST reads entirely.",
+      "confidence": 0.67,
+      "if_wrong": "A stricter WS-only design would require more aggressive client state ownership and potentially a different testing strategy."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
