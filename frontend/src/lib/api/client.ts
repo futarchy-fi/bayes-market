@@ -3,13 +3,16 @@ import type {
   MarketDetailResponse,
   MarketPreviewResponse,
   MarketEventsResponse,
+  MarketCommentsResponse,
   EngineStatsResponse,
   MarketAnalyticsResponse,
   AccountRiskResponse,
   AccountPnlResponse,
   OrderResponse,
+  CommentResponse,
   ApiError,
   AnalyticsInterval,
+  CommentPayload,
   ProbabilityEditPayload,
   EventTradePayload,
   Session,
@@ -128,6 +131,19 @@ export function getMarketEvents(
   const qs = params.toString();
   return request<MarketEventsResponse>(
     `/v1/markets/${encodeURIComponent(marketId)}/events${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export function getMarketComments(
+  marketId: string,
+  opts: { fromSeq?: number; limit?: number } = {},
+): Promise<MarketCommentsResponse> {
+  const params = new URLSearchParams();
+  if (opts.fromSeq != null) params.set("fromSeq", String(opts.fromSeq));
+  if (opts.limit != null) params.set("limit", String(opts.limit));
+  const qs = params.toString();
+  return request<MarketCommentsResponse>(
+    `/v1/markets/${encodeURIComponent(marketId)}/comments${qs ? `?${qs}` : ""}`,
   );
 }
 
@@ -250,6 +266,21 @@ export function submitEventTrade(
 ): Promise<OrderResponse> {
   return request<OrderResponse>(
     `/v1/markets/${encodeURIComponent(marketId)}/orders/event-trade`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    session,
+  );
+}
+
+export function submitMarketComment(
+  marketId: string,
+  payload: CommentPayload,
+  session: Session,
+): Promise<CommentResponse> {
+  return request<CommentResponse>(
+    `/v1/markets/${encodeURIComponent(marketId)}/comments`,
     {
       method: "POST",
       body: JSON.stringify(payload),

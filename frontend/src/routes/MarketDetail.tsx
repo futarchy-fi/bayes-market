@@ -10,6 +10,7 @@ import { AssumptionProvider } from "@/features/assumptions/AssumptionContext";
 import { AssumptionPanel } from "@/features/assumptions/AssumptionPanel";
 import { BayesNetGraph } from "@/features/graph/BayesNetGraph";
 import { JunctionTreePanel } from "@/features/graph/JunctionTreePanel";
+import { DiscussionThread } from "@/features/market/DiscussionThread";
 import { ResolveMarketPanel } from "@/features/market/ResolveMarketPanel";
 import { EventTradePanel } from "@/features/trading/EventTradePanel";
 import type { MarketEvent } from "@/lib/api/types";
@@ -55,6 +56,8 @@ export default function MarketDetail() {
       )}
 
       <EventTradePanel market={m} />
+
+      <DiscussionThread market={m} />
 
       <BayesNetGraph focusMarketId={m.id} />
 

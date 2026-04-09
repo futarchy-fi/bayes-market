@@ -4,6 +4,7 @@ import type {
   AnalyticsInterval,
   ProbabilityEditPayload,
   EventTradePayload,
+  CommentPayload,
   Session,
   MarketListFilters,
 } from "@/lib/api/types";
@@ -15,6 +16,7 @@ export const queryKeys = {
     [...queryKeys.marketLists(), marketListQueryKey(filters)] as const,
   market: (id: string) => ["markets", id] as const,
   marketEvents: (id: string) => ["markets", id, "events"] as const,
+  marketComments: (id: string) => ["markets", id, "comments"] as const,
   engineStats: (id: string) => ["markets", id, "engine-stats"] as const,
   marketAnalytics: (id: string, interval?: AnalyticsInterval) =>
     [...queryKeys.market(id), "analytics", { interval: interval ?? null }] as const,
@@ -46,6 +48,13 @@ export function useMarketEvents(marketId: string) {
   return useQuery({
     queryKey: queryKeys.marketEvents(marketId),
     queryFn: () => api.getMarketEvents(marketId),
+  });
+}
+
+export function useMarketComments(marketId: string) {
+  return useQuery({
+    queryKey: queryKeys.marketComments(marketId),
+    queryFn: () => api.getMarketComments(marketId),
   });
 }
 
@@ -146,6 +155,17 @@ export function useEventTrade(marketId: string) {
     onSuccess: (_data, variables) => {
       void qc.invalidateQueries({ queryKey: queryKeys.market(marketId) });
       void qc.invalidateQueries({ queryKey: queryKeys.account(variables.payload.accountId) });
+    },
+  });
+}
+
+export function usePostMarketComment(marketId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ payload, session }: { payload: CommentPayload; session: Session }) =>
+      api.submitMarketComment(marketId, payload, session),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.marketComments(marketId) });
     },
   });
 }
