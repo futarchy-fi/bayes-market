@@ -1,0 +1,89 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Define the new backend-wide EventTrade exposure cap in `backend/server.py` as `max_position_size = 100.0`, colocated with the existing module-level trading/risk constants so later validation and serialization can share one default source of truth.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Leave the constant unspecified until the write-path work lands.",
+        "Choose a different default that is disconnected from the existing `ACCOUNT_RISK_LIMIT = 100.0` scale.",
+        "Hide the value inside route-local logic instead of a reusable global constant."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Add a dedicated in-memory exposure projection, separate from `ACCOUNT_RISK`, with account and position builder helpers that only materialize live EventTrade state and are cleared by `reset_state()`.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Extend `ACCOUNT_RISK` to also store EventTrade positions.",
+        "Recompute exposure from historical orders on every read.",
+        "Keep exposure state outside the normal in-memory reset lifecycle."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Model each `(accountId, marketId, outcomeId)` exposure slice as one signed net position where buys add size, sells subtract size, exact-zero net positions are deleted immediately, and accounts with no remaining live positions are pruned from the exposure store so `/exposure` can later return `404 account_not_found`.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Retain zero-size positions as historical placeholders.",
+        "Keep empty exposure accounts and return `200` with an empty document.",
+        "Track separate long and short buckets instead of one signed net position."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Serialize exposure through additive helpers that return `{account, meta}` with account-level `maxPositionSize` and `updatedAt`, plus a flat `positions` list sorted lexically by `(marketId, outcomeId)` and populated from the projection with `netSize`, `absSize`, `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId`.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Use recency-first position ordering.",
+        "Return only aggregate account fields without per-outcome rows.",
+        "Expose an empty envelope for missing exposure accounts."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Add market-scoped exposure cleanup helpers that mirror the existing resolution-settlement seam by removing all live positions for a resolved market, updating account timestamps as needed, and pruning now-empty exposure accounts without touching historical `ORDERS` or `EVENTS`.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Leave resolved-market positions in the live exposure projection.",
+        "Inline resolution cleanup inside the resolve command instead of reusable helpers.",
+        "Delete historical trade/order records when cleaning live exposure."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add the new global `max_position_size` constant and a dedicated top-level exposure store in `backend/server.py`, wired into `reset_state()` beside the existing in-memory read models.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Implement account/position builder and ensure helpers for the exposure projection, following the existing `build_account_risk_state(...)` and `ensure_account_risk_state(...)` conventions but scoped to live EventTrade positions only.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add signed-size math helpers for EventTrade positions, including net-size calculation, exact-zero row deletion, account pruning when the final live position disappears, and field updates for `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId`.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Implement exposure serializers that transform the internal projection into the planned `{account, meta}` response shape with deterministic lexical `(marketId, outcomeId)` ordering and account-level metadata derived from the new constant and projection timestamps.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Add reusable market-resolution cleanup helpers that remove all exposure positions for one market and prune empty accounts, so later resolve-path and route work can call a single backend primitive instead of duplicating cleanup logic.",
+      "depends_on": [2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
