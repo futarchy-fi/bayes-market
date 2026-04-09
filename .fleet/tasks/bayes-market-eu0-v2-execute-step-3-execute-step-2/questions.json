@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This checkout already has direct assertions for the root `routes.accounts` list, `POST /v1/accounts/{id}/exposure` returning `405 method_not_allowed`, the never-traded `404 account_not_found` case, and a route-vs-getter parity check inside `test_get_account_exposure_serializes_lexically_sorted_positions_and_account_timestamp`. Should step 2 be treated as adding only the missing risk-only `404` regression, or is it expected to regroup those existing assertions into one tighter exposure-routing slice?",
+      "category": "codebase",
+      "why_it_matters": "Most of the task wording is already represented in `tests/test_bayes_market_api.py`, so the remaining implementation scope depends on whether the goal is new coverage, test reorganization, or both."
+    },
+    {
+      "id": "q2",
+      "question": "For the required risk-only account case, should the test create that account through an accepted `POST /v1/markets/{id}/orders/probability-edit` so the scenario is produced through public behavior, or is direct `ACCOUNT_RISK` seeding acceptable for a routing-focused regression?",
+      "category": "design",
+      "why_it_matters": "A real ProbabilityEdit write proves the cross-read-model contract end to end, while direct seeding keeps the test smaller and more local to routing. The preferred setup changes both the fixture shape and the regression's coupling."
+    },
+    {
+      "id": "q3",
+      "question": "Should the risk-only regression explicitly assert the split account contract in one scenario by checking `GET /v1/accounts/{id}/risk` still returns `200` while `GET /v1/accounts/{id}/exposure` returns `404 account_not_found`, or is asserting the exposure-side `404` alone enough for this step?",
+      "category": "requirements",
+      "why_it_matters": "The planned behavior is projection-local account existence, not global account existence. Freezing both reads together is the strongest proof of that rule, but it makes this routing step a little broader."
+    },
+    {
+      "id": "q4",
+      "question": "Because `get_account_exposure(...)` also turns a fully pruned or zero-row exposure document into `404 account_not_found`, should step 2 stay limited to the two task-named empty-account variants (`never-traded` and `risk-only`), or should it also pin one projection-local empty state such as an all-zero document before the later read-after-write tests?",
+      "category": "design",
+      "why_it_matters": "The exposure getter has three distinct paths to the same public `404` contract. Deciding whether this step freezes only route-level account lookup or also one projection-pruning shape affects how much overlap there will be with the later exposure-projection tests."
+    },
+    {
+      "id": "q5",
+      "question": "Is the existing route dispatch proof in `BayesMarketExposureProjectionTests.test_get_account_exposure_serializes_lexically_sorted_positions_and_account_timestamp` the intended seam for step 2, or should the direct routing section add a smaller test that explicitly proves `route_request(\"GET\", \"/v1/accounts/{id}/exposure\")` delegates to `get_account_exposure(account_id)`?",
+      "category": "codebase",
+      "why_it_matters": "The branch already proves successful GET dispatch indirectly from the exposure-projection class. Whether that is considered sufficient determines if step 2 needs a genuinely new dispatch test or just an empty-account regression."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The existing service-index and exposure-route smoke tests remain valid and should be extended rather than replaced; step 2 does not need a new public contract for `routes.accounts`, `405` handling, or successful GET reads.",
+      "confidence": 0.98,
+      "if_wrong": "The work would need a broader test rewrite that re-pins routing behavior in a different structure instead of adding one or two targeted regressions."
+    },
+    {
+      "id": "a2",
+      "assumption": "A successful ProbabilityEdit is the canonical way to create a risk-only account in this codebase because `handle_probability_edit(...)` updates `ACCOUNT_RISK` through `sync_account_risk_state(...)` and never mutates `ACCOUNT_EXPOSURE`.",
+      "confidence": 0.97,
+      "if_wrong": "The risk-only regression would need either direct state seeding or some other write path, and the chosen fixture could misrepresent the intended account semantics."
+    },
+    {
+      "id": "a3",
+      "assumption": "The intended exposure contract is still projection-local: an account may exist for `/v1/accounts/{id}/risk` but legitimately return `404 account_not_found` from `/v1/accounts/{id}/exposure` until it has at least one live EventTrade position.",
+      "confidence": 0.95,
+      "if_wrong": "The route would need global account existence semantics or a `200` empty exposure document, which would invalidate both the planned risk-only regression and the current getter behavior."
+    },
+    {
+      "id": "a4",
+      "assumption": "Fully pruned or post-resolution exposure empties belong primarily to later exposure-projection and read-after-write regressions, so this step can stay focused on direct routing and the two explicitly requested empty-account cases.",
+      "confidence": 0.87,
+      "if_wrong": "Step 2 would need to absorb more of the projection-lifecycle coverage that the parent plan currently assigns to later steps."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the routing expectations, getter semantics, and existing test gaps are all visible in `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `.fleet` plan artifacts for step 3.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up subtask would be needed to inspect a missing contract source before the direct test work could be scoped correctly."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
