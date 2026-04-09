@@ -95,6 +95,27 @@ export function getMarket(
   return request<MarketDetailResponse>(`/v1/markets/${encodeURIComponent(marketId)}`);
 }
 
+function joinUrlPath(basePath: string, path: string): string {
+  const normalizedBase = basePath === "/" ? "" : basePath.replace(/\/$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${normalizedBase}${normalizedPath}`;
+}
+
+export function getMarketPricesWebSocketUrl(marketId: string): string {
+  const baseUrl = API_BASE
+    ? new URL(API_BASE, window.location.origin)
+    : new URL(window.location.origin);
+  const socketUrl = new URL(baseUrl.toString());
+  socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
+  socketUrl.pathname = joinUrlPath(
+    socketUrl.pathname,
+    `/ws/markets/${encodeURIComponent(marketId)}/prices`,
+  );
+  socketUrl.search = "";
+  socketUrl.hash = "";
+  return socketUrl.toString();
+}
+
 export function getMarketPreview(
   marketId: string,
 ): Promise<MarketPreviewResponse> {
