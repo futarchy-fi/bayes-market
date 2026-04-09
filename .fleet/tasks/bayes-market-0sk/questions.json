@@ -1,0 +1,105 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Does \"tests for CRUD\" mean create/read only for comments, or are update/delete operations also expected even though the requested API surface only names GET/POST /v1/markets/{id}/comments?",
+      "category": "requirements",
+      "why_it_matters": "The current router is fully explicit and there is no generic resource layer, so supporting update/delete would expand the backend routes, client API, UI controls, and test matrix beyond the two endpoints in the brief."
+    },
+    {
+      "id": "q2",
+      "question": "What should the POST comment request body contain, and what identity should a comment be attributed to: accountId, a separate author/display name, or anonymous posting?",
+      "category": "requirements",
+      "why_it_matters": "The frontend only has session.accountId plus an optional agentId header today, and the backend has no user/profile model to derive comment authorship from."
+    },
+    {
+      "id": "q3",
+      "question": "Should POST /v1/markets/{id}/comments inherit the existing protected-write behavior around X-Bayes-Agent-Id validation and per-agent rate limiting when auth is enabled?",
+      "category": "requirements",
+      "why_it_matters": "All existing market-scoped POST routes are categorized by resolve_write_request_agent(...); comments either need to plug into that policy system or intentionally bypass it."
+    },
+    {
+      "id": "q4",
+      "question": "What is the canonical comment resource shape in API responses: commentId, seq, marketId, author/accountId, body/content, createdAt, updatedAt, and any replay/idempotency metadata?",
+      "category": "design",
+      "why_it_matters": "There is no existing comment type to extend, so the chosen shape drives backend storage, frontend types, test fixtures, and whether comments can support pagination and future edits cleanly."
+    },
+    {
+      "id": "q5",
+      "question": "What pagination contract should GET /v1/markets/{id}/comments use, and in what order should comments be returned: oldest-first, newest-first, or a cursor anchored on a monotonic sequence?",
+      "category": "design",
+      "why_it_matters": "The only paginated collection in the repo today is /v1/markets/{id}/events, which uses fromSeq/limit/nextFromSeq; comments can mirror that pattern or establish a new one."
+    },
+    {
+      "id": "q6",
+      "question": "What validation and rendering constraints apply to comment bodies: maximum length, blank trimming, duplicate submission handling, and whether text is plain text only or supports formatting such as Markdown?",
+      "category": "requirements",
+      "why_it_matters": "This determines server-side validation, frontend form behavior, error cases, and whether the UI can safely render comments without introducing formatting or sanitization ambiguity."
+    },
+    {
+      "id": "q7",
+      "question": "Should comments be allowed on all market statuses, or should posting be limited to active markets while resolved/closed/draft markets remain read-only?",
+      "category": "requirements",
+      "why_it_matters": "The market detail page already shows and hides panels based on market status, so composer visibility and POST validation need a consistent product rule."
+    },
+    {
+      "id": "q8",
+      "question": "Should comment writes also appear in the existing market event journal, or should comments live in a separate per-market discussion store with its own sequencing and pagination?",
+      "category": "codebase",
+      "why_it_matters": "The backend already maintains a canonical per-market event chain, but the feature brief describes a discussion thread; choosing one model affects storage reuse, tests, and whether comments become part of the journaled market history."
+    },
+    {
+      "id": "q9",
+      "question": "Is in-memory persistence acceptable for comments, matching the rest of this backend, or is durable storage expected across process restarts?",
+      "category": "codebase",
+      "why_it_matters": "The current service stores markets, orders, events, and rate-limit state in process-local dictionaries and resets them heavily in tests; durable comments would be a materially different implementation."
+    },
+    {
+      "id": "q10",
+      "question": "On the market detail page, should the comment composer follow the existing session pattern and only enable posting when an accountId is configured, or should the UI expose anonymous/read-only states differently for discussion?",
+      "category": "design",
+      "why_it_matters": "Current write panels either hide entirely or rely on the shared session context, so comments need a deliberate UX choice instead of inheriting that behavior accidentally."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Comments can be stored in the same in-memory style as MARKETS and EVENTS, and should reset with server.reset_state() in tests.",
+      "confidence": 0.94,
+      "if_wrong": "A durable store or different lifecycle would require new persistence plumbing and a different testing strategy."
+    },
+    {
+      "id": "a2",
+      "assumption": "This feature only requires create/read behavior for comments despite the brief using the word CRUD.",
+      "confidence": 0.58,
+      "if_wrong": "We would need additional update/delete endpoints, UI affordances, and broader API/client coverage."
+    },
+    {
+      "id": "a3",
+      "assumption": "Comment identity will be based on the existing session accountId, with the optional agentId header only used for backend write controls rather than display.",
+      "confidence": 0.66,
+      "if_wrong": "We would need a separate author model or additional request fields and frontend inputs."
+    },
+    {
+      "id": "a4",
+      "assumption": "GET /v1/markets/{id}/comments should reuse the repo's existing pagination style, most likely limit plus a forward-moving sequence cursor similar to /events.",
+      "confidence": 0.47,
+      "if_wrong": "A different ordering or cursor scheme would change both the contract and the frontend data-fetching logic."
+    },
+    {
+      "id": "a5",
+      "assumption": "Comments should be rendered as a dedicated discussion section on the market detail page and kept separate from the existing event journal.",
+      "confidence": 0.63,
+      "if_wrong": "If comments must be folded into the journal, the feature becomes more of an event-stream extension than a standalone thread UI."
+    },
+    {
+      "id": "a6",
+      "assumption": "The composer should follow the current session UX and allow posting only when an accountId is configured, while leaving the thread readable without session state.",
+      "confidence": 0.57,
+      "if_wrong": "We would need a different unauthenticated UX, such as anonymous posting or a stronger requirement for agent/account setup before the section appears."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
