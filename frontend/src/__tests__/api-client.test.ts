@@ -35,8 +35,22 @@ describe("API Client", () => {
   it("listMarkets passes status filter", async () => {
     const body = { markets: [], count: 0, meta: { apiVersion: "1.0", timestamp: "" } };
     mockFetch.mockResolvedValue(jsonResponse(body));
-    await listMarkets("active");
+    await listMarkets({ status: "active" });
     expect(mockFetch).toHaveBeenCalledWith("/v1/markets?status=active", expect.any(Object));
+  });
+
+  it("listMarkets passes normalized sort and search filters", async () => {
+    const body = { markets: [], count: 0, meta: { apiVersion: "1.0", timestamp: "" } };
+    mockFetch.mockResolvedValue(jsonResponse(body));
+    await listMarkets({ status: "all", sort: "volume", q: "  ETH  " });
+    expect(mockFetch).toHaveBeenCalledWith("/v1/markets?sort=volume&q=ETH", expect.any(Object));
+  });
+
+  it("listMarkets omits blank search values", async () => {
+    const body = { markets: [], count: 0, meta: { apiVersion: "1.0", timestamp: "" } };
+    mockFetch.mockResolvedValue(jsonResponse(body));
+    await listMarkets({ q: "   ", sort: "created" });
+    expect(mockFetch).toHaveBeenCalledWith("/v1/markets?sort=created", expect.any(Object));
   });
 
   it("getMarket calls /v1/markets/{id}", async () => {

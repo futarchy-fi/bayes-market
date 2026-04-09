@@ -1,0 +1,70 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Mirror MarketList status, sort, and committed search state into URL search params, using omitted params as the canonical representation for default/all values.",
+      "based_on": ["q1", "q4", "q5"],
+      "alternatives_rejected": [
+        "Keep filters only in component state",
+        "Serialize status=all instead of omitting the status param",
+        "Preserve raw whitespace-only search text in API-facing state"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Ship a neutral sort default that omits sort and expose dropdown labels as Default order, Volume, Liquidity, and Newest.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Implicitly request created sorting by default",
+        "Use copy that hides the neutral default state"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Debounce search commits by roughly 300 ms, then normalize and persist the committed value into the URL and market query filters.",
+      "based_on": ["q3", "q5"],
+      "alternatives_rejected": [
+        "Fetch on every keystroke",
+        "Only refetch on explicit submit or Enter"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Verify the change across API serialization, market query key coverage, and MarketList interaction tests.",
+      "based_on": ["q6", "q7"],
+      "alternatives_rejected": [
+        "Only add route-level UI tests",
+        "Skip local frontend dependency bootstrap and verification"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Update frontend API and query hooks to accept MarketListFilters, normalize default and blank values, and preserve broad market cache invalidation.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Refactor MarketList to read and write status, sort, and committed search via URL search params with a debounced search input state.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Extend frontend test helpers and add coverage for listMarkets serialization, market query keys, and MarketList URL-driven interactions.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Install frontend dependencies if needed, run targeted frontend tests and build validation, then commit the completed changes.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
