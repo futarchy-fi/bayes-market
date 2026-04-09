@@ -1,0 +1,134 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Step 4 should assume the step-2/3 write-path refactor lands first; it is not the regression step's job to absorb that missing backend patch. The recorded parent plan makes the focused regression pass depend on the ordering and sync changes, earlier execute-step-3 research explicitly says this later step is where the exact-cap, over-limit, survivor-sync, and replay regressions belong after the refactor lands, and the current tree still has the pre-refactor handler that materializes a fresh EventTrade command before the active-market gate with no max-position validation. If this branch still points at that old handler, the sequencing is wrong and the prerequisite patch needs to land or be rebased in first.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:62",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:64",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-3/research.json:77",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/validation.json:4",
+        "backend/server.py:3574",
+        "backend/server.py:3584"
+      ],
+      "uncertainty": "The only open point is branch mechanics: whether step 4 is applied after a rebase/cherry-pick of steps 2 and 3 or after those commits merge separately. The scope decision itself is already frozen by the task artifacts.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The regression should pin both layers: helper-level preview math and route-level acceptance. The earlier preview-seam research already placed helper assertions in this later step-4 slice, not in the seam-only step, and the accepted EventTrade response/event contract does not expose `currentNetSize` or `resultingNetSize`. That means route acceptance alone cannot prove the exact-cap math landed on `+/-max_position_size`; the clean proof is direct assertions on `preview_event_trade_position_net_change(...)` for buy and sell boundary cases plus route-level acceptance for the corresponding fresh submissions.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:16",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:63",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-1/research.json:64",
+        "backend/server.py:1226",
+        "backend/server.py:3259",
+        "tests/test_bayes_market_api.py:3780",
+        "tests/test_bayes_market_api.py:3853"
+      ],
+      "uncertainty": "The exact helper cases can stay minimal; the point is to prove the internal scalar boundary directly because the public success payload does not carry those preview fields.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Use the stronger regression. Snapshotting `COMMANDS`, `ORDERS`, `EVENTS`, `TERMINAL_OUTCOMES`, `IDEMPOTENCY_KEYS`, and `ACCOUNT_EXPOSURE` before an over-limit `400 position_limit_exceeded` is necessary, but it is not sufficient by itself because a bug could leave those stores unchanged while still binding the idempotency key incorrectly. The recorded step-2 decision explicitly says the same key must remain reusable later against changed exposure, so the regression should also reduce exposure and prove the same `idempotencyKey` succeeds afterward as a fresh accepted submission.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:25",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:26",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:58",
+        "backend/server.py:2869",
+        "backend/server.py:2888",
+        "backend/server.py:3557",
+        "tests/test_bayes_market_api.py:116",
+        "tests/test_bayes_market_api.py:130"
+      ],
+      "uncertainty": "That proof can be one end-to-end scenario or split across two tests. The important part is covering both side-effect-free failure and later key reuse, not the exact test shape.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Both survivor branches are part of the intended regression target. The earlier exposure-sync plan froze metadata refresh for reducing survivors and sign-flipping survivors, while the current checked-in tests only pin the exact offset-to-zero prune path. Step 4 should therefore add coverage for a partial offset sell that stays on the same sign and a larger sell that crosses through zero and leaves an opposite-sign row, with assertions that `netSize`, `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId` all advance to the newest accepted trade.",
+      "confidence": 0.93,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-3/plan.json:35",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-3/plan.json:68",
+        "backend/server.py:1261",
+        "backend/server.py:1268",
+        "tests/test_bayes_market_api.py:3853",
+        "tests/test_bayes_market_api.py:3891"
+      ],
+      "uncertainty": "If test budget forced a single survivor case, the sign-flip path is the one most likely to hide a regression, but the recorded plan does not actually narrow the requirement to only one of the two.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "The new regressions should explicitly patch `preview_event_trade_position_net_change(...)` and assert it is bypassed for already-persisted accepted and terminally rejected `market_not_active` EventTrades. The ordering change specifically risks moving replay behind the new preview gate, and `meta.replayed` plus no extra writes only proves persistence stability, not that replay short-circuited before preview. The repo already uses mock-based `assert_not_called()` coverage for accepted and rejected probability-edit replays, and the step-2 refactor plan freezes EventTrade replay ahead of the new preview path in the same way.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:25",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:48",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:68",
+        "tests/test_bayes_market_api.py:2244",
+        "tests/test_bayes_market_api.py:2413",
+        "tests/test_bayes_market_api.py:3604",
+        "tests/test_bayes_market_api.py:3635"
+      ],
+      "uncertainty": "The tests can still retain the existing replay/no-double-write assertions alongside the mock, but the `assert_not_called()` check is the part that directly guards the new ordering seam.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "Step 4 does not need a dedicated EventTrade `GET /v1/accounts/{id}/risk` read-after-write assertion. The recorded plan keeps `ACCOUNT_RISK` and `/risk` behavior unchanged and out of scope for this EventTrade/exposure regression step, `get_account_risk(...)` serializes only `ACCOUNT_RISK`, and the existing EventTrade suite already asserts accepted EventTrades do not mutate `ACCOUNT_RISK`. That state-level invariant is sufficient here; an extra `/risk` call would be redundant integration coverage rather than the core regression being introduced.",
+      "confidence": 0.87,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:35",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:35",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-2/plan.json:73",
+        "backend/server.py:1502",
+        "tests/test_bayes_market_api.py:3320",
+        "tests/test_bayes_market_api.py:3354",
+        "tests/test_bayes_market_api.py:7043"
+      ],
+      "uncertainty": "Adding a `/risk` read as belt-and-suspenders coverage would still be harmless, especially if an account already has prior risk state, but the task artifacts do not make it a required part of this focused regression slice.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Step 4 should target the intended post-step-2/3 EventTrade flow, and a branch that still has the pre-refactor handler is a sequencing problem to fix before landing the regression-only patch."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Boundary regressions should accept previewed resulting positions of exactly `+100.0` or `-100.0` and reject only when `abs(resultingNetSize)` is strictly greater than `max_position_size`."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The over-limit branch should be tested as a side-effect-free `400` with no command/order/event/terminal-outcome/idempotency persistence and with later reuse of the same idempotency key still possible."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Replay regressions should prove already-persisted accepted and terminally rejected EventTrades short-circuit before any new preview or max-position validation runs."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "This regression step should stay inside `tests/test_bayes_market_api.py` and the backend EventTrade/exposure seam, without widening accepted payloads or changing `/risk` contracts."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This checkout still shows the pre-step-2/3 EventTrade handler in `backend/server.py` where fresh commands are materialized before the active-market gate and there is no max-position validation. Should step 4 assume those prerequisites land first, or is this regression task expected to absorb the missing write-path patch in the same branch?",
+      "category": "codebase",
+      "why_it_matters": "A test-only change will fail against the current tree. The answer decides whether step 4 can target the intended post-refactor behavior directly or must bundle prerequisite implementation work."
+    },
+    {
+      "id": "q2",
+      "question": "For the exact-cap boundary, should the regression suite pin both the internal preview math and the route outcome, meaning helper-level assertions on `preview_event_trade_position_net_change(...)` plus `route_request(...)` acceptance at `resultingNetSize == +/-max_position_size`, or is route-level acceptance coverage alone considered sufficient?",
+      "category": "design",
+      "why_it_matters": "The preview scalars are intentionally internal and accepted EventTrade responses do not expose `currentNetSize` or `resultingNetSize`. This determines whether the boundary proof belongs partly in helper tests or only in end-to-end write tests."
+    },
+    {
+      "id": "q3",
+      "question": "How strong should the over-limit idempotency regression be: is checking that a `400 position_limit_exceeded` leaves `COMMANDS`, `ORDERS`, `EVENTS`, `TERMINAL_OUTCOMES`, `IDEMPOTENCY_KEYS`, and `ACCOUNT_EXPOSURE` unchanged enough, or should the test also prove the same `idempotencyKey` can succeed later after the account's exposure is reduced?",
+      "category": "requirements",
+      "why_it_matters": "The task explicitly calls out side-effect-free failures and unbound idempotency keys. The stronger replay-after-state-change proof requires a multi-step scenario and materially affects test size."
+    },
+    {
+      "id": "q4",
+      "question": "For accepted-trade exposure sync after the new ordering, which survivor case is the canonical regression target: a partial offset sell that leaves the row on the same sign, a larger sell that crosses through zero and leaves an opposite-sign row, or both?",
+      "category": "requirements",
+      "why_it_matters": "The current suite only pins initial buy creation and exact offset-to-zero pruning. Step-3 planning says the new ordering must still sync metadata correctly on non-zero survivors, but the specific survivor branch to make mandatory is not yet frozen by tests."
+    },
+    {
+      "id": "q5",
+      "question": "To prove unchanged replay behavior after the new ordering, should the new regressions explicitly patch `preview_event_trade_position_net_change(...)` and assert it is bypassed for already-persisted accepted and terminally rejected `market_not_active` EventTrades, or is asserting `meta.replayed` plus no extra writes enough?",
+      "category": "design",
+      "why_it_matters": "The ordering change specifically risks moving replay behind the new preview or limit gate. A mock-based call assertion is the strongest guard, but it adds coupling to the internal helper seam."
+    },
+    {
+      "id": "q6",
+      "question": "Does step 4 need an explicit EventTrade no-regression assertion on `GET /v1/accounts/{id}/risk` after accepted writes, or is preserving the existing `ACCOUNT_RISK` no-mutation expectation inside the EventTrade-focused tests sufficient?",
+      "category": "requirements",
+      "why_it_matters": "The parent scope says accepted EventTrades must sync exposure without changing `/risk`, but the current EventTrade suite mostly checks in-memory `ACCOUNT_RISK` rather than read-after-write `/risk` responses. That changes whether this step stays narrowly focused or adds one more integration-style assertion."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Step 4 is intended to target the post-step-2/3 EventTrade flow even though this checkout still shows the pre-refactor handler, so the regression cases can be written against the planned ordering rather than today's behavior.",
+      "confidence": 0.95,
+      "if_wrong": "The task is under-specified for the current tree, and the test branch would need to backfill the missing handler changes or defer until the prerequisite patch lands."
+    },
+    {
+      "id": "a2",
+      "assumption": "The exact-cap boundary remains strict on `abs(resultingNetSize) > max_position_size`, so trades previewing to exactly `+100.0` or `-100.0` should still be accepted.",
+      "confidence": 0.99,
+      "if_wrong": "The boundary regressions would encode the wrong acceptance rule and would need to be rewritten around `>=` rejection or a different limit convention."
+    },
+    {
+      "id": "a3",
+      "assumption": "A `400 position_limit_exceeded` stays completely side-effect free: no command, order, event, terminal-outcome, or exposure persistence and no idempotency binding.",
+      "confidence": 0.99,
+      "if_wrong": "The new tests would need to assert persisted terminal outcomes or replay semantics for the limit branch instead of state invariance and reusable keys."
+    },
+    {
+      "id": "a4",
+      "assumption": "Accepted and already-persisted terminally rejected EventTrades must still replay before any new preview or max-position validation runs.",
+      "confidence": 0.98,
+      "if_wrong": "The regression strategy would need to expect revalidation on replay, which would materially change the current idempotency and terminal-outcome contracts."
+    },
+    {
+      "id": "a5",
+      "assumption": "This regression step should stay inside `tests/test_bayes_market_api.py` and the backend EventTrade or exposure seam; it should not widen public success payloads or modify `/risk` contracts.",
+      "confidence": 0.97,
+      "if_wrong": "The work would expand beyond focused regression coverage into API-contract changes or broader integration updates."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Split fresh `handle_event_trade(...)` handling into a side-effect-free active-market preflight and a later accepted-mutation phase: keep normalize plus idempotency replay/conflict first, preserve persisted terminal `409 market_not_active` behavior for inactive markets, and delay fresh accepted command/order creation until the active submission has passed the preview and max-position checks.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Continue materializing the EventTrade command before the active-market or position-limit gates.",
+        "Convert inactive-market EventTrades to the new side-effect-free validation style instead of keeping their replayable terminal rejection contract."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep `build_event_trade_position_net_change(...)` as the single netting primitive for both preflight preview and accepted exposure sync, and recompute the projection inside `sync_account_exposure_state(...)` from the current stored row instead of threading a richer preview object through the accepted path.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Pass a richer precomputed preview object from `handle_event_trade(...)` into `sync_account_exposure_state(...)`.",
+        "Duplicate buy/sell netting arithmetic inline inside the sync helper."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Refactor `sync_account_exposure_state(...)` around one computed `currentNetSize`/`signedDelta`/`resultingNetSize` projection, then branch cleanly into survivor updates versus exact-zero deletion so accepted buys, sells, and zero-crossing trades all share the same rounding and cleanup rules while surviving rows always advance their last-trade metadata.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Call `ensure_account_exposure_position(...)` before computing the netting result and create placeholder rows even when the accepted trade immediately nets back to zero.",
+        "Refresh `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId` only when absolute exposure grows instead of on every non-zero survivor."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep this implementation step confined to EventTrade accepted-path ordering and `ACCOUNT_EXPOSURE` mutation, leaving `ACCOUNT_RISK`, `sync_account_risk_state(...)`, `/v1/accounts/{id}/risk`, and the heavier focused regression additions for the later parent regression step.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Broaden the patch into `/risk` or `ACCOUNT_RISK` changes.",
+        "Make this implementation step responsible for the full new regression suite instead of landing the mutation refactor first."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Restructure the `handle_event_trade(...)` write-lock flow so normalization and idempotency replay/conflict handling remain first, previously persisted accepted or rejected EventTrades still replay immediately, and fresh inactive-market submissions continue through the existing replayable terminal `market_not_active` rejection path.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "For fresh active submissions only, keep the preview/max-position gate as the last side-effect-free preflight and move `materialize_event_trade_command(...)` plus `create_event_trade_order(...)` behind that pass condition so no fresh accepted command or order exists before preflight succeeds.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Refactor `sync_account_exposure_state(...)` to read the current `(accountId, marketId, outcomeId)` row, reuse `build_event_trade_position_net_change(...)` once for the accepted order, and branch on the rounded `resultingNetSize` instead of coupling arithmetic to eager row creation.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Implement the accepted-path exposure mutations from that shared projection: create or update the surviving row when the rounded result is non-zero, always advance `netSize`, `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId` on survivors, and delete the row plus prune the account when the rounded result is exactly zero.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Run targeted EventTrade/account-exposure verification to confirm accepted buys, sells, zero-crossing cleanup, and metadata updates still work after the ordering change while `ACCOUNT_RISK` and `/v1/accounts/{id}/risk` remain untouched, leaving the broader dedicated regression additions to the later parent step.",
+      "depends_on": [2, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

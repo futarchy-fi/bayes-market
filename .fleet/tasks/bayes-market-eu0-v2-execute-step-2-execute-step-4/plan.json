@@ -1,0 +1,89 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat this step as regression-only work in `tests/test_bayes_market_api.py` that assumes the step-2/3 EventTrade ordering and exposure-sync refactor is already present; if the branch still has the pre-refactor handler, rebase or cherry-pick that prerequisite before landing these tests.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Fold the missing backend write-path refactor into this regression step.",
+        "Write expectations against the current pre-step-2/3 handler and rewrite them after the refactor lands."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Cover the exact-cap boundary at both the preview seam and the route level by asserting `preview_event_trade_position_net_change(...)` lands exactly on `+/-max_position_size` for buy and sell cases, then proving the corresponding submissions still return `201` instead of tripping the strict `abs(resultingNetSize) > max_position_size` guard.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Rely on route-level acceptance alone and leave the internal boundary math unpinned.",
+        "Add preview scalars to accepted EventTrade payloads just to make the route tests assert the boundary directly."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Use the stronger over-limit regression: snapshot `COMMANDS`, `ORDERS`, `EVENTS`, `TERMINAL_OUTCOMES`, `IDEMPOTENCY_KEYS`, and `ACCOUNT_EXPOSURE`, assert a fresh over-limit submission returns `400 position_limit_exceeded` without mutating any of them, then reduce exposure and prove the same `idempotencyKey` succeeds later as a fresh accepted EventTrade.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Stop after checking store snapshots and never prove later key reuse.",
+        "Expect over-limit failures to bind and replay the idempotency key like terminal rejections."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Add accepted-trade exposure-sync regressions for both non-zero survivor paths, one partial offset that stays on the same sign and one larger sell that flips sign, and assert the surviving row's `netSize`, `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId` advance to the newest accepted trade while `ACCOUNT_RISK` remains unchanged.",
+      "based_on": ["q4", "q6"],
+      "alternatives_rejected": [
+        "Cover only the zero-prune path that is already in the suite.",
+        "Add a separate `GET /v1/accounts/{id}/risk` read-after-write assertion as part of this focused EventTrade regression step."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Guard replay ordering explicitly by patching `preview_event_trade_position_net_change(...)` and asserting it is not called when replaying already-persisted accepted EventTrades or terminally rejected `market_not_active` EventTrades, while keeping the existing `meta.replayed` and no-double-write assertions.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Assert only `meta.replayed` and unchanged persistence counts without proving the preview seam was bypassed.",
+        "Broaden replay coverage into new response-contract assertions unrelated to the ordering risk."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Rebase or cherry-pick the step-2/3 EventTrade handler changes into the working branch, then identify the existing EventTrade replay and exposure-projection test clusters in `tests/test_bayes_market_api.py` where the new regressions should be added without widening API contracts.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add helper-level preview tests for exact-cap buy and sell math, plus route-level acceptance tests that seed exposure just below the configured cap and verify submissions landing exactly on `+/-max_position_size` still succeed with the existing accepted EventTrade contract.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add an over-limit regression that seeds near-cap exposure, records the command, order, event, terminal-outcome, idempotency, and exposure stores, asserts a fresh submission over the cap returns the frozen `400 position_limit_exceeded` error with no persistence side effects, then reduces exposure and reuses the same `idempotencyKey` successfully.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Extend accepted-trade exposure coverage with two survivor-sync scenarios, one same-sign partial offset and one sign-flip survivor, asserting the final `ACCOUNT_EXPOSURE` row contents and account timestamp after each accepted trade while confirming `ACCOUNT_RISK` is unchanged.",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Add replay regressions for already-persisted accepted and terminally rejected `market_not_active` EventTrades by patching `preview_event_trade_position_net_change(...)`, asserting replay bypasses the preview path, and preserving the existing replay payload and no-extra-write invariants.",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Run the targeted `tests/test_bayes_market_api.py` EventTrade and exposure slices, then review the diff to confirm the new coverage stays focused on the post-refactor ordering and does not add `/risk` read-after-write assertions or other contract changes.",
+      "depends_on": [2, 3, 4, 5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
