@@ -1,0 +1,150 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Keep the current point-mass settlement model. In this checkout, `finalProbabilities` is only an alternate request shape for the same single-winner contract: the normalizer accepts the map, resolves it to one `outcomeId`, canonicalizes the stored payload back to a one-hot distribution, and the resolved market always stores a single `resolution` string alongside one-hot `resolutionProbabilities` and `marginals`. Allowing any final distribution would be a broader settlement/read-model change, not a narrow validation tweak.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:2251",
+        "backend/server.py:2290",
+        "backend/server.py:2740",
+        "tests/test_bayes_market_api.py:2704",
+        "tests/test_bayes_market_api.py:2744"
+      ],
+      "uncertainty": "This is clear for the current codebase; the only open question is whether product requirements intentionally want to widen settlement semantics despite the current contract.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "In this codebase, 'calculate final payouts' currently means releasing exposure from the risk read model, not booking realized balances or P&L. Resolution removes the market from `ACCOUNT_RISK.markets`, deletes matching LMSR slices, recomputes account `minAsset`, and emits `effects.assetDelta`; `GET /v1/accounts/{id}/risk` is the only settlement-facing read surface. There is no cash ledger, holdings ledger, payout record table, or realized-P&L model to populate, so the present payout effect is the risk-release and LMSR-slice cleanup path.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:1031",
+        "backend/server.py:1236",
+        "backend/server.py:2656",
+        "backend/server.py:2763",
+        "tests/test_bayes_market_api.py:2558",
+        "tests/test_bayes_market_api.py:5805",
+        "docs/t556-scope-and-compatibility-boundary-freeze.md:127"
+      ],
+      "uncertainty": "The task wording could still intend a richer payout/accounting model, but the repository does not contain one today.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q3",
+      "answer": "If non-point-mass final probabilities were allowed, `market.marginals` should keep carrying the final distribution because the detail page and probability bar already render from `marginals`, and `market.resolutionProbabilities` should mirror that same distribution as the explicit resolution field. `market.resolution` cannot stay effectively required for resolved markets in that model because it is a single outcome id and the resolve panel prefers it over the distribution when present. The least disruptive inferred rule is: keep `resolution` only for point-mass resolutions, otherwise omit it and rely on `resolutionProbabilities` plus `marginals`.",
+      "confidence": 0.82,
+      "evidence": [
+        "backend/server.py:1430",
+        "backend/server.py:2741",
+        "backend/server.py:2742",
+        "backend/server.py:2743",
+        "frontend/src/lib/api/types.ts:21",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:15",
+        "frontend/src/routes/MarketDetail.tsx:45"
+      ],
+      "uncertainty": "No backend or frontend test freezes a probabilistic resolved-market read surface today.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q4",
+      "answer": "The only implemented admin-auth behavior is the existing protected-write `X-Bayes-Agent-Id` gate. `/resolve` is classified as `market_admin`, but that category currently only requires a syntactically valid agent id and shared rate limiting; it does not model allowlists, admin roles, secrets, or separate operator credentials. If true admin authorization is required, it must be added as new authorization logic rather than inferred from the current route category.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:131",
+        "backend/server.py:137",
+        "backend/server.py:359",
+        "backend/server.py:391",
+        "backend/server.py:3375",
+        "tests/test_bayes_market_api.py:5109",
+        "tests/test_bayes_market_api.py:5248"
+      ],
+      "uncertainty": "The repo does not indicate which new admin primitive would be preferred if stronger authorization is introduced.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q5",
+      "answer": "Today `accountId` is still part of the resolve contract and is not derived from auth. The handler rejects missing or blank `accountId`, stores it on the persisted `AdminOp` command, and scopes idempotency by `(marketId, accountId, idempotencyKey)`. On the client side, the resolve panel sends `session.accountId` in the JSON body while `session.agentId` only becomes the header. So if admin auth is added without a broader command/audit redesign, `accountId` should remain; moving operator identity entirely into auth would require changing command materialization and idempotency semantics.",
+      "confidence": 0.92,
+      "evidence": [
+        "backend/server.py:2434",
+        "backend/server.py:3077",
+        "backend/server.py:3100",
+        "frontend/src/lib/api/client.ts:41",
+        "frontend/src/lib/api/client.ts:145",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:46",
+        "tests/test_bayes_market_api.py:2845"
+      ],
+      "uncertainty": "If future auth becomes the canonical operator identity, the current codebase does not show a replacement pattern for `accountId` on `AdminOp` commands.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q6",
+      "answer": "The current invalid-payout boundary is the full stricter validator, not just a bad total. `finalProbabilities` must be an object with exactly one finite numeric, non-negative value per declared outcome, no missing or unexpected outcomes, a total of `1.0`, a point-mass shape, and agreement with `outcomeId` when both are provided. Unknown or blank `outcomeId` is also rejected.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:2174",
+        "backend/server.py:2207",
+        "backend/server.py:2235",
+        "backend/server.py:2251",
+        "backend/server.py:2315",
+        "tests/test_bayes_market_api.py:2744",
+        "tests/test_bayes_market_api.py:2767",
+        "tests/test_bayes_market_api.py:2786",
+        "tests/test_bayes_market_api.py:5782"
+      ],
+      "uncertainty": "Some subcases, such as negative or non-numeric values and missing or unexpected outcomes, are enforced directly in code more clearly than they are covered by explicit tests.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q7",
+      "answer": "Yes. The canonical double-resolve behavior is already `409 market_already_resolved` plus a terminal `CommandRejected` event persisted for that command, with replay of the same terminal outcome when the same `(marketId, accountId, idempotencyKey)` is reused. Both the route code and the HTTP tests pin that behavior.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:2518",
+        "backend/server.py:2537",
+        "backend/server.py:3077",
+        "backend/server.py:3125",
+        "tests/test_bayes_market_api.py:5749",
+        "tests/test_bayes_market_api.py:5765"
+      ],
+      "uncertainty": "The route-level behavior is clear; the only nuance is that the lower-level transition helper also independently raises a 409 if called directly.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The work stays scoped to the existing `/v1/markets/{id}/resolve` handler and its tests instead of inventing a second resolution endpoint."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Preserving the current `409 market_already_resolved` and same-key replay behavior avoids unnecessary churn in journal persistence, terminal outcomes, and idempotency semantics."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Settlement work should target account-risk release and LMSR-slice cleanup, because there is no hidden payout ledger to reuse."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Any request for 'real admin auth' is additional authorization scope, not something already satisfied by the current route-category checks."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.7,
+      "impact": "The resolve UI definitely assumes single-outcome submission, but the frontend request type already allows `finalProbabilities` and the resolved-state display can already fall back to `resolutionProbabilities`, so frontend scope may be smaller than the assumption suggests."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
