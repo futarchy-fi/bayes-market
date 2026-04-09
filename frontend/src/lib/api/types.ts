@@ -3,10 +3,20 @@ export interface MarketOutcome {
   name: string;
 }
 
+export type MarketStatus = "active" | "resolved" | "closed" | "draft";
+export type MarketListStatusFilter = MarketStatus | "all";
+export type MarketListSort = "volume" | "liquidity" | "created";
+
+export interface MarketListFilters {
+  status?: MarketListStatusFilter;
+  sort?: MarketListSort;
+  q?: string;
+}
+
 export interface MarketSummary {
   id: string;
   title: string;
-  status: "active" | "resolved" | "closed" | "draft";
+  status: MarketStatus;
   liquidity: number;
   volume: number;
   expires_at: string;
@@ -17,7 +27,7 @@ export interface Market {
   title: string;
   description: string;
   variableId: string;
-  status: "active" | "resolved" | "closed" | "draft";
+  status: MarketStatus;
   resolution?: string;
   outcomes: MarketOutcome[];
   marginals: Record<string, number>;
@@ -254,6 +264,11 @@ export interface ApiError {
 export interface Meta {
   apiVersion: string;
   timestamp: string;
+  filters?: {
+    status?: MarketStatus | null;
+    sort?: MarketListSort | null;
+    q?: string | null;
+  };
 }
 
 export interface ProbabilityEditPayload {

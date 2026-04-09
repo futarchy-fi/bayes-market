@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should `GET /v1/markets` accept `status=all` explicitly, and if it does, is it equivalent to omitting `status`?",
+      "category": "requirements",
+      "why_it_matters": "The task title says `active/resolved/all`, but the implementation brief only names `active|resolved`, and the current backend/frontend model already knows about `closed` and `draft` states."
+    },
+    {
+      "id": "q2",
+      "question": "Does this task intentionally narrow the public status filter to `active` and `resolved`, or must existing `closed` and `draft` filters remain supported for compatibility?",
+      "category": "requirements",
+      "why_it_matters": "Today `backend/server.py` validates against `active/resolved/closed/draft`, and `frontend/src/routes/MarketList.tsx` still exposes `closed` and `draft` in the status dropdown."
+    },
+    {
+      "id": "q3",
+      "question": "For `sort=volume|liquidity|created`, what is the expected default ordering when `sort` is omitted, and should each sort be descending or ascending?",
+      "category": "design",
+      "why_it_matters": "The current list endpoint preserves dict insertion order, so tests for the new sort options need a defined baseline and deterministic direction."
+    },
+    {
+      "id": "q4",
+      "question": "Should `sort=created` use the existing `created_at` field internally, and should the market summary response stay unchanged even though `created_at` is not currently included in `MARKET_SUMMARY_FIELDS`?",
+      "category": "design",
+      "why_it_matters": "Sorting can be implemented without widening the response shape, but if the summary contract is expected to expose `created_at`, backend tests and frontend types will both need updates."
+    },
+    {
+      "id": "q5",
+      "question": "What are the exact `q` semantics: case-insensitive substring match on `title` only, whitespace-trimmed input, and should `q=` with an empty string behave like no filter or return a query validation error?",
+      "category": "requirements",
+      "why_it_matters": "The task says 'text search on title' but does not define matching behavior, which directly affects query parsing, edge-case tests, and user-visible results."
+    },
+    {
+      "id": "q6",
+      "question": "Should the list response metadata expand from `meta.filters = { status }` to include the applied `sort` and `q` values, and should duplicate `sort`/`q` params follow the existing `invalid_query` pattern used for `status` and `interval`?",
+      "category": "codebase",
+      "why_it_matters": "The existing backend has a consistent single-value query validation style, but the current list response only echoes `status`, so the implementation needs a clear contract for metadata and error behavior."
+    },
+    {
+      "id": "q7",
+      "question": "Is the implementation scope for the follow-up coding phase backend-only, or should it also update the frontend API client/hooks/MarketList to send the new `status`, `sort`, and `q` params?",
+      "category": "requirements",
+      "why_it_matters": "The bd issue description explicitly mentions making `MarketList` pass these params, but the direct task brief only names `backend/server.py` and `tests/test_bayes_market_api.py`."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The task text's `handle_list_markets` refers to the existing `list_markets(query)` function in `backend/server.py`.",
+      "confidence": 0.98,
+      "if_wrong": "Implementation work could be applied to the wrong seam, or a wrapper handler elsewhere may need to own query parsing instead."
+    },
+    {
+      "id": "a2",
+      "assumption": "When multiple query params are present, filtering is conjunctive: apply `status` and `q` together, then sort the remaining results.",
+      "confidence": 0.9,
+      "if_wrong": "Tests that cover combined filters will encode the wrong result set and ordering rules."
+    },
+    {
+      "id": "a3",
+      "assumption": "New query params should follow the repo's current validation style: single-valued params, `400 invalid_query` on duplicates or unsupported values.",
+      "confidence": 0.84,
+      "if_wrong": "The parser and tests would need different behavior for repeated params or looser coercion rules."
+    },
+    {
+      "id": "a4",
+      "assumption": "The market list summary shape should remain unchanged unless clarified; this task adds filtering/search/sorting behavior, not a summary schema expansion.",
+      "confidence": 0.78,
+      "if_wrong": "Frontend types, client tests, and the backend list tests will need to expand to include new list fields such as `created_at`."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

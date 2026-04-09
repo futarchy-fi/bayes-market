@@ -882,7 +882,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         self.assertEqual(status, 200)
         self.assertEqual(payload["count"], 3)
-        self.assertEqual(payload["meta"]["filters"], {"status": None})
+        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2", "m3"])
+        self.assertEqual(payload["meta"]["filters"], {"status": None, "sort": None, "q": None})
         self.assertTrue(payload["meta"]["timestamp"].endswith("Z"))
         self.assertEqual(
             set(payload["markets"][0].keys()),
@@ -890,13 +891,70 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         )
         self.assertNotIn("description", payload["markets"][0])
 
+    def test_list_markets_accepts_status_all_alias(self):
+        payload, status = server.route_request("GET", "/v1/markets?status=all")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["count"], 3)
+        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2", "m3"])
+        self.assertEqual(payload["meta"]["filters"], {"status": None, "sort": None, "q": None})
+
     def test_list_markets_filters_by_status(self):
         payload, status = server.route_request("GET", "/v1/markets?status=resolved")
 
         self.assertEqual(status, 200)
         self.assertEqual(payload["count"], 1)
         self.assertEqual([market["id"] for market in payload["markets"]], ["m3"])
-        self.assertEqual(payload["meta"]["filters"], {"status": "resolved"})
+        self.assertEqual(payload["meta"]["filters"], {"status": "resolved", "sort": None, "q": None})
+
+    def test_list_markets_keeps_closed_and_draft_status_filters_valid(self):
+        for market_status in ("closed", "draft"):
+            with self.subTest(status=market_status):
+                payload, status = server.route_request("GET", f"/v1/markets?status={market_status}")
+
+                self.assertEqual(status, 200)
+                self.assertEqual(payload["count"], 0)
+                self.assertEqual(payload["markets"], [])
+                self.assertEqual(payload["meta"]["filters"], {"status": market_status, "sort": None, "q": None})
+
+    def test_list_markets_filters_by_trimmed_case_insensitive_title_search(self):
+        payload, status = server.route_request("GET", "/v1/markets?q=%20ETH%20")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual([market["id"] for market in payload["markets"]], ["m1"])
+        self.assertEqual(payload["meta"]["filters"], {"status": None, "sort": None, "q": "ETH"})
+
+    def test_list_markets_treats_blank_search_like_no_filter(self):
+        payload, status = server.route_request("GET", "/v1/markets?q=%20%20")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["count"], 3)
+        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2", "m3"])
+        self.assertEqual(payload["meta"]["filters"], {"status": None, "sort": None, "q": None})
+
+    def test_list_markets_applies_supported_sorts_descending(self):
+        expectations = {
+            "volume": ["m3", "m1", "m2"],
+            "liquidity": ["m3", "m1", "m2"],
+            "created": ["m2", "m1", "m3"],
+        }
+
+        for sort, expected_ids in expectations.items():
+            with self.subTest(sort=sort):
+                payload, status = server.route_request("GET", f"/v1/markets?sort={sort}")
+
+                self.assertEqual(status, 200)
+                self.assertEqual([market["id"] for market in payload["markets"]], expected_ids)
+                self.assertEqual(payload["meta"]["filters"], {"status": None, "sort": sort, "q": None})
+
+    def test_list_markets_combines_status_search_and_sort_filters(self):
+        payload, status = server.route_request("GET", "/v1/markets?status=active&q=t&sort=liquidity")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2"])
+        self.assertEqual(payload["meta"]["filters"], {"status": "active", "sort": "liquidity", "q": "t"})
 
     def test_invalid_status_filter_returns_contract_error(self):
         with self.assertRaises(server.ApiError) as ctx:
@@ -906,6 +964,32 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_query")
         self.assertEqual(error.details["parameter"], "status")
+
+    def test_invalid_market_list_sort_returns_contract_error(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/markets?sort=oldest")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_query")
+        self.assertEqual(error.details["parameter"], "sort")
+
+    def test_duplicate_market_list_query_params_return_contract_error(self):
+        paths = {
+            "status": "/v1/markets?status=active&status=resolved",
+            "sort": "/v1/markets?sort=volume&sort=created",
+            "q": "/v1/markets?q=eth&q=btc",
+        }
+
+        for parameter, path in paths.items():
+            with self.subTest(parameter=parameter):
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("GET", path)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_query")
+                self.assertEqual(error.details["parameter"], parameter)
 
     def test_market_detail_returns_variable_and_marginals(self):
         payload, status = server.route_request("GET", "/v1/markets/m1")
