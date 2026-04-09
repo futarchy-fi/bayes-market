@@ -1,0 +1,75 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep existing status compatibility by continuing to support active, resolved, closed, and draft, and accept status=all as an alias for omitting the status filter.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Reject status=all and require callers to omit status",
+        "Narrow the public filter contract to only active and resolved"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Add single-valued sort and q query params using the existing invalid_query style, with q implemented as trimmed case-insensitive substring matching on title and blank q treated as no filter.",
+      "based_on": ["q5", "q6"],
+      "alternatives_rejected": [
+        "Search across additional fields such as description",
+        "Reject blank q values instead of normalizing them away",
+        "Allow repeated sort or q parameters"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Apply filters conjunctively and add explicit descending sorts for volume, liquidity, and created while preserving current insertion order when sort is omitted.",
+      "based_on": ["q3", "q4", "q5"],
+      "alternatives_rejected": [
+        "Change the default order when sort is omitted",
+        "Sort created ascending oldest-first",
+        "Expose created_at in the summary payload just to support sorting"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Update the frontend list API and MarketList route to send status, sort, and q so the new backend contract is user-visible end to end.",
+      "based_on": ["q7"],
+      "alternatives_rejected": [
+        "Ship backend-only support and leave the UI unchanged"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Extend backend/server.py market listing query parsing to normalize status, q, and sort and to include the applied filters in response metadata.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Expand tests/test_bayes_market_api.py coverage for status=all, duplicate params, trimmed title search, combined filters, and explicit sort order.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Update frontend API client and React Query hook signatures so /v1/markets requests can include status, sort, and q.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Update frontend/src/routes/MarketList.tsx and related frontend tests to expose status, sort, and search controls backed by the new query params.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Run targeted backend and frontend tests, then stage and commit the completed implementation.",
+      "depends_on": [2, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
