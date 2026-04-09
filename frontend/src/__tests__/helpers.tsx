@@ -13,12 +13,18 @@ function createTestQueryClient() {
   });
 }
 
-function TestProviders({ children }: { children: ReactNode }) {
+function TestProviders({
+  children,
+  initialEntries,
+}: {
+  children: ReactNode;
+  initialEntries?: string[];
+}) {
   const qc = createTestQueryClient();
   return (
     <QueryClientProvider client={qc}>
       <SessionProvider>
-        <MemoryRouter>{children}</MemoryRouter>
+        <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
       </SessionProvider>
     </QueryClientProvider>
   );
@@ -26,7 +32,17 @@ function TestProviders({ children }: { children: ReactNode }) {
 
 export function renderWithProviders(
   ui: ReactElement,
-  options?: Omit<RenderOptions, "wrapper">,
+  options?: Omit<RenderOptions, "wrapper"> & { route?: string; initialEntries?: string[] },
 ) {
-  return render(ui, { wrapper: TestProviders, ...options });
+  const { route, initialEntries, ...renderOptions } = options ?? {};
+
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <TestProviders initialEntries={initialEntries ?? (route ? [route] : undefined)}>
+        {children}
+      </TestProviders>
+    );
+  }
+
+  return render(ui, { wrapper: Wrapper, ...renderOptions });
 }

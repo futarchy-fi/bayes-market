@@ -5,10 +5,14 @@ import type {
   ProbabilityEditPayload,
   EventTradePayload,
   Session,
+  MarketListFilters,
 } from "@/lib/api/types";
+import { marketListQueryKey } from "@/lib/marketListFilters";
 
 export const queryKeys = {
-  markets: (status?: string) => ["markets", { status }] as const,
+  marketLists: () => ["markets", "list"] as const,
+  markets: (filters: MarketListFilters = {}) =>
+    [...queryKeys.marketLists(), marketListQueryKey(filters)] as const,
   market: (id: string) => ["markets", id] as const,
   marketEvents: (id: string) => ["markets", id, "events"] as const,
   engineStats: (id: string) => ["markets", id, "engine-stats"] as const,
@@ -21,10 +25,10 @@ export const queryKeys = {
   serviceIndex: () => ["service-index"] as const,
 };
 
-export function useMarkets(status?: string) {
+export function useMarkets(filters: MarketListFilters = {}) {
   return useQuery({
-    queryKey: queryKeys.markets(status),
-    queryFn: () => api.listMarkets(status),
+    queryKey: queryKeys.markets(filters),
+    queryFn: () => api.listMarkets(filters),
     refetchInterval: 5000,
   });
 }
@@ -104,7 +108,7 @@ export function useCreateMarket() {
     mutationFn: ({ payload, session }: { payload: api.CreateMarketPayload; session?: Session }) =>
       api.createMarket(payload, session),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.markets() });
+      void qc.invalidateQueries({ queryKey: queryKeys.marketLists() });
     },
   });
 }
@@ -129,7 +133,7 @@ export function useResolveMarket(marketId: string) {
     onSuccess: (_data, variables) => {
       void qc.invalidateQueries({ queryKey: queryKeys.market(marketId) });
       void qc.invalidateQueries({ queryKey: queryKeys.account(variables.payload.accountId) });
-      void qc.invalidateQueries({ queryKey: queryKeys.markets() });
+      void qc.invalidateQueries({ queryKey: queryKeys.marketLists() });
     },
   });
 }

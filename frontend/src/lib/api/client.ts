@@ -12,7 +12,9 @@ import type {
   ProbabilityEditPayload,
   EventTradePayload,
   Session,
+  MarketListFilters,
 } from "./types";
+import { normalizeMarketListFilters } from "@/lib/marketListFilters";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -64,10 +66,25 @@ async function request<T>(
 }
 
 export function listMarkets(
-  status?: string,
+  filters: MarketListFilters = {},
 ): Promise<MarketListResponse> {
-  const params = status ? `?status=${encodeURIComponent(status)}` : "";
-  return request<MarketListResponse>(`/v1/markets${params}`);
+  const normalized = normalizeMarketListFilters(filters);
+  const params = new URLSearchParams();
+
+  if (normalized.status) {
+    params.set("status", normalized.status);
+  }
+
+  if (normalized.sort) {
+    params.set("sort", normalized.sort);
+  }
+
+  if (normalized.q) {
+    params.set("q", normalized.q);
+  }
+
+  const qs = params.toString();
+  return request<MarketListResponse>(`/v1/markets${qs ? `?${qs}` : ""}`);
 }
 
 export interface CreateMarketPayload {
