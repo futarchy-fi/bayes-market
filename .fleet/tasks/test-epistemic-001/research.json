@@ -1,0 +1,126 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The current codebase freezes `POST /v1/markets/{id}/resolve` as a single-winner `{accountId, outcomeId, idempotencyKey?}` contract end to end. Replacing that body in place would break the backend normalizer and persisted command payload, the frontend client/panel, and the existing API tests. There is no alternate versioned route or migration layer in this checkout. So if backward compatibility matters, the route must support both shapes or be versioned; a hard replacement is a breaking migration, not a small additive change.",
+      "confidence": 0.93,
+      "evidence": [
+        "backend/server.py:1977",
+        "backend/server.py:2091",
+        "frontend/src/lib/api/client.ts:138",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:41",
+        "tests/test_bayes_market_api.py:72",
+        "tests/test_bayes_market_api.py:5447"
+      ],
+      "uncertainty": "The repo shows the breakage surface clearly, but it does not state whether the maintainers are willing to accept a breaking API change on this task.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q2",
+      "answer": "If a full-distribution resolve body is introduced, the strongest existing precedent is to validate it like `market.marginals`, not like an LMSR edit target. That means a full probability map should be provided explicitly for every declared outcome; omitted outcomes should not silently imply `0`; values should be finite numbers, non-negative, and `0`/`1` should be allowed; and the total should be checked with `abs_tol = 1e-9`. The likely canonical shape is a top-level map such as `{accountId, finalProbabilities: {outcomeId: probability}, idempotencyKey?}`, but that field name is an inference because no such payload exists yet.",
+      "confidence": 0.8,
+      "evidence": [
+        "backend/server.py:1424",
+        "backend/server.py:1435",
+        "backend/server.py:1444",
+        "backend/server.py:1447",
+        "backend/server.py:1958",
+        "backend/lmsr.py:9",
+        "backend/lmsr.py:58"
+      ],
+      "uncertainty": "The exact top-level field name for the probability map is not defined anywhere in the repo today.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q3",
+      "answer": "Current read surfaces already represent a resolved market as `status = \"resolved\"` plus `marginals`, but they also preserve a single-string `resolution` that means \"winning outcome id\". That string works only for point-mass outcomes. For probabilistic resolution, keeping `status = \"resolved\"` and using `market.marginals` for the final distribution fits the existing probability displays, but `market.resolution` should not keep pretending to be a single outcome. The smallest additive design would be to keep `resolution` only for point-mass resolutions and add a new explicit field for the full final distribution; removing `resolution` outright or changing its type in place would break current frontend types and UI.",
+      "confidence": 0.86,
+      "evidence": [
+        "backend/server.py:99",
+        "backend/server.py:1249",
+        "backend/server.py:2396",
+        "frontend/src/lib/api/types.ts:21",
+        "frontend/src/routes/MarketDetail.tsx:45",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:21"
+      ],
+      "uncertainty": "The repo does not define the name or exact wire shape of a new probabilistic-resolution read field.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q4",
+      "answer": "As implemented, resolve is a terminal point-mass operation: it rewrites market marginals to a one-hot distribution, marks the market resolved, deletes conditional slices, and immediately removes that market from account risk/LMSR slice state. There is no separate realized-P&L or fractional-settlement model in this checkout. That means non-point-mass resolution is not just a request-validation change; it would require new settlement/accounting semantics. The safest codebase-consistent interpretation is that `resolve` remains valid only for point-mass final distributions unless a broader settlement model is added.",
+      "confidence": 0.77,
+      "evidence": [
+        "backend/server.py:2313",
+        "backend/server.py:2395",
+        "backend/server.py:2417",
+        "backend/server.py:2706",
+        "tests/test_bayes_market_api.py:2563",
+        "tests/test_bayes_market_api.py:5632"
+      ],
+      "uncertainty": "The repo does not contain a separate positions/P&L settlement design, so any probabilistic-settlement behavior would be new design work rather than an extension of current semantics.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q5",
+      "answer": "Today the persisted resolve command is `commandType = \"AdminOp\"` with payload `{\"kind\":\"ResolveMarket\",\"outcomeId\":...}`. The accepted event does not carry an explicit resolution object; it only exposes `effects.marginalDelta`, `effects.assetDelta`, pricing, and the replay hash, and `GET /v1/markets/{id}/events` returns that stored payload unchanged. If probabilistic resolution is added, the command payload has to persist the full probability map somewhere in `payload`, and the accepted event should surface the final distribution explicitly instead of forcing consumers to reconstruct it only from per-outcome deltas. The least disruptive path is to keep `AdminOp`/`ResolveMarket` and add a new probability-map field, because the event-sourcing doc allows additive optional fields in v1.",
+      "confidence": 0.74,
+      "evidence": [
+        "backend/server.py:2099",
+        "backend/server.py:2421",
+        "backend/server.py:1320",
+        "tests/test_bayes_market_api.py:2572",
+        "tests/test_bayes_market_api.py:2616",
+        "docs/t544-event-sourcing-contract.md:95",
+        "docs/t544-event-sourcing-contract.md:217"
+      ],
+      "uncertainty": "There is no separate analytics/reconstruction module in this checkout beyond the canonical event journal and replay-state consumers, so the exact downstream field requirements are not fully specified.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q6",
+      "answer": "Yes. The current route-level mechanics look intentionally frozen and should remain unchanged unless the task explicitly says otherwise. Resolve is POST-only, only allowed from `active` or `closed`, returns `409 market_already_resolved` for resolved markets, replays identical idempotency keys, and sits under the market-admin write controls that enforce agent-id validation and per-agent rate limiting before route dispatch.",
+      "confidence": 0.96,
+      "evidence": [
+        "backend/server.py:359",
+        "backend/server.py:2371",
+        "backend/server.py:2382",
+        "backend/server.py:2749",
+        "backend/server.py:3009",
+        "tests/test_bayes_market_api.py:4957",
+        "tests/test_bayes_market_api.py:5523"
+      ],
+      "uncertainty": "There is no resolve-specific 429 test in this checkout, but the shared protected-write path applies rate limiting to `/resolve` through route categorization.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The repo already has `POST /v1/markets/{id}/resolve` implemented as an `AdminOp` carrying `outcomeId`, so this task is modifying an existing contract rather than adding a new endpoint."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Current route mechanics such as journal append, idempotency replay, protected-write agent handling, and `409` terminal rejections are already implemented and heavily tested, so preserving them keeps scope bounded."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Non-point-mass resolution would ripple beyond request validation because frontend types/UI, stored command payloads, and settlement/read semantics currently assume a single winning outcome id."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.76,
+      "impact": "The repo uses `abs_tol = 1e-9` as its established distribution-sum tolerance, so adopting a full-probabilities payload would most naturally follow that convention instead of strict string-exact equality."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
