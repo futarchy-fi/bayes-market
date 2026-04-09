@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact `400` contract should an over-limit EventTrade use: a new dedicated `error.code` or the existing `invalid_event_trade`, what message should be frozen, and is the boundary strict `abs(resultingNetSize) > max_position_size` so trades landing exactly on `100.0` still pass?",
+      "category": "requirements",
+      "why_it_matters": "The current EventTrade path only has payload-shape `400` errors and terminal `409` rejections. Step 2 adds a new validation path, so the symbolic error code, message, and equality boundary need to be pinned for backend tests and frontend handling."
+    },
+    {
+      "id": "q2",
+      "question": "Should step 2 add a dedicated read-only EventTrade position-preview helper that looks up `ACCOUNT_EXPOSURE` without calling `ensure_*`, then reuses the existing six-decimal netting math for both pre-command limit checks and accepted-trade sync?",
+      "category": "design",
+      "why_it_matters": "Today `handle_event_trade(...)` has no preview seam and `sync_account_exposure_state(...)` recomputes the net change after order creation. A shared pure preview path would prevent drift between validation and mutation while preserving the planned `404` semantics for accounts with no live exposure document."
+    },
+    {
+      "id": "q3",
+      "question": "For a max-position breach on a request with an `idempotencyKey`, should the failure stay completely outside command/event/idempotency persistence so the same key can be retried later against changed exposure, or does product still want replayable storage for this new `400` case?",
+      "category": "requirements",
+      "why_it_matters": "Existing replayable failures in this backend are terminal rejections that persist `COMMANDS`, `EVENTS`, and `TERMINAL_OUTCOMES`. Step 2 explicitly moves the new check before command materialization, so the intended idempotency behavior is the main contract difference that still needs to be nailed down."
+    },
+    {
+      "id": "q4",
+      "question": "Should the resulting-net-position preview remain internal to validation only, or should accepted EventTrade responses and/or accepted journal events start surfacing fields like `currentNetSize` and `resultingNetSize` in step 2?",
+      "category": "requirements",
+      "why_it_matters": "The current accepted EventTrade contract exposes trade pricing but no exposure projection data, and step 3 separately introduces `/v1/accounts/{id}/exposure`. If step 2 is also supposed to expose preview numbers, that changes API and test scope beyond a pure write-path patch."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The parent-plan rule is already fixed: compare the six-decimal absolute resulting net position for one `(accountId, marketId, outcomeId)` slice against the global `max_position_size = 100.0`, with buys adding size and sells subtracting it.",
+      "confidence": 0.98,
+      "if_wrong": "The preview math, accepted-trade sync, and limit tests would all need a different ledger model or boundary quantity."
+    },
+    {
+      "id": "a2",
+      "assumption": "Fresh-submission preview must be read-only and treat missing exposure state as implicit zero via direct lookup, not by calling `ensure_account_exposure_state(...)` or `ensure_account_exposure_position(...)`.",
+      "confidence": 0.98,
+      "if_wrong": "Step 2 could accidentally materialize empty exposure documents during rejected requests and break the planned `404` empty-account semantics for `/exposure`."
+    },
+    {
+      "id": "a3",
+      "assumption": "Idempotent replays of already-accepted or already-rejected EventTrades remain the first gate and should bypass the new preview path entirely, matching the current `handle_event_trade(...)` ordering.",
+      "confidence": 0.97,
+      "if_wrong": "Replay requests could recompute validation or mutate exposure again, which would break the existing replay contract and likely double-apply projection state."
+    },
+    {
+      "id": "a4",
+      "assumption": "Accepted EventTrade writes should continue to update only `ACCOUNT_EXPOSURE`; `/v1/accounts/{id}/risk` and `ACCOUNT_RISK` stay unchanged in this step.",
+      "confidence": 0.99,
+      "if_wrong": "Step 2 would have to reopen the frozen `/risk` contract and add new risk-state mutations or tests."
+    },
+    {
+      "id": "a5",
+      "assumption": "Unless product explicitly asks otherwise, the new preview exists to gate acceptance rather than to widen the successful EventTrade response shape; step 3's `/exposure` route remains the planned read surface for live positions.",
+      "confidence": 0.79,
+      "if_wrong": "Step 2 would need additive response or event-payload fields plus new contract coverage, not just a validation and write-path change."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
