@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should `POST /v1/markets/{id}/resolve` replace the current `{\"accountId\",\"outcomeId\"}` contract with a full final-probabilities payload, or must it support both shapes for backward compatibility?",
+      "category": "requirements",
+      "why_it_matters": "The endpoint already exists end to end as a single-outcome resolve flow in the backend, frontend client/panel, and tests. This is the main scope boundary between a small validation change and a breaking contract migration."
+    },
+    {
+      "id": "q2",
+      "question": "What exact request shape and validation rules should the final-probabilities body use: must clients provide every declared outcome, can omitted outcomes imply `0`, are `0` and `1` allowed, and should the sum be validated exactly or with a tolerance such as `1e-9`?",
+      "category": "requirements",
+      "why_it_matters": "The task explicitly calls out outcome-sum validation, but the acceptance criteria do not define the canonical payload or numeric edge cases. Those details determine both the normalization code and the negative-test matrix."
+    },
+    {
+      "id": "q3",
+      "question": "How should a probabilistically resolved market be represented on read surfaces: keep `market.status = \"resolved\"` with `market.marginals` holding the final distribution, preserve or remove the current single-string `market.resolution`, and should any new response field be introduced?",
+      "category": "design",
+      "why_it_matters": "Current read models and frontend types assume a single winning outcome via `market.resolution`. A non-point-mass resolution needs an explicit representation decision to avoid inconsistent API responses and UI behavior."
+    },
+    {
+      "id": "q4",
+      "question": "What are the settlement semantics for non-point-mass resolution: should resolve still fully settle account exposure and realize P&L immediately using the final probabilities, or is resolution only valid when the final distribution is a point mass?",
+      "category": "design",
+      "why_it_matters": "The current resolve path releases account risk, clears LMSR slices, and values resolved positions as binary payouts. Changing the endpoint to accept arbitrary final probabilities has direct consequences for account risk, P&L, and event-trade valuation."
+    },
+    {
+      "id": "q5",
+      "question": "What command and event-journal contract should be persisted for the new behavior: should the existing `AdminOp`/`ResolveMarket` command now store a full probability map, and how should the accepted event payload and analytics reconstruction surface those final probabilities?",
+      "category": "codebase",
+      "why_it_matters": "The current journal and analytics logic reconstruct resolution history from `payload.outcomeId` and point-mass marginals. A new payload shape changes replay, event snapshots, and history/analytics consumers."
+    },
+    {
+      "id": "q6",
+      "question": "Should the existing route-level behaviors remain unchanged while adding probabilistic resolution: allow resolve only from `active` or `closed`, keep `409 market_already_resolved`, preserve idempotent replay semantics, and retain agent-id auth/rate-limit handling?",
+      "category": "requirements",
+      "why_it_matters": "Those behaviors are already implemented and heavily tested on this route. Confirming they stay frozen avoids accidentally widening the task into a broader endpoint redesign."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The repository already implements `POST /v1/markets/{id}/resolve` as a single-winner `AdminOp` using `outcomeId`, so this task is a contract change to an existing endpoint rather than a greenfield addition.",
+      "confidence": 0.99,
+      "if_wrong": "Implementation planning would change substantially; we might otherwise duplicate an endpoint that is already present or miss a separate intended surface."
+    },
+    {
+      "id": "a2",
+      "assumption": "Unless specified otherwise, the new resolution flow should preserve current route mechanics such as journal append, idempotency replay, agent-id protection, and the existing `409` behavior for already-resolved markets.",
+      "confidence": 0.84,
+      "if_wrong": "The work would need broader route-layer and HTTP-contract changes than the task description suggests, including auth/policy and replay behavior."
+    },
+    {
+      "id": "a3",
+      "assumption": "Supporting non-point-mass final probabilities will require downstream changes beyond request validation, because parts of the frontend, P&L, and analytics code currently assume `market.resolution` is a single outcome id.",
+      "confidence": 0.95,
+      "if_wrong": "The implementation could stay much more localized to the handler and tests, and I would be overestimating migration scope."
+    },
+    {
+      "id": "a4",
+      "assumption": "If the endpoint accepts a full probability map, sum validation will likely follow the repo's existing normalization tolerance pattern (`abs_tol = 1e-9`) rather than strict string-exact equality.",
+      "confidence": 0.63,
+      "if_wrong": "Validation and tests will need a stricter sum rule or explicit decimal policy, and edge-case behavior near `1.0` would need to be rewritten."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
