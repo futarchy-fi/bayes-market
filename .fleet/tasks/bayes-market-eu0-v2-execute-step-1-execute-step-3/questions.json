@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This checkout still lacks the step-2 exposure helper seam (`build_account_exposure_state(...)`, `build_account_exposure_position(...)`, `ensure_account_exposure_state(...)`, and `ensure_account_exposure_position(...)`). Should step 3 backfill those helpers in the same implementation branch, or can it assume that prerequisite lands first?",
+      "category": "codebase",
+      "why_it_matters": "The signed-size math is planned to layer on top of canonical account/position builders. Without those helpers, there is no stable mutation seam for creating, updating, deleting, and pruning live exposure rows."
+    },
+    {
+      "id": "q2",
+      "question": "For resulting-net calculation and exact-zero row deletion, should the helper operate on the backend's canonical six-decimal precision (`round_risk_value`, matching persisted `order[\"size\"]`) rather than raw Python float arithmetic from the request payload?",
+      "category": "requirements",
+      "why_it_matters": "EventTrade size starts as user-supplied float input, but accepted orders round it before persistence. The zero-versus-nonzero boundary determines whether offsetting trades reliably delete rows or leave epsilon-sized live positions behind."
+    },
+    {
+      "id": "q3",
+      "question": "Should the signed-size calculation be exposed as a pure helper that returns the current net size, signed delta, and resulting net size for reuse by both later limit-preview logic and accepted-trade mutation, or is separate arithmetic in preview and sync paths acceptable?",
+      "category": "design",
+      "why_it_matters": "The parent rollout later rejects over-limit trades before command materialization. If preview and mutation do not share one arithmetic primitive, the position-limit check can drift from the live projection update logic."
+    },
+    {
+      "id": "q4",
+      "question": "When a trade touches an existing live position but does not delete it, should `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId` always advance to the newest accepted trade on that `(marketId, outcomeId)` slice, even when the trade reduces or flips the net position rather than increasing absolute exposure?",
+      "category": "requirements",
+      "why_it_matters": "The plan freezes these fields in the public exposure contract, but it does not yet pin whether they mean 'latest activity on the slice' or only the latest trade that increased the open position. That changes both mutation logic and test expectations."
+    },
+    {
+      "id": "q5",
+      "question": "Should the netting helper defensively normalize partially malformed existing exposure rows in place, or can it assume the step-2 `ensure_*` helpers have already canonicalized `positions`, `netSize`, and metadata fields before signed-size math runs?",
+      "category": "codebase",
+      "why_it_matters": "The current risk helpers normalize some nested blocks but not every scalar field. Deciding where normalization responsibility lives determines whether the step-3 helpers stay narrow or need to harden legacy and test-seeded state before mutating it."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The exposure projection remains a separate in-memory store (`ACCOUNT_EXPOSURE`) that is cleared by `reset_state()` and does not reshape the existing `ACCOUNT_RISK` read model.",
+      "confidence": 0.99,
+      "if_wrong": "Step 3 would need to target a different state container and could not safely build on the current exposure rollout artifacts."
+    },
+    {
+      "id": "a2",
+      "assumption": "Per-account live positions are still intended to live in a flat composite-key map like `positions[marketId|outcomeId]`, with canonical stored fields limited to `marketId`, `outcomeId`, `netSize`, `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId`.",
+      "confidence": 0.97,
+      "if_wrong": "The helper signatures and deletion/pruning logic for step 3 would target the wrong internal shape or persist the wrong fields."
+    },
+    {
+      "id": "a3",
+      "assumption": "The high-level position lifecycle is already frozen: buys add positive size, sells subtract size, exact-zero positions are deleted, and accounts with no remaining live positions are pruned so `/exposure` can later return `404 account_not_found`.",
+      "confidence": 0.98,
+      "if_wrong": "The signed-size math would need a different ledger model, such as retained zero rows or separate long/short buckets."
+    },
+    {
+      "id": "a4",
+      "assumption": "Accepted EventTrade orders already expose all mutation inputs the step-3 helpers need: `size`, `side`, `price`, `filledAt`, `id`, and `commandId`.",
+      "confidence": 0.99,
+      "if_wrong": "The EventTrade order materialization path would need extra fields before exposure math could update position metadata correctly."
+    },
+    {
+      "id": "a5",
+      "assumption": "Account-level exposure `updatedAt` should continue to mean the latest live-projection mutation, including trade-time row deletion and later market-resolution cleanup, not only the latest accepted opening trade.",
+      "confidence": 0.97,
+      "if_wrong": "Step-3 account pruning and metadata updates could diverge from the planned cleanup semantics and the future serializer contract."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

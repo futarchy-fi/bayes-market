@@ -1,0 +1,99 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use `100.0` as the default global `max_position_size` constant. The repo has no pre-existing position-limit number, but `ACCOUNT_RISK_LIMIT = 100.0` is the only established module-level global trading/risk control in `backend/server.py`, the prior research already chose the same constant-style seam for `max_position_size`, and the default EventTrade fixture size remains `12.5`, so `100.0` fits the current backend/testing scale without forcing immediate fixture rewrites.",
+      "confidence": 0.61,
+      "evidence": [
+        "backend/server.py:125",
+        "docs/t557-unconditional-solvency-contract-freeze.md:27",
+        "tests/test_bayes_market_api.py:57",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:6"
+      ],
+      "uncertainty": "No checked-in source explicitly freezes this numeric value for exposure. `100.0` is a repo-consistent inference from the existing global-limit precedent, not a directly documented product constant.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Delete the `(accountId, marketId, outcomeId)` row immediately when opposite-side trades net it back to exactly zero. The parent plan already freezes signed net accounting per slice and says exposure should stay strictly live state. Once `netSize == 0`, there is no remaining live exposure for that slice, so retaining a zero row would turn the projection into a partial history store and conflict with the later `404` empty-account behavior planned for the route.",
+      "confidence": 0.88,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:6",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:49",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:71",
+        "backend/server.py:2788",
+        "tests/test_bayes_market_api.py:5948"
+      ],
+      "uncertainty": "There is no current EventTrade netting test that hits exact zero, so this is derived from the parent plan's live-state semantics and the existing resolution-cleanup pattern rather than from a direct zero-net regression.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "After resolution cleanup or zero-net deletion removes the final live exposure position, `GET /v1/accounts/{id}/exposure` should return `404 account_not_found`, not `200` with an empty document, even if the same account still exists in another read model such as `/risk`. The exposure projection is planned as a separate in-memory live-state store, and the parent plan explicitly rejects `200` empty exposure documents for accounts with no EventTrade state. In other words, `account_not_found` on `/exposure` should mean \"no live exposure document exists in this projection,\" not \"the account does not exist anywhere in the system.\"",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:17",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:28",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:31",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:71",
+        "backend/server.py:1260",
+        "tests/test_bayes_market_api.py:5946"
+      ],
+      "uncertainty": "This is intentionally different from current `/risk` behavior, which preserves an empty risk document after market resolution. The step-3 exposure plan is the main source that tips this decision toward projection-local `404` semantics.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Use deterministic lexical `(marketId, outcomeId)` ordering for the flat exposure `positions` list. The closest in-tree account read-model precedent, `get_account_risk(...)`, already sorts by `marketId` rather than by recency, and nothing in the exposure plan freezes a recency-first contract. Lexical ordering keeps the serializer stable for tests and UI consumers without adding recency-specific semantics to the projection layer.",
+      "confidence": 0.86,
+      "evidence": [
+        "backend/server.py:1265",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:28",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/questions.json:61"
+      ],
+      "uncertainty": "There is no existing `/exposure` route or explicit product doc that names the order. If the portfolio UI later wants newest-first presentation, it can sort client-side without changing the backend contract.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 1 can freeze helpers around signed net size per `(accountId, marketId, outcomeId)`: buys add, sells subtract, and later limit checks compare `abs(resulting_net_size)` to the global cap."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The new exposure builders/serializers should live beside, not inside, `ACCOUNT_RISK`. `/risk` stays stable and exposure can use its own document lifecycle."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Resolution cleanup can remove only live exposure state for the resolved market while leaving `ORDERS` and `EVENTS` as the historical source of truth, matching the current risk-settlement pattern."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 1 can safely build serializers toward an additive `{account, meta}` response with an `account.exposure` block rather than inventing a different envelope."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Accepted EventTrade orders already carry the fields needed to update and serialize the projection, so Step 1 does not need extra persistence changes on the order path."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.87,
+      "impact": "The serializer should sort positions lexically by `(marketId, outcomeId)` unless a later product requirement explicitly upgrades the public contract to recency ordering."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

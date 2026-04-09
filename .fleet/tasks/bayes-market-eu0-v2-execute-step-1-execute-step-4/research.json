@@ -1,0 +1,110 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Step 4 should backfill the missing step-2 and step-3 exposure primitives in this same implementation branch before serializer work lands. The recorded execution plan makes serializer work depend on the builder/ensure layer and the signed-size sync layer, and both validation artifacts say those prerequisites never landed in `backend/server.py`. In the current checkout the exposure surface is still only the top-level `ACCOUNT_EXPOSURE` store plus `max_position_size`, so there is no canonical exposure document shape to serialize yet.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:67",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:72",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:77",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/validation.json:4",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-3/validation.json:4",
+        "backend/server.py:126",
+        "backend/server.py:177"
+      ],
+      "uncertainty": "The only real uncertainty is sequencing outside this checkout: if another branch were guaranteed to merge the prerequisites first, step 4 could consume that work instead. Nothing in this repo snapshot provides that guarantee.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Step 4 should add pure exposure serialization helpers and also a route-facing `get_account_exposure(account_id)` wrapper that composes them. The repo's existing account-read seam is `get_account_risk(...)`, which owns lookup, `404 account_not_found`, and the final `{account, meta}` payload, and the parent exposure plan freezes the same public envelope and missing-account semantics for `/v1/accounts/{id}/exposure`. Landing the getter now keeps the response contract in one backend seam so the later route-registration step only has to dispatch to it.",
+      "confidence": 0.88,
+      "evidence": [
+        "backend/server.py:1261",
+        "backend/server.py:1265",
+        "backend/server.py:1284",
+        "backend/server.py:1296",
+        "backend/server.py:3475",
+        "backend/server.py:3484",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:28",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-4/questions.json:55"
+      ],
+      "uncertainty": "The exact helper name is not explicitly frozen, and router/service-index wiring still belongs to the later route step. The stronger point is the boundary pattern, not the specific symbol name.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Keep canonical storage responsibility in the missing step-2 and step-3 helpers, but still normalize numeric output at serialization time. The closest read-model precedent, `get_account_risk(...)`, rounds stored numeric fields on the way out, and tests already seed `ACCOUNT_EXPOSURE` directly, so the serializer should harden the read boundary instead of assuming every row was materialized through the future canonical helpers. Concretely, it should emit `netSize` and `lastTradePrice` via `round_risk_value(...)`, derive `absSize` from the rounded net size, and otherwise stay a non-mutating sorter/projector.",
+      "confidence": 0.84,
+      "evidence": [
+        "backend/server.py:1014",
+        "backend/server.py:1273",
+        "backend/server.py:1283",
+        "backend/server.py:2990",
+        "backend/server.py:2991",
+        "tests/test_bayes_market_api.py:350",
+        "tests/test_bayes_market_api.py:357",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:26"
+      ],
+      "uncertainty": "If all writes eventually flow through canonical helpers and no tests or callers seed partially normalized rows, the read-time rounding becomes defensive rather than strictly necessary. The existing `/risk` serializer pattern still makes the defensive choice the better fit.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "For `account.exposure.updatedAt`, read the stored exposure-account timestamp directly. The frozen exposure design defines account `updatedAt` as the latest live-projection mutation, not as `max(position.updatedAt)`, and the existing risk cleanup path already updates account-level freshness when resolution removes market-scoped state. Recomputing from surviving rows would lose cleanup-time mutations or diverge from later prune semantics. If cleanup removes the final live exposure row, the account should disappear and the read path should raise `404 account_not_found` rather than synthesize `updatedAt` from positions.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-3/plan.json:58",
+        "backend/server.py:2801",
+        "backend/server.py:2822",
+        "tests/test_bayes_market_api.py:2657",
+        "tests/test_bayes_market_api.py:2658"
+      ],
+      "uncertainty": "There is no exposure cleanup implementation in this checkout yet, so this answer is inferred from the already-frozen exposure plan and the analogous `ACCOUNT_RISK` settlement behavior.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 4 can target a stable `{account, meta}` payload with `account.exposure` and lexically ordered `(marketId, outcomeId)` positions rather than inventing a new envelope."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The exposure read boundary should raise `account_not_found` for a missing or fully pruned projection document instead of returning `200` with an empty exposure block."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Serializer logic should expect `ACCOUNT_EXPOSURE[accountId]` with a flat composite-key `positions` map and should trust the stored account `updatedAt` as projection-level freshness."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The projection can stay minimal and canonical; `absSize` remains a derived serializer field instead of additional persisted state that would need sync logic."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.88,
+      "impact": "Adding `get_account_exposure(...)` now keeps missing-account handling and `{account, meta}` shaping in one reusable backend seam for the later route step."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "This branch should backfill the builder/ensure/netting primitives before serializer work instead of introducing a temporary serializer-only internal shape that would be rewritten later."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

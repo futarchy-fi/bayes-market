@@ -1,0 +1,118 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Step 3 should backfill the missing step-2 exposure helper seam in the same implementation branch before adding signed-size math. The recorded step breakdown makes signed-size helpers depend on the builder/ensure layer, the step-2 task already defined those exact helpers as the normalization and materialization seam, and the step-2 validation artifact confirms they never landed in this checkout. In practice, this branch cannot safely assume a separate prerequisite merge will appear first; it should add `build_account_exposure_state(...)`, `build_account_exposure_position(...)`, `ensure_account_exposure_state(...)`, and `ensure_account_exposure_position(...)` and then layer the math on top of them.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:73",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:74",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:48",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:53",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:58",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/validation.json:4",
+        "backend/server.py:1056",
+        "backend/server.py:1095"
+      ],
+      "uncertainty": "The only ambiguity is procedural, not technical: if another branch were guaranteed to merge first, step 3 could consume it. Nothing in this checkout provides that guarantee.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. The netting helper should operate on canonical six-decimal precision via `round_risk_value`, and the exact-zero deletion check should be against that rounded resulting net size. `create_event_trade_order(...)` persists `order[\"size\"]` only after six-decimal rounding, so preview and mutation math that uses raw request floats could disagree with the stored order and leave epsilon-sized rows behind. The existing risk ledger helpers already normalize values during accumulation with `round_risk_value`, which is the closest in-tree arithmetic precedent.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:1014",
+        "backend/server.py:1149",
+        "backend/server.py:1153",
+        "backend/server.py:2990",
+        "backend/server.py:2991"
+      ],
+      "uncertainty": "The exact implementation shape is still open, for example whether the helper rounds both the signed delta and the resulting sum at each step or only at the helper boundaries. The canonical precision requirement itself is clear.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Expose the signed-size arithmetic as a pure reusable helper that returns at least current net size, signed delta, and resulting net size. The parent rollout already couples two callers to the same rule set: pre-command limit preview and accepted-trade exposure mutation. If those paths duplicate arithmetic, the `max_position_size` check can drift from live projection updates. The codebase also already extracts reusable arithmetic into helpers such as `_accumulate_score_by_outcome(...)` instead of open-coding repeated rounding logic inline.",
+      "confidence": 0.9,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:66",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:73",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:63",
+        "backend/server.py:1142"
+      ],
+      "uncertainty": "The repo does not yet contain the exposure preview path, so this is a design inference from the rollout plan rather than a direct existing API contract.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. When a trade touches an existing live position and the row survives, `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId` should always advance to that newest accepted trade, even if it reduces or flips the net position. The planned exposure row stores these as canonical mutable facts, not as 'opening trade' metadata, and the repo's existing account read models update analogous `updatedAt` and `last*Id` fields on every accepted mutation to reflect latest slice activity. Holding older metadata after a reduction would make the surviving row inconsistent with the most recent accepted trade that produced its current net size.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:26",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:36",
+        "backend/server.py:1208",
+        "backend/server.py:1209",
+        "backend/server.py:1210",
+        "backend/server.py:1246",
+        "backend/server.py:1247",
+        "backend/server.py:1248",
+        "tests/test_bayes_market_api.py:1279",
+        "tests/test_bayes_market_api.py:1280",
+        "tests/test_bayes_market_api.py:6726",
+        "tests/test_bayes_market_api.py:6728"
+      ],
+      "uncertainty": "There is no current exposure-specific regression that distinguishes 'latest slice activity' from 'latest opening trade', so `lastTradePrice` is inferred from the surrounding metadata contract and existing read-model precedent.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "The netting helper should stay narrow and assume canonical account/position state once the step-2 `ensure_*` seam has run; normalization responsibility belongs in the backfilled `ensure_account_exposure_state(...)` and `ensure_account_exposure_position(...)` helpers, not inside the arithmetic itself. The step-2 plan already assigns normalization to those helpers, while the current risk precedent keeps `ensure_account_risk_state(...)` as the state-shaping seam. Because those exposure helpers are still missing in this checkout, step 3 should backfill them first, and only then let the math helper operate on canonical `positions`, numeric `netSize`, and metadata defaults.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:48",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:53",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:58",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/validation.json:4",
+        "backend/server.py:1095"
+      ],
+      "uncertainty": "The exact normalization depth is not fully frozen. If the implementation must tolerate malformed legacy or hand-seeded test rows, the exposure `ensure_*` helpers may need stronger scalar canonicalization than `ensure_account_risk_state(...)` currently performs.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 3 should target `ACCOUNT_EXPOSURE` as a separate live projection and leave `ACCOUNT_RISK` and `/risk` behavior unchanged."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The helper seam can safely use a flat `positions[marketId|outcomeId]` map with canonical stored fields `marketId`, `outcomeId`, `netSize`, `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId`."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Signed-size math should implement buy-positive and sell-negative netting, exact-zero deletion, and empty-account pruning rather than retaining zero rows or separate long/short buckets."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No extra order-shape work is needed before exposure math: accepted EventTrade orders already provide `size`, `side`, `price`, `filledAt`, `id`, and `commandId`."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Account-level exposure `updatedAt` should continue to mean the latest live-projection mutation, including deletion and later resolution cleanup, which keeps it aligned with the existing risk cleanup precedent."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

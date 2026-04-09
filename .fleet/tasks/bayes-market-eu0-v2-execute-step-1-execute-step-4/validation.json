@@ -1,0 +1,14 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.97,
+  "plan_adherence_notes": "Execution closely followed the recorded plan. `backend/server.py` now contains the planned exposure builders/ensure helpers, signed-size netting and sync logic, serializer helpers, and `get_account_exposure(account_id)` read seam, and accepted EventTrade orders now update `ACCOUNT_EXPOSURE`. Focused regressions were added in `tests/test_bayes_market_api.py` for canonical helper shape, exact-zero pruning, deterministic lexical ordering, read-time rounding, stored account timestamp semantics, and getter-level 404 behavior. No `/v1/accounts/{id}/exposure` route registration was added, which is consistent with this branch plan.",
+  "research_quality": 0.95,
+  "question_completeness": 0.89,
+  "missed_questions": [
+    "Should the parent exposure roadmap's market-resolution cleanup helper for `ACCOUNT_EXPOSURE` also be backfilled in this branch, or is that explicitly deferred beyond this serializer-focused step?"
+  ],
+  "verdict": "approve",
+  "reason": "The branch implements the planned exposure projection and serializer boundary, including deterministic lexical `(marketId, outcomeId)` ordering and account-level metadata derived from `max_position_size` and stored projection timestamps. Verification succeeded with `pytest -q tests/test_bayes_market_api.py` (212 passed). The only notable gap is that the task artifacts did not explicitly settle the scope of future market-resolution cleanup for live exposure state, but that does not block the work this branch set out to complete.",
+  "spawn_children": false,
+  "children": []
+}

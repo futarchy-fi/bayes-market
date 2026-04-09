@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This checkout still lacks the step-2 and step-3 exposure primitives (`build_account_exposure_state(...)`, `build_account_exposure_position(...)`, `ensure_account_exposure_state(...)`, `ensure_account_exposure_position(...)`, and the signed-size sync helper). Should step 4 backfill those prerequisites in the same implementation branch, or can it assume that canonical exposure state will exist before serializer work lands?",
+      "category": "codebase",
+      "why_it_matters": "The planned serializer contract depends on canonical stored account timestamps, flat per-position rows, and deterministic live-position pruning. With only `ACCOUNT_EXPOSURE = {}` and no builder/sync seam in `backend/server.py`, there is not yet a stable internal projection shape to serialize."
+    },
+    {
+      "id": "q2",
+      "question": "Should step 4 introduce only pure exposure serialization helpers over an already-loaded account document, or should it also add a route-facing `get_account_exposure(account_id)` wrapper that owns the `404 account_not_found` check and `{account, meta}` envelope the way `get_account_risk(...)` already does?",
+      "category": "design",
+      "why_it_matters": "The parent plan defers actual `/v1/accounts/{id}/exposure` route registration to a later step, but the repo's existing account-read pattern combines lookup, error semantics, and response shaping in one helper. Freezing that seam now avoids duplicating `404` and `meta` logic when the route is added."
+    },
+    {
+      "id": "q3",
+      "question": "Should the exposure serializer defensively round and normalize stored `netSize`, `lastTradePrice`, and derived `absSize` at read time, or can it assume the missing step-2/step-3 helpers will already canonicalize every exposure row so serialization only needs to sort and project fields?",
+      "category": "codebase",
+      "why_it_matters": "Current read models such as `/risk` normalize numeric fields on the way out, and the test suite already seeds in-memory stores directly in a few places. The answer determines whether step 4 is a thin projector over trusted state or a hardened read boundary for partially normalized rows."
+    },
+    {
+      "id": "q4",
+      "question": "For `account.exposure.updatedAt`, should the serializer read the stored exposure-account timestamp directly as the latest live-projection mutation, or recompute it from the maximum position-level `updatedAt` among live rows at serialization time?",
+      "category": "requirements",
+      "why_it_matters": "The prompt explicitly ties account metadata to projection timestamps, and later market-resolution cleanup is planned to mutate account freshness even when positions are removed. Recomputing from rows can diverge from cleanup semantics or lose the final mutation timestamp when the last position is deleted."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The public exposure contract is already frozen by the parent plan as `{ \"account\": { \"id\": ..., \"exposure\": { \"maxPositionSize\": ..., \"updatedAt\": ..., \"positions\": [...] } }, \"meta\": ... }`, with `positions` sorted lexically by `(marketId, outcomeId)`.",
+      "confidence": 0.99,
+      "if_wrong": "Step 4 would be targeting the wrong response shape, and both the serializer helpers and later route/frontend work would need a different contract."
+    },
+    {
+      "id": "a2",
+      "assumption": "Missing or fully pruned exposure accounts should match the existing account-read precedent and raise `404 account_not_found` instead of serializing `200` with an empty exposure envelope.",
+      "confidence": 0.98,
+      "if_wrong": "The serializer boundary would need explicit empty-account handling, and later route tests/UI would have to expect a different no-positions contract."
+    },
+    {
+      "id": "a3",
+      "assumption": "The internal exposure projection remains `ACCOUNT_EXPOSURE[accountId]` with a flat composite-key `positions` map, and the account-level `updatedAt` field is intended to mean the latest live-projection mutation, including future resolution cleanup.",
+      "confidence": 0.97,
+      "if_wrong": "Serializer logic for account metadata and position ordering could be built against the wrong internal state model or freshness rule."
+    },
+    {
+      "id": "a4",
+      "assumption": "Per-position stored fields are still limited to canonical mutable facts (`marketId`, `outcomeId`, `netSize`, `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId`), with `absSize` derived during serialization rather than persisted in the projection.",
+      "confidence": 0.97,
+      "if_wrong": "Step 4 would need to read or persist a broader set of fields and keep that redundant state synchronized with future trade mutations."
+    },
+    {
+      "id": "a5",
+      "assumption": "The eventual `/v1/accounts/{id}/exposure` route should reuse the same helper boundary pattern as `/risk`: a backend getter that raises `ApiError` for missing accounts and returns a complete `{account, meta}` payload on success.",
+      "confidence": 0.84,
+      "if_wrong": "Step 4 should stop at pure serialization only, and later route work would need to own lookup, error handling, and envelope construction itself."
+    },
+    {
+      "id": "a6",
+      "assumption": "If the prerequisite exposure builders and netting helpers are still absent when implementation starts, the safest path is to backfill them to the already-planned seam rather than invent a serializer-specific internal shape just for this step.",
+      "confidence": 0.9,
+      "if_wrong": "The branch may need to wait for another prerequisite rollout or accept temporary serializer code that will have to be rewritten once canonical exposure helpers arrive."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,112 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Freeze the reusable seam as one market-scoped top-level helper that scans `ACCOUNT_EXPOSURE`, mirroring `settle_market_account_risk(market_id, timestamp)`. The step-1 plan already describes cleanup as a single backend primitive for later callers, and the existing resolution precedent is a market-level loop over all accounts. If the implementation wants a small private per-account utility inside that helper, that is fine, but step 5 should not require or expose a second account-scoped public mutation API.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:50",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:83",
+        "backend/server.py:3010",
+        "backend/server.py:3014"
+      ],
+      "uncertainty": "The codebase does not forbid a tiny private helper for one account document, but there is no evidence that a separately named account-scoped cleanup seam needs to be part of the frozen public design.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Have the cleanup helper return a structured removal summary, not `None` and not just a list of account ids. The closest precedent is `settle_market_account_risk(...)`, whose returned list flows straight into the accepted-resolution event, and an exposure cleanup helper with no structured return would force later resolve-path tests, logging, or event metadata to rescan `ACCOUNT_EXPOSURE`. The summary does not need risk-style min-asset fields, but it should at least identify the affected account, the market, which position rows were removed, and whether the account was pruned.",
+      "confidence": 0.81,
+      "evidence": [
+        "backend/server.py:3010",
+        "backend/server.py:3053",
+        "backend/server.py:3122",
+        "backend/server.py:3153",
+        "tests/test_bayes_market_api.py:2691"
+      ],
+      "uncertainty": "The exact exposure-summary schema is not frozen anywhere yet because there is no existing `effects.exposureDelta` contract in events or responses.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Advance `account[\"updatedAt\"]` to the resolution timestamp whenever cleanup removes that market but the account still has other live positions. Both the exposure rollout plan and the current serializer define account `updatedAt` as the latest live-projection mutation, not `max(position.updatedAt)`, and the existing risk settlement path already updates account-level freshness on resolution even when other market state survives. If cleanup prunes the final live position, the account should disappear instead of preserving any timestamp.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:36",
+        "backend/server.py:1241",
+        "backend/server.py:1454",
+        "backend/server.py:3040",
+        "tests/test_bayes_market_api.py:2657",
+        "tests/test_bayes_market_api.py:3862"
+      ],
+      "uncertainty": "There is still no checked-in exposure-resolution regression, so the answer is inferred from the frozen timestamp semantics and the analogous risk cleanup behavior.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Do not assume perfect canonical state. The cleanup helper should be defensive enough to tolerate hand-seeded or partially normalized exposure documents by reusing the existing `ensure_*` normalization seam for account containers and by safely skipping or pruning non-live rows during its scan. That is different from turning cleanup into a general repair pass: normalization should stay shallow and targeted, but the helper should not crash or silently miss rows just because tests wrote `ACCOUNT_EXPOSURE` directly or a row/key drifted.",
+      "confidence": 0.83,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:53",
+        "backend/server.py:1154",
+        "backend/server.py:1165",
+        "backend/server.py:1436",
+        "tests/test_bayes_market_api.py:350",
+        "tests/test_bayes_market_api.py:3743",
+        "tests/test_bayes_market_api.py:3903"
+      ],
+      "uncertainty": "The repo does not freeze exactly how far cleanup should go in repairing composite-key versus `marketId` drift; the stronger point is that it should tolerate malformed seeded state rather than assume every document was written by the canonical sync path.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Step 5 should add the reusable cleanup helper and wire it into `resolve_market_command(...)` in the same change. The parent roadmap already freezes resolution as the point where live exposure disappears for resolved markets, `get_account_exposure(...)` is already in place to surface live projection state, and the current `resolve_market_command(...)` still only settles `ACCOUNT_RISK`. Leaving step 5 as an unused helper-only extraction would preserve stale resolved-market exposure in the live model and postpone a behavior the plan already treats as part of resolution semantics.",
+      "confidence": 0.92,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:49",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:71",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:83",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-4/validation.json:8",
+        "backend/server.py:1461",
+        "backend/server.py:3113"
+      ],
+      "uncertainty": "The eventual HTTP `/v1/accounts/{id}/exposure` route is still deferred, so the first observable proof may be direct getter and backend-test behavior rather than an HTTP assertion.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 5 stays scoped to live `ACCOUNT_EXPOSURE` cleanup alongside the existing `ACCOUNT_RISK` settlement path; no historical journal or payout-model changes are needed."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Cleanup should delete exposure accounts that lose their final live row so `get_account_exposure(...)` keeps returning `404 account_not_found` for fully emptied projections."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "The helper can remove every row for the resolved market across all outcomes with one market-scoped scan; no outcome-specific survivor logic is required for live exposure."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Implementation should keep traversing the flat `positions[marketId|outcomeId]` map and avoid introducing a nested market container just for cleanup."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.93,
+      "impact": "The current branch and task-history artifacts already expose the relevant constraints, so `spawn_children` can remain `false` for this research phase."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
