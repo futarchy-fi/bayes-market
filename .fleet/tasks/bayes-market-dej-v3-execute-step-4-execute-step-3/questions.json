@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Has the step-2 prerequisite already landed in the intended execution branch so live messages patch the existing `useMarket(marketId)` query, or would this step also need to backfill missing subscription/cache-update plumbing before `MarketDetail` can stay on `const m = data.market`?",
+      "category": "codebase",
+      "why_it_matters": "This checkout still exposes only REST hooks in `frontend/src/lib/query/hooks.ts`, while step 3 assumes the route can remain query-driven and consume live updates indirectly through the existing market query."
+    },
+    {
+      "id": "q2",
+      "question": "For this step, which queries are considered part of the route's required query-driven state: only `useMarket(...)`, or also `useMarketEvents`, `useEngineStats`, and `useMarkets` that feed adjacent panels on the detail page?",
+      "category": "design",
+      "why_it_matters": "The route renders more than `ProbabilityBar`. If only `data.market` stays fresh while the event journal, junction-tree panel, or assumptions market list lag behind, the page is not fully query-driven in practice."
+    },
+    {
+      "id": "q3",
+      "question": "When a live update moves the market from `active` to `resolved` or `closed`, is the intended behavior simply to let the patched `data.market.status` rerender hide active-only surfaces, or are any extra teardown/refetch side effects expected at the same moment?",
+      "category": "requirements",
+      "why_it_matters": "The route already gates `AssumptionPanel` directly on `m.status`, and `EventTradePanel` and `ResolveMarketPanel` also branch on `market.status`. Whether that is sufficient determines if this step stays route-thin or needs broader coordination."
+    },
+    {
+      "id": "q4",
+      "question": "Should disconnect and reconnect behavior remain entirely inside the subscription/query layer, with `MarketDetail` continuing to render whatever React Query last has from REST, or is the route expected to surface connection-state UI or perform explicit fallback work?",
+      "category": "design",
+      "why_it_matters": "The step title says to fall back to the current REST query state without adding route-local reset logic. That still leaves an open boundary around whether the route should know about socket state at all."
+    },
+    {
+      "id": "q5",
+      "question": "Are child-component local states intentionally out of scope for this step, or should any of them reset on live sequence/status changes even though the route itself must not add local reset logic?",
+      "category": "requirements",
+      "why_it_matters": "`EventTradePanel` and `ResolveMarketPanel` keep local selections, confirmation state, and mutation banners that are independent of the query cache, so the exact scope line matters before implementation."
+    },
+    {
+      "id": "q6",
+      "question": "What evidence is expected to prove the route stayed query-driven after this step: route tests that assert terminal updates hide active-only UI through `data.market`, tests for disconnect fallback preserving REST-backed rendering, or reliance on lower-level hook coverage?",
+      "category": "requirements",
+      "why_it_matters": "The current `MarketDetail` Vitest coverage is REST-only. Clarifying the verification boundary prevents this step from either under-testing the route contract or duplicating hook-level websocket tests."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Step 3 is supposed to consume step-2 cache-patching work rather than introduce any route-local market mirror or direct socket message handling inside `MarketDetail`.",
+      "confidence": 0.97,
+      "if_wrong": "The implementation scope is larger than the step title suggests and this question set understates missing prerequisite work."
+    },
+    {
+      "id": "a2",
+      "assumption": "Once `data.market.status` changes, the existing status gates in `MarketDetail`, `EventTradePanel`, and `ResolveMarketPanel` are intended to hide active-only surfaces without extra route cleanup.",
+      "confidence": 0.89,
+      "if_wrong": "The route or child panels will need additional explicit teardown behavior, which conflicts with the current 'no route-local reset logic' framing."
+    },
+    {
+      "id": "a3",
+      "assumption": "Disconnect/reconnect fallback means React Query's current REST-backed data remains the render source of truth, and any reconnect/refetch mechanics belong in the subscription hook rather than in route state.",
+      "confidence": 0.86,
+      "if_wrong": "The route may need to subscribe to connection status, add fallback UI, or coordinate explicit resets when the socket drops."
+    },
+    {
+      "id": "a4",
+      "assumption": "Child local selections and success/error banners are acceptable to persist until rerender or unmount for this step; only correctness of cache-driven rendering is in scope.",
+      "confidence": 0.76,
+      "if_wrong": "Component-level reset requirements will need to be pulled into the implementation or split into follow-up work."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

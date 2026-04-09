@@ -1,0 +1,170 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "There is no pre-existing realtime payload contract in the repo. The closest frozen contract is the canonical per-market Bayes event envelope, which requires `schemaVersion`, `eventId`, `marketId`, `seq`, `commandId`, `eventType`, `emittedAt`, `approxFlag`, `payload`, `prevEventHash`, and `eventHash`. But the live price UI renders `market.marginals` from `GET /v1/markets/{id}`, not from journal payloads, and the frontend `MarketEvent` type has already drifted from the backend event shape. So `/ws/markets/{id}/prices` should be treated as a typed stream with a price-state message as the primary unit: at minimum `marketId`, `status`, `marginals`, `seq`, `timestamp`/`emittedAt`, and `approxFlag`. If command attribution is needed, include or embed the canonical event metadata (`eventId`, `commandId`, `eventType`). `orderId` should not be required at the top level because market resolution events do not produce orders.",
+      "confidence": 0.62,
+      "evidence": [
+        "backend/server.py:2575",
+        "backend/server.py:2587",
+        "docs/t544-event-sourcing-contract.md:101",
+        "docs/t563-journal-read-surface-freeze.md:95",
+        "frontend/src/routes/MarketDetail.tsx:21",
+        "frontend/src/routes/MarketDetail.tsx:46",
+        "frontend/src/lib/api/types.ts:56"
+      ],
+      "uncertainty": "The repo freezes the event-journal shape, but it does not freeze any dedicated price-stream message schema, so the exact top-level WS message format still needs a product/API decision.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q2",
+      "answer": "This stream should cover any accepted command that changes the displayed market price state, not only EventTrade results. In the current code, unconditional ProbabilityEdit writes mutate `market.marginals`, market resolution mutates both `market.status` and `market.marginals`, and the detail page renders the probability bar from `market.marginals`. EventTrade currently computes a fill price and emits trade metadata, but its accepted event carries an empty `effects.marginalDelta` and does not mutate market marginals. An EventTrade-only stream would therefore miss the actual price-changing paths that the UI already exposes.",
+      "confidence": 0.94,
+      "evidence": [
+        "backend/server.py:2192",
+        "backend/server.py:2877",
+        "backend/server.py:2880",
+        "backend/server.py:3026",
+        "backend/server.py:3035",
+        "frontend/src/routes/MarketDetail.tsx:46",
+        "frontend/src/components/ui/ProbabilityBar.tsx:14"
+      ],
+      "uncertainty": "If EventTrade becomes price-impacting in a future implementation, this conclusion would need revisiting.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The current codebase is better aligned with reconnect plus REST refetch than with full sequence-aware WS recovery. The backend already exposes a sequence-based per-market journal with `fromSeq`, `headSeq`, and `headHash`, so sequence-aware catch-up is possible. But there is no existing socket protocol, resume token, or client event-store logic; the frontend still treats `GET /v1/markets/{id}` as the source of truth through 5-second polling and write-triggered invalidation. The lowest-churn contract is: reconnect, refetch the latest market state, and optionally use `/v1/markets/{id}/events?fromSeq=` for journal catch-up if ordered event continuity is needed later.",
+      "confidence": 0.71,
+      "evidence": [
+        "backend/server.py:1539",
+        "backend/server.py:1571",
+        "docs/t563-journal-read-surface-freeze.md:77",
+        "docs/t563-journal-read-surface-freeze.md:88",
+        "frontend/src/lib/query/hooks.ts:24",
+        "frontend/src/lib/query/hooks.ts:28",
+        "frontend/src/lib/query/hooks.ts:95"
+      ],
+      "uncertainty": "The event journal is strong enough to support a resumable stream, but no existing code or doc freezes that as the expected WS reconnect contract.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q4",
+      "answer": "At connect time, `/ws/markets/{id}/prices` should reject non-active markets. That matches the task scope and the current write rules: ProbabilityEdit and EventTrade are only allowed for active markets. But if a market transitions out of `active` after the socket is open, the server should still deliver the terminal resolution update because resolution changes the detail page's visible `status` and `marginals`; after that terminal update, the socket can close or remain idle. Allowing arbitrary initial subscriptions to already-resolved markets is not strongly supported by the current task framing.",
+      "confidence": 0.67,
+      "evidence": [
+        "backend/server.py:3248",
+        "backend/server.py:3340",
+        "backend/server.py:3423",
+        "backend/server.py:2877",
+        "backend/server.py:2880",
+        "backend/server.py:1452",
+        "frontend/src/routes/MarketDetail.tsx:36",
+        "frontend/src/routes/MarketDetail.tsx:46"
+      ],
+      "uncertainty": "The repo does not define post-resolution socket lifecycle semantics, so the exact behavior after emitting the terminal resolution update is still open.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q5",
+      "answer": "The new endpoint is most consistent with a public read surface, like the existing GET APIs. The backend's auth and rate-limit checks are wired only to POST write routes, and the frontend read clients do not pass `Session` or `X-Bayes-Agent-Id`; only write calls attach that header. There is also no explicit Origin-check logic in the server. So the repo currently points to an unauthenticated read socket unless a new abuse-control policy is introduced deliberately.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:377",
+        "backend/server.py:411",
+        "backend/server.py:3670",
+        "backend/server.py:3702",
+        "frontend/src/lib/api/client.ts:44",
+        "frontend/src/lib/api/client.ts:67",
+        "frontend/src/lib/api/client.ts:92",
+        "frontend/src/lib/api/client.ts:146"
+      ],
+      "uncertainty": "A future deployment could still choose to rate-limit or proxy-protect read sockets, but that would be a new policy, not one implied by the current code.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "The repo strongly biases toward extending the current stdlib HTTP server in place. The backend is a single-file `BaseHTTPRequestHandler`/`HTTPServer` app, `run_server()` starts that exact runtime, and the backend tests boot `BayesHandler` directly under `HTTPServer` or `ThreadingHTTPServer`. There is no existing backend WebSocket framework in the checkout. So the least disruptive boundary is to keep the current server entrypoint and add WS support within or immediately around it. Switching the whole runtime would be materially larger churn, and introducing a third-party WS dependency would be a conscious architecture expansion rather than an obvious existing pattern.",
+      "confidence": 0.66,
+      "evidence": [
+        "backend/server.py:20",
+        "backend/server.py:3645",
+        "backend/server.py:3792",
+        "tests/test_bayes_market_api.py:4585",
+        "tests/test_bayes_market_api.py:4910",
+        "tests/test_bayes_market_api.py:5422"
+      ],
+      "uncertainty": "Manual WebSocket support on top of `BaseHTTPRequestHandler` is awkward, so the implementation may still justify a small dependency; the repo does not yet make that choice explicit.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q7",
+      "answer": "The frontend should keep polling as a fallback/backstop while adding WS-driven cache updates. Today `useMarket(...)` polls every 5 seconds, mutations invalidate the market and event queries on success, and the detail page plus several child components render directly from `market.marginals`. That means the current frontend state model is still REST-and-React-Query centric. A WS-first-but-not-WS-only approach fits the codebase best: patch the query cache from the socket for freshness, but retain polling/revalidation for reconnects, missed messages, and non-WS states.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:24",
+        "frontend/src/lib/query/hooks.ts:28",
+        "frontend/src/lib/query/hooks.ts:95",
+        "frontend/src/lib/query/hooks.ts:109",
+        "frontend/src/lib/query/hooks.ts:123",
+        "frontend/src/routes/MarketDetail.tsx:21",
+        "frontend/src/routes/MarketDetail.tsx:46",
+        "frontend/src/features/trading/EventTradePanel.tsx:45"
+      ],
+      "uncertainty": "If the team wants a stricter WS-owned client state model later, polling could be reduced or disabled after the socket is proven stable.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q8",
+      "answer": "Both levels of verification fit the current repo. Backend integration tests are already used to exercise the real server process and are the right place to prove actual socket handshake, ordering, and disconnect behavior. Frontend Vitest tests with mocked dependencies are already used for route/state behavior and are the right place to validate reconnect handling, cache patching, and fallback polling with a mocked `WebSocket`. Given that the task explicitly calls out connection and reconnection, the codebase points to backend transport tests plus frontend reconnect-state tests, not just one side.",
+      "confidence": 0.76,
+      "evidence": [
+        "tests/test_bayes_market_api.py:4585",
+        "tests/test_bayes_market_api.py:4910",
+        "tests/test_bayes_market_api.py:5422",
+        "frontend/src/__tests__/MarketDetail.test.tsx:7",
+        "frontend/src/__tests__/MarketDetail.test.tsx:47",
+        "frontend/src/__tests__/helpers.tsx:7",
+        "docs/t539-mvp-launch-gate.md:69",
+        "docs/t539-mvp-launch-gate.md:76"
+      ],
+      "uncertainty": "There is no existing WS harness on either side, so the exact split between contract coverage and UI-state coverage still needs implementation-level scoping.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "This is greenfield transport work. There is no reusable WebSocket or SSE layer in the current checkout, so implementation and tests need to establish the realtime boundary from scratch."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.79,
+      "impact": "The existing per-market `seq` and chain head metadata are the strongest ordering primitive already present, and both repo docs and launch gates explicitly tie realtime streams to monotonic `seq` plus `approxFlag`."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.74,
+      "impact": "The immediate consumer is the market detail experience and its current probability/trading UI, even though broader realtime channels are mentioned in planning docs. If that scope is wrong, the task expands into portfolio or list surfaces."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "The path `/ws/markets/{id}/prices` has no query surface for conditional context, while the REST detail endpoint uses explicit `context` query parameters for conditional marginals. That strongly suggests unconditional market prices unless the socket protocol is widened."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.83,
+      "impact": "A WS-primary signal with REST fallback matches the current React Query polling/invalidation design and avoids forcing the frontend to become a fully authoritative event-stream client in one step."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

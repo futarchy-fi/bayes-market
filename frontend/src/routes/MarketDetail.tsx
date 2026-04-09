@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { useMarket, useMarketEvents, useAccountRisk } from "@/lib/query/hooks";
+import { useMarket, useMarketEvents, useAccountRisk, useMarketPriceSubscription } from "@/lib/query/hooks";
 import { useSession } from "@/features/session/context";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ProbabilityBar } from "@/components/ui/ProbabilityBar";
@@ -21,6 +21,11 @@ export default function MarketDetail() {
   const { data, isLoading, error } = useMarket(marketId!);
   const events = useMarketEvents(marketId!);
   const accountRisk = useAccountRisk(session.accountId);
+  const isActiveMarket = data?.market.status === "active";
+
+  useMarketPriceSubscription(marketId ?? "", {
+    enabled: Boolean(marketId) && !isLoading && !error && isActiveMarket,
+  });
 
   if (isLoading) return <LoadingPage />;
   if (error) return <ErrorMessage message={error instanceof Error ? error.message : "Market not found"} />;

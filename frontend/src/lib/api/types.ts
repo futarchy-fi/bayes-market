@@ -28,6 +28,24 @@ export interface Market {
   expires_at: string;
 }
 
+export type MarketStatus = Market["status"];
+
+export interface MarketPriceMessage {
+  marketId: string;
+  status: MarketStatus;
+  marginals: Record<string, number>;
+  seq: number;
+  emittedAt: string;
+  approxFlag: boolean;
+  resolution?: string;
+  resolutionProbabilities?: Record<string, number>;
+  terminalEvent?: {
+    eventId?: string;
+    eventType?: string;
+    commandId?: string;
+  };
+}
+
 export interface MarketListResponse {
   markets: MarketSummary[];
   count: number;

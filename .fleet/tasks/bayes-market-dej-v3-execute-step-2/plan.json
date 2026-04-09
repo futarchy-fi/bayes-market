@@ -1,0 +1,86 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Publish live price snapshots only for fresh accepted writes that change the unconditional market detail view: unconditional `ProbabilityEdit` acceptances and market resolution. Conditional `ProbabilityEdit`, `EventTrade`, rejections, and idempotent replays stay silent on `/prices`.",
+      "based_on": ["q1", "q4", "q6"],
+      "alternatives_rejected": [
+        "Broadcast every accepted terminal event regardless of whether `market.marginals` or `status` changed",
+        "Emit unchanged snapshots for conditional edits just to advance `seq`",
+        "Rebroadcast replayed outcomes even though no new journal event was appended"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Hook the broadcaster into `build_terminal_response(...)` immediately after `record_terminal_outcome(...)`, using the just-emitted journal event as the source of `seq`, `emittedAt`, and `approxFlag` and the already-mutated `MARKETS[marketId]` state as the snapshot payload.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Publish immediately after `emit_terminal_event(...)` before the terminal outcome has been persisted",
+        "Publish later at the route layer after `refresh_market_compile_snapshot(...)`"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Call a dedicated broadcaster seam with explicit `publish(snapshot)` and `publish_then_close(snapshot)` semantics, but keep that seam non-blocking from the mutation path so same-market writes do not perform socket fan-out while holding the market lock.",
+      "based_on": ["q3", "q5"],
+      "alternatives_rejected": [
+        "Write directly to subscribed sockets from inside the mutation handlers",
+        "Expose only one publish primitive and encode resolution close behavior elsewhere",
+        "Treat successful live delivery as part of the synchronous acceptance contract"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Bring market resolution onto the same per-market lock discipline as other accepted writes so the observable order becomes: mutate market state, append the accepted journal event, persist the terminal outcome, enqueue one final terminal snapshot, then close subscribers.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Keep the current unlocked resolution path and rely on best-effort ordering",
+        "Close subscribers before attempting the terminal publish"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Treat broadcaster publish and subscriber-cleanup failures as logged best-effort read-side errors that never alter an already accepted HTTP response once the journal event and terminal outcome are recorded.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Surface broadcaster failures as 5xx responses after a command has already been accepted",
+        "Attempt to roll back accepted state when live delivery fails"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add a small backend snapshot-builder seam in `backend/server.py` that can turn the current unconditional market read model plus a terminal journal event into the `/prices` payload (`marketId`, `status`, `marginals`, `seq`, `emittedAt`, `approxFlag`, and event attribution fields needed by step 1).",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Extend `build_terminal_response(...)` with optional live-publish intent metadata and, after `record_terminal_outcome(...)`, gate broadcaster calls so only accepted unconditional `ProbabilityEdit` and resolution responses publish snapshots while rejections, conditional edits, trades, and replay paths remain silent.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Refactor `handle_market_resolution(...)` and related helpers to run under `get_market_write_lock(market_id)` like the order paths, then route accepted resolutions through the terminal publish path using `publish_then_close(...)` so the final resolved snapshot is queued before subscriber teardown.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Wrap broadcaster publish and close calls in best-effort error isolation and logging so accepted writes keep their existing HTTP outcome even if live fan-out or subscriber cleanup fails after persistence.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Add backend coverage in `tests/test_bayes_market_api.py` for ordered snapshot metadata on unconditional probability edits, no-publish behavior for conditional edits/trades/replays, and resolution’s terminal publish-before-close behavior, then run the targeted test slice for the affected command paths.",
+      "depends_on": [2, 3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
