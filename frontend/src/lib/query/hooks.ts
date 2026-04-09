@@ -1,6 +1,15 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import * as api from "@/lib/api/client";
-import type { ProbabilityEditPayload, EventTradePayload, CommentPayload, Session } from "@/lib/api/types";
+import type {
+  ProbabilityEditPayload,
+  EventTradePayload,
+  CommentPayload,
+  Session,
+  MarketDetailResponse,
+  MarketPriceMessage,
+  MarketStatus,
+} from "@/lib/api/types";
 
 export const queryKeys = {
   markets: (status?: string) => ["markets", { status }] as const,
@@ -12,6 +21,233 @@ export const queryKeys = {
   health: () => ["health"] as const,
   serviceIndex: () => ["service-index"] as const,
 };
+
+const INITIAL_RECONNECT_DELAY_MS = 500;
+const MAX_RECONNECT_DELAY_MS = 5000;
+
+function invalidateMarketCollectionQueries(qc: QueryClient) {
+  return qc.invalidateQueries({
+    predicate: ({ queryKey }) => Array.isArray(queryKey)
+      && queryKey[0] === "markets"
+      && typeof queryKey[1] === "object"
+      && queryKey[1] !== null,
+  });
+}
+
+function invalidateMarketDependentQueries(qc: QueryClient, marketId: string) {
+  void qc.invalidateQueries({ queryKey: queryKeys.marketEvents(marketId) });
+  void qc.invalidateQueries({ queryKey: queryKeys.engineStats(marketId) });
+  void invalidateMarketCollectionQueries(qc);
+}
+
+function refetchMarketRouteQueries(qc: QueryClient, marketId: string) {
+  void qc.invalidateQueries({ queryKey: queryKeys.market(marketId) });
+  invalidateMarketDependentQueries(qc, marketId);
+}
+
+function isMarketStatus(value: unknown): value is MarketStatus {
+  return value === "active" || value === "resolved" || value === "closed" || value === "draft";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseMarginals(value: unknown): Record<string, number> | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const marginals: Record<string, number> = {};
+  for (const [outcomeId, probability] of Object.entries(value)) {
+    if (typeof probability !== "number" || !Number.isFinite(probability)) {
+      return null;
+    }
+    marginals[outcomeId] = probability;
+  }
+  return marginals;
+}
+
+function parseMarketPriceMessage(value: unknown): MarketPriceMessage | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.marketId !== "string"
+    || !isMarketStatus(value.status)
+    || typeof value.seq !== "number"
+    || !Number.isFinite(value.seq)
+    || typeof value.emittedAt !== "string"
+    || typeof value.approxFlag !== "boolean"
+  ) {
+    return null;
+  }
+
+  const marginals = parseMarginals(value.marginals);
+  if (!marginals) {
+    return null;
+  }
+
+  const resolutionProbabilities = value.resolutionProbabilities == null
+    ? undefined
+    : parseMarginals(value.resolutionProbabilities);
+  if (value.resolutionProbabilities != null && !resolutionProbabilities) {
+    return null;
+  }
+
+  return {
+    marketId: value.marketId,
+    status: value.status,
+    marginals,
+    seq: value.seq,
+    emittedAt: value.emittedAt,
+    approxFlag: value.approxFlag,
+    resolution: typeof value.resolution === "string" ? value.resolution : undefined,
+    resolutionProbabilities,
+  };
+}
+
+export function useMarketPriceSubscription(marketId: string, opts?: { enabled?: boolean }) {
+  const qc = useQueryClient();
+  const enabled = opts?.enabled ?? true;
+  const lastSeqRef = useRef<number>(-1);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!enabled || marketId.length === 0) {
+      lastSeqRef.current = -1;
+      reconnectAttemptRef.current = 0;
+      if (reconnectTimerRef.current != null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      return;
+    }
+
+    lastSeqRef.current = -1;
+    reconnectAttemptRef.current = 0;
+
+    let socket: WebSocket | null = null;
+    let effectClosed = false;
+    let terminalStatus: MarketStatus | null = null;
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimerRef.current != null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
+
+    const scheduleReconnect = () => {
+      clearReconnectTimer();
+      const attempt = reconnectAttemptRef.current;
+      const delay = Math.min(
+        MAX_RECONNECT_DELAY_MS,
+        INITIAL_RECONNECT_DELAY_MS * (2 ** attempt),
+      );
+      reconnectAttemptRef.current += 1;
+      reconnectTimerRef.current = window.setTimeout(() => {
+        if (effectClosed || terminalStatus !== null) {
+          return;
+        }
+        refetchMarketRouteQueries(qc, marketId);
+        connect();
+      }, delay);
+    };
+
+    const connect = () => {
+      if (effectClosed || terminalStatus !== null) {
+        return;
+      }
+
+      socket = new WebSocket(api.getMarketPricesWebSocketUrl(marketId));
+
+      socket.addEventListener("open", () => {
+        const reconnecting = reconnectAttemptRef.current > 0;
+        reconnectAttemptRef.current = 0;
+        clearReconnectTimer();
+        if (reconnecting) {
+          refetchMarketRouteQueries(qc, marketId);
+        }
+      });
+
+      socket.addEventListener("message", (event) => {
+        if (typeof event.data !== "string") {
+          return;
+        }
+
+        let raw: unknown;
+        try {
+          raw = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+
+        const update = parseMarketPriceMessage(raw);
+        if (!update || update.marketId !== marketId || update.seq <= lastSeqRef.current) {
+          return;
+        }
+
+        lastSeqRef.current = update.seq;
+        qc.setQueryData<MarketDetailResponse>(queryKeys.market(marketId), (current) => {
+          if (!current) {
+            return current;
+          }
+
+          return {
+            ...current,
+            market: {
+              ...current.market,
+              status: update.status,
+              marginals: update.marginals,
+              resolution: update.resolution ?? current.market.resolution,
+              resolutionProbabilities: update.resolutionProbabilities ?? current.market.resolutionProbabilities,
+            },
+          };
+        });
+
+        invalidateMarketDependentQueries(qc, marketId);
+
+        if (update.status !== "active") {
+          terminalStatus = update.status;
+          refetchMarketRouteQueries(qc, marketId);
+          socket?.close();
+        }
+      });
+
+      socket.addEventListener("error", () => {
+        socket?.close();
+      });
+
+      socket.addEventListener("close", () => {
+        socket = null;
+        if (effectClosed) {
+          return;
+        }
+
+        if (terminalStatus !== null) {
+          return;
+        }
+
+        refetchMarketRouteQueries(qc, marketId);
+        scheduleReconnect();
+      });
+    };
+
+    connect();
+
+    return () => {
+      effectClosed = true;
+      clearReconnectTimer();
+      reconnectAttemptRef.current = 0;
+      terminalStatus = null;
+      socket?.close();
+      socket = null;
+    };
+  }, [enabled, marketId, qc]);
+}
 
 export function useMarkets(status?: string) {
   return useQuery({
