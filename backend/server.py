@@ -1251,12 +1251,14 @@ def sync_account_exposure_state(order: dict[str, Any]) -> dict[str, Any]:
     market_id = str(order.get("targetMarketId") or order["marketId"])
     outcome_id = str(order.get("targetOutcomeId") or order["payload"]["formula"][0][0]["outcomeId"])
     timestamp = str(order["filledAt"])
+    composite_key = account_exposure_position_key(market_id, outcome_id)
 
     account = ensure_account_exposure_state(account_id, timestamp)
-    position = ensure_account_exposure_position(account, market_id, outcome_id, timestamp)
-    net_change = build_event_trade_position_net_change(position, order)
-    composite_key = account_exposure_position_key(market_id, outcome_id)
     positions = account["positions"]
+    current_position = positions.get(composite_key) if isinstance(positions, dict) else None
+    if not isinstance(current_position, dict):
+        current_position = None
+    net_change = build_event_trade_position_net_change(current_position, order)
 
     if net_change["resultingNetSize"] == 0.0:
         positions.pop(composite_key, None)
@@ -1265,6 +1267,7 @@ def sync_account_exposure_state(order: dict[str, Any]) -> dict[str, Any]:
         else:
             ACCOUNT_EXPOSURE.pop(account_id, None)
     else:
+        position = ensure_account_exposure_position(account, market_id, outcome_id, timestamp)
         position["netSize"] = net_change["resultingNetSize"]
         position["lastTradePrice"] = round_exposure_value(order.get("price"))
         position["updatedAt"] = timestamp
@@ -3571,17 +3574,17 @@ def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[
                     )
                 return replay_terminal_outcome(existing_command_id)
 
-        submitted_at = utc_timestamp()
-        command = materialize_event_trade_command(
-            market_id=market_id,
-            normalized_payload=normalized_payload,
-            account_id=account_id,
-            command_id=generate_command_id(),
-            submitted_at=submitted_at,
-            idempotency_key=idempotency_key,
-        )
         market = MARKETS[market_id]
         if market["status"] != "active":
+            submitted_at = utc_timestamp()
+            command = materialize_event_trade_command(
+                market_id=market_id,
+                normalized_payload=normalized_payload,
+                account_id=account_id,
+                command_id=generate_command_id(),
+                submitted_at=submitted_at,
+                idempotency_key=idempotency_key,
+            )
             return build_terminal_rejection_response(
                 command,
                 code="market_not_active",
@@ -3597,6 +3600,34 @@ def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[
                 scope_key=scope_key,
             )
 
+        preview = preview_event_trade_position_net_change(account_id, market_id, normalized_payload)
+        if abs(preview["resultingNetSize"]) > round_exposure_value(max_position_size):
+            literal = normalized_payload["formula"][0][0]
+            raise ApiError(
+                400,
+                "position_limit_exceeded",
+                "Trade would exceed max position size",
+                {
+                    "accountId": account_id,
+                    "marketId": market_id,
+                    "outcomeId": str(literal["outcomeId"]),
+                    "side": str(normalized_payload["side"]),
+                    "requestedSize": round_exposure_value(normalized_payload["size"]),
+                    "currentNetSize": preview["currentNetSize"],
+                    "resultingNetSize": preview["resultingNetSize"],
+                    "maxPositionSize": round_exposure_value(max_position_size),
+                },
+            )
+
+        submitted_at = utc_timestamp()
+        command = materialize_event_trade_command(
+            market_id=market_id,
+            normalized_payload=normalized_payload,
+            account_id=account_id,
+            command_id=generate_command_id(),
+            submitted_at=submitted_at,
+            idempotency_key=idempotency_key,
+        )
         order = create_event_trade_order(command)
         sync_account_exposure_state(order)
         return build_event_trade_acceptance_response(command, order, scope_key)

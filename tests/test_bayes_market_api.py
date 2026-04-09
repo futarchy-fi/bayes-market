@@ -122,6 +122,8 @@ def snapshot_domain_state() -> dict[str, object]:
         "events": deepcopy(server.EVENTS),
         "terminal_outcomes": deepcopy(server.TERMINAL_OUTCOMES),
         "idempotency_keys": deepcopy(server.IDEMPOTENCY_KEYS),
+        "market_event_sequences": deepcopy(server.MARKET_EVENT_SEQUENCES),
+        "last_event_hashes": deepcopy(server.LAST_EVENT_HASHES),
         "account_risk": deepcopy(server.ACCOUNT_RISK),
         "account_exposure": deepcopy(server.ACCOUNT_EXPOSURE),
     }
@@ -135,6 +137,8 @@ def assert_domain_state_unchanged(test_case: unittest.TestCase, snapshot: dict[s
     test_case.assertEqual(server.EVENTS, snapshot["events"])
     test_case.assertEqual(server.TERMINAL_OUTCOMES, snapshot["terminal_outcomes"])
     test_case.assertEqual(server.IDEMPOTENCY_KEYS, snapshot["idempotency_keys"])
+    test_case.assertEqual(server.MARKET_EVENT_SEQUENCES, snapshot["market_event_sequences"])
+    test_case.assertEqual(server.LAST_EVENT_HASHES, snapshot["last_event_hashes"])
     test_case.assertEqual(server.ACCOUNT_RISK, snapshot["account_risk"])
     test_case.assertEqual(server.ACCOUNT_EXPOSURE, snapshot["account_exposure"])
 
@@ -3601,6 +3605,147 @@ class BayesMarketEventTradeTests(unittest.TestCase):
             self.assertEqual(error.code, "invalid_event_trade")
             self.assertEqual(error.details["field"], "size")
 
+    def test_event_trade_accepts_exact_max_position_boundary_without_widening_contract(self):
+        for case in (
+            {
+                "label": "positive-cap-buy",
+                "account_id": "acct_event_trade_exact_positive",
+                "starting_net_size": 99.5,
+                "side": "buy",
+                "size": 0.5,
+                "expected_net_size": 100.0,
+            },
+            {
+                "label": "negative-cap-sell",
+                "account_id": "acct_event_trade_exact_negative",
+                "starting_net_size": -99.5,
+                "side": "sell",
+                "size": 0.5,
+                "expected_net_size": -100.0,
+            },
+        ):
+            with self.subTest(case=case["label"]):
+                server.reset_state()
+                account_id = case["account_id"]
+                server.ACCOUNT_EXPOSURE[account_id] = {
+                    "accountId": account_id,
+                    "updatedAt": "2026-04-09T12:00:00Z",
+                    "positions": {
+                        "m1|yes": {
+                            "marketId": "m1",
+                            "outcomeId": "yes",
+                            "netSize": case["starting_net_size"],
+                            "lastTradePrice": 0.65,
+                            "updatedAt": "2026-04-09T11:55:00Z",
+                            "lastOrderId": "ord_seed",
+                            "lastCommandId": "cmd_seed",
+                        }
+                    },
+                }
+
+                payload, status = server.route_request(
+                    "POST",
+                    "/v1/markets/m1/orders/event-trade",
+                    build_event_trade_body(
+                        account_id,
+                        "m1",
+                        "yes",
+                        size=case["size"],
+                        side=case["side"],
+                    ),
+                )
+
+                self.assertEqual(status, 201)
+                self.assertEqual(payload["result"]["status"], "accepted")
+                self.assertEqual(payload["order"]["type"], "EventTrade")
+                self.assertEqual(payload["order"]["size"], case["size"])
+                self.assertNotIn("currentNetSize", payload["order"])
+                self.assertNotIn("resultingNetSize", payload["order"])
+                self.assertEqual(
+                    server.ACCOUNT_EXPOSURE[account_id]["positions"]["m1|yes"]["netSize"],
+                    case["expected_net_size"],
+                )
+                self.assertEqual(server.ACCOUNT_RISK, {})
+                self.assertEqual(
+                    server.EVENTS[payload["result"]["eventId"]]["payload"]["effects"],
+                    {"marginalDelta": [], "assetDelta": []},
+                )
+
+    def test_event_trade_position_limit_exceeded_is_side_effect_free_and_idempotency_key_remains_reusable(self):
+        account_id = "acct_event_trade_limit"
+        idempotency_key = "idem-event-trade-limit"
+        scope_key = server.idempotency_scope_key("m1", account_id, idempotency_key)
+
+        setup_payload, setup_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=99.0, side="buy"),
+        )
+        baseline_snapshot = snapshot_domain_state()
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/event-trade",
+                build_event_trade_body(
+                    account_id,
+                    "m1",
+                    "yes",
+                    size=2.0,
+                    side="buy",
+                    idempotency_key=idempotency_key,
+                ),
+            )
+
+        error = ctx.exception
+        self.assertEqual(setup_status, 201)
+        self.assertEqual(setup_payload["result"]["status"], "accepted")
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "position_limit_exceeded")
+        self.assertEqual(error.message, "Trade would exceed max position size")
+        self.assertEqual(
+            error.details,
+            {
+                "accountId": account_id,
+                "marketId": "m1",
+                "outcomeId": "yes",
+                "side": "buy",
+                "requestedSize": 2.0,
+                "currentNetSize": 99.0,
+                "resultingNetSize": 101.0,
+                "maxPositionSize": 100.0,
+            },
+        )
+        self.assertNotIn(scope_key, server.IDEMPOTENCY_KEYS)
+        assert_domain_state_unchanged(self, baseline_snapshot)
+
+        reduction_payload, reduction_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=10.0, side="sell"),
+        )
+        retry_payload, retry_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(
+                account_id,
+                "m1",
+                "yes",
+                size=2.0,
+                side="buy",
+                idempotency_key=idempotency_key,
+            ),
+        )
+
+        self.assertEqual(reduction_status, 201)
+        self.assertEqual(reduction_payload["result"]["status"], "accepted")
+        self.assertEqual(retry_status, 201)
+        self.assertEqual(retry_payload["result"]["status"], "accepted")
+        self.assertEqual(retry_payload["order"]["idempotencyKey"], idempotency_key)
+        self.assertNotIn("replayed", retry_payload["meta"])
+        self.assertEqual(server.ACCOUNT_EXPOSURE[account_id]["positions"]["m1|yes"]["netSize"], 91.0)
+        self.assertEqual(server.IDEMPOTENCY_KEYS[scope_key], retry_payload["result"]["commandId"])
+
     def test_event_trade_replays_idempotent_submission(self):
         body = build_event_trade_body(
             "acct_event_trade",
@@ -3614,11 +3759,12 @@ class BayesMarketEventTradeTests(unittest.TestCase):
             "/v1/markets/m1/orders/event-trade",
             body,
         )
-        second_payload, second_status = server.route_request(
-            "POST",
-            "/v1/markets/m1/orders/event-trade",
-            body,
-        )
+        with patch.object(server, "preview_event_trade_position_net_change", autospec=True) as preview_mock:
+            second_payload, second_status = server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/event-trade",
+                body,
+            )
 
         self.assertEqual(first_status, 201)
         self.assertEqual(second_status, 201)
@@ -3626,6 +3772,7 @@ class BayesMarketEventTradeTests(unittest.TestCase):
         self.assertEqual(second_payload["order"]["commandId"], first_payload["order"]["commandId"])
         self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
         self.assertTrue(second_payload["meta"]["replayed"])
+        preview_mock.assert_not_called()
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(server.ACCOUNT_RISK, {})
         self.assertEqual(len(server.ORDERS), 1)
@@ -3645,11 +3792,12 @@ class BayesMarketEventTradeTests(unittest.TestCase):
             "/v1/markets/m3/orders/event-trade",
             body,
         )
-        second_payload, second_status = server.route_request(
-            "POST",
-            "/v1/markets/m3/orders/event-trade",
-            body,
-        )
+        with patch.object(server, "preview_event_trade_position_net_change", autospec=True) as preview_mock:
+            second_payload, second_status = server.route_request(
+                "POST",
+                "/v1/markets/m3/orders/event-trade",
+                body,
+            )
         events_payload, events_status = server.route_request("GET", "/v1/markets/m3/events")
 
         self.assertEqual(first_status, 409)
@@ -3663,6 +3811,7 @@ class BayesMarketEventTradeTests(unittest.TestCase):
         self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
         self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
         self.assertTrue(second_payload["meta"]["replayed"])
+        preview_mock.assert_not_called()
         self.assertEqual(len(server.COMMANDS), 1)
         self.assertEqual(len(server.EVENTS), 1)
 
@@ -3850,6 +3999,59 @@ class BayesMarketExposureProjectionTests(unittest.TestCase):
         )
         self.assertEqual(server.ACCOUNT_EXPOSURE, before_preview)
 
+    def test_preview_event_trade_position_net_change_lands_exactly_on_position_cap(self):
+        for case in (
+            {
+                "label": "positive-cap-buy",
+                "account_id": "acct_exposure_cap_positive",
+                "starting_net_size": 99.5,
+                "side": "buy",
+                "expected": {
+                    "currentNetSize": 99.5,
+                    "signedDelta": 0.5,
+                    "resultingNetSize": 100.0,
+                },
+            },
+            {
+                "label": "negative-cap-sell",
+                "account_id": "acct_exposure_cap_negative",
+                "starting_net_size": -99.5,
+                "side": "sell",
+                "expected": {
+                    "currentNetSize": -99.5,
+                    "signedDelta": -0.5,
+                    "resultingNetSize": -100.0,
+                },
+            },
+        ):
+            with self.subTest(case=case["label"]):
+                server.reset_state()
+                account_id = case["account_id"]
+                normalized_payload = server.normalize_event_trade_payload(
+                    "m1",
+                    build_event_trade_body(account_id, "m1", "yes", size=0.5, side=case["side"]),
+                )
+                server.ACCOUNT_EXPOSURE[account_id] = {
+                    "accountId": account_id,
+                    "updatedAt": "2026-04-09T12:00:00Z",
+                    "positions": {
+                        "m1|yes": {
+                            "marketId": "m1",
+                            "outcomeId": "yes",
+                            "netSize": case["starting_net_size"],
+                            "lastTradePrice": 0.65,
+                            "updatedAt": "2026-04-09T11:55:00Z",
+                            "lastOrderId": "ord_seed",
+                            "lastCommandId": "cmd_seed",
+                        }
+                    },
+                }
+
+                preview = server.preview_event_trade_position_net_change(account_id, "m1", normalized_payload)
+
+                self.assertEqual(preview, case["expected"])
+                self.assertLessEqual(abs(preview["resultingNetSize"]), server.max_position_size)
+
     def test_event_trade_acceptance_syncs_account_exposure_and_prunes_after_offsetting_sell(self):
         account_id = "acct_exposure_sync"
         buy_payload, buy_status = server.route_request(
@@ -3889,6 +4091,80 @@ class BayesMarketExposureProjectionTests(unittest.TestCase):
         self.assertEqual(sell_status, 201)
         self.assertEqual(sell_payload["order"]["price"], 0.65)
         self.assertEqual(server.ACCOUNT_EXPOSURE, {})
+
+    def test_event_trade_acceptance_updates_surviving_position_after_partial_offset(self):
+        account_id = "acct_exposure_partial_offset"
+        buy_payload, buy_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=12.5, side="buy"),
+        )
+        sell_payload, sell_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=4.0, side="sell"),
+        )
+
+        self.assertEqual(buy_status, 201)
+        self.assertEqual(sell_status, 201)
+        self.assertEqual(server.ACCOUNT_RISK, {})
+        self.assertEqual(
+            server.ACCOUNT_EXPOSURE,
+            {
+                account_id: {
+                    "accountId": account_id,
+                    "updatedAt": sell_payload["order"]["filledAt"],
+                    "positions": {
+                        "m1|yes": {
+                            "marketId": "m1",
+                            "outcomeId": "yes",
+                            "netSize": 8.5,
+                            "lastTradePrice": 0.65,
+                            "updatedAt": sell_payload["order"]["filledAt"],
+                            "lastOrderId": sell_payload["order"]["id"],
+                            "lastCommandId": sell_payload["order"]["commandId"],
+                        }
+                    },
+                }
+            },
+        )
+
+    def test_event_trade_acceptance_updates_surviving_position_after_sign_flip(self):
+        account_id = "acct_exposure_sign_flip"
+        buy_payload, buy_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=4.0, side="buy"),
+        )
+        sell_payload, sell_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=10.0, side="sell"),
+        )
+
+        self.assertEqual(buy_status, 201)
+        self.assertEqual(sell_status, 201)
+        self.assertEqual(server.ACCOUNT_RISK, {})
+        self.assertEqual(
+            server.ACCOUNT_EXPOSURE,
+            {
+                account_id: {
+                    "accountId": account_id,
+                    "updatedAt": sell_payload["order"]["filledAt"],
+                    "positions": {
+                        "m1|yes": {
+                            "marketId": "m1",
+                            "outcomeId": "yes",
+                            "netSize": -6.0,
+                            "lastTradePrice": 0.65,
+                            "updatedAt": sell_payload["order"]["filledAt"],
+                            "lastOrderId": sell_payload["order"]["id"],
+                            "lastCommandId": sell_payload["order"]["commandId"],
+                        }
+                    },
+                }
+            },
+        )
 
     def test_get_account_exposure_serializes_lexically_sorted_positions_and_account_timestamp(self):
         account_id = "acct_exposure_view"
