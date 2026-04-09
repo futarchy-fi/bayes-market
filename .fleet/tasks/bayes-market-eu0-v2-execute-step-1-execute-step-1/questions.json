@@ -1,0 +1,57 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the new position-cap identifier follow the module's existing uppercase constant convention (for example `MAX_POSITION_SIZE`) or must it literally be introduced as `max_position_size` because later steps or tests will reference that exact name?",
+      "category": "codebase",
+      "why_it_matters": "All current module-level trading and risk controls in `backend/server.py` are uppercase, but the task prose uses a lowercase identifier. Choosing the canonical name now avoids churn across later validation, serializers, and tests."
+    },
+    {
+      "id": "q2",
+      "question": "What exact default numeric value should the new global position-cap constant use when it is added beside `ACCOUNT_RISK_LIMIT`?",
+      "category": "requirements",
+      "why_it_matters": "This step introduces the single source of truth that later EventTrade validation and `/v1/accounts/{id}/exposure` serialization will reuse, so the default affects both implementation and fixture scale."
+    },
+    {
+      "id": "q3",
+      "question": "Should the dedicated top-level exposure store be account-keyed like `ACCOUNT_RISK` (`accountId -> exposure document`) or a flatter projection keyed directly by `(accountId, marketId, outcomeId)` positions?",
+      "category": "design",
+      "why_it_matters": "Step 1 only adds the store, but its top-level shape constrains the account builder, position builder, serializer, and market-resolution cleanup helpers planned for subsequent steps."
+    },
+    {
+      "id": "q4",
+      "question": "After `reset_state()`, should the new exposure store always be completely empty, or is any bootstrap or fixture seeding expected from existing account read models, historical orders, or resolved market fixtures?",
+      "category": "requirements",
+      "why_it_matters": "The reset integration could be a simple in-memory projection clear like `ACCOUNT_RISK`, or it could need startup seeding rules. That choice determines whether step 1 is just state registration or also state reconstruction."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new exposure primitives are additive and should remain separate from `ACCOUNT_RISK`; this step should not change existing `/v1/accounts/{id}/risk` behavior or the current service-index route list.",
+      "confidence": 0.98,
+      "if_wrong": "The task is larger than a new store registration and would need coordinated read-model or routing changes immediately."
+    },
+    {
+      "id": "a2",
+      "assumption": "The codebase precedent favors an uppercase module-level constant near `ACCOUNT_RISK_LIMIT`, and `100.0` is the most likely default value unless a stronger requirement overrides it.",
+      "confidence": 0.84,
+      "if_wrong": "Later steps may need a rename or a different cap value, creating avoidable churn in validation logic and tests."
+    },
+    {
+      "id": "a3",
+      "assumption": "The top-level exposure store should mirror current account read-model organization and start as an account-keyed in-memory dictionary cleared by `reset_state()` rather than a flat position map or on-read reconstruction.",
+      "confidence": 0.9,
+      "if_wrong": "The future builder and cleanup helpers would target the wrong storage seam and step 1 would introduce the wrong global shape."
+    },
+    {
+      "id": "a4",
+      "assumption": "Process reset should leave the new exposure store empty, with no seeding from `ORDERS`, `EVENTS`, or fixture markets; those historical structures remain untouched and continue to serve only as history.",
+      "confidence": 0.95,
+      "if_wrong": "Step 1 needs bootstrap logic rather than a simple clear operation, and later tests must account for seeded exposure state."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
