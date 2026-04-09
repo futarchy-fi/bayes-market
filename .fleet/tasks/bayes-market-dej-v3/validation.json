@@ -1,0 +1,16 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.38,
+  "plan_adherence_notes": "Execution covers the frontend half of steps 3-4: `frontend/src/lib/api/client.ts` adds `getMarketPricesWebSocketUrl()`, `frontend/src/lib/api/types.ts` adds `MarketPriceMessage`, `frontend/src/lib/query/hooks.ts` adds `useMarketPriceSubscription(...)` with cache patching/reconnect/refetch behavior, and `frontend/src/routes/MarketDetail.tsx` enables the hook only for active markets. The branch does not execute plan steps 1-2 or 5. `backend/server.py` still exposes only HTTP routes via `service_index_payload()`/`do_GET()` and still starts `HTTPServer` in `run_server()`, so there is no `/ws/markets/{id}/prices` server, no threaded long-lived-socket runtime, and no publisher wiring. The planned verification work is also absent: there are no backend WebSocket tests in `tests/test_bayes_market_api.py` and no frontend tests for the new subscription path. The client-side parser also drops the optional `terminalEvent` attribution metadata described in decision d1.",
+  "research_quality": 0.92,
+  "question_completeness": 0.79,
+  "missed_questions": [
+    "Is the backend prerequisite already present in this checkout: does `backend/server.py` actually implement `/ws/markets/{id}/prices` and advertise it before the frontend starts connecting to it?",
+    "If the backend socket is absent or not yet advertised, what capability-detection or rollout guard should prevent active-market pages from entering a perpetual reconnect/refetch loop?",
+    "What exact test harness work is required for the new subscription path, including a mocked `WebSocket` strategy in Vitest and a real-socket backend integration harness?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "The plan follows the research, but the branch only lands the frontend subscription wiring. The backend WebSocket endpoint, threaded runtime change, mutation broadcaster, and both backend/frontend WS regression tests are missing, so the feature is not functional end-to-end. Validation evidence: `python3 -m unittest discover -s tests -p 'test_bayes_market_api.py'` passed (206 tests), while `pnpm test` in `frontend/` could not run because `frontend/node_modules` is missing and `vitest` was not executable (`sh: 1: vitest: Permission denied`).",
+  "spawn_children": false,
+  "children": []
+}
