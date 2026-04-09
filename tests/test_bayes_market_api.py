@@ -433,7 +433,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["service"], "bayes-market")
         self.assertEqual(payload["status"], "ok")
         self.assertIn("routes", payload)
-        self.assertEqual(payload["routes"]["accounts"], ["/v1/accounts/{id}/risk"])
+        self.assertEqual(payload["routes"]["accounts"], ["/v1/accounts/{id}/risk", "/v1/accounts/{id}/exposure"])
         self.assertIn("/v1/markets/{id}/meta", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/events", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/engine-stats", payload["routes"]["markets"])
@@ -909,6 +909,25 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.code, "method_not_allowed")
         self.assertEqual(error.details["method"], "POST")
         self.assertEqual(error.details["path"], "/v1/accounts/acct_test/risk")
+
+    def test_account_exposure_requires_known_account(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/accounts/acct_missing/exposure")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 404)
+        self.assertEqual(error.code, "account_not_found")
+        self.assertEqual(error.details["accountId"], "acct_missing")
+
+    def test_account_exposure_route_is_method_not_allowed_for_post(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", "/v1/accounts/acct_test/exposure", {})
+
+        error = ctx.exception
+        self.assertEqual(error.status, 405)
+        self.assertEqual(error.code, "method_not_allowed")
+        self.assertEqual(error.details["method"], "POST")
+        self.assertEqual(error.details["path"], "/v1/accounts/acct_test/exposure")
 
     def test_probability_edit_success_updates_market(self):
         payload, status = server.route_request(
@@ -2600,7 +2619,21 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m2/orders/probability-edit",
             build_unconditional_probability_edit_body(account_id, "m2", "yes", 0.4),
         )
+        resolved_trade, resolved_trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=8.0),
+        )
+        retained_trade, retained_trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body(account_id, "m2", "yes", size=5.0),
+        )
         pre_resolution_risk, pre_resolution_risk_status = server.route_request("GET", f"/v1/accounts/{account_id}/risk")
+        pre_resolution_exposure, pre_resolution_exposure_status = server.route_request(
+            "GET",
+            f"/v1/accounts/{account_id}/exposure",
+        )
         pre_resolution_account_state = deepcopy(server.ACCOUNT_RISK[account_id])
 
         payload, status = server.route_request(
@@ -2609,13 +2642,21 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             build_market_resolution_body("ops_admin", "yes", idempotency_key="idem-resolve-m1"),
         )
         post_resolution_risk, post_resolution_risk_status = server.route_request("GET", f"/v1/accounts/{account_id}/risk")
+        post_resolution_exposure, post_resolution_exposure_status = server.route_request(
+            "GET",
+            f"/v1/accounts/{account_id}/exposure",
+        )
 
         self.assertEqual(first_status, 201)
         self.assertEqual(conditional_status, 201)
         self.assertEqual(retained_status, 201)
+        self.assertEqual(resolved_trade_status, 201)
+        self.assertEqual(retained_trade_status, 201)
         self.assertEqual(pre_resolution_risk_status, 200)
+        self.assertEqual(pre_resolution_exposure_status, 200)
         self.assertEqual(status, 201)
         self.assertEqual(post_resolution_risk_status, 200)
+        self.assertEqual(post_resolution_exposure_status, 200)
         self.assertEqual(payload["market"]["id"], "m1")
         self.assertEqual(payload["market"]["status"], "resolved")
         self.assertEqual(payload["market"]["resolution"], "yes")
@@ -2632,6 +2673,26 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(command["payload"], expected_market_resolution_payload("m1", "yes"))
         self.assertNotIn("m1", server.CONDITIONAL_MARGINALS)
         self.assertEqual(post_resolution_risk["account"]["id"], account_id)
+        self.assertEqual(
+            [position["marketId"] for position in pre_resolution_exposure["account"]["exposure"]["positions"]],
+            ["m1", "m2"],
+        )
+        self.assertEqual(post_resolution_exposure["account"]["id"], account_id)
+        self.assertEqual(
+            post_resolution_exposure["account"]["exposure"]["positions"],
+            [
+                {
+                    "marketId": "m2",
+                    "outcomeId": "yes",
+                    "netSize": 5.0,
+                    "absSize": 5.0,
+                    "lastTradePrice": retained_trade["order"]["price"],
+                    "updatedAt": retained_trade["order"]["filledAt"],
+                    "lastOrderId": retained_trade["order"]["id"],
+                    "lastCommandId": retained_trade["order"]["commandId"],
+                }
+            ],
+        )
         self.assertEqual(post_resolution_risk["account"]["risk"]["minAssets"]["overall"], expected_remaining_min_asset)
         self.assertEqual(
             post_resolution_risk["account"]["risk"]["capacityIndicators"],
@@ -2669,12 +2730,17 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 server.account_lmsr_slice_key("m2", []),
             },
         )
+        self.assertEqual(set(server.ACCOUNT_EXPOSURE[account_id]["positions"]), {"m2|yes"})
 
         event = server.EVENTS[payload["result"]["eventId"]]
         self.assertEqual(event["eventType"], "CommandAccepted")
         self.assertEqual(event["payload"]["resolution"]["outcomeId"], "yes")
         self.assertEqual(event["payload"]["resolution"]["finalProbabilities"], {"yes": 1.0, "no": 0.0})
         self.assertTrue(event["payload"]["resolution"]["resolvedAt"].endswith("Z"))
+        self.assertEqual(
+            post_resolution_exposure["account"]["exposure"]["updatedAt"],
+            event["payload"]["resolution"]["resolvedAt"],
+        )
         self.assertEqual(
             event["payload"]["effects"]["marginalDelta"],
             [
@@ -4204,8 +4270,11 @@ class BayesMarketExposureProjectionTests(unittest.TestCase):
         }
 
         payload, status = server.get_account_exposure(account_id)
+        route_payload, route_status = server.route_request("GET", f"/v1/accounts/{account_id}/exposure")
 
         self.assertEqual(status, 200)
+        self.assertEqual(route_status, 200)
+        self.assertEqual(route_payload["account"], payload["account"])
         self.assertEqual(payload["account"]["id"], account_id)
         self.assertEqual(
             payload["account"]["exposure"],
@@ -4272,6 +4341,103 @@ class BayesMarketExposureProjectionTests(unittest.TestCase):
             self.assertEqual(error.status, 404)
             self.assertEqual(error.code, "account_not_found")
             self.assertEqual(error.details, {"accountId": "acct_zero_only"})
+
+    def test_settle_market_account_exposure_prunes_resolved_market_rows_and_updates_survivors(self):
+        timestamp = "2026-04-10T00:00:00Z"
+        server.ACCOUNT_EXPOSURE.update(
+            {
+                "acct_keep": {
+                    "accountId": "acct_keep",
+                    "updatedAt": "2026-04-09T12:00:00Z",
+                    "positions": {
+                        "m1|yes": {
+                            "marketId": "m1",
+                            "outcomeId": "yes",
+                            "netSize": 4.0,
+                            "lastTradePrice": 0.65,
+                            "updatedAt": "2026-04-09T11:00:00Z",
+                            "lastOrderId": "ord_drop",
+                            "lastCommandId": "cmd_drop",
+                        },
+                        "m2|no": {
+                            "marketId": "m2",
+                            "outcomeId": "no",
+                            "netSize": -2.5,
+                            "lastTradePrice": 0.6,
+                            "updatedAt": "2026-04-09T11:30:00Z",
+                            "lastOrderId": "ord_keep",
+                            "lastCommandId": "cmd_keep",
+                        },
+                    },
+                },
+                "acct_prune": {
+                    "accountId": "acct_prune",
+                    "updatedAt": "2026-04-09T12:05:00Z",
+                    "positions": {
+                        "m1|no": {
+                            "marketId": "m1",
+                            "outcomeId": "no",
+                            "netSize": 1.5,
+                            "lastTradePrice": 0.35,
+                            "updatedAt": "2026-04-09T11:10:00Z",
+                            "lastOrderId": "ord_prune",
+                            "lastCommandId": "cmd_prune",
+                        },
+                        "m2|yes": {
+                            "marketId": "m2",
+                            "outcomeId": "yes",
+                            "netSize": 0.0000004,
+                            "lastTradePrice": 0.25,
+                            "updatedAt": "2026-04-09T11:15:00Z",
+                            "lastOrderId": "ord_zero",
+                            "lastCommandId": "cmd_zero",
+                        },
+                    },
+                },
+            }
+        )
+
+        cleanup = server.settle_market_account_exposure("m1", timestamp)
+
+        self.assertEqual(
+            cleanup,
+            [
+                {
+                    "accountId": "acct_keep",
+                    "marketId": "m1",
+                    "removedPositionCount": 1,
+                    "remainingPositionCount": 1,
+                    "pruned": False,
+                },
+                {
+                    "accountId": "acct_prune",
+                    "marketId": "m1",
+                    "removedPositionCount": 1,
+                    "remainingPositionCount": 0,
+                    "pruned": True,
+                },
+            ],
+        )
+        self.assertEqual(
+            server.ACCOUNT_EXPOSURE,
+            {
+                "acct_keep": {
+                    "accountId": "acct_keep",
+                    "updatedAt": timestamp,
+                    "positions": {
+                        "m2|no": {
+                            "marketId": "m2",
+                            "outcomeId": "no",
+                            "netSize": -2.5,
+                            "lastTradePrice": 0.6,
+                            "updatedAt": "2026-04-09T11:30:00Z",
+                            "lastOrderId": "ord_keep",
+                            "lastCommandId": "cmd_keep",
+                        }
+                    },
+                }
+            },
+        )
 
 
 class BayesMarketApiPropertyTests(unittest.TestCase):
@@ -6536,7 +6702,21 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
         )
+        resolved_trade_status, resolved_trade_payload = self.request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=7.0),
+        )
+        retained_trade_status, retained_trade_payload = self.request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body(account_id, "m2", "yes", size=4.0),
+        )
         pre_resolution_risk_status, pre_resolution_risk_payload = self.request("GET", f"/v1/accounts/{account_id}/risk")
+        pre_resolution_exposure_status, pre_resolution_exposure_payload = self.request(
+            "GET",
+            f"/v1/accounts/{account_id}/exposure",
+        )
         pre_resolution_account_state = deepcopy(server.ACCOUNT_RISK[account_id])
         resolve_status, resolve_payload = self.request(
             "POST",
@@ -6544,13 +6724,38 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             build_market_resolution_body("ops_http", "yes"),
         )
         risk_status, risk_payload = self.request("GET", f"/v1/accounts/{account_id}/risk")
+        exposure_status, exposure_payload = self.request("GET", f"/v1/accounts/{account_id}/exposure")
 
         self.assertEqual(post_status, 201)
+        self.assertEqual(resolved_trade_status, 201)
+        self.assertEqual(retained_trade_status, 201)
         self.assertEqual(resolve_status, 201)
         self.assertEqual(pre_resolution_risk_status, 200)
+        self.assertEqual(pre_resolution_exposure_status, 200)
         self.assertEqual(risk_status, 200)
+        self.assertEqual(exposure_status, 200)
         self.assertEqual(resolve_payload["market"]["status"], "resolved")
         self.assertEqual(risk_payload["account"]["id"], account_id)
+        self.assertEqual(
+            [position["marketId"] for position in pre_resolution_exposure_payload["account"]["exposure"]["positions"]],
+            ["m1", "m2"],
+        )
+        self.assertEqual(exposure_payload["account"]["id"], account_id)
+        self.assertEqual(
+            exposure_payload["account"]["exposure"]["positions"],
+            [
+                {
+                    "marketId": "m2",
+                    "outcomeId": "yes",
+                    "netSize": 4.0,
+                    "absSize": 4.0,
+                    "lastTradePrice": retained_trade_payload["order"]["price"],
+                    "updatedAt": retained_trade_payload["order"]["filledAt"],
+                    "lastOrderId": retained_trade_payload["order"]["id"],
+                    "lastCommandId": retained_trade_payload["order"]["commandId"],
+                }
+            ],
+        )
         self.assertEqual(
             risk_payload["account"]["risk"]["minAssets"],
             {
@@ -6580,7 +6785,9 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             },
         )
         self.assertNotEqual(server.ACCOUNT_RISK[account_id], pre_resolution_account_state)
+        self.assertEqual(set(server.ACCOUNT_EXPOSURE[account_id]["positions"]), {"m2|yes"})
         event = server.EVENTS[resolve_payload["result"]["eventId"]]
+        self.assertEqual(exposure_payload["account"]["exposure"]["updatedAt"], event["payload"]["resolution"]["resolvedAt"])
         self.assertEqual(
             event["payload"]["effects"]["assetDelta"],
             [
@@ -7416,6 +7623,21 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "method_not_allowed")
         self.assertEqual(payload["error"]["details"]["method"], "POST")
         self.assertEqual(payload["error"]["details"]["path"], "/v1/accounts/acct_http/risk")
+
+    def test_account_exposure_http_unknown_account_returns_structured_error(self):
+        status, payload = self.request("GET", "/v1/accounts/acct_missing/exposure")
+
+        self.assertEqual(status, 404)
+        self.assertEqual(payload["error"]["code"], "account_not_found")
+        self.assertEqual(payload["error"]["details"]["accountId"], "acct_missing")
+
+    def test_account_exposure_http_rejects_non_get_methods(self):
+        status, payload = self.request("POST", "/v1/accounts/acct_http/exposure", {})
+
+        self.assertEqual(status, 405)
+        self.assertEqual(payload["error"]["code"], "method_not_allowed")
+        self.assertEqual(payload["error"]["details"]["method"], "POST")
+        self.assertEqual(payload["error"]["details"]["path"], "/v1/accounts/acct_http/exposure")
 
 
 if __name__ == "__main__":
