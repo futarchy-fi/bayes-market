@@ -137,7 +137,8 @@ export function submitProbabilityEdit(
 
 export interface ResolveMarketPayload {
   accountId: string;
-  outcomeId: string;
+  outcomeId?: string;
+  finalProbabilities?: Record<string, number>;
   idempotencyKey?: string;
 }
 

@@ -12,13 +12,18 @@ export function ResolveMarketPanel({ market }: Props) {
   const mutation = useResolveMarket(market.id);
   const [selectedOutcome, setSelectedOutcome] = useState<string>("");
   const [confirming, setConfirming] = useState(false);
+  const resolvedSummary = market.resolution
+    ? `Outcome: ${market.resolution}`
+    : market.resolutionProbabilities
+      ? `Distribution: ${formatResolutionProbabilities(market.resolutionProbabilities)}`
+      : "Resolution finalized";
 
   if (market.status === "resolved") {
     return (
       <div style={resolvedStyle}>
         <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>Resolved</span>
         <span style={{ fontSize: "0.85rem", color: "var(--color-text-muted)" }}>
-          Outcome: <strong>{market.resolution}</strong>
+          <strong>{resolvedSummary}</strong>
         </span>
       </div>
     );
@@ -205,3 +210,9 @@ const successStyle: React.CSSProperties = {
   fontSize: "0.8rem",
   color: "var(--color-success, #22c55e)",
 };
+
+function formatResolutionProbabilities(resolutionProbabilities: Record<string, number>): string {
+  return Object.entries(resolutionProbabilities)
+    .map(([outcomeId, probability]) => `${outcomeId} ${(probability * 100).toFixed(1)}%`)
+    .join(", ");
+}

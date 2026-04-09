@@ -19,6 +19,7 @@ export interface Market {
   variableId: string;
   status: "active" | "resolved" | "closed" | "draft";
   resolution?: string;
+  resolutionProbabilities?: Record<string, number>;
   outcomes: MarketOutcome[];
   marginals: Record<string, number>;
   liquidity: number;
