@@ -1,0 +1,15 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.72,
+  "plan_adherence_notes": "Execution matches the first three local plan steps: the branch backfills the shared market-price client/types/hook in `frontend/src/lib/api/client.ts`, `frontend/src/lib/api/types.ts`, and `frontend/src/lib/query/hooks.ts`, then gates `useMarketPriceSubscription(...)` in `frontend/src/routes/MarketDetail.tsx` from REST-loaded active market data while keeping the route render source on `data.market`. It did not execute steps 4-5: `frontend/src/__tests__/MarketDetail.test.tsx` remains REST-only, with no new active/inactive/anonymous/disconnect subscription assertions or shared socket mocks, and there is no evidence the planned targeted MarketDetail Vitest run was completed. The checkout also still lacks any backend `/ws/markets/{id}/prices` implementation, so the route wiring cannot provide real live updates end-to-end in this branch.",
+  "research_quality": 0.57,
+  "question_completeness": 0.6,
+  "missed_questions": [
+    "Is the parent step-3 backend prerequisite actually present in this checkout: does `backend/server.py` implement `GET /ws/markets/{id}/prices`, or is step 4 wiring landing on a nonexistent server route?",
+    "What test harness changes are required now that `MarketDetail` triggers a WebSocket subscription path, specifically how should Vitest mock `WebSocket` and `getMarketPricesWebSocketUrl()` for the active/inactive/disconnect cases?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "The route integration itself follows the intended active-only/query-driven design, but the branch is still incomplete for the stated feature. There is no backend `/ws/markets/{id}/prices` endpoint in this checkout, so active markets cannot actually receive live updates, and the planned route-level Vitest coverage was never added. During validation, `pnpm test -- --run src/__tests__/MarketDetail.test.tsx` failed immediately because `frontend/node_modules` is missing and `vitest` was not executable (`sh: 1: vitest: Permission denied`).",
+  "spawn_children": false,
+  "children": []
+}
