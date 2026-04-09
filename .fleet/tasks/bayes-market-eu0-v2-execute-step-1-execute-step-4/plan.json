@@ -1,0 +1,69 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Backfill the missing exposure builder, ensure, and signed-size sync primitives in `backend/server.py` within this same branch before serializer work, so the serializer targets one canonical `ACCOUNT_EXPOSURE[accountId]` projection with a flat composite-key `positions` map instead of inventing a temporary read-only shape.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Assume another branch will land the missing step-2 and step-3 primitives first.",
+        "Write serializer logic directly against ad hoc dict lookups without first establishing the canonical exposure projection helpers."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Add pure exposure serialization helpers and a route-facing `get_account_exposure(account_id)` wrapper that mirrors the existing `get_account_risk(...)` seam by owning missing-account handling, the `{account, meta}` envelope, and deterministic lexical `(marketId, outcomeId)` position ordering in one backend boundary.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Stop at pure serializers and defer the getter boundary to the later route-registration step.",
+        "Let the future route own `404 account_not_found` and `meta` construction separately from serialization."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep canonical storage normalization in the exposure builder and sync helpers, but harden the read boundary by rounding serialized `netSize` and `lastTradePrice` with `round_risk_value(...)`, deriving `absSize` from the rounded net size, and leaving serialization otherwise as a non-mutating projector over stored state.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Assume every stored exposure row is already perfectly normalized and serialize raw float values.",
+        "Persist `absSize` in the projection and read it back as stored state instead of deriving it during serialization."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Serialize `account.exposure.updatedAt` from the stored exposure-account timestamp directly, and treat missing or fully pruned exposure accounts as `404 account_not_found` rather than recomputing freshness from surviving rows or returning an empty `200` envelope.",
+      "based_on": ["q4", "q2"],
+      "alternatives_rejected": [
+        "Recompute account freshness as `max(position.updatedAt)` during serialization.",
+        "Return `200` with an empty exposure document when an account has no live positions."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Backfill the missing exposure projection primitives in `backend/server.py`: `build_account_exposure_state(...)`, `build_account_exposure_position(...)`, `ensure_account_exposure_state(...)`, `ensure_account_exposure_position(...)`, and the signed-size arithmetic/sync helper that maintains canonical row metadata, exact-zero pruning, and account-level `updatedAt`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Implement pure exposure serializers in `backend/server.py` that project one canonical exposure account into the planned public shape, deriving `maxPositionSize` from `max_position_size`, emitting `updatedAt` from the stored account timestamp, rounding output numerics defensively, deriving `absSize`, and sorting serialized positions lexically by `(marketId, outcomeId)`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add `get_account_exposure(account_id)` as the reusable read seam that looks up `ACCOUNT_EXPOSURE`, raises `ApiError(404, \"account_not_found\", ...)` for missing or pruned accounts, and wraps the serialized exposure payload in the standard `{account, meta}` response envelope.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Add focused backend regressions in `tests/test_bayes_market_api.py` covering the canonical exposure helper shape, deterministic lexical serializer ordering, read-time rounding and `absSize` derivation, stored account-timestamp semantics, and getter-level `404` versus success payload behavior without registering the HTTP route yet.",
+      "depends_on": [1, 2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
