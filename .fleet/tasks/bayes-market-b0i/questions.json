@@ -1,0 +1,87 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should MarketList keep its filter state local to the route, or should status/sort/search be mirrored into URL search params like `frontend/src/routes/Analytics.tsx` does?",
+      "category": "design",
+      "why_it_matters": "The current `MarketList` route uses local `useState`, while `Analytics` already treats route-level filters as URL state. That choice changes back/forward behavior, shareable links, and whether the frontend work is limited to widening `useMarkets(filters)` or also needs routing-state plumbing."
+    },
+    {
+      "id": "q2",
+      "question": "When the user selects the all-markets option, should the frontend continue omitting `status`, or should it now send the explicit backend alias `status=all`?",
+      "category": "design",
+      "why_it_matters": "The backend accepts both forms, but the current client only omits empty status values. Picking one canonical frontend representation affects request serialization, query-key normalization, and the assertions in the new tests."
+    },
+    {
+      "id": "q3",
+      "question": "What exact sort dropdown contract should ship in MarketList: a neutral default option that omits `sort`, or an explicit default like `created`, and what user-facing labels/order should the `volume`, `liquidity`, and `created` options use?",
+      "category": "requirements",
+      "why_it_matters": "The backend sort values exist, but the UI contract does not. The component needs an initial state, visible labels, and predictable option ordering before the dropdown and its tests can be written cleanly."
+    },
+    {
+      "id": "q4",
+      "question": "Should the search box refetch on every keystroke, after a debounce, or only on an explicit submit/Enter action?",
+      "category": "requirements",
+      "why_it_matters": "The market query refetches whenever its inputs change, so the interaction model directly affects request volume, perceived responsiveness, and how stable the frontend tests will be."
+    },
+    {
+      "id": "q5",
+      "question": "Should the frontend trim and omit blank search text before calling `listMarkets`, or should it pass raw input through and rely on the backend's existing `q` normalization?",
+      "category": "design",
+      "why_it_matters": "The backend already normalizes blank `q`, but client-side normalization changes React Query cache keys and determines whether whitespace-only edits still trigger extra requests from the UI."
+    },
+    {
+      "id": "q6",
+      "question": "What frontend acceptance tests are required for this task: API client URL serialization, hook/query-key coverage for `status` + `sort` + `q`, MarketList interaction tests, or all three?",
+      "category": "requirements",
+      "why_it_matters": "The task brief names `client.ts`, `hooks.ts`, `MarketList.tsx`, and frontend tests, but the current suite only has `api-client.test.ts` and `MarketList.test.tsx`. The expected verification depth is not yet explicit."
+    },
+    {
+      "id": "q7",
+      "question": "Should the frontend rely on a documented secondary ordering when backend sort values tie, or should the new UI/tests avoid tie cases entirely?",
+      "category": "design",
+      "why_it_matters": "The previous validation for qg9 flagged deterministic ordering for sort ties as unresolved. Without a stated tie-break rule, MarketList ordering assertions can become brittle even if the query params are wired correctly."
+    },
+    {
+      "id": "q8",
+      "question": "Is the implementation phase expected to bootstrap frontend dependencies locally before running tests, or is there a repo-specific pre-provisioned workflow this worktree should use instead?",
+      "category": "codebase",
+      "why_it_matters": "This checkout currently has no `frontend/node_modules`, so frontend test execution is blocked unless dependency setup is part of the expected workflow."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The backend list contract is already fixed and should be consumed as-is: `GET /v1/markets` accepts single-valued `status`, `sort`, and `q`; `status=all` aliases no status filter; `q` is trimmed case-insensitive title search; and `meta.filters` echoes normalized values.",
+      "confidence": 0.99,
+      "if_wrong": "The frontend could wire the wrong params or lock in incorrect normalization expectations in its tests."
+    },
+    {
+      "id": "a2",
+      "assumption": "The intended `hooks.ts` change is to widen `queryKeys.markets(...)` and `useMarkets(...)` around the existing `MarketListFilters` type, not to introduce a separate market-list data hook.",
+      "confidence": 0.9,
+      "if_wrong": "The implementation could land on the wrong hook API and force unnecessary rewrites in `MarketList` or other `useMarkets()` callers."
+    },
+    {
+      "id": "a3",
+      "assumption": "The UI should preserve existing status compatibility by keeping `active`, `resolved`, `closed`, and `draft` options available alongside an all-markets option.",
+      "confidence": 0.84,
+      "if_wrong": "The status dropdown, types, and tests would need a narrower product contract than the current backend/frontend model suggests."
+    },
+    {
+      "id": "a4",
+      "assumption": "If MarketList filter state becomes URL-backed, `frontend/src/routes/Analytics.tsx` is the repo-local pattern to follow rather than introducing a new routing/state abstraction.",
+      "confidence": 0.8,
+      "if_wrong": "The implementation could overfit to an existing route pattern that the project does not want reused here."
+    },
+    {
+      "id": "a5",
+      "assumption": "Frontend verification will require dependency bootstrap or an equivalent provided environment, because `frontend/node_modules` is absent in this worktree.",
+      "confidence": 0.99,
+      "if_wrong": "Time could be wasted setting up tooling that the repo already exposes through another supported workflow."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
