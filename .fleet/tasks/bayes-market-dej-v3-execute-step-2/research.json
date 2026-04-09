@@ -1,0 +1,144 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The live-price publish hook should cover accepted unconditional `ProbabilityEdit` writes plus market resolution, not accepted conditional `ProbabilityEdit` or `EventTrade` writes. The prior feature plan already narrows `/prices` to accepted state transitions that change the displayed market state. The code matches that boundary: unconditional edits write `MARKETS[marketId][\"marginals\"]`, resolution writes both `status` and `marginals`, conditional edits only update `CONDITIONAL_MARGINALS`, and `EventTrade` acceptance records an empty `marginalDelta` without mutating market marginals.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:17",
+        "backend/server.py:2171",
+        "backend/server.py:2192",
+        "backend/server.py:2877",
+        "backend/server.py:2880",
+        "backend/server.py:3026",
+        "tests/test_bayes_market_api.py:5682",
+        "tests/test_bayes_market_api.py:6443"
+      ],
+      "uncertainty": "This boundary would need revisiting only if the socket contract later widens to carry context-specific conditional slices or if `EventTrade` starts mutating displayed market prices.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The broadcaster should run inside the accepted-response path immediately after `record_terminal_outcome(...)` in `build_terminal_response(...)`, not later at the route layer after `refresh_market_compile_snapshot(...)`. By the time `build_terminal_response(...)` runs, the final market mutation has already happened for unconditional `ProbabilityEdit` and resolution, and `emit_terminal_event(...)` has produced the canonical `seq`/`emittedAt`/`approxFlag` metadata. Publishing after `record_terminal_outcome(...)` keeps the persisted replay/idempotency result ahead of any live-side effect, while avoiding the later route-layer compile-refresh step that is diagnostic/read-side work and can still raise `internal_error` after an accepted write.",
+      "confidence": 0.88,
+      "evidence": [
+        "backend/server.py:2190",
+        "backend/server.py:2711",
+        "backend/server.py:2715",
+        "backend/server.py:2893",
+        "backend/server.py:3557",
+        "backend/server.py:3584",
+        "backend/server.py:792",
+        ".fleet/tasks/temporal-fleet-klq/integration-status.txt:1"
+      ],
+      "uncertainty": "Market resolution currently bypasses `get_market_write_lock(...)`, so if step 2 needs publish ordering serialized with other same-market writes, that handler likely needs the same lock discipline as the order paths.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The step-1 websocket layer should expose explicit `publish(snapshot)` and `publish_then_close(snapshot)` primitives, but those primitives should capture/enqueue work instead of performing synchronous socket fan-out in the mutation path. `ProbabilityEdit` and `EventTrade` already run under the per-market write lock, so direct socket I/O there would stall same-market writes. Resolution also needs a distinct terminal primitive so one final snapshot is sent before subscriber teardown, matching the feature plan's 'terminal update, then clean close' requirement.",
+      "confidence": 0.77,
+      "evidence": [
+        "backend/server.py:199",
+        "backend/server.py:3222",
+        "backend/server.py:3314",
+        "backend/server.py:3360",
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:38",
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:76"
+      ],
+      "uncertainty": "There is no step-1 broadcaster implementation in this worktree yet, so the exact function names, queue ownership, and whether `publish_then_close` blocks on enqueue completion are still open implementation details.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q4",
+      "answer": "Accepted conditional `ProbabilityEdit` writes should be suppressed on the live `/prices` stream for now. The current stream contract is aligned to the unconditional market-detail read model: default `GET /v1/markets/{id}` returns stored unconditional `market.marginals`, while conditional edits are only visible through explicit context queries and `CONDITIONAL_MARGINALS`. Emitting an unchanged snapshot with a newer `seq` would advance ordering without changing the rendered state, and widening the stream to carry context-specific state is a larger protocol change that the existing plan did not choose.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:6",
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:17",
+        "backend/server.py:1452",
+        "backend/server.py:1461",
+        "backend/server.py:1464",
+        "backend/server.py:2171",
+        "tests/test_bayes_market_api.py:5682",
+        "tests/test_bayes_market_api.py:6443"
+      ],
+      "uncertainty": "If a future socket contract adds context selectors or per-context channels, conditional accepts could become publishable on a different stream.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Live publication and terminal subscriber cleanup should be best-effort and isolated from the HTTP mutation result. In the current write path, the authoritative acceptance contract is the mutated state plus the appended journal event and persisted terminal outcome. The repo already shows the risk of letting read-side follow-up work poison accepted writes: route-level compile refresh runs after accepted mutations and can still surface `500 internal_error`. Step 2 should not make live delivery or dead-subscriber cleanup part of the acceptance contract; failures there should be logged and isolated rather than rolling back or changing an already accepted command result.",
+      "confidence": 0.84,
+      "evidence": [
+        "backend/server.py:2711",
+        "backend/server.py:2715",
+        "backend/server.py:3557",
+        "backend/server.py:3584",
+        "backend/server.py:792",
+        ".fleet/tasks/temporal-fleet-klq/integration-status.txt:1",
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:76"
+      ],
+      "uncertainty": "The codebase does not yet define the exact logging/metrics policy for failed fan-out or cleanup, only the stronger architectural signal that those are read-side side effects rather than write-side authority.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q6",
+      "answer": "Publication should happen only when a fresh terminal event is appended to the journal. Idempotent replays should not rebroadcast. The replay path returns the previously stored response with `meta.replayed = true` and does not append a new event or advance `seq`, and the tests for `ProbabilityEdit`, `EventTrade`, and market resolution all assert replay leaves the event journal head unchanged.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:2644",
+        "backend/server.py:2649",
+        "backend/server.py:3225",
+        "backend/server.py:3317",
+        "backend/server.py:3385",
+        "tests/test_bayes_market_api.py:3583",
+        "tests/test_bayes_market_api.py:4721",
+        "tests/test_bayes_market_api.py:5869"
+      ],
+      "uncertainty": "None in the current contract; a manual rebroadcast feature would be a separate capability, not normal replay behavior.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "There is no existing live-price publish seam in this checkout. Step 2 has to target a new backend interface introduced by the websocket work rather than plug into an established broadcaster."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The emitted journal event is the only object that already carries `seq`, `emittedAt`, and `approxFlag`. Response `meta.timestamp` and order timestamps are not equivalent ordering metadata, so the publish hook belongs next to event emission."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Fresh accepted state transitions are the publish boundary. Rejections do not change displayed price state, and replayed responses do not append a new event, so including them would create duplicate or misleading live updates."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The current `/prices` stream design follows the unconditional `GET /v1/markets/{id}` view. Conditional slices remain a separate read path until the protocol is widened explicitly."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.74,
+      "impact": "The mutation path should hand off publish work without doing socket writes inline under the market lock. Otherwise same-market writes can block on subscriber I/O and the resolution-close path becomes harder to reason about."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "For resolution, the intended observable order is mutated terminal market state, appended accepted journal event, one final live snapshot using that event metadata, then subscriber cleanup. Step 2 should encode that order directly."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

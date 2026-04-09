@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Which accepted command paths are actually in scope for the live-price publish hook in step 2: unconditional `ProbabilityEdit` only, unconditional `ProbabilityEdit` plus market resolution, or also accepted conditional `ProbabilityEdit` and `EventTrade` writes that do not mutate `MARKETS[marketId][\"marginals\"]`?",
+      "category": "requirements",
+      "why_it_matters": "The current accepted write paths are not equivalent. Unconditional edits mutate the market detail read model, conditional edits only update `CONDITIONAL_MARGINALS`, `EventTrade` emits an accepted journal event with empty `marginalDelta`, and resolution changes both `status` and `marginals`. The answer determines which handlers should publish and which should stay silent."
+    },
+    {
+      "id": "q2",
+      "question": "At what exact point in the accepted-write lifecycle should the broadcaster be invoked: immediately after `emit_terminal_event(...)`, after `record_terminal_outcome(...)`, or later at the route layer after `refresh_market_compile_snapshot(...)` runs?",
+      "category": "design",
+      "why_it_matters": "Step 2 needs the live snapshot to carry the canonical journal `seq` and `approxFlag` from the newly emitted event while also reflecting the final mutated market state. The insertion point also decides whether publication can happen before later side effects fail and whether the hook will run while the market write lock is still held."
+    },
+    {
+      "id": "q3",
+      "question": "What API should the step-1 websocket layer expose for step 2 to call from the mutation path: a non-blocking enqueue/capture method, synchronous socket fan-out, or explicit `publish` and `publish_then_close` primitives for the resolution terminal update?",
+      "category": "codebase",
+      "why_it_matters": "The current mutation handlers already run under a per-market `RLock`, so direct socket I/O there could stall the shard. Resolution also needs an explicit way to guarantee one final terminal snapshot before subscriber cleanup."
+    },
+    {
+      "id": "q4",
+      "question": "How should accepted conditional `ProbabilityEdit` writes be represented on the live `prices` stream when they advance the journal but the current detail-page read model remains unconditional `market.marginals`?",
+      "category": "design",
+      "why_it_matters": "Today the frontend `useMarket(...)` query and `ProbabilityBar` render unconditional market state, while conditional edits are stored separately in `CONDITIONAL_MARGINALS`. That leaves an open contract question: suppress those publishes, emit an unchanged snapshot with a newer `seq`, or widen the stream to carry context-specific state."
+    },
+    {
+      "id": "q5",
+      "question": "If live publication or terminal subscriber cleanup fails after the command has already been accepted and journaled, is that failure best-effort and isolated from the HTTP mutation result, or is successful broadcast part of the acceptance contract for this step?",
+      "category": "requirements",
+      "why_it_matters": "The write path is currently authoritative and synchronous, while live delivery is a new read-side concern. Failure policy determines whether broadcaster errors can roll back or poison accepted writes, and whether dead sockets should simply be dropped."
+    },
+    {
+      "id": "q6",
+      "question": "Should idempotent replays of previously accepted commands ever rebroadcast the last market snapshot to currently connected subscribers, or should publication happen only when a fresh terminal event is appended to the journal?",
+      "category": "requirements",
+      "why_it_matters": "The replay paths return a successful prior response through `replay_terminal_outcome(...)` without mutating state or creating a new `seq`. The broadcaster hook placement needs an explicit rule here to avoid duplicate live updates by accident."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "There is no existing live-price broadcaster hook in this worktree yet, so step 2 will need to target a new backend seam introduced by step 1 rather than reusing an established publish API.",
+      "confidence": 0.99,
+      "if_wrong": "I would be asking interface questions that are already answered in code and might miss the intended integration point."
+    },
+    {
+      "id": "a2",
+      "assumption": "The emitted journal event is the canonical source for live ordering metadata, so step 2 should derive `seq`, `emittedAt`, and `approxFlag` from that event rather than from response `meta.timestamp`, `order.filledAt`, or route timing.",
+      "confidence": 0.95,
+      "if_wrong": "The broadcaster may need its own sequencing or timestamp contract, which would change where the publish hook belongs."
+    },
+    {
+      "id": "a3",
+      "assumption": "Only fresh accepted state transitions, not rejections or idempotent replays, are intended to trigger live market snapshot publication.",
+      "confidence": 0.9,
+      "if_wrong": "The implementation would need explicit rebroadcast behavior for replayed requests or negative-state notifications for rejected commands."
+    },
+    {
+      "id": "a4",
+      "assumption": "The step-2 live `prices` stream is aligned to the unconditional `GET /v1/markets/{id}` read model that the current market detail page renders, not to context-specific conditional slices stored in `CONDITIONAL_MARGINALS`.",
+      "confidence": 0.73,
+      "if_wrong": "The stream contract and frontend cache patching would need to encode context and possibly support multiple simultaneous price views per market."
+    },
+    {
+      "id": "a5",
+      "assumption": "The step-1 broadcaster should accept a snapshot/envelope capture without performing blocking socket writes under the market write lock.",
+      "confidence": 0.78,
+      "if_wrong": "Publishing may need to happen synchronously inside the locked write path, which changes contention, failure handling, and test expectations."
+    },
+    {
+      "id": "a6",
+      "assumption": "For market resolution, the correct observable order is: mutate market state to `resolved`, append the accepted terminal event, publish one terminal live snapshot using that event metadata, then clean up subscribers.",
+      "confidence": 0.84,
+      "if_wrong": "The final live update could carry stale state or subscriber teardown might need to happen on a separate connection lifecycle rather than directly from the mutation path."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
