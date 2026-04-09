@@ -1,0 +1,119 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Keep the account service-index entries in the existing bare-path style and append `/v1/accounts/{id}/exposure`; do not switch the account route list to method-qualified strings. In this checkout, bare paths are already the contract for GET-only account and market-detail routes, while method-qualified strings are used when one path supports multiple verbs. The root-index test also pins `routes.accounts` to that bare-path style, and the step-3 plan explicitly preserves it for exposure.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:716",
+        "backend/server.py:720",
+        "backend/server.py:732",
+        "tests/test_bayes_market_api.py:429",
+        "tests/test_bayes_market_api.py:436",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:6"
+      ],
+      "uncertainty": "This would only change if the repo were concurrently doing a separate global service-index normalization, and there is no evidence of that in this checkout.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "`route_request(...)` should expose `GET /v1/accounts/{id}/exposure` as a thin mirror of the existing `/risk` branch: same GET-only method guard, same `405 method_not_allowed` error shape, and direct delegation to `get_account_exposure(account_id)`. Any semantic difference should come from the read model itself, not from special router behavior. `get_account_exposure(...)` already defines projection-local `404 account_not_found` semantics when the exposure document is missing or has no live positions.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:1486",
+        "backend/server.py:1493",
+        "backend/server.py:3748",
+        "backend/server.py:3751",
+        "backend/server.py:3757",
+        "tests/test_bayes_market_api.py:894",
+        "tests/test_bayes_market_api.py:903",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:6",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:39"
+      ],
+      "uncertainty": "The payload body is different by design because `/exposure` and `/risk` serialize different projections; the router contract itself should not diverge.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "If this checkout still lacks resolved-market exposure cleanup, this step should backfill the missing cleanup implementation and wiring in `backend/server.py`; it should not limit itself to calling a helper only if some other branch already merged one. The current validation artifact says step-5 cleanup is missing and that `resolve_market_command()` still only calls `settle_market_account_risk(...)`, and the step-3 plan explicitly says to absorb that cleanup wiring in this patch if it is absent.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/validation.json:4",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/validation.json:12",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:17",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:49",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:71",
+        "backend/server.py:3147"
+      ],
+      "uncertainty": "If a helper has already landed elsewhere by the time the patch is written, this step should reuse that helper rather than duplicate it. In the current checkout, no such helper is present.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. Resolution cleanup should remove every live exposure row for the resolved `marketId` across all outcomes and prune any account whose final live position disappears, so `GET /v1/accounts/{id}/exposure` returns `404 account_not_found` afterward even if the same account still exists in `/risk` or another read model. That matches the existing live-state lifecycle: zero-net EventTrade sync already deletes the final exposure account, `get_account_exposure(...)` treats missing-or-empty exposure as `404`, and the cleanup-helper plans explicitly require whole-market row removal plus account pruning.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:1263",
+        "backend/server.py:1268",
+        "backend/server.py:1486",
+        "backend/server.py:1493",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:50",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-5/plan.json:58",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:39"
+      ],
+      "uncertainty": "The only plausible alternative would be to treat exposure as archival history, but the checked-in plans consistently reject that direction.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "The most specific in-tree plan says the resolution path should expose a new cleanup summary rather than silently mutating live state and leaving the public resolve contract unchanged. Current code does not do that yet: the accepted-resolution payload only publishes `marginalDelta` and `assetDelta`. But the dedicated cleanup-step plan explicitly requires the helper to return a structured per-account removal summary, `resolve_market_command(...)` to store that summary on `resolution`, and the accepted-resolution payload/event effects to emit the same summary.",
+      "confidence": 0.84,
+      "evidence": [
+        "backend/server.py:3178",
+        "backend/server.py:3180",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-5/plan.json:16",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-5/plan.json:46",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-5/plan.json:58",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-5/plan.json:68",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-5/plan.json:78"
+      ],
+      "uncertainty": "The current task title mentions `resolve_market_command(...)` wiring more directly than response-shape changes, so scope could be narrowed in implementation. The strongest checked-in plan still points to surfacing the cleanup summary.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Use `get_account_exposure(account_id)` as the thin router seam for `/v1/accounts/{id}/exposure`, mirroring the existing `/risk` dispatch pattern."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Keep `/v1/accounts/{id}/risk` unchanged and add `/v1/accounts/{id}/exposure` as a separate read-only GET surface and service-index entry."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Resolved-market cleanup should mutate only live `ACCOUNT_EXPOSURE` state and run alongside existing risk settlement; it should not delete historical `ORDERS`, `COMMANDS`, or `EVENTS`."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "If this checkout still lacks exposure cleanup wiring, this step can and should backfill it in `backend/server.py` instead of waiting on an assumed prerequisite branch."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No child task is needed; the relevant route, projection, test, and rollout-scope evidence is already present in `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `.fleet` artifacts."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

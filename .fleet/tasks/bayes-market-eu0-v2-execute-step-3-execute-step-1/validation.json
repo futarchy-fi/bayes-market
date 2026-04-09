@@ -1,0 +1,12 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.98,
+  "plan_adherence_notes": "Execution matched the three planned steps: `service_index_payload()` now advertises `/v1/accounts/{id}/exposure`, `route_request(...)` accepts `GET /v1/accounts/{id}/exposure` with the same GET-only 405 guard pattern as `/risk`, and `resolve_market_command(...)` now invokes resolved-market exposure cleanup via a new `settle_market_account_exposure(...)` helper. The implementation also added focused unit/integration regressions, which is consistent with the plan's implied verification scope. The only notable scope choice was to keep `exposureCleanup` as an internal resolution seam rather than widening the public resolve payload, which the plan explicitly allowed.",
+  "research_quality": 0.94,
+  "question_completeness": 0.97,
+  "missed_questions": [],
+  "verdict": "approve",
+  "reason": "The diff follows the recorded plan and is well-supported by the research: the service index and router preserve the existing bare-path/GET-only account-route contract, and the branch backfills the missing resolved-market exposure cleanup wiring in `backend/server.py`. No obvious question gaps were left unresolved for this scope. Verification passed with `python3 -m unittest discover -s tests -p 'test_bayes_market_api.py'` (224 tests, all green).",
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,67 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep the account service-index contract in the existing bare-path style and add `/v1/accounts/{id}/exposure` as a sibling GET-only route whose `route_request(...)` branch mirrors `/risk` and delegates directly to `get_account_exposure(account_id)`.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Switch `routes.accounts` to method-qualified strings such as `GET /v1/accounts/{id}/exposure`.",
+        "Fold exposure reads into `/v1/accounts/{id}/risk` or another combined account endpoint.",
+        "Introduce a special exposure adapter instead of routing straight to `get_account_exposure(...)`."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Backfill the missing resolved-market exposure cleanup seam in `backend/server.py` and invoke it from `resolve_market_command(...)` alongside `settle_market_account_risk(...)`, because this checkout still lacks that wiring.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Assume another branch already added cleanup and limit this step to route registration only.",
+        "Leave stale resolved-market exposure rows in `ACCOUNT_EXPOSURE` until a later follow-up.",
+        "Inline one-off cleanup logic inside `resolve_market_command(...)` without a reusable helper."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Define resolution cleanup over the live exposure projection only: remove every position row whose `marketId` matches the resolved market across all outcomes, refresh surviving accounts' `updatedAt`, and prune accounts whose final live exposure disappears so `/v1/accounts/{id}/exposure` preserves its projection-local `404 account_not_found` behavior.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Keep resolved-market positions visible as archival exposure history.",
+        "Delete exposure rows but keep empty account documents around for read-time filtering.",
+        "Expand cleanup into unrelated historical `ORDERS`, `COMMANDS`, or `EVENTS` mutation."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep this step scoped to the server-index, router, and resolve-path wiring named in the task; if the new cleanup helper returns structured data, retain it on the in-memory resolution result as an internal seam, but do not widen the accepted-resolution HTTP payload unless the current implementation already requires it.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Expand this patch into a broader resolve-response contract change.",
+        "Drop any cleanup result entirely and force later work to rescan `ACCOUNT_EXPOSURE`."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Patch `service_index_payload()` and the account branch in `route_request(...)` so the service index advertises `/v1/accounts/{id}/exposure` and the router accepts `GET /v1/accounts/{id}/exposure` with the same `405 method_not_allowed` guard pattern already used for `/v1/accounts/{id}/risk`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add a small market-scoped exposure cleanup helper in `backend/server.py` near the exposure projection utilities that scans `ACCOUNT_EXPOSURE`, removes all rows for the resolved `marketId`, updates surviving account timestamps, and prunes empty exposure accounts.",
+      "depends_on": []
+    },
+    {
+      "step": 3,
+      "task": "Update `resolve_market_command(...)` to call the new exposure cleanup helper alongside `settle_market_account_risk(...)`, keeping the cleanup limited to live exposure state and storing the helper result only if needed as an internal resolution seam.",
+      "depends_on": [2]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
