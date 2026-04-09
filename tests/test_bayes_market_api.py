@@ -3777,6 +3777,79 @@ class BayesMarketExposureProjectionTests(unittest.TestCase):
             },
         )
 
+    def test_preview_event_trade_position_net_change_reads_matching_composite_slice(self):
+        normalized_payload = server.normalize_event_trade_payload(
+            "m1",
+            build_event_trade_body("acct_exposure_preview", "m1", "yes", size=12.5, side="buy"),
+        )
+        server.ACCOUNT_EXPOSURE["acct_exposure_preview"] = {
+            "accountId": "acct_exposure_preview",
+            "updatedAt": "2026-04-09T12:00:00Z",
+            "positions": {
+                "m1|yes": {
+                    "marketId": "m1",
+                    "outcomeId": "yes",
+                    "netSize": 3.3333334,
+                    "lastTradePrice": 0.65,
+                    "updatedAt": "2026-04-09T11:30:00Z",
+                    "lastOrderId": "ord_existing",
+                    "lastCommandId": "cmd_existing",
+                },
+                "m1|no": {
+                    "marketId": "m1",
+                    "outcomeId": "no",
+                    "netSize": 99.0,
+                    "lastTradePrice": 0.35,
+                    "updatedAt": "2026-04-09T11:45:00Z",
+                    "lastOrderId": "ord_other",
+                    "lastCommandId": "cmd_other",
+                },
+            },
+        }
+
+        preview = server.preview_event_trade_position_net_change(
+            "acct_exposure_preview",
+            "m1",
+            normalized_payload,
+        )
+
+        self.assertEqual(
+            preview,
+            {
+                "currentNetSize": 3.333333,
+                "signedDelta": 12.5,
+                "resultingNetSize": 15.833333,
+            },
+        )
+
+    def test_preview_event_trade_position_net_change_defaults_malformed_state_to_zero_without_mutation(self):
+        normalized_payload = server.normalize_event_trade_payload(
+            "m1",
+            build_event_trade_body("acct_exposure_preview_zero", "m1", "yes", size=1.2345678, side="sell"),
+        )
+        server.ACCOUNT_EXPOSURE["acct_exposure_preview_zero"] = {
+            "accountId": "acct_exposure_preview_zero",
+            "updatedAt": "2026-04-09T12:00:00Z",
+            "positions": [],
+        }
+        before_preview = deepcopy(server.ACCOUNT_EXPOSURE)
+
+        preview = server.preview_event_trade_position_net_change(
+            "acct_exposure_preview_zero",
+            "m1",
+            normalized_payload,
+        )
+
+        self.assertEqual(
+            preview,
+            {
+                "currentNetSize": 0.0,
+                "signedDelta": -1.234568,
+                "resultingNetSize": -1.234568,
+            },
+        )
+        self.assertEqual(server.ACCOUNT_EXPOSURE, before_preview)
+
     def test_event_trade_acceptance_syncs_account_exposure_and_prunes_after_offsetting_sell(self):
         account_id = "acct_exposure_sync"
         buy_payload, buy_status = server.route_request(

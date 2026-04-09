@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What helper contract should step 1 freeze for the new read-only EventTrade preview seam: should it accept `(account_id, market_id, normalized_payload)` and extract the atomic literal itself, or should callers pass the already-resolved `outcome_id` and/or exposure row so the helper stays narrower?",
+      "category": "design",
+      "why_it_matters": "This seam is the handoff point between step 1 and the later `handle_event_trade(...)` refactor. Its argument shape determines whether the preview logic owns normalized-payload decoding or whether that logic stays duplicated at call sites."
+    },
+    {
+      "id": "q2",
+      "question": "Because the preview must bypass `ensure_account_exposure_state(...)` and `ensure_account_exposure_position(...)`, how defensive should direct reads be against non-canonical `ACCOUNT_EXPOSURE` state already seeded by tests or fixtures, such as a non-dict account, non-dict `positions`, or a non-dict row at `marketId|outcomeId`: collapse those cases to zero exposure or fail loudly?",
+      "category": "codebase",
+      "why_it_matters": "The existing mutation path normalizes state through `ensure_*` helpers, but the new preview seam is explicitly read-only. Its behavior against malformed in-memory state determines whether the helper stays pure and robust or instead introduces a new invariant boundary."
+    },
+    {
+      "id": "q3",
+      "question": "Should the preview helper return only the shared scalar projection (`currentNetSize`, `signedDelta`, `resultingNetSize`), or should it also carry identifiers like `accountId`, `marketId`, and `outcomeId` so later limit errors and accepted-trade sync can reuse one preview object without re-extracting ids?",
+      "category": "design",
+      "why_it_matters": "Step 1 is supposed to introduce a reusable seam, not just one local calculation. Freezing the return shape now avoids churn when step 2 consumes the preview for limit checks and step 3 aligns accepted-trade sync with the same projection."
+    },
+    {
+      "id": "q4",
+      "question": "For the parent-plan requirement that accepted EventTrades sync exposure from the same net-position projection used for preflight validation, is the intent to reuse this new preview helper result directly inside `sync_account_exposure_state(...)`, or is it sufficient that both preview and sync independently call `build_event_trade_position_net_change(...)`?",
+      "category": "design",
+      "why_it_matters": "That decision changes how much state the new seam needs to expose and whether step 1 should be shaped as a shared projection object versus a validation-only helper layered on top of the existing net-change primitive."
+    },
+    {
+      "id": "q5",
+      "question": "Is helper-level backend coverage for missing-account, missing-row, sell-from-zero, and six-decimal rounding behavior expected to land with this seam step, or should proof wait for the later step-4 EventTrade regression slice?",
+      "category": "requirements",
+      "why_it_matters": "This task only adds an internal preview seam, but it sits on the critical path for later `400 position_limit_exceeded` behavior. Clarifying the expected test boundary prevents either under-covering the new arithmetic seam or duplicating the later regression work."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new preview seam will only be called after `normalize_event_trade_payload(...)`, so it can assume one atomic literal whose `variableId` already matches the route market and whose `outcomeId` is already validated.",
+      "confidence": 0.98,
+      "if_wrong": "The helper would need to duplicate formula-shape and market/outcome validation that is currently owned by normalization."
+    },
+    {
+      "id": "a2",
+      "assumption": "Read-only preview must not mutate `ACCOUNT_EXPOSURE`; missing account state, missing `positions`, or a missing composite row should all behave like current net exposure `0.0` rather than materializing new documents.",
+      "confidence": 0.99,
+      "if_wrong": "Rejected or preview-only EventTrade requests could create empty exposure state and break the planned `404` semantics for accounts with no live positions."
+    },
+    {
+      "id": "a3",
+      "assumption": "The canonical arithmetic primitive remains `build_event_trade_position_net_change(...)`, preserving the current six-decimal rounding, buy-positive and sell-negative netting, and `-0.0` to `0.0` collapse.",
+      "confidence": 0.99,
+      "if_wrong": "Preview and accepted-trade sync could drift, and later limit checks would not match the persisted exposure projection."
+    },
+    {
+      "id": "a4",
+      "assumption": "The exposure store shape is already frozen as `ACCOUNT_EXPOSURE[accountId][\"positions\"][marketId|outcomeId]`, using `account_exposure_position_key(...)` to resolve the one slice previewed by EventTrade writes.",
+      "confidence": 0.98,
+      "if_wrong": "This seam would look up the wrong storage boundary and step 1 would need a different access pattern before any preview math runs."
+    },
+    {
+      "id": "a5",
+      "assumption": "This step is internal-only: accepted EventTrade HTTP responses, accepted journal events, and `/v1/accounts/{id}/risk` should remain unchanged until the later write-path and `/exposure` steps consume the seam.",
+      "confidence": 0.97,
+      "if_wrong": "Step 1 would need broader contract changes and additional response or event coverage rather than a small preparatory helper."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
