@@ -2171,6 +2171,9 @@ def build_market_resolution_marginals(market: dict[str, Any], outcome_id: str) -
     return {candidate: 1.0 if candidate == outcome_id else 0.0 for candidate in outcome_ids}
 
 
+_MARKET_RESOLUTION_FIELD_UNSET = object()
+
+
 def normalize_market_resolution_probabilities(
     market: dict[str, Any],
     raw_final_probabilities: Any,
@@ -2287,30 +2290,23 @@ def resolve_market_resolution_outcome_id(
     return outcome_id
 
 
-def normalize_market_resolution_payload(market_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """Normalize and validate a market-resolution request body."""
-    market = MARKETS.get(market_id)
-    if not market:
-        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
-
-    if not isinstance(payload, dict):
-        raise ApiError(400, "invalid_body", "payload must be an object")
-
-    has_outcome_id = "outcomeId" in payload
-    raw_outcome_id = payload.get("outcomeId")
+def canonicalize_market_resolution_inputs(
+    market: dict[str, Any],
+    raw_outcome_id: Any = _MARKET_RESOLUTION_FIELD_UNSET,
+    raw_final_probabilities: Any = _MARKET_RESOLUTION_FIELD_UNSET,
+) -> tuple[str, dict[str, float]]:
+    """Validate and canonicalize market-resolution inputs to one winning outcome."""
+    market_id = str(market["id"])
     outcome_id: str | None = None
-    if has_outcome_id:
+
+    if raw_outcome_id is not _MARKET_RESOLUTION_FIELD_UNSET:
         if not isinstance(raw_outcome_id, str) or not raw_outcome_id.strip():
             raise ApiError(400, "invalid_market_resolution", "outcomeId is required", {"field": "outcomeId"})
         outcome_id = raw_outcome_id.strip()
         build_market_resolution_marginals(market, outcome_id)
 
-    has_final_probabilities = "finalProbabilities" in payload
-    if has_final_probabilities:
-        normalized_final_probabilities = normalize_market_resolution_probabilities(
-            market,
-            payload.get("finalProbabilities"),
-        )
+    if raw_final_probabilities is not _MARKET_RESOLUTION_FIELD_UNSET:
+        normalized_final_probabilities = normalize_market_resolution_probabilities(market, raw_final_probabilities)
         resolved_outcome_id = resolve_market_resolution_outcome_id(market, normalized_final_probabilities)
         if outcome_id is not None and outcome_id != resolved_outcome_id:
             raise ApiError(
@@ -2325,11 +2321,31 @@ def normalize_market_resolution_payload(market_id: str, payload: dict[str, Any])
                 },
             )
         outcome_id = resolved_outcome_id
-        final_probabilities = build_market_resolution_marginals(market, outcome_id)
-    else:
-        if outcome_id is None:
-            raise ApiError(400, "invalid_market_resolution", "outcomeId is required", {"field": "outcomeId"})
-        final_probabilities = build_market_resolution_marginals(market, outcome_id)
+
+    if outcome_id is None:
+        raise ApiError(400, "invalid_market_resolution", "outcomeId is required", {"field": "outcomeId"})
+
+    return outcome_id, build_market_resolution_marginals(market, outcome_id)
+
+
+def normalize_market_resolution_payload(market_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize and validate a market-resolution request body."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    if not isinstance(payload, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
+
+    raw_outcome_id = payload["outcomeId"] if "outcomeId" in payload else _MARKET_RESOLUTION_FIELD_UNSET
+    raw_final_probabilities = (
+        payload["finalProbabilities"] if "finalProbabilities" in payload else _MARKET_RESOLUTION_FIELD_UNSET
+    )
+    outcome_id, final_probabilities = canonicalize_market_resolution_inputs(
+        market,
+        raw_outcome_id=raw_outcome_id,
+        raw_final_probabilities=raw_final_probabilities,
+    )
 
     return {
         "kind": "ResolveMarket",
@@ -2735,8 +2751,13 @@ def transition_market_to_resolved(
             },
         )
 
+    outcome_id, canonical_final_probabilities = canonicalize_market_resolution_inputs(
+        market,
+        raw_outcome_id=outcome_id,
+        raw_final_probabilities=final_probabilities,
+    )
     previous_marginals = deepcopy(market["marginals"])
-    new_marginals = deepcopy(final_probabilities)
+    new_marginals = deepcopy(canonical_final_probabilities)
     market["status"] = "resolved"
     market["resolution"] = outcome_id
     market["resolutionProbabilities"] = deepcopy(new_marginals)

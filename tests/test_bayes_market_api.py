@@ -2764,6 +2764,91 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         )
         assert_domain_state_unchanged(self, before_state)
 
+    def test_market_resolution_rejects_final_probabilities_with_missing_or_unexpected_outcomes(self):
+        cases = (
+            (
+                "missing_outcome",
+                {"yes": 1.0},
+                {
+                    "field": "finalProbabilities",
+                    "marketId": "m1",
+                    "missing": ["no"],
+                },
+            ),
+            (
+                "unexpected_outcome",
+                {"yes": 1.0, "no": 0.0, "maybe": 0.0},
+                {
+                    "field": "finalProbabilities",
+                    "marketId": "m1",
+                    "unexpected": ["maybe"],
+                },
+            ),
+        )
+
+        for label, final_probabilities, expected_details in cases:
+            with self.subTest(label=label):
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(
+                        "POST",
+                        "/v1/markets/m1/resolve",
+                        build_market_resolution_body("ops_admin", final_probabilities=final_probabilities),
+                    )
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_resolution")
+                self.assertEqual(
+                    error.message,
+                    "finalProbabilities must contain exactly one value for each market outcome",
+                )
+                self.assertEqual(error.details, expected_details)
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolution_rejects_final_probabilities_with_invalid_values(self):
+        cases = (
+            (
+                "non_numeric",
+                {"yes": "1.0", "no": 0.0},
+                "finalProbabilities must contain finite numeric values for all market outcomes",
+                {
+                    "field": "finalProbabilities.yes",
+                    "marketId": "m1",
+                    "outcomeId": "yes",
+                },
+            ),
+            (
+                "negative",
+                {"yes": 1.1, "no": -0.1},
+                "finalProbabilities must preserve non-negative values for all outcomes",
+                {
+                    "field": "finalProbabilities.no",
+                    "marketId": "m1",
+                    "outcomeId": "no",
+                },
+            ),
+        )
+
+        for label, final_probabilities, expected_message, expected_details in cases:
+            with self.subTest(label=label):
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(
+                        "POST",
+                        "/v1/markets/m1/resolve",
+                        build_market_resolution_body("ops_admin", final_probabilities=final_probabilities),
+                    )
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_resolution")
+                self.assertEqual(error.message, expected_message)
+                self.assertEqual(error.details, expected_details)
+                assert_domain_state_unchanged(self, before_state)
+
     def test_market_resolution_rejects_final_probabilities_that_do_not_sum_to_one(self):
         before_state = snapshot_domain_state()
 
@@ -2808,6 +2893,41 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "marketId": "m1",
                 "received": "yes",
                 "expected": "no",
+            },
+        )
+        assert_domain_state_unchanged(self, before_state)
+
+    def test_resolve_market_command_revalidates_resolution_payload_before_mutating_market(self):
+        command = {
+            "schemaVersion": "bayes-command/v1",
+            "commandId": "cmd_bad_resolve",
+            "marketId": "m1",
+            "accountId": "ops_admin",
+            "commandType": "AdminOp",
+            "submittedAt": server.utc_timestamp(),
+            "payload": {
+                "kind": "ResolveMarket",
+                "outcomeId": "yes",
+                "finalProbabilities": {"yes": 0.6, "no": 0.4},
+            },
+            "meta": {
+                "source": "test",
+            },
+        }
+        before_state = snapshot_domain_state()
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.resolve_market_command(command)
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_market_resolution")
+        self.assertEqual(error.message, "finalProbabilities must encode a point-mass distribution")
+        self.assertEqual(
+            error.details,
+            {
+                "field": "finalProbabilities",
+                "marketId": "m1",
             },
         )
         assert_domain_state_unchanged(self, before_state)
