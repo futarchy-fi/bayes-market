@@ -1,0 +1,93 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact quantity does `max_position_size` bound for `POST /v1/markets/{id}/orders/event-trade`: raw request `size`, signed net position, absolute position, gross long-plus-short exposure, or price-weighted `notional`?",
+      "category": "requirements",
+      "why_it_matters": "The current EventTrade path stores both `size` and `notional` in `create_event_trade_order(...)`, but it has no holdings ledger. The bounded quantity determines both the validation rule and what the new exposure read model must represent."
+    },
+    {
+      "id": "q2",
+      "question": "If the limit is based on resulting position rather than single-order size, how should EventTrade exposure be accounted for across `buy` and `sell`: netted per `(accountId, marketId, outcomeId)`, tracked separately for longs and shorts, or aggregated at the market level regardless of outcome?",
+      "category": "design",
+      "why_it_matters": "EventTrade already supports both sides, but the backend currently has no position state at all. The accounting model changes execution math, limit enforcement, and the shape of `GET /v1/accounts/{id}/exposure`."
+    },
+    {
+      "id": "q3",
+      "question": "What exact JSON contract should `GET /v1/accounts/{id}/exposure` expose: account-level summary only, per-market entries, per-outcome entries, and fields such as `size`, `netSize`, `side`, `notional`, `averagePrice`, `lastTradePrice`, and `updatedAt`?",
+      "category": "requirements",
+      "why_it_matters": "The endpoint does not exist yet, and the repo already has a stable `/risk` read model. The exposure response shape drives backend storage, route tests, client types, and whether the route is a thin projection or a new read model."
+    },
+    {
+      "id": "q4",
+      "question": "For an account that has never traded, should `GET /v1/accounts/{id}/exposure` return `404 account_not_found` like the current `/risk` route, or `200` with an empty exposure document?",
+      "category": "requirements",
+      "why_it_matters": "Today `get_account_risk(...)` only works after state exists in `ACCOUNT_RISK`. A trader-facing exposure endpoint may want a different empty-account contract, and that choice affects route behavior and tests."
+    },
+    {
+      "id": "q5",
+      "question": "Where should `max_position_size` be configured in this codebase: as a constant in `backend/server.py`, an environment-backed runtime setting, or a shared config module, and is it one global value or something market-specific/account-specific?",
+      "category": "codebase",
+      "why_it_matters": "The backend currently relies on module-level constants such as `ACCOUNT_RISK_LIMIT`, and there is no general application config layer for trade controls. The chosen seam affects implementation scope, deploy-time behavior, and test setup."
+    },
+    {
+      "id": "q6",
+      "question": "When a trade would exceed the limit, what exact `400` error contract is required: `error.code`, `message`, `details`, and should the failure be fully pre-acceptance with no command/order/event persistence, or should it still emit a terminal rejected command the way current business-rule failures do?",
+      "category": "requirements",
+      "why_it_matters": "The task explicitly says 'return 400 on limit exceeded', but current write-path business rejections such as `market_not_active` and `min_asset_violation` go through terminal rejection responses with persisted command/event state. This choice changes handler structure and replay semantics."
+    },
+    {
+      "id": "q7",
+      "question": "What lifecycle should exposure state follow after later system events: should idempotent EventTrade replays leave exposure untouched, and should market resolution clear or archive resolved-market positions from `/v1/accounts/{id}/exposure` the way resolution already settles market-specific risk state?",
+      "category": "design",
+      "why_it_matters": "EventTrade already has replay semantics, and `resolve_market_command(...)` currently releases `ACCOUNT_RISK` exposure for resolved markets. The new read model needs equally explicit cleanup rules to avoid stale positions."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This feature targets `POST /v1/markets/{id}/orders/event-trade` only; probability edits keep their existing min-asset validation and `/v1/accounts/{id}/risk` behavior.",
+      "confidence": 0.98,
+      "if_wrong": "The scope expands beyond the EventTrade path into probability-edit execution, risk previews, and additional test coverage."
+    },
+    {
+      "id": "a2",
+      "assumption": "The existing `/v1/accounts/{id}/risk` contract should remain stable and `/v1/accounts/{id}/exposure` is an additive read surface rather than a rename or replacement.",
+      "confidence": 0.97,
+      "if_wrong": "We would need to redesign an already frozen public contract instead of adding a new endpoint alongside it."
+    },
+    {
+      "id": "a3",
+      "assumption": "Exposure state will need to be stored in the same in-memory style as the rest of this backend and reset by `server.reset_state()`, because the repository has no durable position ledger today.",
+      "confidence": 0.95,
+      "if_wrong": "Implementation would require new persistence infrastructure instead of extending the existing in-process state model."
+    },
+    {
+      "id": "a4",
+      "assumption": "The first implementation seam for `max_position_size` is likely a single global backend config value near `ACCOUNT_RISK_LIMIT` in `backend/server.py`, not a new market schema field or separate configuration subsystem.",
+      "confidence": 0.78,
+      "if_wrong": "We would need broader config plumbing or schema changes before the limit can be enforced."
+    },
+    {
+      "id": "a5",
+      "assumption": "A limit breach should be side-effect free for exposure and orders, because the requested status code is `400`, which suggests a validation-style failure rather than the existing replayable `409` rejection path.",
+      "confidence": 0.69,
+      "if_wrong": "The implementation must preserve command/event journaling and idempotent replay semantics even for limit-exceeded failures."
+    },
+    {
+      "id": "a6",
+      "assumption": "Any initial exposure model will be derived from accepted EventTrade executions and tracked per account plus market/outcome, since `create_event_trade_order(...)` already records `side`, `size`, `price`, and `notional` but no other position state exists.",
+      "confidence": 0.72,
+      "if_wrong": "We would need a different exposure source of truth, such as per-market aggregation or separate long/short ledgers."
+    },
+    {
+      "id": "a7",
+      "assumption": "If exposure state is introduced, market resolution should eventually remove or settle resolved-market entries just as the current resolution flow already removes market-specific account-risk state.",
+      "confidence": 0.64,
+      "if_wrong": "Resolved markets may intentionally remain visible in exposure history, which changes cleanup logic and the endpoint's read semantics."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
