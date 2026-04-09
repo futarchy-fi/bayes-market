@@ -1342,6 +1342,28 @@ def build_event_trade_position_net_change(
     }
 
 
+def preview_event_trade_position_net_change(
+    account_id: str,
+    market_id: str,
+    normalized_payload: dict[str, Any],
+) -> dict[str, float]:
+    """Preview one normalized EventTrade net-size transition without mutating exposure state."""
+    literal = normalized_payload["formula"][0][0]
+    outcome_id = str(literal["outcomeId"])
+    composite_key = account_exposure_position_key(market_id, outcome_id)
+
+    position: dict[str, Any] | None = None
+    account = ACCOUNT_EXPOSURE.get(account_id)
+    if isinstance(account, dict):
+        positions = account.get("positions")
+        if isinstance(positions, dict):
+            stored_position = positions.get(composite_key)
+            if isinstance(stored_position, dict):
+                position = stored_position
+
+    return build_event_trade_position_net_change(position, normalized_payload)
+
+
 def sync_account_exposure_state(order: dict[str, Any]) -> dict[str, Any]:
     """Apply one accepted EventTrade order to the live account-exposure projection."""
     account_id = str(order["accountId"])
