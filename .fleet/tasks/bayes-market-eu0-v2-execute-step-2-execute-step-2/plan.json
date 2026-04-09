@@ -1,0 +1,79 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Refactor `handle_event_trade(...)` around the already-landed `preview_event_trade_position_net_change(...)` seam: normalize the payload first, then do idempotency replay/conflict handling, then verify the market is active, and only then run the read-only position preview before any fresh EventTrade command is materialized.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Duplicate signed net-size math inline in `handle_event_trade(...)` instead of calling the dedicated preview helper.",
+        "Materialize the command before the active-market check or position-limit preview, which would keep creating persistence side effects on requests that should now fail earlier."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Treat a max-position breach as a new pre-command validation error raised via `ApiError(400, ...)` with frozen code `position_limit_exceeded`, frozen message `Trade would exceed max position size`, and the strict rejection boundary `abs(resultingNetSize) > max_position_size` so a trade that lands exactly on the cap still succeeds.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Reuse `invalid_event_trade` for the new limit path.",
+        "Reject at `>= max_position_size` instead of only when the previewed absolute net position exceeds the cap."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep the new limit failure entirely outside command, order, event, terminal-outcome, and idempotency-key persistence, while leaving replay of already-persisted accepted or terminally rejected EventTrades unchanged and ahead of the new preview path.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Persist a replayable rejected command/event for `position_limit_exceeded`.",
+        "Re-run preview validation on already-bound idempotent submissions instead of replaying the stored terminal outcome immediately."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep the preview internal to validation only: once the preflight passes, the accepted EventTrade path should still materialize the command and order, sync `ACCOUNT_EXPOSURE` with the shared netting primitive, and return the existing acceptance contract without exposing preview scalars or touching `/risk` behavior.",
+      "based_on": ["q2", "q4"],
+      "alternatives_rejected": [
+        "Add `currentNetSize` or `resultingNetSize` to the accepted EventTrade response or accepted event payload in this step.",
+        "Broaden the patch into `ACCOUNT_RISK` or `/v1/accounts/{id}/risk` changes."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Refactor `handle_event_trade(...)` so the write-lock body becomes: normalize the payload, replay or conflict-check a bound `idempotencyKey`, and preserve immediate replay for previously persisted accepted or terminally rejected EventTrades before any new write-path work begins.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Move the active-market gate ahead of fresh command creation, keeping inactive markets on the existing replayable terminal `409 market_not_active` path while ensuring the new preview gate only runs for active fresh submissions.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "For active fresh submissions, call `preview_event_trade_position_net_change(account_id, market_id, normalized_payload)`, compare the six-decimal `resultingNetSize` against `max_position_size`, and raise the frozen `400 position_limit_exceeded` `ApiError` before any EventTrade command, order, event, terminal outcome, or idempotency binding is materialized.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Leave the post-preview happy path contract-preserving: after the preview passes, materialize the EventTrade command, create the order, sync `ACCOUNT_EXPOSURE`, and return the existing accepted response shape without surfacing preview-only fields.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Add focused regressions in `tests/test_bayes_market_api.py` for exact-cap acceptance, over-limit side-effect-free `400` failures with reusable idempotency keys, unchanged replay of persisted accepted and `market_not_active` EventTrades, and the absence of command/order/event/exposure writes on the new validation path.",
+      "depends_on": [3, 4]
+    },
+    {
+      "step": 6,
+      "task": "Run the targeted EventTrade and exposure test slices, then review the diff to confirm the new limit guard only changes the intended pre-command validation seam and does not widen successful EventTrade or `/risk` contracts.",
+      "depends_on": [5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
