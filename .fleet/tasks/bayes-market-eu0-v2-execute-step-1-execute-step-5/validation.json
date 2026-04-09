@@ -1,0 +1,12 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.0,
+  "plan_adherence_notes": "Compared to `ff/Tbayes-market-eu0-v2-execute-step-1`, this branch only adds `.fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-5/{questions,research,plan}.json` and makes no changes to `backend/server.py` or `tests/test_bayes_market_api.py`. The code still exposes only `settle_market_account_risk(...)` for resolution cleanup, `resolve_market_command(...)` still wires only `assetDelta`, and the accepted resolution event still emits only `marginalDelta` plus `assetDelta`. A direct runtime probe with an EventTrade position confirmed that resolving `m1` leaves `ACCOUNT_EXPOSURE` populated and `get_account_exposure(account_id)` still returns 200 for the resolved market. Existing tests pass via `python3 -m unittest discover -s tests -p 'test_bayes_market_api.py'` (212 tests), but that suite does not cover the planned exposure-cleanup behavior.",
+  "research_quality": 0.95,
+  "question_completeness": 0.96,
+  "missed_questions": [],
+  "verdict": "reject",
+  "reason": "The execution phase did not happen on this branch. None of the planned backend or regression-test changes were implemented, and current runtime behavior still leaves live exposure rows in `ACCOUNT_EXPOSURE` after market resolution while the acceptance payload exposes no reusable exposure cleanup summary.",
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,84 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Freeze the reusable cleanup seam as one market-scoped top-level helper in `backend/server.py` that scans `ACCOUNT_EXPOSURE`, mirroring `settle_market_account_risk(market_id, timestamp)`, while keeping any per-account mutation helper private to the implementation.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Introduce a separately named public account-scoped exposure cleanup API and make callers orchestrate the market loop themselves.",
+        "Duplicate market-removal loops inside each resolve-path caller instead of centralizing the logic in one backend primitive."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Have the market cleanup helper return a structured per-account removal summary that records the resolved `marketId`, the removed exposure rows, and whether the account was pruned, so `resolve_market_command(...)` and accepted-resolution event assembly can reuse the helper result directly.",
+      "based_on": ["q2", "q5"],
+      "alternatives_rejected": [
+        "Return no value and force later resolve/event code to rescan `ACCOUNT_EXPOSURE` for test and payload data.",
+        "Return only a flat list of affected account ids without enough detail to describe which exposure rows were removed."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "When cleanup removes one market from an account that still has live positions elsewhere, advance the surviving account document's `updatedAt` to the resolution timestamp; if the removed market was the account's final live exposure, prune the entire account document.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Preserve the previous account timestamp from the most recent surviving trade even though resolution mutated the live projection.",
+        "Keep empty exposure account documents after cleanup and rely on read-time filtering alone."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Implement cleanup defensively over seeded or partially normalized exposure state by normalizing the account container and removing rows based on resolved-market identity even when composite keys drift, while keeping the helper scoped to targeted cleanup instead of a general repair pass.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Assume every `ACCOUNT_EXPOSURE` document is perfectly canonical and let malformed seeded state crash or escape cleanup.",
+        "Expand this step into a broad exposure-state migration or repair routine unrelated to resolution removal."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Wire the new cleanup helper into `resolve_market_command(...)` in this same change and thread its structured summary through the resolution payload so resolved-market exposure disappears from the live model immediately instead of waiting for a later extraction-only follow-up.",
+      "based_on": ["q5", "q2"],
+      "alternatives_rejected": [
+        "Land the cleanup primitive without calling it from market resolution yet.",
+        "Mutate exposure during resolution but drop the helper summary instead of exposing one canonical result for tests and accepted-event metadata."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add the new exposure-resolution cleanup seam in `backend/server.py` beside the existing exposure helpers: a small private per-account mutation utility if useful internally, plus the public market-scoped helper that scans `ACCOUNT_EXPOSURE`, removes every position row for the resolved `marketId` across all outcomes, advances surviving account timestamps, prunes empty accounts, and returns a deterministic structured removal summary.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Make the cleanup helper tolerant of hand-seeded or partially normalized exposure documents by reusing `ensure_account_exposure_state(...)`-style normalization for account containers, skipping non-dict rows safely, and removing resolved-market rows even when composite keys and stored `marketId` values drift.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Integrate the new helper into the market-resolution path by updating `resolve_market_command(...)` to invoke it alongside `settle_market_account_risk(...)`, storing the returned exposure cleanup summary on the resolution result, and extending the accepted-resolution event builder to emit that summary from the same source of truth.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Add focused backend regressions in `tests/test_bayes_market_api.py` for the helper itself, covering multi-outcome market removal, account `updatedAt` advancement when other markets survive, pruning when the final live position disappears, and tolerance of malformed or drifted seeded exposure state.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 5,
+      "task": "Add integration regressions around market resolution to prove resolved-market exposure is removed immediately from live state, unaffected markets still survive, `get_account_exposure(account_id)` keeps its `404` contract for fully pruned accounts, and the accepted resolution payload carries the cleanup summary without regressing existing `assetDelta` assertions.",
+      "depends_on": [3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

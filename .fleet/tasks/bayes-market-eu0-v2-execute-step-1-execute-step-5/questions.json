@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the new market-resolution exposure cleanup seam mirror `settle_market_account_risk(market_id, timestamp)` as one top-level helper that scans all of `ACCOUNT_EXPOSURE`, or should step 5 also introduce a lower-level account-scoped mutation helper and make the market-level cleanup a thin wrapper over it?",
+      "category": "design",
+      "why_it_matters": "The exposure projection is already account-keyed, while resolution work is naturally market-scoped. Freezing the helper granularity now determines whether later resolve-path code reuses one global primitive directly or needs a second layer of account-level cleanup logic."
+    },
+    {
+      "id": "q2",
+      "question": "What should the reusable cleanup helper return to its callers: no value, a list of affected account ids, or a structured per-account/per-position removal summary analogous to the existing risk `assetDelta` list?",
+      "category": "requirements",
+      "why_it_matters": "The current risk cleanup helper returns data that feeds the accepted-resolution event payload, but the new exposure model has no frozen equivalent yet. The return shape determines whether later resolution integration can reuse the helper result directly for tests, logging, or response/event metadata instead of rescanning the projection."
+    },
+    {
+      "id": "q3",
+      "question": "When cleanup removes one resolved market from an exposure account that still has live positions in other markets, should `account[\"updatedAt\"]` advance to the resolution timestamp even though no surviving row for that resolved market remains, or should the account keep the timestamp of the most recent surviving trade?",
+      "category": "requirements",
+      "why_it_matters": "The merged serializer now reads the stored account timestamp directly, and earlier task artifacts framed it as the latest live-projection mutation. Cleanup can therefore change account freshness without mutating any surviving position row, so the rule needs to be explicit before the helper writes timestamps."
+    },
+    {
+      "id": "q4",
+      "question": "Should the cleanup helper defensively normalize or tolerate malformed/test-seeded exposure state such as non-dict `positions`, rounded-zero rows, or composite-key and `marketId` drift, or can it assume every live document was created through the canonical `build_/ensure_/sync_account_exposure_*` helpers already in `backend/server.py`?",
+      "category": "codebase",
+      "why_it_matters": "The current exposure read path hardens some seeded state at serialization time, and tests in this repo already write `ACCOUNT_EXPOSURE` directly. Cleanup has to choose whether it is a narrow mutation primitive over canonical state or another defensive boundary that repairs partially normalized fixtures before pruning."
+    },
+    {
+      "id": "q5",
+      "question": "Now that exposure sync and serialization helpers are already merged in this branch, should step 5 stop at reusable cleanup primitives only, or is it expected to wire cleanup into `resolve_market_command(...)` and make resolved-market exposure removal observable immediately in this same change?",
+      "category": "codebase",
+      "why_it_matters": "The task wording says later resolve-path and route work can call a single backend primitive, which suggests extraction-only scope, but the current branch already exposes live `ACCOUNT_EXPOSURE` state. Whether this step is helper-only or behavior-changing affects implementation boundaries, regression scope, and whether the branch should still leave stale exposure visible until a later integration step."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Market-resolution cleanup is intended to target the live `ACCOUNT_EXPOSURE` projection only; it should not delete historical `ORDERS`, `COMMANDS`, or `EVENTS`, and it should not redesign the existing `ACCOUNT_RISK` settlement behavior.",
+      "confidence": 0.99,
+      "if_wrong": "The task would expand from a read-model cleanup primitive into broader settlement or archival-state changes across multiple backend stores."
+    },
+    {
+      "id": "a2",
+      "assumption": "Exposure accounts that lose their final live position during cleanup should still be pruned entirely so `get_account_exposure(account_id)` continues to raise `404 account_not_found` for fully emptied projections.",
+      "confidence": 0.99,
+      "if_wrong": "The cleanup helper would need to preserve empty account documents and the exposure read contract would stop matching the already-merged serializer and getter behavior."
+    },
+    {
+      "id": "a3",
+      "assumption": "Cleanup is market-scoped but outcome-complete: for a resolved market it should remove every `(marketId, outcomeId)` exposure row across all accounts, not just the resolved outcome's row.",
+      "confidence": 0.96,
+      "if_wrong": "The helper would need a narrower notion of which outcome slices remain live after resolution, and later resolve-path code could not simply drop the entire market from exposure."
+    },
+    {
+      "id": "a4",
+      "assumption": "The existing flat composite-key exposure layout (`positions[marketId|outcomeId]`) remains the canonical storage shape that cleanup should traverse, rather than introducing a nested market/outcome container just for resolution removal.",
+      "confidence": 0.98,
+      "if_wrong": "Step 5 would first need to refactor the projection shape or maintain two traversal strategies before market-scoped cleanup could be implemented safely."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child research task is needed for this question phase because the relevant constraints are already visible in the merged exposure code, the current resolution helper (`settle_market_account_risk(...)`), and the parent `.fleet` plan artifacts.",
+      "confidence": 0.97,
+      "if_wrong": "A deeper follow-up task would be needed to inspect additional hidden contracts before the cleanup helper interface could be finalized."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
