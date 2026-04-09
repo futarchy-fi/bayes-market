@@ -1,0 +1,112 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Freeze the new read-only preview seam as a route-local helper that accepts `(account_id, market_id, normalized_payload)` and resolves the atomic literal itself, rather than requiring callers to pass a pre-resolved `outcome_id` or exposure row. `normalize_event_trade_payload(...)` already guarantees one atomic literal whose route market and outcome are validated, and the recorded step-2 task explicitly defines the seam as previewing one normalized payload. Keeping literal decoding inside the helper avoids duplicating `formula[0][0]` extraction at call sites and matches the existing preview-helper style in `preview_unconditional_probability_edit(...)`, which accepts route-local inputs rather than a lower-level slice.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:48",
+        "backend/server.py:2196",
+        "backend/server.py:2206",
+        "backend/server.py:2229",
+        "backend/server.py:2348"
+      ],
+      "uncertainty": "A later refactor could still add a smaller private utility that accepts `outcome_id` or a row, but the seam this step is freezing should stay payload-based.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Direct preview reads should collapse malformed or missing exposure state to zero instead of failing loudly. The exposure builder plan already froze `ensure_account_exposure_state(...)` and `ensure_account_exposure_position(...)` as mutation-only seams, while preview-style reads are supposed to use plain lookups and treat missing state as implicit zero. The closest existing read boundary, exposure serialization, is defensive about non-dict `positions` containers and non-dict rows. The preview helper should follow that same read-only posture: if `ACCOUNT_EXPOSURE[account_id]` is not a dict, `positions` is not a dict, or the `marketId|outcomeId` row is absent or not a dict, behave as if there is no live row and feed `None` into the shared net-change math.",
+      "confidence": 0.83,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:16",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:63",
+        "backend/server.py:1154",
+        "backend/server.py:1171",
+        "backend/server.py:1436",
+        "backend/server.py:1442",
+        "tests/test_bayes_market_api.py:3743"
+      ],
+      "uncertainty": "Current tests directly cover malformed `positions` and non-canonical rows more clearly than a totally non-dict top-level account object, so the top-level zero-default recommendation is inferred from the read-boundary pattern rather than an already-pinned assertion.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Return only the shared scalar projection: `currentNetSize`, `signedDelta`, and `resultingNetSize`. The step-2 plan names that exact triple as the new seam, and the existing arithmetic helper already models precisely those scalars. `accountId` and `marketId` are already known at the call site, and `outcomeId` can be re-read from the normalized payload or accepted order where needed. If later code wants an enriched object for error construction or sync bookkeeping, it can wrap those identifiers around the scalar preview without widening the core helper contract now.",
+      "confidence": 0.91,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:48",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-3/plan.json:25",
+        "backend/server.py:1219",
+        "backend/server.py:1253"
+      ],
+      "uncertainty": "The mutation path may still choose to wrap the scalar projection with identifiers at a higher layer, since `sync_account_exposure_state(...)` currently returns ids plus the net-change fields.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "It is sufficient that preview and accepted-trade sync independently call the same pure `build_event_trade_position_net_change(...)` primitive; the plan does not require `sync_account_exposure_state(...)` to consume the preview helper's returned object directly. The frozen invariant is 'same net-position projection used for preflight validation and accepted-trade sync,' and the existing reusable arithmetic helper is already that projection. A read-only preview wrapper can call it from a direct lookup over `ACCOUNT_EXPOSURE`, while `sync_account_exposure_state(...)` can keep calling it after `ensure_*` normalization and order creation.",
+      "confidence": 0.88,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:58",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-3/plan.json:25",
+        "backend/server.py:1201",
+        "backend/server.py:1233",
+        "backend/server.py:1235"
+      ],
+      "uncertainty": "Step 3 could still thread a previously computed preview object through as an implementation convenience or micro-optimization, but that is not the contract the current plan freezes.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Proof should wait for the later step-4 EventTrade regression slice, but that slice should still include small helper-level backend cases for missing-account, missing-row, sell-from-zero, and six-decimal rounding. The recorded step-2 plan centralizes EventTrade and exposure coverage in step 4 after the preview, ordering, and sync changes land. Earlier exposure steps show the repo is comfortable adding focused helper tests, so the expected boundary is not 'route-only tests later' but 'land the preview-boundary coverage in the planned step-4 backend regression pass rather than in step 1's seam extraction by itself.'",
+      "confidence": 0.84,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:62",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-2/plan.json:67",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-3/plan.json:67",
+        "tests/test_bayes_market_api.py:3695",
+        "tests/test_bayes_market_api.py:3765"
+      ],
+      "uncertainty": "If the implementation naturally introduces a tiny pure preview helper, adding a couple of direct helper assertions earlier would still fit the repo's testing style, but the recorded step ordering does not require that before step 4.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The preview seam can assume one validated atomic literal from `normalize_event_trade_payload(...)` and does not need to duplicate formula-shape, route-market, or outcome validation."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The preview path should use direct lookup semantics and default malformed or missing slices to `0.0`, preserving side-effect-free behavior and planned `/exposure` `404` semantics for accounts with no live document."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Both preview and accepted-trade sync should continue to rely on `build_event_trade_position_net_change(...)` so six-decimal rounding, buy/sell sign rules, and `-0.0` collapse stay aligned."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The read-only seam should resolve exactly one `ACCOUNT_EXPOSURE[accountId][\"positions\"][marketId|outcomeId]` slice via `account_exposure_position_key(...)`, not invent a new storage boundary."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "This step stays internal: accepted EventTrade responses, accepted journal events, `ACCOUNT_RISK`, and `/v1/accounts/{id}/risk` should remain unchanged while later steps consume the preview seam."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
