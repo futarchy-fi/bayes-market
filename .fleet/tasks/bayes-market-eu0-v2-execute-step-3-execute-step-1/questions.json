@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should `service_index_payload()` advertise the new account exposure route using the same bare-path style as the existing `\"/v1/accounts/{id}/risk\"` entry, or should this step switch the account route list to explicit method-qualified strings such as `\"GET /v1/accounts/{id}/exposure\"`?",
+      "category": "requirements",
+      "why_it_matters": "The root service index is already test-covered, and the current `routes.accounts` contract uses a different style from multi-method route groups. The exact string shape will be pinned by the new regression."
+    },
+    {
+      "id": "q2",
+      "question": "For `route_request(...)`, should `GET /v1/accounts/{id}/exposure` be a strict mirror of the existing `/risk` branch, including the same `405 method_not_allowed` payload shape and projection-local `404 account_not_found` behavior, or is any divergence expected for exposure reads?",
+      "category": "design",
+      "why_it_matters": "The codebase already has `get_account_exposure(account_id)` with its own missing-account semantics, but the router does not yet expose it. Freezing whether the new route is a thin `/risk`-style adapter or a slightly different account surface determines both implementation and tests."
+    },
+    {
+      "id": "q3",
+      "question": "If this checkout still lacks resolved-market exposure cleanup wiring, is step 1 expected to backfill the missing cleanup implementation in `backend/server.py` as part of the same patch, or should it only invoke an already-merged helper when one exists?",
+      "category": "codebase",
+      "why_it_matters": "Right now `resolve_market_command(...)` only calls `settle_market_account_risk(...)`, while the planned regression matrix includes market-resolution cleanup for live exposure. Clarifying the intended scope avoids either under-implementing the step or duplicating work from another branch."
+    },
+    {
+      "id": "q4",
+      "question": "When resolution cleanup runs, should it remove every exposure row for the resolved `marketId` across all outcomes and prune accounts that lose their final live position so `/v1/accounts/{id}/exposure` returns `404`, even if that account still has state in `/risk` or other read models?",
+      "category": "requirements",
+      "why_it_matters": "The existing exposure getter treats account existence as projection-local live state, but resolution currently does not touch `ACCOUNT_EXPOSURE`. The exact cleanup scope determines whether step 1 is just route registration or also a contract-preserving live-state mutation change."
+    },
+    {
+      "id": "q5",
+      "question": "Should the resolution path expose any new cleanup summary on the accepted resolve payload or event effects when exposure is pruned, or is it sufficient for this step to mutate only live state and leave the public resolution response unchanged?",
+      "category": "design",
+      "why_it_matters": "A cleanup helper may naturally return structured information about affected accounts or removed positions. Whether that data becomes part of the resolve contract changes how `resolve_market_command(...)` should thread the result and what later regressions are expected to assert."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The intended read seam for the new route is the existing `get_account_exposure(account_id)` helper, mirroring how `/v1/accounts/{id}/risk` dispatches to `get_account_risk(account_id)`.",
+      "confidence": 0.99,
+      "if_wrong": "Step 1 would need a new adapter or a different response envelope instead of a thin router registration."
+    },
+    {
+      "id": "a2",
+      "assumption": "The new exposure route is additive and read-only: `/v1/accounts/{id}/risk` stays unchanged, and `/v1/accounts/{id}/exposure` should be introduced as a separate `GET` surface rather than a replacement or merged account endpoint.",
+      "confidence": 0.98,
+      "if_wrong": "The service index, router, and regression design would need to be reshaped around a broader account-API change."
+    },
+    {
+      "id": "a3",
+      "assumption": "Resolved-market exposure cleanup is meant to touch only the live `ACCOUNT_EXPOSURE` projection; it should not delete historical `ORDERS`, `COMMANDS`, or `EVENTS`, and it should not alter the existing `ACCOUNT_RISK` settlement contract beyond running alongside it.",
+      "confidence": 0.96,
+      "if_wrong": "The task would expand from route registration plus live-state cleanup into a wider settlement or archival redesign."
+    },
+    {
+      "id": "a4",
+      "assumption": "If the branch still lacks exposure cleanup wiring, this step is allowed to backfill that missing behavior in `backend/server.py` so the planned market-resolution cleanup regression can pass against current code.",
+      "confidence": 0.9,
+      "if_wrong": "The work would block on a prerequisite branch or would need to defer a regression explicitly called for by the parent plan."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed for this question phase because the relevant constraints are visible in `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `.fleet` plan and validation artifacts for the exposure rollout.",
+      "confidence": 0.98,
+      "if_wrong": "A follow-up subtask would be needed to inspect another hidden contract before the route and resolution patch could be scoped safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
