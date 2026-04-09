@@ -1,0 +1,97 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Implement `/ws/markets/{id}/prices` as a typed market-price stream that sends an immediate snapshot on connect and subsequent price-state updates shaped around the current read model: `marketId`, `status`, `marginals`, `seq`, `emittedAt`, `approxFlag`, plus optional terminal-event attribution metadata when the update is mutation-driven.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Stream raw journal events only and force the frontend to reconstruct displayed prices from event payloads",
+        "Emit trade-result payloads only with no canonical market snapshot",
+        "Keep the socket silent until the next mutation instead of sending a connect-time snapshot"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Publish price messages only for accepted state transitions that change the displayed market state, which currently means `ProbabilityEdit` and market resolution updates; rejected commands and accepted `EventTrade` writes that leave `market.marginals` unchanged do not emit `/prices` updates.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Broadcast only `EventTrade` acceptances",
+        "Broadcast every accepted terminal event even when `status` and `marginals` are unchanged"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Stay on the current stdlib server stack, add the WebSocket handshake/connection management around `BayesHandler`, and switch the serving runtime to `ThreadingHTTPServer` so long-lived sockets do not block concurrent REST traffic.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Migrate the backend entrypoint to a different HTTP runtime",
+        "Add a third-party Python WebSocket framework for this task",
+        "Keep the single-threaded `HTTPServer` runtime while holding open live socket connections"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Treat `/ws/markets/{id}/prices` as a public read-only active-market subscription: reject connect attempts for non-active markets, allow already-open sockets to receive the terminal resolution update if the market resolves, and then close the socket cleanly.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Require `X-Bayes-Agent-Id` or other auth on the read socket",
+        "Allow initial subscriptions to resolved or closed markets",
+        "Keep the socket open indefinitely after sending the terminal resolution state"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Keep React Query polling as the fallback source of truth while adding WebSocket-driven cache patching: the client reconnects with bounded backoff and refetches REST data on reconnect or disconnect instead of implementing sequence-aware resume in v1.",
+      "based_on": ["q3", "q7"],
+      "alternatives_rejected": [
+        "Make the WebSocket authoritative and remove polling",
+        "Implement sequence-aware resume and missed-event catch-up on the initial rollout"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d6",
+      "decision": "Verify the feature at both layers: backend integration tests will exercise a real socket handshake and live update ordering against the threaded server, and frontend tests will mock `WebSocket` to cover reconnect handling, cache patching, and fallback refetch behavior.",
+      "based_on": ["q8"],
+      "alternatives_rejected": [
+        "Rely only on backend socket tests",
+        "Rely only on frontend mocked-WebSocket tests"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add backend WebSocket infrastructure in `backend/server.py`: threaded server startup, upgrade detection for `GET /ws/markets/{id}/prices`, frame encode/decode helpers, per-market subscriber registry, active-market connect validation, initial snapshot serialization, and service-index exposure of the new socket route.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Wire the live-price broadcaster into the existing market mutation path so accepted price-changing writes publish ordered snapshots using the journal `seq`/`approxFlag` metadata, and resolution emits a final terminal update before subscriber cleanup.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Extend frontend API/types with the live-price message contract and a market-price subscription hook that opens the socket, patches the `useMarket` cache, invalidates dependent market queries when `seq` advances, and triggers REST refetch on reconnect/backoff paths without removing the existing polling interval.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Integrate the subscription hook into the market detail route so active markets receive live probability/status updates while inactive markets and disconnected sessions continue to render from the existing REST query state.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Add backend socket integration coverage for connection acceptance/rejection, ordered update delivery, reconnect-after-disconnect, and resolution-close behavior; add frontend Vitest coverage for cache patching and reconnect fallback; then run the targeted suites and commit the finished implementation.",
+      "depends_on": [2, 3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
