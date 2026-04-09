@@ -1,0 +1,168 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The parent plan expects step 4 to land on top of step 3, not recreate it. Step 4 explicitly depends on step 3, and step 3 is where the live-price message contract, market-price subscription hook, dependent-query invalidation, and reconnect/refetch behavior are supposed to be added. In the current checkout, `frontend/src/lib/query/hooks.ts` still exposes only REST React Query hooks and `frontend/src/lib/api/client.ts` still exposes only HTTP helpers, so that prerequisite plumbing is absent here. Practically, a step-4 implementation on this branch would need the missing step-3 work imported or backfilled before the route can integrate it.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:80",
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:85",
+        "frontend/src/lib/query/hooks.ts:16",
+        "frontend/src/lib/query/hooks.ts:24",
+        "frontend/src/lib/api/client.ts:31",
+        "frontend/src/lib/api/client.ts:67",
+        "frontend/src/lib/api/client.ts:92"
+      ],
+      "uncertainty": "Step 3 may exist on another branch or worktree that is not merged into this checkout.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q2",
+      "answer": "The route should begin the live subscription only after `useMarket(marketId)` has resolved a market whose REST status is `active`. The route already treats REST `useMarket` as the first read, active-only UI is gated from `m.status`, and the parent plan says non-active connect attempts should be rejected while REST/polling remains the fallback source of truth. Connecting immediately from the route param before REST status is known would create avoidable rejection and reconnect churn for resolved or closed markets.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/routes/MarketDetail.tsx:21",
+        "frontend/src/routes/MarketDetail.tsx:29",
+        "frontend/src/routes/MarketDetail.tsx:52",
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:38",
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:49",
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:85"
+      ],
+      "uncertainty": "This assumes the missing step-3 hook follows the active-only connect contract from the parent plan rather than silently no-oping for inactive markets.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "In this task, \"disconnected sessions\" most plausibly refers to browser/socket connection state, not missing `accountId` in `SessionProvider`. The detail read path (`useMarket`, `useMarketEvents`) is public and does not consume session state; session only gates account-specific panels and actions such as position risk, trading, resolving, and comment posting. The parent plan also describes `/ws/markets/{id}/prices` as a public read-only subscription and says REST should remain the fallback on disconnect or reconnect. Anonymous users should therefore continue to render the same REST detail view they already have today.",
+      "confidence": 0.83,
+      "evidence": [
+        "frontend/src/routes/MarketDetail.tsx:20",
+        "frontend/src/routes/MarketDetail.tsx:21",
+        "frontend/src/routes/MarketDetail.tsx:23",
+        "frontend/src/routes/MarketDetail.tsx:48",
+        "frontend/src/features/session/context.tsx:53",
+        "frontend/src/features/trading/EventTradePanel.tsx:37",
+        "frontend/src/features/trading/EventTradePanel.tsx:42",
+        "frontend/src/features/market/DiscussionThread.tsx:14",
+        "frontend/src/features/market/DiscussionThread.tsx:86",
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:38",
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:49",
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:85"
+      ],
+      "uncertainty": "The task wording overloads the word \"session\", so a product note could still clarify terminology explicitly.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Keeping only the `useMarket(...)` cache fresh is too narrow. The route also renders `useMarketEvents` for the event journal and `useEngineStats` for the junction-tree panel, and step 3's plan explicitly says the hook should invalidate dependent market queries when `seq` advances. `useMarkets()` should also be invalidated when a live update changes status or other list-visible summary fields, because both `AssumptionPanel` and `BayesNetGraph` depend on that list. `useAccountRisk()` should stay out of the public price/status subscription path for step 4: it is account-scoped, session-dependent, and the current mutation invalidation logic never couples it to passive market reads.",
+      "confidence": 0.85,
+      "evidence": [
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:80",
+        "frontend/src/lib/query/hooks.ts:33",
+        "frontend/src/lib/query/hooks.ts:47",
+        "frontend/src/lib/query/hooks.ts:71",
+        "frontend/src/lib/query/hooks.ts:96",
+        "frontend/src/lib/query/hooks.ts:109",
+        "frontend/src/lib/query/hooks.ts:112",
+        "frontend/src/lib/query/hooks.ts:123",
+        "frontend/src/routes/MarketDetail.tsx:22",
+        "frontend/src/routes/MarketDetail.tsx:48",
+        "frontend/src/routes/MarketDetail.tsx:64",
+        "frontend/src/features/assumptions/AssumptionPanel.tsx:12",
+        "frontend/src/features/graph/BayesNetGraph.tsx:231",
+        "frontend/src/features/graph/JunctionTreePanel.tsx:91"
+      ],
+      "uncertainty": "If the missing step-3 hook already chose a narrower invalidation set on another branch, step 4 should follow that concrete implementation instead of inferring a different one.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "If a live update moves the market out of `active`, the route should accept that terminal update, let the patched market cache hide active-only panels, and then stop the live subscription rather than trying to keep it alive. The parent plan says already-open sockets may receive the terminal resolution update and then close cleanly; reconnecting after the cache now says `resolved` or `closed` would just fight the active-only connect rule. On the UI side, `AssumptionPanel` is gated on `m.status === \"active\"` and `EventTradePanel` returns `null` unless the market is active, so the REST-backed cache is enough to flip the page into its inactive view once the final live update lands.",
+      "confidence": 0.89,
+      "evidence": [
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:38",
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:43",
+        "frontend/src/routes/MarketDetail.tsx:52",
+        "frontend/src/routes/MarketDetail.tsx:58",
+        "frontend/src/features/trading/EventTradePanel.tsx:42",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:21",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:32"
+      ],
+      "uncertainty": "The plan is explicit about the resolution path; it is less explicit about exact close timing for a non-resolved `closed` transition.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "No explicit child-component reset looks required for correctness in step 4. `EventTradePanel` and `ResolveMarketPanel` keep local selection and confirmation state, but their rendered controls are already driven off the incoming `market` prop and status gates, and the assumption editor subtree is mounted only while the market is active, so it naturally unmounts and resets on terminal status changes. The remaining risk is cosmetic rather than functional: success or error banners and a selected outcome can persist in component state until the component is hidden, but live price and status updates do not appear to require extra reset code beyond the rerender and status-gating already present.",
+      "confidence": 0.78,
+      "evidence": [
+        "frontend/src/routes/MarketDetail.tsx:52",
+        "frontend/src/routes/MarketDetail.tsx:58",
+        "frontend/src/features/trading/EventTradePanel.tsx:39",
+        "frontend/src/features/trading/EventTradePanel.tsx:42",
+        "frontend/src/features/trading/EventTradePanel.tsx:45",
+        "frontend/src/features/trading/EventTradePanel.tsx:132",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:13",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:21",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:32",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:55",
+        "frontend/src/features/assumptions/VariableRow.tsx:20",
+        "frontend/src/features/assumptions/VariableRow.tsx:47"
+      ],
+      "uncertainty": "If product wants banners or selections cleared on every live sequence advance, that would be a new UX rule rather than something implied by the current code.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q7",
+      "answer": "Route-level verification for step 4 should focus on the `MarketDetail` integration points: subscribe only when the REST-loaded market is active, skip live wiring for inactive markets, and keep rendering from REST when there is no configured account session or when the socket disconnects. The parent plan reserves backend tests for real socket transport behavior and frontend tests for mocked-`WebSocket` cache patching and reconnect fallback. The current `MarketDetail` Vitest coverage only asserts REST-rendered content and has no socket coverage, so step 4 will need new frontend tests in exactly those route scenarios.",
+      "confidence": 0.91,
+      "evidence": [
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:58",
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:85",
+        ".fleet/tasks/bayes-market-dej-v3/plan.json:90",
+        "frontend/src/__tests__/MarketDetail.test.tsx:46",
+        "frontend/src/__tests__/MarketDetail.test.tsx:58",
+        "frontend/src/__tests__/MarketDetail.test.tsx:81",
+        "frontend/src/__tests__/MarketDetail.test.tsx:88",
+        "frontend/src/__tests__/MarketDetail.test.tsx:95"
+      ],
+      "uncertainty": "The exact split between route tests and hook-only tests depends on how step 3 exposes the subscription API.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 4 is missing its planned prerequisite in this checkout. Route integration work here must either backfill or import the step-3 socket hook and types first."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.89,
+      "impact": "Waiting for REST to prove the market is active aligns with the active-only socket contract and avoids rejection or reconnect churn on resolved and closed routes."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.81,
+      "impact": "The fallback behavior should target WebSocket transport loss, not `SessionProvider` account configuration. Anonymous viewers should keep the same REST-backed detail rendering."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "WRONG",
+      "confidence": 0.8,
+      "impact": "Patching only the market detail query is too narrow. Event journal, engine stats, and sometimes markets-list queries need invalidation or refetch on live sequence advances to avoid cross-panel divergence."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Fresh frontend test scaffolding is required. The current Vitest suite has REST-only `MarketDetail` coverage and no reusable WebSocket or subscription helper to extend."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

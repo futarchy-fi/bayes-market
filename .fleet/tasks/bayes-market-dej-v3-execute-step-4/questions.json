@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Is this step-4 task expected to land on top of step 3's WebSocket hook/types work, or should it also introduce the missing `useMarketPrice...` subscription/client plumbing that is not present in the current checkout?",
+      "category": "codebase",
+      "why_it_matters": "The current frontend tree still has only REST query hooks in `frontend/src/lib/query/hooks.ts` and no WebSocket client/types. That determines whether this task is a thin route integration or must absorb missing dependency work from the prior step."
+    },
+    {
+      "id": "q2",
+      "question": "When should the market detail route begin the live subscription: only after `useMarket(marketId)` resolves an active market from REST, or immediately from the route param before the initial REST status is known?",
+      "category": "design",
+      "why_it_matters": "The page currently fetches the market via REST first and gates several panels on `market.status === \"active\"`, while the plan for `/ws/markets/{id}/prices` rejects non-active connect attempts. The connection timing changes error handling and reconnect behavior on first render."
+    },
+    {
+      "id": "q3",
+      "question": "What does \"disconnected sessions continue to render from the existing REST query state\" mean in this task: browser WebSocket disconnect/reconnect states, or users with no configured `accountId` session in `SessionProvider`?",
+      "category": "requirements",
+      "why_it_matters": "In this codebase, \"session\" currently means local account/agent configuration for write flows, while the planned price socket is a public read surface. Those are different concepts, and the route-integration logic changes depending on which one the requirement targets."
+    },
+    {
+      "id": "q4",
+      "question": "Which other detail-page queries must stay in sync when a live price/status message advances the market sequence: only the `useMarket(...)` cache, or also `useMarketEvents`, `useEngineStats`, `useMarkets`, and `useAccountRisk`?",
+      "category": "design",
+      "why_it_matters": "The route renders more than the probability bar. It also shows the event journal, position card, resolve panel, and status-dependent child panels. Without a clear sync policy, the live `market` cache can diverge from adjacent route data."
+    },
+    {
+      "id": "q5",
+      "question": "If a live update flips the market from `active` to `resolved` or `closed`, should the route immediately stop subscribing and rely on the patched REST cache to hide active-only panels, or keep the socket alive until the server closes it after the terminal update?",
+      "category": "requirements",
+      "why_it_matters": "Current child components are rendered directly from `market.status`. The exact teardown rule affects whether the route risks reconnect loops, duplicate closes, or transient stale UI after resolution."
+    },
+    {
+      "id": "q6",
+      "question": "Do any child components on `MarketDetail` need explicit local-state reset behavior when live updates arrive, especially panels with selected-outcome or confirmation state such as `EventTradePanel`, `ResolveMarketPanel`, and the assumption editor?",
+      "category": "design",
+      "why_it_matters": "Those panels currently keep local React state independent of the query cache. A live status/probability change could leave stale selections or success banners visible unless rerender-from-cache alone is considered sufficient."
+    },
+    {
+      "id": "q7",
+      "question": "What route-level verification is expected for step 4 specifically: tests that `MarketDetail` subscribes only for active markets, skips live wiring for inactive markets, and preserves REST rendering through anonymous/no-session and socket-disconnect states?",
+      "category": "requirements",
+      "why_it_matters": "The frontend test suite has no existing WebSocket mock harness, and the current `MarketDetail` tests only cover REST-rendered output. Clarifying the route-level assertions prevents under- or over-scoping the integration coverage."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Step 3 has not been merged into this checkout yet; there is currently no frontend WebSocket hook, message type, or socket utility to integrate from the market detail route.",
+      "confidence": 0.99,
+      "if_wrong": "I would overstate the scope risk for step 4 and might ask for missing infrastructure that already exists on another branch or in unsearched files."
+    },
+    {
+      "id": "a2",
+      "assumption": "The safest route integration is to let REST `useMarket(...)` establish the initial market status and only enable the live subscription once that REST state says the market is `active`.",
+      "confidence": 0.82,
+      "if_wrong": "If the hook is intended to connect optimistically from the route param, the route will need different initial-loading and connection-error behavior."
+    },
+    {
+      "id": "a3",
+      "assumption": "The requirement's fallback behavior is primarily about WebSocket transport disconnects, not about missing `accountId` session configuration, because the planned live price socket is public/read-only.",
+      "confidence": 0.56,
+      "if_wrong": "Anonymous viewers may need explicit subscription suppression or alternate route behavior tied to `SessionProvider`, which would materially change the integration logic."
+    },
+    {
+      "id": "a4",
+      "assumption": "For this step, live updates only need to patch the existing market read model on the detail route; adjacent panels can continue to rely on current React Query invalidation, polling, or status-gated rerender behavior.",
+      "confidence": 0.68,
+      "if_wrong": "The route may need broader coordination work, such as targeted refetches or local-state resets across multiple child surfaces whenever the live sequence advances."
+    },
+    {
+      "id": "a5",
+      "assumption": "Any step-4 frontend verification will need fresh mocked-WebSocket coverage because the current Vitest suite contains no WebSocket test utility or existing subscription tests to extend.",
+      "confidence": 0.97,
+      "if_wrong": "There may already be a reusable socket test helper elsewhere in the repo, making the route-level test scope smaller than it appears."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
