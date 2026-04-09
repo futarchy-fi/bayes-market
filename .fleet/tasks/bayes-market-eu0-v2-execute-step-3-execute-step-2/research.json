@@ -1,0 +1,106 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Treat step 2 as additive, not as a regrouping rewrite. This checkout already has direct coverage for the root `routes.accounts` list, exposure-route `POST` `405`, the never-traded exposure `404`, and a direct route-vs-getter parity check for successful `GET /v1/accounts/{id}/exposure`. The parent step only says to extend coverage, and nothing in-tree requires these assertions to be co-located in one new exposure-routing slice. The real uncovered contract is the risk-only `404` case; moving existing assertions would be optional cleanup, not required scope.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:68",
+        "tests/test_bayes_market_api.py:429",
+        "tests/test_bayes_market_api.py:913",
+        "tests/test_bayes_market_api.py:922",
+        "tests/test_bayes_market_api.py:4272"
+      ],
+      "uncertainty": "A reviewer could still prefer co-locating these assertions for readability, but no checked-in plan or precedent makes that a required outcome.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Use an accepted `POST /v1/markets/{id}/orders/probability-edit` to create the risk-only account. The backend wires accepted ProbabilityEdit orders into `sync_account_risk_state(order)` and accepted EventTrade orders into `sync_account_exposure_state(order)`, so a successful ProbabilityEdit is the clean public way to materialize `/risk` state without creating `/exposure` state. Direct `ACCOUNT_RISK` seeding is technically possible, but it bypasses the contract this regression is supposed to prove.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:3591",
+        "backend/server.py:3689",
+        "tests/test_bayes_market_api.py:990",
+        "tests/test_bayes_market_api.py:1001"
+      ],
+      "uncertainty": "If the team explicitly wants the smallest possible unit-level fixture, direct seeding would still work mechanically, but the checked-in code and tests favor public-write setup for read-model regressions.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. In the risk-only scenario, assert both `GET /v1/accounts/{id}/risk` returning `200` and `GET /v1/accounts/{id}/exposure` returning `404 account_not_found`. The plan calls out accounts that still exist elsewhere but have no live exposure, and `get_account_exposure(...)` defines existence projection-locally while `get_account_risk(...)` reads from a separate store. If you only assert exposure `404`, the scenario can collapse into the already-covered never-traded case and stop proving the split-account contract.",
+      "confidence": 0.93,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:39",
+        "backend/server.py:1543",
+        "backend/server.py:1562",
+        "tests/test_bayes_market_api.py:1001"
+      ],
+      "uncertainty": "If someone wants the smallest possible delta, they could omit the extra `/risk` assertion, but that weakens the distinction the plan explicitly wants to freeze.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Keep step 2 limited to the two task-named empty-account variants: never-traded and risk-only. The getter-level zero-row or fully pruned path is already frozen by the exposure projection tests, and the later read-after-write step is where resolution and pruning lifecycle coverage is supposed to expand. Adding a route-level zero-row case here would mainly duplicate existing projection coverage instead of closing a routing gap.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:68",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-4/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-4/plan.json:63",
+        "tests/test_bayes_market_api.py:4310",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:73"
+      ],
+      "uncertainty": "A redundant route-level zero-row check would be harmless, but it is not the missing contract this step names.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Treat the existing parity check in `BayesMarketExposureProjectionTests.test_get_account_exposure_serializes_lexically_sorted_positions_and_account_timestamp` as sufficient GET-dispatch proof for this step. The router branch for `/v1/accounts/{id}/exposure` is a thin one-line delegation to `get_account_exposure(account_id)`, and the current parity assertion already exercises that direct backend path. For this step, the missing signal is the risk-only `404` contract, not another delegate-only test.",
+      "confidence": 0.89,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:68",
+        "backend/server.py:3805",
+        "backend/server.py:3816",
+        "tests/test_bayes_market_api.py:4272"
+      ],
+      "uncertainty": "If a reviewer wants stricter co-location inside the routing section, a tiny extra dispatch test would be acceptable, but it would mostly duplicate existing semantic coverage.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Extend the existing service-index and exposure-route assertions rather than redesigning the public `routes.accounts`, `405`, or successful GET contracts."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Use an accepted ProbabilityEdit as the canonical setup for the risk-only account regression."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Freeze projection-local semantics with a scenario where `/risk` returns `200` while `/exposure` returns `404 account_not_found` for the same account."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Keep this step centered on the named never-traded and risk-only route cases, leaving zero-row and post-cleanup duplication to existing getter tests or later read-after-write coverage."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed; the routing expectations, getter semantics, and current test gaps are already visible in this checkout."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
