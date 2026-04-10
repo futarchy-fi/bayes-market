@@ -1,0 +1,94 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat the step-3 replay helper and `unrealizedPnl` serializer seam as prerequisites for this leaf: either rebase onto that work or bundle the backfill before making the new ordering regressions authoritative, rather than staging tests against the current minimal `/positions` payload.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Stage watered-down ordering assertions that stay green against the pre-P&L `/positions` serializer.",
+        "Delay the deterministic-order leaf until some later sweep without capturing the prerequisite explicitly in this plan."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep the new deterministic-order coverage inside `BayesMarketExposureProjectionTests` in `tests/test_bayes_market_api.py`, updating the existing `/positions` baseline for lexical wire order and adding nearby additive replay-order cases instead of creating a separate helper-only cluster.",
+      "based_on": ["q2", "q5"],
+      "alternatives_rejected": [
+        "Create a separate top-level replay-order test cluster that duplicates the `/positions` route contract.",
+        "Scatter ordering assertions across unrelated helper or integration classes."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Directly seed `ORDERS` and `ACCOUNT_EXPOSURE` for the replay-order regression, including same-`filledAt` ties and out-of-insertion-order rows, because accepted EventTrade POSTs do not reliably exercise the `(filledAt, id)` chronology seam this task is meant to pin.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Use only accepted EventTrade POSTs and assume they naturally reach the unstable replay-order edge.",
+        "Cover only different-timestamp cases and leave same-timestamp ties unpinned."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Make directly seeded live rows replay-compatible only when the replayed survivor's `netSize` matches the live `ACCOUNT_EXPOSURE` row after the backend's canonical six-decimal rounding; do not use a tolerance band, because mismatches should fall back to live-row `unrealizedPnl: 0.0` instead of muddying the ordering proof.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Use an arbitrary numeric tolerance when comparing replayed and live `netSize` values.",
+        "Let ordering regressions rely on mismatched seeded live rows that accidentally exercise fallback behavior."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Prove wire order separately from replay chronology: keep the public `/positions` response sorted lexically by `(marketId, outcomeId)` in the updated baseline and add a separate multi-row regression showing lexical wire order remains stable even when the underlying replay chronology is deliberately different.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Overload one assertion to cover both replay chronology and public wire ordering at once.",
+        "Treat replay-order coverage as sufficient evidence for public lexical ordering."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Keep most deterministic-order assertions at the getter or projection seam, with only the existing or one representative `route_request(\"GET\", \"/v1/accounts/{id}/positions\")` parity smoke to show the HTTP branch delegates the same ordered payload.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Require route-level parity assertions for every seeded deterministic-order case.",
+        "Skip route coverage entirely and prove everything only through helper internals."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Confirm the branch has the step-3 replay helper and `unrealizedPnl` production seam required by `/positions`; if not, land or rebase onto that prerequisite before expecting the new deterministic-order assertions to pass.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Update the existing `/positions` baseline in `BayesMarketExposureProjectionTests` so it remains the canonical exact payload and route-parity assertion for lexical `(marketId, outcomeId)` wire order once `unrealizedPnl` is present.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add a focused replay-order regression that directly seeds canonical filled EventTrade rows into `ORDERS` out of insertion order, including same-`filledAt` ties, alongside a matching live `ACCOUNT_EXPOSURE` row whose rounded `netSize` exactly matches the replayed survivor, and assert the computed `/positions` result follows stable `(filledAt, id)` replay order.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Add a separate multi-row regression that seeds live exposure and matching replay history across multiple slices so chronology differs underneath, then asserts the serialized `/positions` array stays lexically sorted by `(marketId, outcomeId)` independently of replay order.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Run the targeted `BayesMarketExposureProjectionTests` `/positions` selection, verify the baseline, replay-order, and wire-order regressions pass together, and then commit the implementation changes for this leaf.",
+      "depends_on": [2, 3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
