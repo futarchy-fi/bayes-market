@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact response contract is frozen for `GET /v1/stats`: top-level fields, whether it includes `meta`, and whether it is meant to expose market/platform aggregates, runtime diagnostics, or both?",
+      "category": "requirements",
+      "why_it_matters": "The repo has no existing `/v1/stats` branch, payload helper, docs, frontend type, or test fixture, so the coding step cannot write deterministic assertions until the new route's schema is explicit."
+    },
+    {
+      "id": "q2",
+      "question": "Which concrete in-memory sources should feed the stats payload in this checkout: only `MARKETS`-derived totals like the frontend System page currently computes, or also global stores such as `ORDERS`, `EVENTS`, `COMMENTS`, `ACCOUNT_RISK`, and `MARKET_ENGINE_STATS`?",
+      "category": "design",
+      "why_it_matters": "All of those stores already exist in `backend/server.py`, but there is no current aggregate-stats seam; the chosen inputs directly determine the handler logic, empty/reset semantics, and test setup."
+    },
+    {
+      "id": "q3",
+      "question": "Is `/v1/stats` intended to become the canonical backend for the existing frontend 'Platform Stats' view, or is this step intentionally backend-only with frontend clients continuing to compute those numbers from `GET /v1/markets` for now?",
+      "category": "requirements",
+      "why_it_matters": "The frontend `System` route already renders aggregate stats client-side from `useMarkets()` and consumes the service index dynamically, so the task scope changes materially depending on whether client/types/tests should move in the same step."
+    },
+    {
+      "id": "q4",
+      "question": "Should the coding step freeze the exact `service_index_payload()[\"routes\"]` key order as `health`, `markets`, `orders`, `accounts`, `stats`, with every pre-existing group preserved byte-for-byte and only the new `stats` group appended last?",
+      "category": "codebase",
+      "why_it_matters": "Current backend tests assert route presence but not dict-key order, while `frontend/src/routes/System.tsx` renders `Object.entries(index.data.routes)` in insertion order, so the new group placement is a user-visible contract."
+    },
+    {
+      "id": "q5",
+      "question": "What verification surface is expected for this step: direct `route_request()` coverage for `GET /v1/stats` and its 405 behavior, threaded HTTP coverage through `BayesHandler`, explicit root-index order assertions, or some combination of those?",
+      "category": "codebase",
+      "why_it_matters": "This repo uses both direct router tests and HTTP integration tests in `tests/test_bayes_market_api.py`, but `/v1/*` dispatch already flows through `BayesHandler.do_GET()` automatically, so the intended proof layer is still ambiguous."
+    },
+    {
+      "id": "q6",
+      "question": "When `GET /v1/stats` is called against freshly reset process state, should the contract return a stable `200` aggregate snapshot from the current in-memory fixtures, or is any part of the payload allowed to be absent until runtime activity has occurred?",
+      "category": "design",
+      "why_it_matters": "The server resets to seeded markets but empty order/event/comment/engine-stat stores, and there is no existing global stats endpoint to show whether this route should behave like a zero/fixture snapshot or a partially populated diagnostics surface."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new `stats` service-index group should be additive only: existing `health`, `markets`, `orders`, and `accounts` entries stay unchanged and `stats` is appended after them.",
+      "confidence": 0.99,
+      "if_wrong": "The implementation would need to reorder or rewrite existing advertised groups, which would broaden the task from a narrow additive change into a public-index migration."
+    },
+    {
+      "id": "a2",
+      "assumption": "The only advertised route in the new group is the bare path `\"/v1/stats\"`, not a method-prefixed string such as `\"GET /v1/stats\"`.",
+      "confidence": 0.99,
+      "if_wrong": "Both the service-index contract and any consumer expectations would need a different string format than the task title currently states."
+    },
+    {
+      "id": "a3",
+      "assumption": "Non-`GET` methods on `/v1/stats` should reuse the existing `405 method_not_allowed` contract already used by `/v1/health`, account reads, analytics, events, and engine-stats: `error.details = {\"method\": <METHOD>, \"path\": \"/v1/stats\"}`.",
+      "confidence": 0.98,
+      "if_wrong": "The route would need bespoke method handling or headers instead of the router's current read-route pattern, and the tests would have to freeze a new error contract."
+    },
+    {
+      "id": "a4",
+      "assumption": "This step is probably backend-only, because the frontend service-index type is already `Record<string, string[]>` and the System page renders route groups dynamically without a hardcoded whitelist.",
+      "confidence": 0.9,
+      "if_wrong": "The implementation scope expands to frontend API client/types/hooks or System-page behavior, plus their related tests."
+    },
+    {
+      "id": "a5",
+      "assumption": "The primary implementation gate will be `tests/test_bayes_market_api.py`, most likely through direct `route_request()` assertions, with HTTP-threaded coverage optional unless the task owner explicitly asks for it.",
+      "confidence": 0.84,
+      "if_wrong": "The coding phase would need broader end-to-end coverage or additional frontend verification before the task could be considered complete."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
