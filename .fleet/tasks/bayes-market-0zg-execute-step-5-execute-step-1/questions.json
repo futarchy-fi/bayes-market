@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "In `frontend/src/__tests__/api-client.test.ts`, should step 1 add a distinct public-client assertion for object status filters such as `listMarkets({ status: \"active\" })`, or is it acceptable to treat the existing legacy shorthand test (`listMarkets(\"active\")`) as sufficient coverage for the status-filter path as long as object filters are only exercised through the resolved case?",
+      "category": "requirements",
+      "why_it_matters": "The task explicitly names both legacy string shorthand and object filters, but the current suite only freezes the active-status path through the string form and the resolved path through an object. That answer determines whether step 1 needs a new dedicated object-filter case or just a targeted adjustment to the existing assertions."
+    },
+    {
+      "id": "q2",
+      "question": "Should this leaf freeze the market-list contract purely through public `listMarkets(...)` fetch assertions, or is it also expected to add direct coverage for `normalizeMarketListFilters(...)` because `frontend/src/lib/query/hooks.ts` reuses that normalization in `queryKeys.markets(...)`?",
+      "category": "design",
+      "why_it_matters": "The serializer and the query-key contract both depend on the same normalization logic. If step 1 is meant to protect only the HTTP wire shape, `api-client.test.ts` can stay narrowly public-surface focused; if helper-level normalization is also in scope, the test file may need to grow beyond fetch URL assertions."
+    },
+    {
+      "id": "q3",
+      "question": "For the normalized resolved contract, is the intended canonical regression case the contradictory object input `listMarkets({ status: \"resolved\", includeResolved: false })`, or should step 1 also freeze the simpler implicit form `listMarkets({ status: \"resolved\" })` to prove that resolved status alone opts the request into `include_resolved=true`?",
+      "category": "requirements",
+      "why_it_matters": "The current suite already proves the contradiction-normalization path, but the task wording can also be read as preserving the bare `status: \"resolved\"` behavior. That choice affects whether one existing test is enough or whether a second resolved-object assertion is needed."
+    },
+    {
+      "id": "q4",
+      "question": "When `api-client.test.ts` seeds `MarketListResponse.meta.filters`, should the fixtures continue mirroring the backend's normalized effective filters exactly, especially `include_resolved: true` whenever the request status is `resolved`, even though the client tests primarily assert request URLs rather than consuming `meta.filters`?",
+      "category": "codebase",
+      "why_it_matters": "The backend and parent step-5 plan both treat normalized filter metadata as part of the collection contract. Keeping those fixtures aligned prevents the client suite from freezing contradictory request/response combinations that would hide regressions or undermine later route-level test refreshes."
+    },
+    {
+      "id": "q5",
+      "question": "Is the exact query-string order in the resolved-path assertion part of the contract this leaf should freeze, specifically `/v1/markets?status=resolved&include_resolved=true`, or is the requirement only that both parameters are present regardless of order?",
+      "category": "design",
+      "why_it_matters": "The current serializer adds `status` before `include_resolved`, and the existing test uses an exact URL string. Clarifying whether ordering is intentional determines how strict the refreshed assertion should be and whether it is safe to keep relying on deterministic `URLSearchParams` output."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The current `frontend/src/__tests__/api-client.test.ts` already freezes four of the five named step-1 contract edges: default `/v1/markets`, legacy string shorthand, `includeResolved` snake-case serialization, and the normalized resolved request path. The likely remaining gap is explicit non-resolved object-filter coverage.",
+      "confidence": 0.98,
+      "if_wrong": "Step 1 would need a broader rethink of the suite rather than a focused refresh around the object-filter shape."
+    },
+    {
+      "id": "a2",
+      "assumption": "Step 1 is test-only work in this checkout; `frontend/src/lib/api/client.ts` and the backend `GET /v1/markets` handler already agree that `status === \"resolved\"` implies `include_resolved=true` on the wire and in response metadata.",
+      "confidence": 0.99,
+      "if_wrong": "The leaf would expand from refreshing test coverage into changing client or server behavior before the contract could be frozen."
+    },
+    {
+      "id": "a3",
+      "assumption": "The public client surface still intentionally supports both `MarketListFilterInput` forms, because `frontend/src/lib/api/types.ts` keeps `string` in the exported union and `normalizeMarketListFilters(...)` still accepts that shorthand.",
+      "confidence": 0.99,
+      "if_wrong": "Refreshing the test would need to narrow or remove the legacy shorthand contract instead of preserving it."
+    },
+    {
+      "id": "a4",
+      "assumption": "Exact URL assertions remain appropriate in this suite because `serializeMarketListFilters(...)` builds the query string deterministically in `frontend/src/lib/api/client.ts` by setting `status` before `include_resolved`.",
+      "confidence": 0.93,
+      "if_wrong": "The tests should assert query-param presence semantically rather than freezing the literal request string."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed for this leaf because every relevant ambiguity is local to `frontend/src/lib/api/client.ts`, `frontend/src/lib/api/types.ts`, `frontend/src/__tests__/api-client.test.ts`, and the existing step-5 planning artifacts already present in this worktree.",
+      "confidence": 0.99,
+      "if_wrong": "A second exploration pass would be needed before the step-1 test refresh could be scoped confidently."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

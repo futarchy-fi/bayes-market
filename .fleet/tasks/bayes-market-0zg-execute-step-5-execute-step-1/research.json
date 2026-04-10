@@ -1,0 +1,118 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Step 1 should add a distinct public-client assertion for an object status filter such as `listMarkets({ status: \"active\" })`. The current suite already freezes the default request, the legacy string shorthand, `includeResolved` snake-case serialization, and the resolved-object normalization path, but it does not freeze a non-resolved object `status` request on its own. The parent step-5 plan explicitly says `api-client.test.ts` should preserve both the legacy shorthand and the object filter shape, so treating `listMarkets(\"active\")` as the only active-status coverage leaves the object-status branch implicit.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:16",
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:49",
+        "frontend/src/__tests__/api-client.test.ts:45",
+        "frontend/src/__tests__/api-client.test.ts:60",
+        "frontend/src/__tests__/api-client.test.ts:75",
+        "frontend/src/__tests__/MarketList.test.tsx:60",
+        "frontend/src/lib/api/types.ts:33"
+      ],
+      "uncertainty": "The exact object-status example is not mandated by name. Any explicit non-resolved object-status case would close the gap, but `active` matches the existing public caller pattern most directly.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "This leaf should stay focused on public `listMarkets(...)` fetch assertions in `frontend/src/__tests__/api-client.test.ts`, not grow direct helper coverage for `normalizeMarketListFilters(...)`. `queryKeys.markets(...)` does reuse that helper, but the plan scopes step 1 specifically to refreshing the API-client contract in `api-client.test.ts`, while the normalization/query-key work itself was introduced in step 3. Adding direct helper assertions here would expand beyond the step's named seam; if query-key behavior needs separate freezing, that belongs in a hook/query-key-focused test rather than this client fetch suite.",
+      "confidence": 0.9,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:16",
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:49",
+        ".fleet/tasks/bayes-market-0zg/plan.json:59",
+        "frontend/src/lib/query/hooks.ts:15",
+        "frontend/src/lib/query/hooks.ts:16",
+        ".fleet/tasks/bayes-market-0zg-execute-step-3/validation.json:4"
+      ],
+      "uncertainty": "A direct helper test would still be defensible if the team wants tighter unit coverage around cache-key normalization, but the checked-in plan does not make that part of this leaf.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The contradictory object input `listMarkets({ status: \"resolved\", includeResolved: false })` is the right canonical regression case for step 1; an additional `listMarkets({ status: \"resolved\" })` assertion is optional rather than required. In the client normalizer, both inputs collapse to the same effective output because `status === \"resolved\"` forces `includeResolved: true`. The existing test already freezes that stronger normalization path, and the backend suite separately proves both raw HTTP forms (`status=resolved` and `status=resolved&include_resolved=false`) resolve to the same normalized contract.",
+      "confidence": 0.88,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:49",
+        "frontend/src/__tests__/api-client.test.ts:75",
+        "frontend/src/lib/api/client.ts:75",
+        "frontend/src/lib/api/client.ts:81",
+        "tests/test_bayes_market_api.py:679",
+        "tests/test_bayes_market_api.py:687",
+        "backend/server.py:1738"
+      ],
+      "uncertainty": "Adding the bare `{ status: \"resolved\" }` case would be harmless extra redundancy, but I did not find a local artifact that makes it mandatory once the stronger contradictory-input case is present.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. In `api-client.test.ts`, fixtures should continue mirroring the backend's normalized effective `meta.filters`, including `include_resolved: true` whenever the effective request status is `resolved`. The response type models `meta.filters` as part of the market-list contract, the backend handler emits normalized filter metadata after computing the effective resolved-inclusion mode, and both backend tests plus the step-5 plan explicitly treat contradictory or stale filter metadata as something to avoid. Even though the client test mostly asserts request URLs, keeping the response fixture aligned prevents freezing impossible request/response pairings.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:26",
+        "frontend/src/lib/api/types.ts:56",
+        "backend/server.py:1738",
+        "backend/server.py:1748",
+        "tests/test_bayes_market_api.py:685",
+        "tests/test_bayes_market_api.py:693",
+        "frontend/src/__tests__/api-client.test.ts:82"
+      ],
+      "uncertainty": "For suites that never inspect list-contract behavior, lightweight placeholder `meta` can still be acceptable. The stricter rule is clearly warranted in this API-client contract file.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "For this leaf, it is appropriate to keep freezing the exact resolved-path string `/v1/markets?status=resolved&include_resolved=true`, including parameter order. The serializer builds the query deterministically by setting `status` before `include_resolved`, and the existing API-client suite already asserts full URL strings rather than semantic param sets. That makes order a stable client-side serialization detail worth pinning here, even though it is not a backend semantic requirement on its own.",
+      "confidence": 0.86,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:49",
+        "frontend/src/lib/api/client.ts:92",
+        "frontend/src/lib/api/client.ts:96",
+        "frontend/src/lib/api/client.ts:100",
+        "frontend/src/__tests__/api-client.test.ts:57",
+        "frontend/src/__tests__/api-client.test.ts:72",
+        "frontend/src/__tests__/api-client.test.ts:87"
+      ],
+      "uncertainty": "If the client later refactors serialization while preserving parameter semantics, this exact-string assertion would need an intentional update. The order is stable today because of the current implementation, not because the server requires it.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The current suite already freezes the default request, legacy shorthand, `includeResolved` snake-case serialization, and the normalized resolved request path; the main uncovered edge is explicit non-resolved object-status coverage."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 1 can stay test-only because the checked-in client normalizer and backend handler already agree that resolved status implies `include_resolved=true`, and backend tests already freeze that behavior."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The public client surface still intentionally supports both filter input forms, so the refreshed test should preserve the legacy string shorthand rather than narrow the contract silently."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Exact URL assertions remain a reasonable fit for this suite because the serializer emits a deterministic query string today, including `status` before `include_resolved`."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "No child task is needed; the relevant ambiguity is fully answerable from the local client, backend, tests, and recorded planning artifacts in this worktree."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

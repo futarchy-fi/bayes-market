@@ -1,0 +1,12 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.98,
+  "plan_adherence_notes": "The execution diff follows the recorded plan closely. Relative to the plan commit `e8070a9b`, the only product-file change is `frontend/src/__tests__/api-client.test.ts`, exactly where the plan scoped the work. The branch keeps the default `/v1/markets`, legacy `listMarkets(\"active\")`, `includeResolved` snake-case serialization, and resolved normalization assertions, and it adds the planned explicit object-filter case for `listMarkets({ status: \"active\" })` hitting `/v1/markets?status=active`. The only minor limitation is that test execution is not visible in the diff itself, but validation reran the frontend suite successfully.",
+  "research_quality": 0.98,
+  "question_completeness": 0.97,
+  "missed_questions": [],
+  "verdict": "approve",
+  "reason": "Approved. The research directly addressed the only meaningful scope ambiguities: whether object filters needed their own explicit assertion, whether helper-level normalization was in scope, whether the contradictory resolved input was the canonical regression, whether fixtures should mirror normalized `meta.filters`, and whether exact query-string order should stay frozen. The plan then translated those answers into the right narrow implementation, and the execution commit matches that boundary with a single targeted test-file update. Validation reran the available frontend tests with `pnpm test -- src/__tests__/api-client.test.ts`; Vitest executed the frontend suite and all 56 tests passed.",
+  "spawn_children": false,
+  "children": []
+}

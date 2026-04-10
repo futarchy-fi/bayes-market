@@ -26,7 +26,7 @@ describe("API Client", () => {
     mockFetch.mockReset();
   });
 
-  it("listMarkets calls /v1/markets", async () => {
+  it("listMarkets defaults to /v1/markets", async () => {
     const body = {
       markets: [],
       count: 0,
@@ -42,7 +42,7 @@ describe("API Client", () => {
     expect(result.count).toBe(0);
   });
 
-  it("listMarkets passes status filter", async () => {
+  it("listMarkets supports the legacy string status shorthand", async () => {
     const body = {
       markets: [],
       count: 0,
@@ -54,6 +54,21 @@ describe("API Client", () => {
     };
     mockFetch.mockResolvedValue(jsonResponse(body));
     await listMarkets("active");
+    expect(mockFetch).toHaveBeenCalledWith("/v1/markets?status=active", expect.any(Object));
+  });
+
+  it("listMarkets serializes object status filters", async () => {
+    const body = {
+      markets: [],
+      count: 0,
+      meta: {
+        apiVersion: "1.0",
+        timestamp: "",
+        filters: { status: "active", include_resolved: false },
+      },
+    };
+    mockFetch.mockResolvedValue(jsonResponse(body));
+    await listMarkets({ status: "active" });
     expect(mockFetch).toHaveBeenCalledWith("/v1/markets?status=active", expect.any(Object));
   });
 

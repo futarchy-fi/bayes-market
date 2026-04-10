@@ -1,0 +1,54 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep this leaf scoped to public `listMarkets(...)` fetch assertions in `frontend/src/__tests__/api-client.test.ts`; do not add direct `normalizeMarketListFilters(...)` coverage here.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Add helper-level normalization assertions to this file because `queryKeys.markets(...)` reuses the same normalizer.",
+        "Broaden the leaf into hook/query-key coverage instead of freezing the HTTP client contract."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Refresh the market-list request assertions so both supported caller shapes stay explicit: keep the legacy string shorthand case and add a distinct object-status case such as `listMarkets({ status: \"active\" })`, while preserving exact URL assertions including deterministic query order.",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Treat `listMarkets(\"active\")` as sufficient coverage for the object-status path.",
+        "Relax the assertions to unordered query-param checks instead of freezing the literal request string."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep the resolved regression centered on the stronger contradictory-input case `listMarkets({ status: \"resolved\", includeResolved: false })` and ensure response fixtures mirror the normalized effective filters with `include_resolved: true` whenever status is `resolved`.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Require a second bare `listMarkets({ status: \"resolved\" })` assertion before treating the resolved contract as covered.",
+        "Use fixtures whose `meta.filters` contradict the normalized request path."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Update `frontend/src/__tests__/api-client.test.ts` market-list coverage so the suite explicitly asserts the default `/v1/markets` request, the legacy `listMarkets(\"active\")` shorthand, and a new non-resolved object-filter request like `/v1/markets?status=active` from `listMarkets({ status: \"active\" })`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Keep the existing filter-serialization regressions explicit by asserting `listMarkets({ includeResolved: true })` hits `/v1/markets?include_resolved=true` and the normalized resolved input still hits `/v1/markets?status=resolved&include_resolved=true`, with fixtures whose `meta.filters` reflect the effective normalized filters.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Run the focused frontend verification for `frontend/src/__tests__/api-client.test.ts` and adjust only the refreshed client-contract assertions if the serializer or fixture expectations are off.",
+      "depends_on": [2]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
