@@ -1,0 +1,84 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use the focused auth/rate-limit verification slice rather than rerunning the whole `BayesMarketApiAuthRateLimitTests` class: preserve the existing 14-test ProbabilityEdit, unsupported-route, and replay or rejection coverage from step 4, and add the eventual all-five-route breadth sentinels to that slice once they land in this checkout.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Treat the full `BayesMarketApiAuthRateLimitTests` class as the required scope for step 5.",
+        "Replace the existing representative ProbabilityEdit or replay or rejection slice with only the new breadth tests."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "If the new all-routes breadth tests are still absent in this checkout, treat that as a blocker on claiming the breadth gap is closed, run only the pre-existing focused baseline slice as evidence, and leave `backend/server.py` untouched.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Mutate `backend/server.py` before the breadth prerequisite exists in the checkout.",
+        "Claim the breadth gap is closed based only on the pre-existing ProbabilityEdit-centric tests."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Treat passing breadth coverage with test-only updates as sufficient proof that no backend change was needed. If breadth coverage fails, the only acceptable backend fix is one targeted shared-path patch inside `resolve_write_route_category(...)`, `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `BayesHandler.handle_api()`, or `rate_limit_headers(...)`, while route-local handlers stay unchanged.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Apply route-local fixes inside create-market, comment-post, resolve, probability-edit, or event-trade handlers.",
+        "Treat a failing breadth sentinel as justification for a broader backend refactor."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Pin the breadth contract to all five protected POST routes for two shared checks: success under enabled limiting must emit the shared `X-RateLimit-*` headers, and missing-agent requests under required auth must fail with `401 missing_agent_id` plus no quota headers. This includes replacing the stale enabled-limiter resolve-success no-header expectation.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Limit the route-breadth proof to only a subset of the protected POST routes.",
+        "Keep treating resolve success under enabled limiting as a route-specific no-header exception."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Keep the acceptable diff boundary limited to `backend/server.py`, `tests/test_bayes_market_api.py`, and this task's `.fleet` artifacts so the step remains scoped to backend code only.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Allow unrelated backend files, frontend files, or docs to move during this step.",
+        "Broaden the final scope review beyond the shared backend path and its focused HTTP tests."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Re-audit the live shared write-control seam in `backend/server.py` from `resolve_write_route_category(...)` through `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `BayesHandler.handle_api()`, and `rate_limit_headers(...)` to confirm the checkout still matches the researched invariants: exactly five protected POST routes, pre-routing quota spend, and quota headers only on success or `429 rate_limit_exceeded`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Inspect `tests/test_bayes_market_api.py` for the expected all-five-route breadth sentinels. If they still have not landed, record that the breadth prerequisite never arrived in this checkout, run the existing focused 14-test baseline slice from the step-4 validation artifacts for evidence, and stop short of backend edits.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "If the breadth tests are present, run the focused verification slice consisting of the two all-five-route breadth sentinels plus the existing representative ProbabilityEdit quota tests, the unsupported POST negative control, and the replay or rejection sentinels that preserve the pre-routing quota-accounting order.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Interpret the result narrowly: if the breadth slice passes with test-only changes, conclude that the audit required no backend change; if it exposes a real mismatch, patch only the shared backend seam in `backend/server.py` without changing route-local create-market, comment-post, resolve, probability-edit, or event-trade handlers.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Rerun the same focused slice after any shared-path patch, then review the diff to confirm the branch stayed limited to `backend/server.py`, `tests/test_bayes_market_api.py`, and this task's `.fleet` files before committing the step.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
