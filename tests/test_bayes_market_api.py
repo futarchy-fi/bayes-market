@@ -25,6 +25,7 @@ spec.loader.exec_module(server)
 
 PROPERTY_PROBABILITIES = (0.05, 0.1, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95)
 REFERENCE_NET_MARKET_IDS = tuple(server.INITIAL_MARKETS)
+ACTIVE_INITIAL_MARKET_COUNT = sum(1 for market in server.INITIAL_MARKETS.values() if market["status"] != "resolved")
 VARIABLE_ID_TO_MARKET_ID = {
     market["variableId"]: market_id for market_id, market in server.INITIAL_MARKETS.items()
 }
@@ -653,7 +654,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         handler.handle_api.assert_called_once_with("GET")
         handler._serve_static.assert_not_called()
 
-    def test_list_markets_returns_summary_shape(self):
+    def test_list_markets_excludes_resolved_by_default_and_returns_summary_shape(self):
         payload, status = server.route_request("GET", "/v1/markets")
 
         self.assertEqual(status, 200)
@@ -675,7 +676,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2", "m3"])
         self.assertEqual(payload["meta"]["filters"], {"status": None, "include_resolved": True})
 
-    def test_list_markets_filters_by_status(self):
+    def test_list_markets_status_resolved_returns_only_resolved_markets(self):
         payload, status = server.route_request("GET", "/v1/markets?status=resolved")
 
         self.assertEqual(status, 200)
@@ -691,8 +692,19 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual([market["id"] for market in payload["markets"]], ["m3"])
         self.assertEqual(payload["meta"]["filters"], {"status": "resolved", "include_resolved": True})
 
-    def test_invalid_include_resolved_filter_returns_contract_error(self):
-        for raw_value in ("", "TRUE", "1"):
+    def test_blank_include_resolved_filter_returns_contract_error(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/markets?include_resolved=")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_query")
+        self.assertEqual(error.details["parameter"], "include_resolved")
+        self.assertEqual(error.details["received"], "")
+        self.assertEqual(error.details["allowed"], ["false", "true"])
+
+    def test_unsupported_include_resolved_filter_returns_contract_error(self):
+        for raw_value in ("TRUE", "1"):
             with self.subTest(raw_value=raw_value):
                 with self.assertRaises(server.ApiError) as ctx:
                     server.route_request("GET", f"/v1/markets?include_resolved={raw_value}")
@@ -7036,7 +7048,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["market"]["liquidity"], 42000.0)
         self.assertEqual(payload["market"]["volume"], 0.0)
         self.assertEqual(detail_payload["market"], payload["market"])
-        self.assertEqual(list_payload["count"], len(server.INITIAL_MARKETS) + 1)
+        self.assertEqual(list_payload["count"], ACTIVE_INITIAL_MARKET_COUNT + 1)
         self.assertIn("m4", {market["id"] for market in list_payload["markets"]})
 
     def test_create_market_http_rejects_invalid_payloads_without_side_effects(self):
@@ -7099,7 +7111,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
                 "existingMarketId": first_payload["market"]["id"],
             },
         )
-        self.assertEqual(list_payload["count"], len(server.INITIAL_MARKETS) + 1)
+        self.assertEqual(list_payload["count"], ACTIVE_INITIAL_MARKET_COUNT + 1)
 
     def test_frontend_spa_routes_serve_index_html(self):
         status, body, headers = self.request_raw("GET", "/markets/m1")
