@@ -6,10 +6,12 @@ import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { formatCurrency, timeUntil } from "@/lib/utils/format";
 
 const STATUSES = ["", "active", "resolved", "closed", "draft"] as const;
+type StatusFilter = (typeof STATUSES)[number];
 
 export default function MarketList() {
-  const [statusFilter, setStatusFilter] = useState<string>("");
-  const { data, isLoading, error } = useMarkets(statusFilter || undefined);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
+  const marketFilters = statusFilter ? { status: statusFilter } : undefined;
+  const { data, isLoading, error } = useMarkets(marketFilters);
 
   return (
     <div>
@@ -32,7 +34,7 @@ export default function MarketList() {
           </Link>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
           style={{
             padding: "6px 12px",
             borderRadius: "var(--radius-sm)",

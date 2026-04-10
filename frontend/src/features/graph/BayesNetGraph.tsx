@@ -228,7 +228,7 @@ export function BayesNetGraph({
   focusMarketId,
   conditionalEdges = [],
 }: BayesNetGraphProps) {
-  const { data: marketsData, isLoading } = useMarkets();
+  const { data: marketsData, isLoading } = useMarkets({ includeResolved: true });
   const { data: engineStats } = useEngineStats(focusMarketId ?? "", { enabled: !!focusMarketId });
 
   const markets = marketsData?.markets ?? [];
