@@ -381,6 +381,45 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.MARKET_WRITE_LOCKS, {})
         self.assertIsNot(server.get_market_write_lock("m1"), original)
 
+    def test_aggregate_component_status_returns_ok_when_all_components_are_ok(self):
+        components = {
+            "db": {"status": "ok"},
+            "inference": {"status": "ok"},
+            "auth": {"status": "ok"},
+        }
+
+        self.assertEqual(server.aggregate_component_status(components), "ok")
+
+    def test_aggregate_component_status_returns_degraded_when_any_component_is_degraded(self):
+        components = {
+            "db": {"status": "ok"},
+            "inference": {"status": "degraded"},
+            "auth": {"status": "ok"},
+        }
+
+        self.assertEqual(server.aggregate_component_status(components), "degraded")
+
+    def test_aggregate_component_status_returns_unhealthy_when_any_component_is_unhealthy(self):
+        components = {
+            "db": {"status": "degraded"},
+            "inference": {"status": "ok"},
+            "auth": {"status": "unhealthy"},
+        }
+
+        self.assertEqual(server.aggregate_component_status(components), "unhealthy")
+
+    def test_aggregate_component_status_rejects_empty_components(self):
+        with self.assertRaisesRegex(ValueError, "components must not be empty"):
+            server.aggregate_component_status({})
+
+    def test_aggregate_component_status_rejects_missing_component_status(self):
+        with self.assertRaisesRegex(ValueError, "component 'db' is missing status"):
+            server.aggregate_component_status({"db": {}})
+
+    def test_aggregate_component_status_rejects_unexpected_component_status(self):
+        with self.assertRaisesRegex(ValueError, "component 'db' has unexpected status: 'healthy'"):
+            server.aggregate_component_status({"db": {"status": "healthy"}})
+
     def test_get_market_events_serializes_cross_market_appends_while_snapshotting_events(self):
         server.emit_terminal_event({"commandId": "cmd_m1_1", "marketId": "m1"}, "CommandAccepted", {"effects": {}})
         server.emit_terminal_event({"commandId": "cmd_m1_2", "marketId": "m1"}, "CommandAccepted", {"effects": {}})

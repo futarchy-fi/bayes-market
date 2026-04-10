@@ -703,6 +703,42 @@ def uptime_seconds() -> float:
     return round(time.monotonic() - PROCESS_START_MONOTONIC, 3)
 
 
+SERVICE_HEALTH_STATUSES = frozenset({"ok", "degraded", "unhealthy"})
+
+
+def _reduce_service_health_statuses(statuses: list[str]) -> str:
+    """Reduce validated component statuses down to one service status."""
+    if not statuses:
+        raise ValueError("components must not be empty")
+
+    aggregate = "ok"
+    for status in statuses:
+        if status == "unhealthy":
+            return "unhealthy"
+        if status == "degraded":
+            aggregate = "degraded"
+            continue
+        if status != "ok":
+            raise ValueError(f"unexpected service health status: {status!r}")
+    return aggregate
+
+
+def aggregate_component_status(components: dict[str, dict[str, Any]]) -> str:
+    """Aggregate component health records into one service status."""
+    component_statuses: list[str] = []
+
+    for component_name, component in components.items():
+        try:
+            status = component["status"]
+        except (KeyError, TypeError):
+            raise ValueError(f"component {component_name!r} is missing status") from None
+        if not isinstance(status, str) or status not in SERVICE_HEALTH_STATUSES:
+            raise ValueError(f"component {component_name!r} has unexpected status: {status!r}")
+        component_statuses.append(status)
+
+    return _reduce_service_health_statuses(component_statuses)
+
+
 def health_payload() -> dict[str, Any]:
     """Build the service health response payload."""
     return {
