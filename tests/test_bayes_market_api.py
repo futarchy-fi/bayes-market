@@ -13,7 +13,7 @@ from copy import deepcopy
 from email.message import Message
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.parse import urlencode
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "backend" / "server.py"
@@ -654,6 +654,19 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 self.assertEqual(error.code, "method_not_allowed")
                 self.assertEqual(error.details["method"], method)
                 self.assertEqual(error.details["path"], "/v1/health")
+
+    def test_do_get_routes_public_health_paths_before_static_fallback(self):
+        handler = object.__new__(server.BayesHandler)
+        handler.headers = Message()
+        handler.handle_api = Mock()
+        handler._serve_static = Mock(return_value=False)
+
+        with patch.object(server, "PUBLIC_HEALTH_ROUTES", ("/health", "/healthz", "/ready")):
+            handler.path = "/ready"
+            server.BayesHandler.do_GET(handler)
+
+        handler.handle_api.assert_called_once_with("GET")
+        handler._serve_static.assert_not_called()
 
     def test_market_analytics_returns_multi_outcome_price_series_and_excludes_contextual_edits(self):
         unconditional_body = build_unconditional_probability_edit_body("acct_chart", "m2", "yes", 0.4)
