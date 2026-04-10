@@ -1,0 +1,14 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.72,
+  "plan_adherence_notes": "Execution covered the planned mixed active-plus-resolved fixture, explicit `listMarkets({ includeResolved: true })` assertion, and scoped aggregate checks in `frontend/src/__tests__/System.test.tsx`, but it also modified `frontend/src/routes/System.tsx` to add labeled sections. That diverges from the recorded plan and decision d1, which kept this leaf scoped to the test file.",
+  "research_quality": 0.96,
+  "question_completeness": 0.84,
+  "missed_questions": [
+    "Can the duplicate-label scoping in `frontend/src/__tests__/System.test.tsx` be implemented against the existing DOM structure, or would any `frontend/src/routes/System.tsx` accessibility/markup changes be acceptable for this leaf?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "The refreshed assertions are materially better and the frontend test suite passes, but the branch changed `frontend/src/routes/System.tsx` even though the research and plan explicitly scoped this task to `frontend/src/__tests__/System.test.tsx`. Rework the test scoping so the leaf stays test-only, then rerun the frontend tests.",
+  "spawn_children": false,
+  "children": []
+}
