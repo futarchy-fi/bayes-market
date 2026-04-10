@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat the current no-product-diff checkout as an immediate blocked/reject scope review, not as a wait-for-another-merge state, because this leaf's job is to audit an already-landed `/positions` contract change and `ff/Tbayes-market-i6y-execute-step-4..HEAD` currently shows only `.fleet` additions.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Pause the leaf and assume another prerequisite merge will make the scope audit meaningful later.",
+        "Clear the review without any surviving `backend/server.py` or `tests/test_bayes_market_api.py` delta to inspect."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use two baselines during execution: keep `ff/Tbayes-market-i6y-execute-step-4..HEAD` as the broad scope gate for product files, and pair it with `ff/Tbayes-market-i6y-execute-step-5..HEAD` or the leaf merge-base diff to attribute which `.fleet` additions belong to this leaf versus inherited step-5 history.",
+      "based_on": ["q2", "q5"],
+      "alternatives_rejected": [
+        "Judge leaf-local `.fleet` attribution from the broad step-4 diff alone.",
+        "Ignore inherited step-5 artifact history and treat every `.fleet/tasks/bayes-market-i6y-execute-step-5*` path in the broad diff as newly added by this leaf."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Preserve the review evidence as a concrete `git diff --name-status` inventory plus a short patch-level explanation, because a diff stat alone is not enough to show whether the public `/positions` contract change stayed within the allowed surface.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Record only a diff stat summary with no explicit file inventory.",
+        "Rely on an implicit eyeball check without writing down the seam-level reason for the verdict."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Apply the allowlist at hunk level, not just file level: if `backend/server.py` and `tests/test_bayes_market_api.py` appear, execution must confirm their edits stay on the `/v1/accounts/{id}/positions` serializer, replay/P&L helper, router seam, and focused `BayesMarketExposureProjectionTests` or route-discoverability coverage, with unrelated hunks still counted as scope creep.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Accept any change inside `backend/server.py` or `tests/test_bayes_market_api.py` as automatically in scope.",
+        "Reduce the review to a path-only allowlist with no semantic hunk inspection."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Collect the primary scope-gate evidence from `git diff --name-status ff/Tbayes-market-i6y-execute-step-4..HEAD` and compare the surviving path set against the expected allowlist of `backend/server.py`, `tests/test_bayes_market_api.py`, and this leaf's `.fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-4/*` artifacts.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Collect the leaf-attribution evidence from `git diff --name-status ff/Tbayes-market-i6y-execute-step-5..HEAD` or the leaf merge-base so inherited step-5 parent and sibling `.fleet` artifacts are normalized out before deciding what this leaf actually added.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Inspect the current `/positions` seam in `backend/server.py` and `tests/test_bayes_market_api.py` to determine whether the expected additive five-field contract change is present; if the product diff is still absent, treat that as the review outcome and document that there was no public contract change to audit.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "If `backend/server.py` and `tests/test_bayes_market_api.py` do appear in the audited range, review their actual hunks and summarize why they stay limited to the `/positions` serializer, replay/P&L support seam, and focused regression coverage instead of unrelated behavior in those large files.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Write `.fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-4/validation.json` with the primary and attribution diff evidence, the seam-level explanation, and an explicit pass-or-reject scope-gate verdict, then stage the task artifacts and create the execution commit for this leaf.",
+      "depends_on": [3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
