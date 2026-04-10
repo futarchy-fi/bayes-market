@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This checkout currently has no product-file diff beyond the earlier additive `/positions` baseline and the prior step-4 validation explicitly rejected it as unimplemented. Is this step-5 leaf supposed to first land the missing `backend/server.py` and `tests/test_bayes_market_api.py` replay/P&L changes in this branch before any rerun, or should execution happen on a different branch that already contains that implementation?",
+      "category": "requirements",
+      "why_it_matters": "The answer decides whether step 5 is an execution-only gate or a build-then-validate leaf. Right now there is nothing new to test or commit beyond task artifacts."
+    },
+    {
+      "id": "q2",
+      "question": "What exact targeted backend test command should count as the step-5 verification gate once the implementation exists: only `BayesMarketExposureProjectionTests`, or that class plus the root-route/service-index assertions in `BayesMarketApiUnitTests` that freeze `/v1/accounts/{id}/positions` discoverability and route shape?",
+      "category": "codebase",
+      "why_it_matters": "The current `/positions` contract is split across helper/getter tests and the service-index route listing, so step 5 needs one repeatable focused command instead of an ad hoc rerun."
+    },
+    {
+      "id": "q3",
+      "question": "When step 5 says to confirm there are no contract regressions in the serialized positions shape, should the final frozen row be exactly the post-step-4 additive contract `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` in lexical order, or is a different row shape still intended?",
+      "category": "design",
+      "why_it_matters": "The current baseline test still freezes the older four-field minimal row. The diff audit cannot distinguish a deliberate contract upgrade from an accidental regression unless the intended post-implementation shape is explicit."
+    },
+    {
+      "id": "q4",
+      "question": "For the replay-helper coverage, is direct helper/getter validation inside `BayesMarketExposureProjectionTests` sufficient once route parity is preserved by the baseline `/positions` test, or does step 5 also require an HTTP-level `/v1/accounts/{id}/positions` read after the representative weighted-average, partial-close, and sign-flip scenarios?",
+      "category": "requirements",
+      "why_it_matters": "This determines whether the targeted rerun can stay narrowly focused on deterministic backend unit coverage or must also include higher-level transport assertions for the new P&L rows."
+    },
+    {
+      "id": "q5",
+      "question": "What baseline should the final diff audit use when deciding that the implementation is complete and safe to commit: `ff/Tbayes-market-i6y-execute-step-3-execute-step-2` where the additive `/positions` route first appeared, `ff/Tbayes-market-i6y-execute-step-3`, or some other parent branch?",
+      "category": "requirements",
+      "why_it_matters": "Using the wrong comparison point either hides the missing replay/P&L delta or over-attributes earlier route work. The contract review is only meaningful if it compares against the right pre-implementation state."
+    },
+    {
+      "id": "q6",
+      "question": "Is the acceptable product-file boundary for the eventual step-5 implementation still exactly `backend/server.py` plus `tests/test_bayes_market_api.py`, with only this task's `.fleet` artifact added on top and frontend/docs changes explicitly out of scope?",
+      "category": "requirements",
+      "why_it_matters": "The task description is backend-only, but `/positions` already has downstream consumers and documentation. A precise scope boundary is needed before the final commit audit can classify other file changes as required work versus scope creep."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The current branch already contains the additive `/v1/accounts/{id}/positions` route, service-index entry, and baseline serialization tests, but it does not yet contain the replay-helper implementation or the `unrealizedPnl` contract updates described by the parent step-4 plan.",
+      "confidence": 0.99,
+      "if_wrong": "These questions would overstate the implementation gap, and step 5 could proceed as a pure rerun-and-audit leaf."
+    },
+    {
+      "id": "a2",
+      "assumption": "The relevant implementation and validation seams for this work remain concentrated in `backend/server.py` and `tests/test_bayes_market_api.py` rather than another backend package or service.",
+      "confidence": 0.98,
+      "if_wrong": "A broader codebase search or child task would be needed before the execution plan could be scoped safely."
+    },
+    {
+      "id": "a3",
+      "assumption": "The eventual step-5 work is still intended to be backend-only, so frontend portfolio/client changes and docs updates are not part of the required implementation commit for this leaf.",
+      "confidence": 0.92,
+      "if_wrong": "The execution scope would expand materially beyond the targeted backend tests and contract audit described in the task."
+    },
+    {
+      "id": "a4",
+      "assumption": "No child task is needed because the relevant branch ancestry, prior validations, current `/positions` contract, and replay-helper test seams are all visible in this worktree.",
+      "confidence": 0.98,
+      "if_wrong": "A follow-on child investigation would be needed to reconstruct the correct execution baseline or missing implementation owner."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
