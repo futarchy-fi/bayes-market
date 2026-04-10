@@ -1,0 +1,119 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use the pre-step-4 execute baseline, concretely the tree immediately before `b2cc10dd` (product-equivalent to `e1a91ec0`, because the intervening step-4 research/plan commits only touched `.fleet/`). That is the last meaningful state where `/v1/accounts/{id}/positions` was already advertised from the service index but the matched account dispatcher had not yet been widened, so diffing there exposes whether the leaf stayed route-surface-only. Comparing against the current merged HEAD hides the implementation delta entirely and cannot reveal serializer or test spillover.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:67",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1-execute-step-4/plan.json:52",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1-execute-step-4/validation.json:4",
+        "backend/server.py:127",
+        "backend/server.py:3988"
+      ],
+      "uncertainty": "The exact commit label to cite can be either `b2cc10dd^` or `e1a91ec0`; the product tree is the same for this audit even though the branch history contains step-4 research/plan commits in between.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. For this sanity-check leaf, the acceptable owned product diff boundary is `backend/server.py` route-surface plumbing. The child plans explicitly defer the root service-index assertion update and broader `/positions` backend regressions, so simultaneous edits in `tests/test_bayes_market_api.py` should be treated as inherited spillover rather than required scope for this leaf, even though that file eventually has to move.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:67",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1-execute-step-2/plan.json:27",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1-execute-step-4/plan.json:26",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1-execute-step-4/validation.json:4",
+        "tests/test_bayes_market_api.py:578"
+      ],
+      "uncertainty": "The merged history already contains test updates, so the practical call is about ownership and scope accounting, not whether those tests exist in the branch today.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "For this leaf, `get_account_positions(account_id)` counts as acceptable route plumbing only as a thin `{account, meta}` seam that the dispatcher can target. The new `serialize_account_position(...)` and `serialize_account_positions(...)` helpers are serializer-phase work relative to the parent plan, so they are the clearest place where the landed diff steps beyond pure route-surface scope. A later child plan did explicitly allow a minimal helper as a prerequisite, so the helpers are not architecturally wrong; they are just the main overreach relative to this leaf's narrow scope.",
+      "confidence": 0.8,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y/plan.json:54",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:26",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:68",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1-execute-step-4/validation.json:4",
+        "backend/server.py:1629",
+        "backend/server.py:1648",
+        "backend/server.py:1714"
+      ],
+      "uncertainty": "There is a real plan split: the root plan defers serializer work to a later phase, but the step-3 child plan later allowed a minimal helper. That makes the scope verdict nuanced rather than absolute.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "The non-negotiable contract invariants are the shared matched-account dispatcher branch, the shared GET-only `405 method_not_allowed` response for matched account reads, the standard `{account, meta}` envelope with rows at `account.positions`, and the projection-local `404 account_not_found` behavior inherited from `ACCOUNT_EXPOSURE` when the positions projection is missing or fully pruned. Those are the consistency points that `/positions` must share with the existing account reads; deeper row-shape details belong to later phases.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:16",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:26",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:36",
+        "backend/server.py:1716",
+        "backend/server.py:1720",
+        "backend/server.py:1724",
+        "backend/server.py:3988",
+        "backend/server.py:3991",
+        "tests/test_bayes_market_api.py:1119",
+        "tests/test_bayes_market_api.py:1129",
+        "tests/test_bayes_market_api.py:4867"
+      ],
+      "uncertainty": "Risk reads use `ACCOUNT_RISK` rather than `ACCOUNT_EXPOSURE`, so the exact source-of-truth store differs by route; the invariant is shared account-read behavior, not identical backing storage.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. Broader `/positions` regression expansion should remain deferred for this leaf. The parent plan assigns the full backend regression rollout later, and the dispatcher child plan explicitly says broader `/positions` regression expansion is not this step's job. The already-landed direct getter happy-path/404 assertions and the direct route-level `405` check can stay as inherited coverage, but this leaf should not own additional threaded HTTP or client-facing expansion.",
+      "confidence": 0.84,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y/plan.json:64",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1-execute-step-3/plan.json:37",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1-execute-step-4/plan.json:26",
+        "tests/test_bayes_market_api.py:4761",
+        "tests/test_bayes_market_api.py:4830",
+        "tests/test_bayes_market_api.py:4867",
+        "tests/test_bayes_market_api.py:8447"
+      ],
+      "uncertainty": "Direct unit-level coverage is already present in the merged history and was approved, so the line is strongest around deferring new threaded HTTP and broader client/regression work rather than deleting existing unit tests.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Use the pre-dispatch parent tree (`b2cc10dd^` / `e1a91ec0`) when auditing scope; comparing only to the already-merged tip would mask the route-plumbing delta."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Count `backend/server.py` as the owned surface for this leaf and treat test-file changes as deferred or inherited scope rather than required work here."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.8,
+      "impact": "The dedicated getter belongs in the route-surface seam, while the two positions serializers are the main place to scrutinize for bleed into the later serializer phase."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Hold `/positions` to the same account-read contract shape: matched shared branch, GET-only `405`, standard `{account, meta}` envelope, and `ACCOUNT_EXPOSURE`-backed `404 account_not_found` lifecycle."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child investigation is needed; the relevant plans, validation notes, current source, tests, and git history are all present in this worktree."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
