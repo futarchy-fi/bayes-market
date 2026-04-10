@@ -1,0 +1,116 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Step 3 should assume the step-2 component-helper contract rather than backfill that missing seam in the same branch. The recorded decomposition already makes aggregate reduction depend on the shared `db`/`inference`/`auth` builders, and the rejected step-2 execution is explicitly called out as a missing prerequisite instead of something later steps should absorb. In this checkout, the reducer can still be implemented against the frozen component shape and tested with synthetic component objects, but ownership of the actual builder seam remains with step 2.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:67",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:72",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-2/plan.json:60",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-2/plan.json:82",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-2/validation.json:4",
+        "backend/server.py:706",
+        "backend/server.py:711"
+      ],
+      "uncertainty": "The repo does not tell us whether the eventual implementation will rebase on a landed step-2 branch or re-land those builder changes elsewhere; the ownership boundary itself is clear.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The aggregate helper should own the `components` mapping contract, where each value contains a service-health `status`. That keeps step 4 thin: `/v1/health` can build the component objects once and hand the same mapping both to the reducer and to the response payload. Supporting both a raw iterable of strings and a component mapping would widen the public API without solving a real codebase need, because tests can inject synthetic component objects directly. If the implementation wants an iterable-based inner primitive, that can stay private.",
+      "confidence": 0.88,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:16",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:17",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:50",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:78",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-2/plan.json:6",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-2/plan.json:50"
+      ],
+      "uncertainty": "There is no checked-in reducer yet, so the public/private split between a mapping-facing helper and any iterable-based internal primitive is an inference from the planned composition flow.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The reducer should be strict to the `/v1/health` vocabulary `ok | degraded | unhealthy` and should not normalize unrelated status words such as account-capacity `healthy`. `backend/server.py` already carries multiple domain-specific status vocabularies, and `healthy/constrained/critical/breached` means something different from service health. Normalizing those words inside the aggregate helper would silently mix contracts and make it easier for the wrong payload shape to look valid. Unexpected status words should therefore be rejected, not mapped.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:35",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:39",
+        "backend/server.py:1029",
+        "backend/server.py:1041",
+        "backend/server.py:1619",
+        "tests/test_bayes_market_api.py:1041",
+        "tests/test_bayes_market_api.py:464"
+      ],
+      "uncertainty": "If the repo later wants a broader cross-domain status normalizer, that should be a separate wrapper or translation layer rather than widening this service-health helper.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "For edge cases, the helper should raise on both an empty input set and any unexpected status string rather than defaulting to `ok` or falling back to a stronger failure state. This reducer is being introduced for a fixed `/v1/health.components` contract that is expected to contain the shared component builders; returning `ok` for an empty set would hide dropped-component bugs, while silently converting bad input to `degraded` or `unhealthy` would mask the caller mistake as operational state. Because this is an internal server helper rather than a public route, an explicit exception such as `ValueError` is the most codebase-consistent failure mode.",
+      "confidence": 0.79,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:16",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:50",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:78",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-2/plan.json:62",
+        "backend/server.py:1619",
+        "tests/test_bayes_market_api.py:464"
+      ],
+      "uncertainty": "The repo does not already freeze empty-set behavior for this helper; the recommendation is inferred from the fixed three-component contract and the codebase's general preference for rejecting invalid status values instead of coercing them.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q5",
+      "answer": "Step 3 should add direct helper tests that inject synthetic `degraded` and `unhealthy` inputs now. Later `/v1/health` route tests will only prove wiring and the steady-state all-`ok` payload in this checkout, because the planned builders themselves are expected to emit `status: \"ok\"`. The repo already uses direct `backend.server` helper tests in `tests/test_bayes_market_api.py`, so reducer precedence belongs there as a focused helper-level assertion rather than being deferred to route coverage that cannot exercise the non-`ok` branches.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:39",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-2/plan.json:50",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-2/plan.json:77",
+        "tests/test_bayes_market_api.py:783",
+        "tests/test_bayes_market_api.py:1452",
+        "tests/test_bayes_market_api.py:1490"
+      ],
+      "uncertainty": "A new dedicated helper-test module would also work mechanically, but the existing server-focused test file is the clearest match to current repo patterns and to the sibling plan.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 3 should treat `ok`, `degraded`, and `unhealthy` plus the precedence `unhealthy > degraded > ok` as fixed and should not reopen either the names or the ordering."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Keep the reducer scoped to `/v1/health` service-health data and reject unrelated vocabularies like account-capacity `healthy/constrained/critical/breached` instead of normalizing them."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Precedence behavior has to be exercised with synthetic helper-level inputs, because the planned `db`, `inference`, and `auth` builders are still expected to emit `status: \"ok\"` in this checkout."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "This child should stop at the aggregate helper and its helper-level tests in `backend/server.py` and `tests/test_bayes_market_api.py`; `/v1/health` payload assembly and route wiring remain later steps."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.92,
+      "impact": "If tests are added here, `tests/test_bayes_market_api.py` is the right home because it already exercises `backend.server` helpers directly and the missing step-2 plan points to the existing server-focused test modules."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
