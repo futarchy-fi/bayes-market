@@ -3844,7 +3844,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_market_close_accepts_active_market_and_emits_terminal_acceptance(self):
         account_id = "acct_close_preserved"
-        server.route_request(
+        probability_edit_payload, probability_edit_status = server.route_request(
             "POST",
             "/v1/markets/m1/orders/probability-edit",
             build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
@@ -3867,12 +3867,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "resolutionProbabilities": {"yes": 1.0, "no": 0.0},
             }
         )
-        expected_market = deepcopy(server.MARKETS["m1"])
-        baseline_marginals = deepcopy(expected_market["marginals"])
-        expected_market["status"] = "closed"
-        expected_market.pop("closedAt", None)
-        expected_market.pop("resolution", None)
-        expected_market.pop("resolutionProbabilities", None)
+        expected_market = server.build_closed_market_snapshot(server.MARKETS["m1"])
+        baseline_marginals = deepcopy(server.MARKETS["m1"]["marginals"])
         baseline_risk = deepcopy(server.ACCOUNT_RISK)
         baseline_exposure = deepcopy(server.ACCOUNT_EXPOSURE)
         baseline_conditionals = deepcopy(server.CONDITIONAL_MARGINALS)
@@ -3892,8 +3888,14 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 build_market_close_body("ops_admin", idempotency_key="idem-close") | {"unexpected": "noise"},
             )
 
+        self.assertEqual(probability_edit_status, 201)
         self.assertEqual(trade_status, 201)
         self.assertEqual(status, 201)
+        self.assertEqual(probability_edit_payload["order"]["newMarginals"], baseline_marginals)
+        self.assertNotEqual(baseline_marginals, server.INITIAL_MARKETS["m1"]["marginals"])
+        self.assertIn(account_id, baseline_risk)
+        self.assertIn(account_id, baseline_exposure)
+        self.assertTrue(baseline_exposure[account_id]["positions"])
         self.assertEqual(payload["market"], expected_market)
         self.assertNotIn("closedAt", payload["market"])
         self.assertNotIn("resolution", payload["market"])
@@ -3927,6 +3929,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(command["payload"], expected_market_close_payload())
         self.assertEqual(command["accountId"], "ops_admin")
         self.assertEqual(command["commandId"], payload["result"]["commandId"])
+        terminal_outcome = server.TERMINAL_OUTCOMES[payload["result"]["commandId"]]
+        self.assertEqual(terminal_outcome["eventId"], payload["result"]["eventId"])
+        self.assertEqual(terminal_outcome["eventType"], "CommandAccepted")
+        self.assertEqual(terminal_outcome["status"], 201)
+        self.assertEqual(terminal_outcome["response"], payload)
         event = server.EVENTS[payload["result"]["eventId"]]
         self.assertEqual(event["commandId"], payload["result"]["commandId"])
         self.assertEqual(event["eventId"], payload["result"]["eventId"])
@@ -3941,6 +3948,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "replayStateHash": server.market_replay_state_hash("m1"),
             },
         )
+        self.assertEqual(terminal_outcome["eventPayload"], event["payload"])
         self.assertTrue(event["payload"]["closure"]["closedAt"].endswith("Z"))
         self.assertEqual(trade_payload["order"]["marketId"], "m1")
 

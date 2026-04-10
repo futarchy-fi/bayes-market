@@ -3796,6 +3796,7 @@ def record_terminal_outcome(
     TERMINAL_OUTCOMES[command_id] = {
         "eventId": str(event["eventId"]),
         "eventType": str(event["eventType"]),
+        "eventPayload": deepcopy(event["payload"]),
         "status": status,
         "response": deepcopy(response),
     }
