@@ -1,0 +1,94 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Limit the account-read docs patch to the named freeze and gate files: update `docs/t553-current-architecture-cache-boundary-freeze.md`, `docs/t556-scope-and-compatibility-boundary-freeze.md`, `docs/t563-journal-read-surface-freeze.md`, and `docs/t571-per-market-engine-stats-contract-freeze.md` as the primary contract owners, with small consistency edits in `docs/t538-scope-matrix.md` and `docs/t539-mvp-launch-gate.md` so the MVP surface no longer advertises only `/v1/accounts/{id}/risk`.",
+      "based_on": [
+        "q1"
+      ],
+      "alternatives_rejected": [
+        "Update only the route-freeze docs and leave `t538`/`t539` stale.",
+        "Expand into a repo-wide wording sweep for every `risk` mention."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Describe `GET /v1/accounts/{id}/exposure` as an additive, projection-local account read model that complements `GET /v1/accounts/{id}/risk` but can independently return `404 account_not_found` when the exposure projection is absent or fully pruned.",
+      "based_on": [
+        "q2"
+      ],
+      "alternatives_rejected": [
+        "Document `/exposure` as a guaranteed companion resource whenever the account exists.",
+        "Blur the distinction between live exposure state and risk summaries."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep EventTrade response-shape documentation in the HTTP-contract layer by extending `docs/t586-full-chain-http-contract-freeze.md` and any adjacent shared-envelope cross-reference it relies on, rather than moving that contract into `docs/t547-shared-event-formula-contract-freeze.md` or relying on `docs/t544-event-sourcing-contract.md` alone.",
+      "based_on": [
+        "q3"
+      ],
+      "alternatives_rejected": [
+        "Expand `t547` to own HTTP success envelopes.",
+        "Rely only on the event-sourcing memo for route response shape.",
+        "Create a wider repo docs sweep without a clear HTTP owner."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Publish EventTrade request and accepted-event contracts on `size` only, treat `amount` as an undocumented compatibility alias, and add a minimal EventTrade-specific accepted-event note to `docs/t544-event-sourcing-contract.md` covering `pricing.unitPrice` and `payload.trade.{marketId,outcomeId,side,size,price,notional}`.",
+      "based_on": [
+        "q4",
+        "q5"
+      ],
+      "alternatives_rejected": [
+        "Advertise both `size` and `amount` as first-class public fields.",
+        "Leave accepted EventTrade event details test-pinned but undocumented."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Update the primary route-freeze docs (`docs/t553-current-architecture-cache-boundary-freeze.md`, `docs/t556-scope-and-compatibility-boundary-freeze.md`, `docs/t563-journal-read-surface-freeze.md`, `docs/t571-per-market-engine-stats-contract-freeze.md`) to list `/v1/accounts/{id}/exposure` alongside `/risk` and to explain that exposure is an additive, projection-local read model with independent 404 semantics when no live exposure projection exists.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Apply narrow consistency edits in `docs/t538-scope-matrix.md` and `docs/t539-mvp-launch-gate.md` so the MVP API surface and gate checklist refer to markets, orders, engine stats, account risk, and account exposure instead of implying a risk-only account read surface.",
+      "depends_on": [
+        1
+      ]
+    },
+    {
+      "step": 3,
+      "task": "Extend the HTTP-contract documentation in `docs/t586-full-chain-http-contract-freeze.md` to freeze the accepted EventTrade response as `201` with `{order, result, meta}`, document `order.size`, `order.price`, and `order.notional`, and standardize the published request field on `size` rather than `amount`; if the section depends on a shared acceptance-envelope reference that still says `{order, meta}`, align that adjacent note in the same pass.",
+      "depends_on": [
+        1
+      ]
+    },
+    {
+      "step": 4,
+      "task": "Update `docs/t544-event-sourcing-contract.md` with a minimal EventTrade-specific `CommandAccepted` note or example so the persisted event contract matches code and tests for `pricing.unitPrice` and `payload.trade.{marketId,outcomeId,side,size,price,notional}` without broadening the generic envelope beyond what is already live.",
+      "depends_on": [
+        3
+      ]
+    },
+    {
+      "step": 5,
+      "task": "Run a targeted docs search to confirm the edited files no longer advertise risk as the only account read surface and no longer publish stale EventTrade `amount` or `{order, meta}` wording within this scoped patch set.",
+      "depends_on": [
+        2,
+        3,
+        4
+      ]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
