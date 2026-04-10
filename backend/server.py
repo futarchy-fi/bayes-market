@@ -739,6 +739,31 @@ def aggregate_component_status(components: dict[str, dict[str, Any]]) -> str:
     return _reduce_service_health_statuses(component_statuses)
 
 
+def db_health_component() -> dict[str, Any]:
+    """Build the database component record for the v1 health contract."""
+    return {
+        "status": "ok",
+        "kind": "in_memory",
+    }
+
+
+def inference_health_component() -> dict[str, Any]:
+    """Build the inference component record for the v1 health contract."""
+    return {
+        "status": "ok",
+        "backend": ENGINE_CONFIG.backend,
+        "version": ENGINE_CONFIG.version,
+    }
+
+
+def auth_health_component() -> dict[str, Any]:
+    """Build the auth component record for the v1 health contract."""
+    return {
+        "status": "ok",
+        "requires_agent_id": AUTH_REQUIRE_AGENT_ID,
+    }
+
+
 def health_payload() -> dict[str, Any]:
     """Build the service health response payload."""
     return {
@@ -746,6 +771,21 @@ def health_payload() -> dict[str, Any]:
         "status": "ok",
         "timestamp": utc_timestamp(),
     }
+
+
+def v1_health_payload() -> dict[str, Any]:
+    """Build the versioned service health response payload."""
+    payload = health_payload().copy()
+    components = {
+        "db": db_health_component(),
+        "inference": inference_health_component(),
+        "auth": auth_health_component(),
+    }
+    payload["status"] = aggregate_component_status(components)
+    payload["version"] = ENGINE_CONFIG.version
+    payload["uptime_seconds"] = uptime_seconds()
+    payload["components"] = components
+    return payload
 
 
 def service_index_payload() -> dict[str, Any]:
