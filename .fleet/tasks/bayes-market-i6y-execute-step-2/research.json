@@ -1,0 +1,106 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The `/positions` serializers should freeze each surviving row to only `marketId`, `outcomeId`, `netSize`, and `lastTradePrice`. `/exposure`-only fields such as `absSize`, `updatedAt`, `lastOrderId`, and `lastCommandId` should not be carried through.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:1629",
+        "backend/server.py:1640",
+        "tests/test_bayes_market_api.py:4761",
+        "tests/test_bayes_market_api.py:4808"
+      ],
+      "uncertainty": "The frontend does not yet define a dedicated `/positions` response type, but the backend serializer and tests already freeze the wire shape to these four fields.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. Rounded-zero pruning for `/positions` should reuse `round_exposure_value(...)` before comparing against zero, so tiny residuals like `0.0000004` disappear under the same canonical precision used by `/exposure`.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:1224",
+        "backend/server.py:1613",
+        "backend/server.py:1636",
+        "tests/test_bayes_market_api.py:4776",
+        "tests/test_bayes_market_api.py:4830"
+      ],
+      "uncertainty": "None beyond the general possibility of a future rounding-policy change; the current code and tests are explicit.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The `/positions` serializer should silently skip malformed rows rather than fail the whole response. If a row is missing `marketId` or `outcomeId`, `serialize_account_position(...)` returns `None`, `serialize_account_positions(...)` drops it, and the getter only raises when no valid live rows survive.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:1631",
+        "backend/server.py:1655",
+        "backend/server.py:1720",
+        "tests/test_bayes_market_api.py:4794",
+        "tests/test_bayes_market_api.py:4840"
+      ],
+      "uncertainty": "The richer `/exposure` serializer still assumes canonical rows and would error on missing required keys, but the dedicated `/positions` path intentionally tolerates malformed rows.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. `get_account_positions(account_id)` should preserve `/exposure`'s projection-local lifecycle exactly by raising `404 account_not_found` both when `ACCOUNT_EXPOSURE` has no account entry and when serialization prunes every row, rather than returning `200` with an empty list.",
+      "confidence": 1.0,
+      "evidence": [
+        "backend/server.py:1693",
+        "backend/server.py:1714",
+        "tests/test_bayes_market_api.py:4726",
+        "tests/test_bayes_market_api.py:4830"
+      ],
+      "uncertainty": "None. The getter implementation and tests already enforce this lifecycle.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. Step 2 should use dedicated `serialize_account_position(...)` and `serialize_account_positions(...)` helpers instead of reusing the `/exposure` serializers and trimming fields afterward. The code already separates the minimal `/positions` projection from the richer `/exposure` contract.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:1611",
+        "backend/server.py:1629",
+        "backend/server.py:1648",
+        "tests/test_bayes_market_api.py:4761"
+      ],
+      "uncertainty": "No material uncertainty. The only open work would be adding more callers for `/positions`, not redefining the serializer seam.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "`ACCOUNT_EXPOSURE` is the only in-repo source consulted by `get_account_positions(...)` and `get_account_exposure(...)`; there is no separate positions store or account registry to join against, so step 2 should stay projection-local."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The current `/positions` projection stops at `marketId`, `outcomeId`, `netSize`, and `lastTradePrice`. Nothing in the serializer path pulls in P&L, cost basis, or `unrealizedPnl`, so later replay/P&L work remains out of scope for this step."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Using canonical exposure rounding keeps `/positions` aligned with `/exposure` on liveness and output precision, avoiding boundary-value drift for tiny residual positions."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Malformed rows are skipped, not surfaced as serializer errors, and the getter falls back to the existing `404 account_not_found` lifecycle when no valid live rows remain."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The backend serializers sort lexically by `(marketId, outcomeId)`, while callers can still apply their own presentation ordering. The current portfolio view already performs its own recency sort client-side."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
