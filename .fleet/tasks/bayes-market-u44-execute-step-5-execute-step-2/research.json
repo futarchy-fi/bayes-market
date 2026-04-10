@@ -1,0 +1,96 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Treat `git diff ff/Tbayes-market-u44-execute-step-2...HEAD` as the single authoritative scope baseline for step 2. The parent step-5 plan names that exact range as the primary full-task diff audit, and uses `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` only as secondary context to explain where the inherited `backend/server.py` delta entered history. So the scope verdict should come from the execute-step-2-to-HEAD range, with any secondary comparison used only for attribution.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:16",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:17",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:53",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:58"
+      ],
+      "uncertainty": "A secondary comparison is still useful for explaining inherited step-4 history, but the artifacts do not support treating it as a second authoritative scope gate.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The workflow-artifact allowance should be limited to the `bayes-market-u44` task-chain artifacts, not every path under `.fleet/tasks/...`. The plan records task output under task-specific `bayes-market-u44` paths, and the observed diff's workflow files all stay inside that same lineage. Unrelated `.fleet/tasks` additions would be scope spillover, not automatically acceptable just because they live under the task-artifact namespace.",
+      "confidence": 0.84,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-2/questions.json:12",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:36",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:63"
+      ],
+      "uncertainty": "No artifact defines a global `.fleet/tasks` allowlist policy in those exact words. This answer is inferred from the task-specific artifact locations and the actual diff contents, which stay within the `bayes-market-u44` lineage.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. The allowed product-file boundary for this audit is exactly `tests/test_bayes_market_api.py` and `backend/server.py`. The step-5 plan explicitly treats those two files as the only acceptable product-file boundary for the task, so any additional non-workflow path should fail the backend-and-tests-only gate.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:26",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:53",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-2/questions.json:18"
+      ],
+      "uncertainty": "None materially. In the audited range, the only non-workflow paths are those two product files.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Step 2 must carry forward the prior objection about the inherited `backend/server.py` delta; it does not end at a file-boundary pass. The parent step-5 plan says to record an explicit inherited scope objection if the backend delta remains unjustified, and the step-4 validation already concluded that no failing preserved sentinel justified the `backend/server.py` edit. So the audit should report both facts: the file boundary stays narrow, but the inherited backend change still has a plan-adherence problem.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:26",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:29",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/validation.json:12"
+      ],
+      "uncertainty": "The open procedural choice is only how the later execute artifact phrases the objection; the local task history is already clear that the objection itself should be preserved.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. The audit should reason over the merged branch history as recorded in git, not only new local worktree edits in this leaf. This task's question already notes that `HEAD` includes the merge of `ff/Tbayes-market-u44-execute-step-5-execute-step-1`, and the parent plan's step 2 audits `ff/Tbayes-market-u44-execute-step-2...HEAD`, which necessarily includes that merged history. The relevant surface is therefore the branch state captured by git, not just unstaged local changes.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-2/questions.json:30",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/questions.json:12",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:16",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:53"
+      ],
+      "uncertainty": "None materially. The only thing that needs to be stated explicitly in later artifacts is that the scope gate is about recorded branch history, not about whether this particular leaf has additional uncommitted edits.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The overall diff against `ff/Tbayes-market-u44-execute-step-2` stays within workflow artifacts plus `backend/server.py` and `tests/test_bayes_market_api.py`, so the scope review can use a strict two-file product allowlist."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "This execute-step-2 leaf should remain evidence-gathering only. In the current history, this leaf itself has only added the question artifact and now the research artifact, not fresh product edits."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "The relevant product seams are exactly the protected-write helper changes in `backend/server.py` and the `BayesMarketApiAuthRateLimitTests` additions and adjustments in `tests/test_bayes_market_api.py`, which matches the two-file product boundary surfaced by the diff."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed because branch ancestry, baseline comparisons, prior validation artifacts, and the touched product files are all available locally in this worktree."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
