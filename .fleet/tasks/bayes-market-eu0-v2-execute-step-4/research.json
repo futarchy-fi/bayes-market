@@ -1,0 +1,108 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Step 4 should do more than add canonical `EventTradePayload.size`: it should also freeze the already-shipped EventTrade success typing on the frontend, but keep that work narrowly EventTrade-scoped instead of reopening every mutation response. The parent plan makes step 4 the API-type/client-hook layer for exposure plus the EventTrade `size` field, while step 5 is where UI adoption happens. In the current checkout, `EventTradePayload` still has no `size`, `OrderResponse` models an outdated generic shape, and the backend/test contract already freezes EventTrade responses around a richer `order` object with `id`, `accountId`, `status`, `payload`, `side`, `size`, `price`, and `notional`. Leaving the stale success typing in place would preserve a known frontend/backend mismatch right at the layer this step is supposed to correct. The right boundary is: add canonical request `size`, add EventTrade-specific success typing that matches the existing backend trade-and-pricing surface, and still do not widen the public contract with preview-only fields such as `currentNetSize` or `resultingNetSize`.",
+      "confidence": 0.85,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:76",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:81",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:36",
+        "frontend/src/lib/api/types.ts:208",
+        "frontend/src/lib/api/types.ts:253",
+        "frontend/src/features/trading/EventTradePanel.tsx:50",
+        "backend/server.py:3297",
+        "tests/test_bayes_market_api.py:3470",
+        "tests/test_bayes_market_api.py:3799"
+      ],
+      "uncertainty": "The exact TypeScript shape boundary is still a design choice: the safest fit is an EventTrade-specific success type rather than a wholesale shared `OrderResponse` overhaul, because probability-edit responses are also richer than the current type but are not the explicit target of this step.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "After a successful `resolveMarket(...)`, exposure invalidation should target every cached account-exposure query, not only `payload.accountId`. The backend cleanup runs across all stored exposure accounts for the resolved market, and the resolve payload's `accountId` is just the resolving admin account, not the set of traders whose live exposure changed. On the frontend, account-scoped queries are keyed per account id and the app keeps one long-lived global `QueryClient`, so previously viewed accounts can remain cached across session changes. Invalidating only the resolver's account would therefore leave stale exposure data behind for other traders. The implementation boundary that fits this branch is a predicate or prefix invalidation over all `accountExposure(...)` keys while leaving unrelated query families alone.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:1290",
+        "backend/server.py:1295",
+        "backend/server.py:3207",
+        "frontend/src/lib/api/client.ts:182",
+        "frontend/src/lib/query/hooks.ts:14",
+        "frontend/src/lib/query/hooks.ts:339",
+        "frontend/src/app/providers.tsx:7",
+        "frontend/src/features/session/context.tsx:33"
+      ],
+      "uncertainty": "This answer is specific to exposure. The same cross-account argument does not automatically imply broad invalidation for every other account-scoped query family.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Step 4 should preserve the current branch-local React Query shape and add only a new `queryKeys.accountExposure(accountId)` plus targeted exposure invalidation. There is no shared `queryKeys.account(id)` namespace in this checkout, and the current mutation hooks already use explicit per-surface invalidation rather than grouped account invalidation. The parent plan for step 4 is additive and exposure-specific, and the broader epic plan explicitly keeps `/risk` stable while adding exposure as a separate read surface. Reintroducing grouped account-query invalidation here would turn a focused exposure patch into a cache-architecture refactor without any supporting pattern elsewhere in the file. The missing `useAccountRisk(...)` invalidation is therefore a separate issue, not something this step needs to solve while landing the new exposure hook.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:17",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:76",
+        "frontend/src/lib/query/hooks.ts:14",
+        "frontend/src/lib/query/hooks.ts:20",
+        "frontend/src/lib/query/hooks.ts:307",
+        "frontend/src/lib/query/hooks.ts:331",
+        "frontend/src/lib/query/hooks.ts:344",
+        "frontend/src/lib/query/hooks.ts:358"
+      ],
+      "uncertainty": "If the branch later decides to fix stale `/risk` data as part of a separate cleanup, that work would likely deserve its own focused change because it is broader than the exposure addition described here.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "`getAccountExposure(...)` and `useAccountExposure(...)` should preserve the raw `404 account_not_found` contract, not normalize it into synthetic empty data. The backend getter explicitly treats missing or fully pruned live exposure as `404`, and both direct and HTTP tests pin that behavior. The frontend client layer already throws `BayesApiError` on non-OK responses, and `useAccountRisk(...)` simply exposes that raw error path without normalization. Keeping `useAccountExposure(...)` aligned with that pattern preserves the backend contract and keeps step 4 limited to additive API/query plumbing. If the later portfolio UI wants to treat `404` as an empty-state presentation, that normalization belongs in the component layer in step 5, not in the shared hook.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:28",
+        "backend/server.py:1542",
+        "backend/server.py:1550",
+        "tests/test_bayes_market_api.py:4510",
+        "tests/test_bayes_market_api.py:7877",
+        "frontend/src/lib/api/client.ts:55",
+        "frontend/src/lib/query/hooks.ts:307",
+        "frontend/src/routes/Portfolio.tsx:25"
+      ],
+      "uncertainty": "A future UX-driven helper could wrap the hook and reinterpret `404` for a specific screen, but there is no existing normalization layer in this checkout and doing it in the base hook now would be a public-behavior change.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The backend prerequisites are already present in this checkout, so step 4 can stay frontend-scoped against the live `/v1/accounts/{id}/exposure` route and current resolution cleanup behavior."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Add `AccountExposureResponse`, `getAccountExposure(accountId)`, `queryKeys.accountExposure(accountId)`, and `useAccountExposure(accountId)` without reshaping existing market or `/risk` query signatures."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Treat `size` as the only frontend EventTrade input field even though the backend still accepts legacy `amount`; the compatibility alias can remain backend-only."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep this step off the component layer. Portfolio, MarketDetail, and the EventTrade panel can adopt exposure data and size UI in the later step that is explicitly scoped to trader-facing changes."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Handle exposure freshness through post-mutation invalidation. `useMarketPriceSubscription(...)` only touches market/detail/event/engine keys and does not currently participate in account-query synchronization."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
