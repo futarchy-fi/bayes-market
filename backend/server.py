@@ -134,6 +134,23 @@ ACCOUNT_SERVICE_INDEX_ROUTES = (
     "/v1/accounts/{id}/pnl",
     "/v1/accounts/{id}/exposure",
 )
+MARKET_SERVICE_INDEX_ROUTES = (
+    "GET /v1/markets",
+    "POST /v1/markets",
+    "/v1/markets/{id}",
+    "GET /v1/markets/{id}/analytics",
+    "/v1/markets/{id}/meta",
+    "/v1/markets/{id}/events",
+    "GET /v1/markets/{id}/comments",
+    "POST /v1/markets/{id}/comments",
+    "/v1/markets/{id}/engine-stats",
+    "POST /v1/markets/{id}/close",
+    "POST /v1/markets/{id}/resolve",
+)
+ORDER_SERVICE_INDEX_ROUTES = (
+    "POST /v1/markets/{id}/orders/probability-edit",
+    "POST /v1/markets/{id}/orders/event-trade",
+)
 ACCOUNT_LMSR_LEDGER_VERSION = "lmsr-ledger-v1"
 ACCOUNT_LMSR_RISK_READ_MODEL = "scalar-min-asset-v1"
 MAX_EVENT_FORMULA_CLAUSES = 16
@@ -834,28 +851,9 @@ def service_index_payload() -> dict[str, Any]:
         "status": "ok",
         "routes": {
             "health": list(PUBLIC_HEALTH_ROUTES),
-            "markets": [
-                "GET /v1/markets",
-                "POST /v1/markets",
-                "/v1/markets/{id}",
-                "GET /v1/markets/{id}/analytics",
-                "/v1/markets/{id}/meta",
-                "/v1/markets/{id}/events",
-                "GET /v1/markets/{id}/comments",
-                "POST /v1/markets/{id}/comments",
-                "/v1/markets/{id}/engine-stats",
-                "POST /v1/markets/{id}/close",
-                "POST /v1/markets/{id}/resolve",
-            ],
-            "orders": [
-                "POST /v1/markets/{id}/orders/probability-edit",
-                "POST /v1/markets/{id}/orders/event-trade",
-            ],
-            "accounts": [
-                "/v1/accounts/{id}/risk",
-                "/v1/accounts/{id}/pnl",
-                "/v1/accounts/{id}/exposure",
-            ],
+            "markets": list(MARKET_SERVICE_INDEX_ROUTES),
+            "orders": list(ORDER_SERVICE_INDEX_ROUTES),
+            "accounts": list(ACCOUNT_SERVICE_INDEX_ROUTES),
         },
         "meta": make_meta(),
     }
