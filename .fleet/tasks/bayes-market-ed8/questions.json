@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact JSON contract should `GET /v1/health` expose for the new fields, especially the shape of `components` (`db`/`inference`/`auth`) and whether `uptime_seconds` is expected to be an integer or a float?",
+      "category": "requirements",
+      "why_it_matters": "The task only names the fields at a high level. The backend test needs a frozen response shape, and the repo has no existing typed/public contract yet for component health."
+    },
+    {
+      "id": "q2",
+      "question": "Should `/v1/health` be purely additive, or should the existing `/health` and `/healthz` routes also be updated to match or alias the new payload?",
+      "category": "requirements",
+      "why_it_matters": "The current backend and docs already expose `/health` and `/healthz`, and the frontend health client still calls `/health`. Compatibility expectations change whether this is a small additive route or a broader health-surface migration."
+    },
+    {
+      "id": "q3",
+      "question": "What should the `db` component actually represent in this checkout, given that the backend currently keeps markets, orders, events, comments, and account state entirely in in-memory Python dictionaries and there is no database adapter in the repo?",
+      "category": "codebase",
+      "why_it_matters": "If `db` is meant to reflect a real persistence dependency, the codebase does not currently have one. That ambiguity decides whether the endpoint should report a placeholder status, a synthetic 'not configured' state, or whether the requirement assumes future infrastructure that is not present yet."
+    },
+    {
+      "id": "q4",
+      "question": "How should the `inference` and `auth` component statuses be derived: from successful module/config initialization, from a lightweight live probe, or from some other readiness rule?",
+      "category": "design",
+      "why_it_matters": "The inference engine is imported/configured at module load, while auth in this repo is only optional write-route enforcement behind `BAYES_REQUIRE_AGENT_ID`. The health handler needs a deterministic rule for both components if it is going to report more than hard-coded statuses."
+    },
+    {
+      "id": "q5",
+      "question": "What exact aggregation rule should map component states to the top-level `status` values `ok`, `degraded`, and `unhealthy`, and when is `degraded` expected instead of `unhealthy`?",
+      "category": "requirements",
+      "why_it_matters": "There is no existing global health-classification helper in the backend. Without a defined reduction rule, different implementations could report different top-level status values for the same component mix."
+    },
+    {
+      "id": "q6",
+      "question": "What should the new `version` field mean for this endpoint: a backend service version, an API contract version, the inference engine version, or some other explicit constant?",
+      "category": "requirements",
+      "why_it_matters": "The backend has no current service-version constant. The only obvious version-like values in the repo are the inference engine version (`0.1.0`) and the frontend package version, so the source of truth needs to be pinned before implementation."
+    },
+    {
+      "id": "q7",
+      "question": "Is this task intentionally backend-only, or should the existing frontend health client and System page also switch from `/health` to `/v1/health` and consume the richer payload?",
+      "category": "design",
+      "why_it_matters": "The current UI already has a health surface (`getHealth()` / `useHealth()` / `System.tsx`) but it expects the older minimal payload. Scope clarity determines whether the work ends with backend tests or includes frontend type/client updates too."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The correct implementation boundary for this task is `backend/server.py` plus coverage in `tests/test_bayes_market_api.py`, because that is where the current HTTP router, legacy health routes, and API integration tests already live.",
+      "confidence": 0.99,
+      "if_wrong": "The real owner would be some other service/runtime layer, and changing this repo's in-process HTTP server would not satisfy the task."
+    },
+    {
+      "id": "a2",
+      "assumption": "The new `/v1/health` route is additive and should not silently break `/health` or `/healthz`, because those legacy paths are already referenced by the backend, frontend client, and ops docs.",
+      "confidence": 0.86,
+      "if_wrong": "Implementation would need to update existing route behavior and likely touch frontend/docs/probe expectations instead of adding one isolated endpoint."
+    },
+    {
+      "id": "a3",
+      "assumption": "The requested test scope is a backend response-shape test only, not a frontend System-page migration, because the brief says 'Test for response shape' and does not mention UI changes.",
+      "confidence": 0.82,
+      "if_wrong": "The work would need to expand into TypeScript types, API client updates, query hooks, and route/component tests."
+    },
+    {
+      "id": "a4",
+      "assumption": "If `uptime_seconds` is implemented now, it will have to be process uptime measured from server startup or module import, because there is no existing host/runtime diagnostics abstraction in the repo.",
+      "confidence": 0.84,
+      "if_wrong": "A different uptime source or externally injected process monitor would need to be introduced, which changes both implementation and how tests stabilize the value."
+    },
+    {
+      "id": "a5",
+      "assumption": "The `auth` component can probably be reported from configuration/readiness rather than request credentials, since the endpoint is explicitly unauthenticated and current auth behavior is limited to optional write-path agent-id enforcement.",
+      "confidence": 0.74,
+      "if_wrong": "The health contract needs a different definition of auth health, potentially involving runtime checks or richer security state than the current repo exposes."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
