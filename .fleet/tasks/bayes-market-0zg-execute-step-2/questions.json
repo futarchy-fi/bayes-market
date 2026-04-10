@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should step 2 stay confined to the existing `BayesMarketApiUnitTests` `/v1/markets` slice that calls `server.route_request(...)` directly, or is there also an expectation to mirror the same `include_resolved` contract in higher-level HTTP/integration tests during this step?",
+      "category": "requirements",
+      "why_it_matters": "The current market-list coverage lives in the unit-test block and uses direct route calls plus `ApiError` assertions. Expanding into `BayesMarketApiIntegrationTests` would change the helper style, setup path, and scope of the patch."
+    },
+    {
+      "id": "q2",
+      "question": "When freezing `status=resolved&include_resolved=false`, should the test pin only the resolved result set, or also the normalized response metadata `meta.filters == {\"status\": \"resolved\", \"include_resolved\": true}`?",
+      "category": "design",
+      "why_it_matters": "The task text explicitly requires normalized results, but the metadata contract is a separate observable surface. The current handler in this checkout normalizes the metadata too, so the test boundary needs to be explicit."
+    },
+    {
+      "id": "q3",
+      "question": "Should invalid `include_resolved` coverage follow the current `/v1/markets` unit-test style by asserting raised `server.ApiError` values and structured `invalid_query` details, or should this step go through serialized HTTP error payloads instead?",
+      "category": "design",
+      "why_it_matters": "Existing invalid-query tests in `tests/test_bayes_market_api.py` for `status` and duplicate filters already use direct exception assertions. Matching that pattern keeps the new coverage consistent and avoids mixing two error-testing styles in the same block."
+    },
+    {
+      "id": "q4",
+      "question": "Is exact market ordering part of the frozen `/v1/markets` contract for these new cases, or should the tests only assert count plus membership because the endpoint does not document a sort order?",
+      "category": "design",
+      "why_it_matters": "The current list tests in this worktree assert exact ID arrays such as `[\"m1\", \"m2\"]` and `[\"m1\", \"m2\", \"m3\"]`, which rely on `INITIAL_MARKETS` insertion order and the absence of a sort step."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The intended home for this step is the existing `/v1/markets` block inside `BayesMarketApiUnitTests`, not a new test module or helper layer.",
+      "confidence": 0.97,
+      "if_wrong": "The patch could land in the wrong test class and later need to be moved or duplicated for HTTP-level coverage."
+    },
+    {
+      "id": "a2",
+      "assumption": "`server.reset_state()` always restores the seeded fixtures where `m1` and `m2` are active and `m3` is resolved, so the expected default, opt-in, and resolved-only result sets are stable.",
+      "confidence": 0.99,
+      "if_wrong": "The new assertions would pin the wrong IDs or counts and fail for fixture reasons rather than contract reasons."
+    },
+    {
+      "id": "a3",
+      "assumption": "Blank `include_resolved` should be tested with `?include_resolved=` because `route_request(...)` uses `parse_qs(..., keep_blank_values=True)` and therefore preserves omission versus blank as different inputs.",
+      "confidence": 0.98,
+      "if_wrong": "The blank-value regression would miss the real parser behavior and could accidentally duplicate the omitted-parameter case."
+    },
+    {
+      "id": "a4",
+      "assumption": "The normalized contract for `status=resolved` requests includes `meta.filters.include_resolved == true`, even when the caller explicitly passes `include_resolved=false`.",
+      "confidence": 0.9,
+      "if_wrong": "The tests should assert only the rows returned and avoid freezing metadata that the implementation intends to echo raw rather than normalized."
+    },
+    {
+      "id": "a5",
+      "assumption": "This checkout already contains the target backend logic and list-market tests, so the practical implementation step on a baseline branch is likely to transplant or preserve this exact slice rather than invent new semantics.",
+      "confidence": 0.95,
+      "if_wrong": "The next worker would need to derive the assertions from broader plan artifacts instead of using the checked-in code as the reference contract."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
