@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Implement the success-path breadth check as one shared `subTest(...)` matrix inside `BayesMarketApiAuthRateLimitTests`, using the existing request helpers to exercise all five protected POST routes while keeping ProbabilityEdit as the canonical proof for repeated quota behavior, `429`, and per-agent isolation.",
+      "based_on": ["q1", "q2", "q5", "q6"],
+      "alternatives_rejected": [
+        "Add five standalone route-specific header tests for the breadth sweep.",
+        "Clone the full multi-request limiter matrix onto every protected POST route in this step."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Assert the full shared `assert_rate_limit_headers(...)` contract on the new non-ProbabilityEdit success checks, with exact `limit` and `remaining` values on a single successful request per route instead of weakening the new coverage to header presence only.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Only assert that some `X-RateLimit-*` headers are present.",
+        "Skip exact quota assertions for non-ProbabilityEdit routes to avoid repetition."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Preserve the current disabled-limiter and invalid-agent resolve seams, and add a separate limiter-enabled resolve success assertion rather than rewriting the existing resolve auth test into an enabled-limiter-only variant.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Replace the current resolve auth test wholesale and lose the disabled-limiter no-header proof.",
+        "Keep the stale resolve success expectation that headers stay absent when the limiter is enabled."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Give comment-post first-class coverage with a dedicated success-path HTTP test that asserts both the accepted comment payload and the shared rate-limit headers, while create-market and event-trade participate as explicit named cases in the shared breadth matrix.",
+      "based_on": ["q1", "q4", "q5"],
+      "alternatives_rejected": [
+        "Cover comment-post only as an anonymous loop case.",
+        "Add standalone route-specific success-path header tests for create-market and event-trade even though they already have general HTTP success coverage elsewhere."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit the current `BayesMarketApiAuthRateLimitTests` helpers and assertions in `tests/test_bayes_market_api.py` to identify the stale resolve success expectation, the existing ProbabilityEdit header helper usage, and the uncovered success-path seams for comment-post, create-market, and event-trade.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add a shared success-path breadth test in `BayesMarketApiAuthRateLimitTests` that runs with a positive `RATE_LIMIT_PER_MIN` and explicit `subTest(...)` labels for create-market, probability-edit, market-resolve, comment-post, and event-trade, asserting `assert_rate_limit_headers(...)` after one accepted request for each route.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add a dedicated comment-post success test in the same class that asserts the accepted `comment` response contract together with the rate-limit headers so comment-post ends the step with route-specific, first-class auth/rate-limit coverage.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Refactor the resolve coverage just enough to keep missing-agent, blank-agent, malformed-agent, and disabled-limiter no-header assertions intact while moving the limiter-enabled resolve success assertion to header presence via the shared helper.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Run the focused `BayesMarketApiAuthRateLimitTests` slice that covers the new success-path header assertions, inspect the diff to confirm the change stays in test coverage, and commit the worktree with the requested message.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
