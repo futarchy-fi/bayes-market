@@ -7152,9 +7152,11 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
         self.assertEqual(second_status, 201)
         self.assertEqual(second_events_status, 200)
         self.assertEqual(second_payload["market"], first_payload["market"])
-        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
-        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
-        self.assertEqual(second_payload["meta"]["idempotencyKeyEcho"], first_payload["meta"]["idempotencyKeyEcho"])
+        self.assertEqual(second_payload["result"], first_payload["result"])
+        self.assertEqual(
+            {key: value for key, value in second_payload["meta"].items() if key != "replayed"},
+            first_payload["meta"],
+        )
         self.assertTrue(second_payload["meta"]["replayed"])
         self.assertEqual(second_events_payload["events"], first_events_payload["events"])
         self.assertEqual(second_events_payload["chain"], first_events_payload["chain"])
