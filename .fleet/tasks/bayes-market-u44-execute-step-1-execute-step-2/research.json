@@ -1,0 +1,167 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. The only backend gaps worth patching in `backend/server.py` are shared-path misses: a mismatch between `resolve_write_route_category(...)` and the routed protected POST surface, a protected POST path that does not pass through `BayesHandler.handle_api()` and `_enforce_write_controls()`, or quota-header output from the shared success/`429` branches that diverges from `rate_limit_headers(...)`. Stale tests by themselves should be treated as test bugs unless they expose one of those shared-path mismatches.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:384",
+        "backend/server.py:398",
+        "backend/server.py:400",
+        "backend/server.py:402",
+        "backend/server.py:3795",
+        "backend/server.py:3863",
+        "backend/server.py:3875",
+        "backend/server.py:3902",
+        "backend/server.py:3929",
+        "backend/server.py:4008",
+        "backend/server.py:4035",
+        "backend/server.py:4043",
+        "backend/server.py:4048",
+        "backend/server.py:4109",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:16",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:68"
+      ],
+      "uncertainty": "A backend patch would only be justified if a future route-specific contract exception exists outside the current shared seam, and I did not find one.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. Step 2 should treat the route-breadth intent from the prior plan as fixed: prove all five protected POST routes on the success path and the missing-agent failure path, while keeping `429` plus `Retry-After` coverage representative in the existing ProbabilityEdit tests instead of cloning it across create-market, comment-post, resolve, and event-trade. That matches both the plan and the current centralized `429` branch in `handle_api()`.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:26",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:36",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:53",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:58",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:63",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:68",
+        "backend/server.py:4008",
+        "backend/server.py:4046",
+        "backend/server.py:4048",
+        "backend/server.py:4049",
+        "tests/test_bayes_market_api.py:6106",
+        "tests/test_bayes_market_api.py:6302"
+      ],
+      "uncertainty": "This answer assumes the test objective remains route breadth, not per-route duplication of every shared error branch.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "There is no code-level admin-write exception for market resolve. `POST /v1/markets/{id}/resolve` is classified as protected, goes through the same `handle_api()` path, and will emit `X-RateLimit-*` headers on success when `RATE_LIMIT_PER_MIN > 0` and a valid agent id is present. The current resolve test's header-absence assertion is only consistent because it leaves rate limiting at the default disabled value; any expectation that resolve success omits quota headers when rate limiting is enabled is stale test drift, not an intentional contract exception.",
+      "confidence": 0.94,
+      "evidence": [
+        "backend/server.py:333",
+        "backend/server.py:334",
+        "backend/server.py:384",
+        "backend/server.py:398",
+        "backend/server.py:492",
+        "backend/server.py:494",
+        "backend/server.py:4042",
+        "backend/server.py:4043",
+        "tests/test_bayes_market_api.py:6252",
+        "tests/test_bayes_market_api.py:6295",
+        "tests/test_bayes_market_api.py:6299"
+      ],
+      "uncertainty": "The existing resolve auth test is not itself wrong in its current setup because the limiter is off by default; the stale part only appears if that absence expectation is carried into the planned rate-limited route-breadth success test.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. Unsupported POST routes such as `/v1/orders/probability-edit` should remain the explicit negative control. They sit outside `resolve_write_route_category(...)`, so `_enforce_write_controls()` returns no protected-write context and the router still returns `404 not_found` with no quota headers even when auth is enabled. That is the right out-of-scope control for this audit.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:384",
+        "backend/server.py:395",
+        "backend/server.py:404",
+        "backend/server.py:4008",
+        "backend/server.py:4010",
+        "backend/server.py:3954",
+        "tests/test_bayes_market_api.py:6426",
+        "tests/test_bayes_market_api.py:6435",
+        "tests/test_bayes_market_api.py:6438"
+      ],
+      "uncertainty": "None in the current router shape; the negative control only changes if unsupported routes are intentionally added to the protected surface later.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. If the route-breadth tests expose a real gap, the fix should stay in the shared classifier/adapter path: `resolve_write_route_category(...)`, `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `BayesHandler.handle_api()`, or `rate_limit_headers(...)`. The route-local handlers return payload/status tuples and do not assemble quota headers themselves, so this audit does not justify bespoke changes in `create_market(...)`, `handle_comment_post(...)`, `handle_probability_edit(...)`, `handle_event_trade(...)`, or `handle_market_resolution(...)`.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:16",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:19",
+        "backend/server.py:3779",
+        "backend/server.py:3867",
+        "backend/server.py:3885",
+        "backend/server.py:3912",
+        "backend/server.py:3939",
+        "backend/server.py:3990",
+        "backend/server.py:4002",
+        "backend/server.py:4043",
+        "backend/server.py:4049"
+      ],
+      "uncertainty": "If a future route handler starts emitting its own headers or bypassing `route_request(...)`, that would change the fix boundary, but the current code does not.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "Yes. The audit should preserve the current quota-accounting order. `_enforce_write_controls()` runs before `route_request(...)`, while idempotency replay, idempotency-conflict, and terminal rejection logic live inside the route handlers afterward. That means quota can be consumed before a replayed or rejected route-local outcome is known. The header contract is still shared: successful responses, including replayed `201`s, get `rate_limit_headers(...)`, and `429 rate_limit_exceeded` gets `Retry-After` plus quota headers; `409` conflicts and rejections still omit quota headers even though the request may already have consumed quota.",
+      "confidence": 0.94,
+      "evidence": [
+        "backend/server.py:2949",
+        "backend/server.py:2983",
+        "backend/server.py:3024",
+        "backend/server.py:3463",
+        "backend/server.py:3475",
+        "backend/server.py:3531",
+        "backend/server.py:3543",
+        "backend/server.py:3623",
+        "backend/server.py:3635",
+        "backend/server.py:3720",
+        "backend/server.py:3732",
+        "backend/server.py:4008",
+        "backend/server.py:4013",
+        "backend/server.py:4042",
+        "backend/server.py:4046"
+      ],
+      "uncertainty": "There is no dedicated test in the current auth/rate-limit slice that freezes quota consumption for replayed `409` paths, so the conclusion comes from the call order and replay/rejection helpers rather than an explicit HTTP assertion.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "All five protected POST routes share one HTTP adapter seam today, so route-breadth tests can legitimately target that single pre-routing enforcement path."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Quota-header assembly is centralized in `handle_api()` plus `send_json()`, so route-local header divergence is not the current risk."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "A classifier/router mismatch would be a real backend bug, but the current code agrees on the same five-route protected POST surface."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "The likely discrepancy is test drift around resolve success under enabled rate limiting, not an intentional backend exception for admin writes."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "The existing ProbabilityEdit `429` tests are adequate representative proof because rate limiting and `Retry-After` header emission are both centralized before route dispatch."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
