@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should step 2 extend the existing `BayesMarketExposureProjectionTests.test_get_account_positions_raises_404_for_missing_or_fully_pruned_projection` seam, or split the new missing / risk-only / probability-edit-only / fully-pruned scenarios into separate focused tests in the same class?",
+      "category": "codebase",
+      "why_it_matters": "The current projection-level negative contract already lives in one grouped test. Knowing whether that remains the canonical seam affects how the new cases are added without duplicating or fragmenting `/positions` ownership."
+    },
+    {
+      "id": "q2",
+      "question": "Does the task wording require two distinct 404 regressions for 'risk-only' and 'probability-edit-only' accounts, or is one accepted `ProbabilityEdit` fixture sufficient because that path already creates account state in `ACCOUNT_RISK` without a live `ACCOUNT_EXPOSURE` document?",
+      "category": "requirements",
+      "why_it_matters": "The current codebase does not have a separate non-probability risk writer. The answer determines whether step 2 needs both a directly seeded risk-only case and a real write-backed probability-edit-only case."
+    },
+    {
+      "id": "q3",
+      "question": "For the new risk-only / probability-edit-only negative case, should the fixture be created through accepted `POST /v1/markets/{id}/orders/probability-edit` writes, or is direct `ACCOUNT_RISK` seeding acceptable because this step is explicitly projection-level?",
+      "category": "design",
+      "why_it_matters": "An accepted ProbabilityEdit proves the read model stays 404 after a real write, while direct seeding keeps the test narrow and avoids coupling the projection test to write-path behavior."
+    },
+    {
+      "id": "q4",
+      "question": "When step 2 says 'fully pruned accounts whose surviving rows round to zero or serialize away', should the negative coverage distinguish between an account whose `ACCOUNT_EXPOSURE` document has already been physically removed and a stale account document whose remaining rows are filtered out by `serialize_account_positions(...)`, or is the serialize-away fixture alone enough?",
+      "category": "requirements",
+      "why_it_matters": "The current getter has two observable 404 paths: missing account document and empty post-serialization positions. The task text mentions both no-live-document and serialize-away behavior, so the test matrix depends on whether both must be pinned separately."
+    },
+    {
+      "id": "q5",
+      "question": "Should these negative `/positions` regressions remain at the direct getter seam (`server.get_account_positions(...)`) only, or should they also assert route parity through `server.route_request(\"GET\", f\"/v1/accounts/{id}/positions\")` for the new 404 cases?",
+      "category": "codebase",
+      "why_it_matters": "The existing success baseline checks direct getter and route parity, but the current negative test exercises only the direct projection seam. Step 2 needs one clear scope boundary so coverage is neither too narrow nor duplicated."
+    },
+    {
+      "id": "q6",
+      "question": "Do the new 404 cases need to assert that reads are side-effect-free, such as leaving `ACCOUNT_RISK` and stale `ACCOUNT_EXPOSURE` fixtures unchanged when `get_account_positions(...)` raises, or is freezing only the `ApiError` contract sufficient?",
+      "category": "design",
+      "why_it_matters": "`get_account_positions(...)` currently performs lookup plus serialization only, but the new fixtures intentionally exercise empty and stale projection states. If non-mutation is part of the contract, the regressions should pin it now."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The canonical owner for this step is the existing projection-level `/positions` seam in `BayesMarketExposureProjectionTests`, especially `test_get_account_positions_raises_404_for_missing_or_fully_pruned_projection`.",
+      "confidence": 0.98,
+      "if_wrong": "The new coverage could land in the wrong test layer or leave a competing `/positions` contract seam behind."
+    },
+    {
+      "id": "a2",
+      "assumption": "`get_account_positions(account_id)` is projection-local on `ACCOUNT_EXPOSURE` exactly like `get_account_exposure(account_id)`: it raises `404 account_not_found` when the account document is missing or when `serialize_account_positions(...)` returns no surviving rows.",
+      "confidence": 0.99,
+      "if_wrong": "Step 2 would need a different empty-account contract, likely `200` with an empty list or a different error boundary."
+    },
+    {
+      "id": "a3",
+      "assumption": "Accepted `ProbabilityEdit` writes materialize account state only in `ACCOUNT_RISK` via `sync_account_risk_state(...)`, while accepted `EventTrade` writes materialize live holdings only in `ACCOUNT_EXPOSURE` via `sync_account_exposure_state(...)`.",
+      "confidence": 0.99,
+      "if_wrong": "The proposed risk-only / probability-edit-only fixture strategy would be invalid because a real ProbabilityEdit might unexpectedly create live positions."
+    },
+    {
+      "id": "a4",
+      "assumption": "A stale `ACCOUNT_EXPOSURE` document whose remaining rows round to zero or are malformed already exercises the 'serialize away' 404 path because `normalize_account_position_projection(...)` filters those rows before `get_account_positions(...)` checks emptiness.",
+      "confidence": 0.99,
+      "if_wrong": "Step 2 would need a different fixture to prove the fully pruned branch, such as a natural prune through accepted trades or market settlement."
+    },
+    {
+      "id": "a5",
+      "assumption": "This step should stay projection-level and does not require threaded HTTP or broader integration coverage yet, because the task title is specifically about extending projection-level `/positions` negative coverage.",
+      "confidence": 0.95,
+      "if_wrong": "Additional HTTP or integration tests would need to move in the same change, not just the local projection tests."
+    },
+    {
+      "id": "a6",
+      "assumption": "No child task is needed because every relevant seam for this question phase is local to `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `bayes-market-i6y` task artifacts in this worktree.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up child investigation would be needed before the implementation step could be scoped confidently."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
