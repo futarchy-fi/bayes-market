@@ -1,0 +1,69 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat this step as an additive helper patch in `backend/server.py`, but backfill the missing shared `db`, `inference`, and `auth` component-builder seams in the same edit if they are still absent, because `uptime_seconds()` and `aggregate_component_status()` already exist while the new `/v1/health` helper cannot compose without shared component helpers.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Assume the missing component helpers will land first and write a plan that only works after a rebase",
+        "Inline the `components` objects inside the new `/v1/health` helper and skip shared seams"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Implement the dedicated `/v1/health` payload helper by starting from a copy of `health_payload()` and extending it, so the legacy `service`, `status`, and `timestamp` fields are inherited without refactoring the existing `/health` and `/healthz` payload builder.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Refactor both legacy and v1 responses onto a new smaller base helper in this step",
+        "Build the new payload entirely from a fresh literal dict"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Set `/v1/health.status` from `aggregate_component_status(components)` and source the flat `version` field from `ENGINE_CONFIG.version`, so the helper is future-proof for degraded or unhealthy component states while using the repo's only existing runtime version source.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Preserve the legacy hard-coded `\"ok\"` status and treat `components` as informational only",
+        "Introduce a new service-version constant as part of this helper-only slice"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep this subtask helper-only inside `backend/server.py`: no `/v1/health` router wiring yet, no `/health` or `/healthz` contract changes, and no new helper-specific tests beyond sanity-checking that the new helper composes from shared builders.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Expand the patch to wire `GET /v1/health` in the router now",
+        "Broaden the slice with new route-level or helper-level test coverage before the endpoint exists"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Inspect the health-helper block in `backend/server.py` and add the missing shared component-builder helpers for `db`, `inference`, and `auth` beside the existing uptime and aggregate-status helpers if they are still absent in this checkout.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Implement a dedicated `/v1/health` payload helper in `backend/server.py` that copies `health_payload()`, assembles `components` from the shared component helpers, rewrites top-level `status` from `aggregate_component_status(...)`, and appends flat `version` plus float `uptime_seconds`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Sanity-check the helper boundary so the new composition remains additive: `health_payload()` stays the legacy source for `/health` and `/healthz`, no route-local `/v1/health` literal is introduced, and the helper uses `ENGINE_CONFIG.version` as the current version source.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Review the diff for scope against the parent plan and leave router wiring plus API-test coverage to the later steps, only confirming that the helper code is internally consistent and ready for the follow-on `/v1/health` route work.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

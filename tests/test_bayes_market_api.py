@@ -409,6 +409,77 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "component 'db' has unexpected status: 'healthy'"):
             server.aggregate_component_status({"db": {"status": "healthy"}})
 
+    def test_v1_health_payload_extends_a_copy_of_legacy_health_payload(self):
+        original_engine_config = server.ENGINE_CONFIG
+        original_auth_require_agent_id = server.AUTH_REQUIRE_AGENT_ID
+        self.addCleanup(setattr, server, "ENGINE_CONFIG", original_engine_config)
+        self.addCleanup(setattr, server, "AUTH_REQUIRE_AGENT_ID", original_auth_require_agent_id)
+
+        server.ENGINE_CONFIG = server.EngineConfig(
+            mode="EXACT",
+            backend="variable_elimination",
+            version="9.9.9",
+            precision="float64",
+            compile_type="junction_tree",
+            inference_sample_limit=100,
+        )
+        server.AUTH_REQUIRE_AGENT_ID = True
+
+        legacy_payload = {
+            "service": "legacy-bayes-market",
+            "status": "legacy-status",
+            "timestamp": "2026-04-10T00:00:00Z",
+        }
+
+        with (
+            patch.object(server, "health_payload", return_value=legacy_payload) as health_payload,
+            patch.object(
+                server,
+                "db_health_component",
+                return_value={"status": "degraded", "kind": "in_memory"},
+            ) as db_health_component,
+            patch.object(server, "inference_health_component", wraps=server.inference_health_component) as inference_health_component,
+            patch.object(server, "auth_health_component", wraps=server.auth_health_component) as auth_health_component,
+            patch.object(server, "uptime_seconds", return_value=12.345) as uptime_seconds,
+        ):
+            payload = server.v1_health_payload()
+
+        health_payload.assert_called_once_with()
+        db_health_component.assert_called_once_with()
+        inference_health_component.assert_called_once_with()
+        auth_health_component.assert_called_once_with()
+        uptime_seconds.assert_called_once_with()
+        self.assertEqual(
+            legacy_payload,
+            {
+                "service": "legacy-bayes-market",
+                "status": "legacy-status",
+                "timestamp": "2026-04-10T00:00:00Z",
+            },
+        )
+        self.assertEqual(
+            payload,
+            {
+                "service": "legacy-bayes-market",
+                "status": "degraded",
+                "timestamp": "2026-04-10T00:00:00Z",
+                "version": "9.9.9",
+                "uptime_seconds": 12.345,
+                "components": {
+                    "db": {"status": "degraded", "kind": "in_memory"},
+                    "inference": {
+                        "status": "ok",
+                        "backend": "variable_elimination",
+                        "version": "9.9.9",
+                    },
+                    "auth": {
+                        "status": "ok",
+                        "requires_agent_id": True,
+                    },
+                },
+            },
+        )
+
     def test_get_market_events_serializes_cross_market_appends_while_snapshotting_events(self):
         server.emit_terminal_event({"commandId": "cmd_m1_1", "marketId": "m1"}, "CommandAccepted", {"effects": {}})
         server.emit_terminal_event({"commandId": "cmd_m1_2", "marketId": "m1"}, "CommandAccepted", {"effects": {}})

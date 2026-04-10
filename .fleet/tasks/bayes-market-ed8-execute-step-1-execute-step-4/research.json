@@ -1,0 +1,108 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "This checkout is not actually legacy-only. `backend/server.py` already contains the shared `uptime_seconds()` helper and the shared `aggregate_component_status()` reducer, and the reducer already has direct tests. What is still missing here are the step-2 per-component builder seams for `db`, `inference`, and `auth`. So step 4 should not assume a blank prerequisite set, but it also cannot be a tiny composition-only patch in the current branch unless those component helpers land first. In practice, this branch must either backfill the missing component-helper seams or rebase onto a branch that already contains step 2.",
+      "confidence": 0.94,
+      "evidence": [
+        "backend/server.py:706",
+        "backend/server.py:731",
+        "backend/server.py:747",
+        "tests/test_bayes_market_api.py:373",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:67",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-1/validation.json:4"
+      ],
+      "uncertainty": "The missing step-2 component helpers are inferred from the current health-helper section and the recorded plan; there is no separate negative test that proves their absence.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The dedicated `/v1/health` helper should literally start from `health_payload()` rather than refactor both legacy and v1 routes onto a new smaller base helper. `route_request()` already serves `/health` and `/healthz` directly from `health_payload()`, the existing HTTP test asserts that legacy shape, and this step's plan explicitly says the work must remain additive with no legacy payload changes. Building the v1 helper on top of `health_payload()` preserves that boundary while still allowing the new helper to append fields and, if needed, overwrite `status` after component aggregation.",
+      "confidence": 0.96,
+      "evidence": [
+        "backend/server.py:747",
+        "backend/server.py:3834",
+        "tests/test_bayes_market_api.py:6554",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:50",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:83"
+      ],
+      "uncertainty": "A small shared base helper would also work mechanically, but it would broaden the refactor beyond the recorded additive scope.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The `/v1/health` helper should recompute the top-level `status` through `aggregate_component_status()`, not preserve the legacy hard-coded `\"ok\"` as purely informational. The parent plan already freezes the reducer rule `unhealthy > degraded > ok`, the step-specific plan explicitly says the reducer exists to future-proof the payload, and the current reducer is implemented and tested for all three states. In today's in-memory checkout the result will still be `\"ok\"`, because the planned component builders are expected to emit `\"ok\"`, but the helper boundary should already flow through the reducer.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:731",
+        "tests/test_bayes_market_api.py:373",
+        "tests/test_bayes_market_api.py:382",
+        "tests/test_bayes_market_api.py:391",
+        ".fleet/tasks/bayes-market-ed8/plan.json:36",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:39"
+      ],
+      "uncertainty": "Only a later intentional contract change would justify decoupling top-level service status from component status.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "The current source of truth should be the existing engine version, with `ENGINE_CONFIG.version` as the concrete read. The parent plan explicitly chose the backend engine version until the service gains a dedicated runtime version constant, `backend/server.py` already exposes `ENGINE_CONFIG.version` in the engine diagnostics payload, and there is still no separate service-version or API-version constant in this checkout. That means `/v1/health.version` is temporarily an engine-identity proxy, not a distinct HTTP-surface version.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:1043",
+        ".fleet/tasks/bayes-market-ed8/plan.json:46"
+      ],
+      "uncertainty": "Semantically this still names the inference subsystem rather than the whole service, so the field meaning should be revisited if a dedicated runtime or API version constant is added later.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "This step should remain helper-only work inside `backend/server.py`, with verification deferred to the later route and API-test steps. The step-specific plan scopes step 4 to adding the shared payload helper and step 5 to confirming there is still no router wiring or legacy health-route change, while the parent task plan puts `/v1/health` route wiring in a later step and response-shape test coverage after that. The earlier step-1 validation also records that the prior helper slice intentionally landed with no test changes, which matches the intended incremental boundary here.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:77",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:83",
+        ".fleet/tasks/bayes-market-ed8/plan.json:63",
+        ".fleet/tasks/bayes-market-ed8/plan.json:68",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-1/validation.json:4"
+      ],
+      "uncertainty": "A direct helper unit test would be technically possible, but it would widen this slice and would be superseded once the route and route-level assertions exist.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep the `/v1/health` payload flat and additive: reuse the legacy top-level fields and append only `version`, `uptime_seconds`, and `components`."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Preserve `/health` and `/healthz` exactly as they are in this subtask, and build the new helper so it does not change the existing legacy contract."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "WRONG",
+      "confidence": 0.98,
+      "impact": "Do not treat this branch as missing all health-helper prerequisites. `uptime_seconds()` and `aggregate_component_status()` already exist here; only the per-component helper seams are still absent."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Use the existing engine version as the temporary `version` field for `/v1/health` until the repo adds a dedicated service or API version constant."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "No child task is needed. The remaining decisions are local to `backend/server.py`, the checked-in `.fleet` plans, and the existing backend tests already present in this worktree."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
