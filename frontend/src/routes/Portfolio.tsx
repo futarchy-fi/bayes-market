@@ -39,23 +39,30 @@ export default function Portfolio() {
 
   const exposure = exposureQuery.data?.account.exposure;
   const risk = riskQuery.data?.account.risk;
+  const hasExposure = exposure != null;
+  const hasRisk = risk != null;
   const exposureMissing = isAccountNotFoundError(exposureQuery.error);
   const riskMissing = isAccountNotFoundError(riskQuery.error);
+  const exposurePending = !hasExposure && exposureQuery.isPending;
+  const riskPending = !hasRisk && riskQuery.isPending;
   const exposureError = exposureQuery.error && !exposureMissing ? exposureQuery.error : null;
   const riskError = riskQuery.error && !riskMissing ? riskQuery.error : null;
+  const hasNoAccountData = !hasExposure && !hasRisk;
+  const waitingForMissingAccountCompanion = hasNoAccountData
+    && ((exposureMissing && riskPending) || (riskMissing && exposurePending));
   const positions = [...(exposure?.positions ?? [])].sort(
     (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
   );
 
-  if (!exposure && !risk && exposureQuery.isLoading && riskQuery.isLoading) {
+  if (hasNoAccountData && ((exposurePending && riskPending) || waitingForMissingAccountCompanion)) {
     return <LoadingPage />;
   }
 
-  if (!exposure && !risk && exposureMissing && riskMissing) {
+  if (hasNoAccountData && exposureMissing && riskMissing) {
     return <ErrorMessage message="Account not found or no positions yet." />;
   }
 
-  if (!exposure && !risk && (exposureError || riskError)) {
+  if (hasNoAccountData && (exposureError || riskError)) {
     return (
       <ErrorMessage
         message={getErrorMessage(exposureError ?? riskError, "Unable to load portfolio.")}
@@ -96,7 +103,7 @@ export default function Portfolio() {
 
       <div>
         <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--space-sm)" }}>Live Outcome Holdings</h2>
-        {exposureQuery.isLoading && !exposure ? (
+        {exposurePending ? (
           <span style={{ color: "var(--color-text-muted)" }}>Loading live holdings...</span>
         ) : exposureError ? (
           <ErrorMessage message={getErrorMessage(exposureError, "Unable to load live holdings.")} />
