@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Audit this child step against the pre-dispatch parent tree immediately before `b2cc10dd` (product-equivalent to `e1a91ec0`) instead of the current merged tip, because that is the last baseline where `/v1/accounts/{id}/positions` was already advertised from the service index but had not yet widened the matched account dispatcher.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Compare only against the current merged HEAD, which collapses the implementation diff to zero and hides any scope drift.",
+        "Use an earlier baseline before the service index advertised `/v1/accounts/{id}/positions`, which would mix route discovery work into the dispatcher-only audit."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep the owned product scope for this leaf in `backend/server.py` only: confirm the new route remains discoverable from `ACCOUNT_SERVICE_INDEX_ROUTES` and the shared account-read dispatcher handles it additively, while treating the already-landed `tests/test_bayes_market_api.py` updates as deferred or inherited spillover rather than work to expand here.",
+      "based_on": ["q2", "q5"],
+      "alternatives_rejected": [
+        "Broaden this leaf to own the service-index assertion move and direct `/positions` HTTP regression expansion in `tests/test_bayes_market_api.py`.",
+        "Ignore the test-file spillover and let it redefine this child step's scope."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Use the shared account-read contract as the acceptance bar for `/positions`: the matched `/v1/accounts/{id}/{resource}` branch, the shared GET-only `405 method_not_allowed` guard, the standard `{account, meta}` envelope, and the projection-local `404 account_not_found` behavior inherited from `ACCOUNT_EXPOSURE` must stay aligned with `/risk` and `/exposure`.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Allow `/positions` to diverge from the existing account-read dispatcher contract in method handling or error shape.",
+        "Audit deeper row-shape details here instead of focusing on the observable shared route contract."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Treat `get_account_positions(account_id)` as the permitted route-surface seam for this audit, but explicitly classify `serialize_account_position(...)` and `serialize_account_positions(...)` as later-phase serializer work if the diff still depends on them so this leaf can stay scoped to plumbing rather than row shaping.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Accept the serializer helpers as unqualified route plumbing and blur the phase boundary.",
+        "Remove the dedicated getter seam and dispatch `/positions` through another account getter."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Diff `backend/server.py` against the pre-dispatch baseline (`b2cc10dd^` or `e1a91ec0`) and isolate the hunks that changed `ACCOUNT_SERVICE_INDEX_ROUTES`, `get_account_positions(account_id)`, and the `/v1/accounts/{id}/...` branch in `route_request(...)` so the audit starts from the last meaningful parent state.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Check the route-surface contract in those hunks: `/v1/accounts/{id}/positions` must remain listed in the service index, the matched account-read predicate must include `positions`, and non-GET requests must still resolve through the existing shared `405 method_not_allowed` guard before dispatch.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Review the `positions` dispatch target in `backend/server.py` and separate the thin `get_account_positions(account_id)` `{account, meta}` seam and `ACCOUNT_EXPOSURE`-backed `404` lifecycle from deeper serializer helpers so any row-shaping logic can be identified as out of scope for this child step.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "If the audit shows scope drift inside `backend/server.py`, trim the implementation back to additive route-surface plumbing only while leaving `/risk` and `/exposure` behavior untouched and avoiding new ownership of `tests/test_bayes_market_api.py` or broader `/positions` HTTP regressions in this leaf.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Re-check the final diff to confirm the child step now reads as route-surface plumbing only: service-index discovery is intact, all account reads still share one dispatcher contract, and positions serializer or regression expansion remains visibly deferred to later phases.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
