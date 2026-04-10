@@ -1,0 +1,139 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use dedicated HTTP coverage for all five protected POST routes. The protected write surface is hard-coded twice, once in `resolve_write_route_category(...)` and again in `route_request(...)`, so a route-inventory assertion by itself would not prove that each route actually traverses the same enforcement and header seams. An inventory assertion can be a supplement, but the route-breadth audit should hit `POST /v1/markets`, `POST /v1/markets/{id}/resolve`, `POST /v1/markets/{id}/comments`, `POST /v1/markets/{id}/orders/probability-edit`, and `POST /v1/markets/{id}/orders/event-trade` directly.",
+      "confidence": 0.93,
+      "evidence": [
+        "backend/server.py:384",
+        "backend/server.py:398",
+        "backend/server.py:400",
+        "backend/server.py:402",
+        "backend/server.py:3795",
+        "backend/server.py:3863",
+        "backend/server.py:3875",
+        "backend/server.py:3902",
+        "backend/server.py:3929",
+        "backend/server.py:722",
+        "backend/server.py:727",
+        "backend/server.py:730",
+        "backend/server.py:733",
+        "tests/test_bayes_market_api.py:6106",
+        "tests/test_bayes_market_api.py:6252",
+        "tests/test_bayes_market_api.py:6372",
+        "tests/test_bayes_market_api.py:6391"
+      ],
+      "uncertainty": "A smaller subset could still detect a gross regression, but it would not fully prove the all-five route-breadth claim in the task title.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The primary verification seam should be live HTTP tests through `BayesHandler.handle_api()` in `BayesMarketApiAuthRateLimitTests`. That is the only place where `_enforce_write_controls()` runs before `route_request(...)` and the only place where quota headers are attached after a successful routed response or the `rate_limit_exceeded` error branch. Lower-level unit tests are still useful for parsing edge cases, but they cannot prove the end-to-end pre-routing and post-routing seam the task is asking about.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:4008",
+        "backend/server.py:4013",
+        "backend/server.py:4035",
+        "backend/server.py:4040",
+        "backend/server.py:4043",
+        "backend/server.py:4046",
+        "backend/server.py:4049",
+        "tests/test_bayes_market_api.py:5955",
+        "tests/test_bayes_market_api.py:6059",
+        "tests/test_bayes_market_api.py:6410"
+      ],
+      "uncertainty": "None in the current code shape; the named seam only exists at the HTTP handler layer.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "For all five protected POST routes, pin at least two behavioral outcomes: a successful 201 response with `X-RateLimit-*` headers when rate limiting is enabled and a valid agent id is present, and a 401 agent-id failure with no quota headers when agent id enforcement rejects the request. Keep at least one explicit 429 contract test asserting both `Retry-After` and quota headers, but it can stay representative rather than duplicated across all five routes because rate limiting is enforced centrally before routing and the 429 header branch lives only in `handle_api()`.",
+      "confidence": 0.79,
+      "evidence": [
+        "backend/server.py:4008",
+        "backend/server.py:4013",
+        "backend/server.py:4035",
+        "backend/server.py:4043",
+        "backend/server.py:4046",
+        "backend/server.py:4049",
+        "backend/server.py:492",
+        "backend/server.py:512",
+        "tests/test_bayes_market_api.py:6106",
+        "tests/test_bayes_market_api.py:6185",
+        "tests/test_bayes_market_api.py:6252",
+        "tests/test_bayes_market_api.py:6302"
+      ],
+      "uncertainty": "The only design choice left is whether to repeat the 429 case on every route; the codebase itself does not require that duplication because the 429 path is centralized.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "The minimal valid comment fixture is an active market such as `m1` plus a small JSON body with `accountId` and `body`, for example `{\"accountId\": \"acct_http_comment\", \"body\": \"hello\"}`. `idempotencyKey` is optional and not needed just to reach the shared auth/rate-limit path. Adding a reusable `comment_post_with_headers(...)` helper next to the existing `probability_edit_with_headers(...)` and `market_resolution_with_headers(...)` helpers is the best fit for the current auth/rate-limit test style.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:3360",
+        "backend/server.py:3365",
+        "backend/server.py:3380",
+        "backend/server.py:3437",
+        "backend/server.py:3443",
+        "backend/server.py:3461",
+        "backend/server.py:3486",
+        "backend/server.py:3502",
+        "backend/server.py:3863",
+        "tests/test_bayes_market_api.py:6027",
+        "tests/test_bayes_market_api.py:6042"
+      ],
+      "uncertainty": "None for the minimal happy-path fixture; additional plumbing is only needed if the next step also wants idempotency or inactive-market variants for comments.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Behavior-level HTTP tests should be the required proof. They exercise the actual shared seam in `handle_api()` and verify the externally visible contract. A separate implementation-level invariant is optional hardening, not a prerequisite, because the code audit already shows that `rate_limit_headers(...)` is only consumed in `handle_api()`, route handlers return `(payload, status)` tuples, and JSON header emission happens in `send_json()` rather than inside route-local code.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:3779",
+        "backend/server.py:3867",
+        "backend/server.py:3885",
+        "backend/server.py:3912",
+        "backend/server.py:3939",
+        "backend/server.py:3990",
+        "backend/server.py:4002",
+        "backend/server.py:4035",
+        "backend/server.py:4043",
+        "backend/server.py:4049",
+        "backend/server.py:492"
+      ],
+      "uncertainty": "A maintainer could still choose to add a grep-style invariant test to catch future drift, but the current codebase does not need that to confirm the present structure.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Both `resolve_write_route_category(...)` and `route_request(...)` enumerate the same five protected POST routes today, and unsupported POST paths still fall through to router errors without quota headers. If a new protected write route is added later, the audit and tests must expand with it."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "For JSON responses, `handle_api()` decides `extra_headers` and `send_json()` emits them. Route handlers do not own header writing, so the post-routing header seam is singular today."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.88,
+      "impact": "The present code already centralizes write enforcement and quota header emission. The obvious gap is route breadth in `BayesMarketApiAuthRateLimitTests`, not a clear bug in `backend/server.py`."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "A comment post only needs an active market plus non-blank `accountId` and `body`. That keeps the missing comment-route coverage easy to add without extra fixture setup."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

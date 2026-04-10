@@ -1,0 +1,138 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Count step 5 against a narrower targeted slice, not the whole `BayesMarketApiAuthRateLimitTests` class. The recorded `u44` plans keep the required proof to: the two all-five-route breadth sentinels once they land (success with enabled limiter, and missing-agent failure), the existing representative ProbabilityEdit quota tests, the unsupported POST negative control, and a small replay/rejection subset that proves the preserved pre-routing quota order. In practice, the current codebase already freezes that focused shape in the step-4 validation's 14-test `pytest -k` slice; once the new breadth tests exist, they should be added to that slice rather than replacing it with a rerun of the full class.",
+      "confidence": 0.84,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:35",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:57",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-2/plan.json:15",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-2/plan.json:62",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-4/plan.json:15",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-4/plan.json:57",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-4/validation.json:12",
+        "tests/test_bayes_market_api.py:6302",
+        "tests/test_bayes_market_api.py:6350",
+        "tests/test_bayes_market_api.py:6426",
+        "tests/test_bayes_market_api.py:6892",
+        "tests/test_bayes_market_api.py:7172",
+        "tests/test_bayes_market_api.py:7260",
+        "tests/test_bayes_market_api.py:7334"
+      ],
+      "uncertainty": "The exact node ids of the two missing breadth tests are not yet fixed in this checkout because those tests still have not landed, so the final `-k` expression must substitute their eventual names.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Treat the missing breadth tests as a blocker on claiming the breadth gap is closed, and leave `backend/server.py` untouched. The branch plans consistently say to patch backend code only if the new breadth coverage exposes a shared-path mismatch. If that prerequisite still has not arrived, step 5 should run the pre-existing focused auth/rate-limit plus replay/rejection slice as baseline evidence, report that the breadth prerequisite never landed in this checkout, and stop short of any backend change.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-1/plan.json:26",
+        ".fleet/tasks/bayes-market-u44-execute-step-1/plan.json:68",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:15",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:67",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-3/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-4/validation.json:4",
+        "tests/test_bayes_market_api.py:6027",
+        "tests/test_bayes_market_api.py:6042",
+        "tests/test_bayes_market_api.py:6252",
+        "tests/test_bayes_market_api.py:6372",
+        "tests/test_bayes_market_api.py:6391"
+      ],
+      "uncertainty": "This answer does not resolve who should add the missing breadth tests on a later execution branch; it only resolves that their absence is not a reason to mutate `backend/server.py` here.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Sufficient proof that no backend change was needed is: the route-breadth tests pass with only test-side additions or updates. If those tests fail, the sufficient backend fix is one targeted shared-path patch inside `resolve_write_route_category(...)`, `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `BayesHandler.handle_api()`, or `rate_limit_headers(...)`, while the route-local handlers stay unchanged and the representative replay/rejection slice still passes. The current audit still shows one centralized protected-write seam, so a route-local patch would be overreach unless a new failing test disproves that structure.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-1/plan.json:26",
+        ".fleet/tasks/bayes-market-u44-execute-step-1/plan.json:58",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-2/plan.json:5",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-2/plan.json:67",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-4/plan.json:35",
+        "backend/server.py:384",
+        "backend/server.py:418",
+        "backend/server.py:3779",
+        "backend/server.py:4008",
+        "backend/server.py:4035"
+      ],
+      "uncertainty": "A future failing breadth test could still reveal a currently invisible special case, but nothing in the live router or handler path points to a route-local exception today.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. Closing the breadth gap requires all five protected POST routes to prove the shared success-header contract under an enabled limiter: `POST /v1/markets`, `POST /v1/markets/{id}/comments`, `POST /v1/markets/{id}/resolve`, `POST /v1/markets/{id}/orders/probability-edit`, and `POST /v1/markets/{id}/orders/event-trade` must each return `201` with the shared `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `X-RateLimit-Policy` headers when called with a valid Bayes agent id. That includes replacing the current resolve-success no-header expectation, which is only correct today because the existing resolve test leaves rate limiting disabled.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:25",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-1/plan.json:35",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-2/plan.json:15",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-2/plan.json:25",
+        "backend/server.py:384",
+        "backend/server.py:398",
+        "backend/server.py:400",
+        "backend/server.py:402",
+        "backend/server.py:4042",
+        "tests/test_bayes_market_api.py:6252",
+        "tests/test_bayes_market_api.py:6299"
+      ],
+      "uncertainty": "The only unknown is the eventual helper/test naming for comment-post and event-trade, not the required route inventory or the success-header contract itself.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Keep the acceptable diff scope to `backend/server.py`, `tests/test_bayes_market_api.py`, and this task's `.fleet/tasks/bayes-market-u44-execute-step-1-execute-step-5/*` artifacts. The prior `u44` plans consistently constrain execution to test additions in `tests/test_bayes_market_api.py` plus, only if required, a shared-path backend fix in `backend/server.py`; no other backend-side files are implicated by the current classifier/router/header audit.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-1/plan.json:58",
+        ".fleet/tasks/bayes-market-u44-execute-step-1/plan.json:68",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-2/plan.json:67",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-2/plan.json:72",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-4/plan.json:35",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-4/validation.json:4",
+        "backend/server.py:4008",
+        "tests/test_bayes_market_api.py:5929"
+      ],
+      "uncertainty": "If a later failure somehow proves the shared seam lives outside `backend/server.py`, that would change the scope, but the present audit does not expose any such file.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The protected write surface is still exactly the five POST routes recognized by `resolve_write_route_category(...)`, so route-breadth verification can stay confined to those endpoints."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Quota-header emission remains centralized in `handle_api()` plus `send_json()`, with `rate_limit_headers(...)` used only for successful responses and `429 rate_limit_exceeded`, so a route-local header bug is not the current risk."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "This checkout still lacks the all-routes breadth coverage: the auth/rate-limit class has ProbabilityEdit-centric helpers, no dedicated comment-post or event-trade helper, and the current resolve-success auth test still expects no quota headers."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "If a bug appears, the most defensible fix boundary is still the shared classifier or HTTP adapter seam in `backend/server.py`, not route-local business handlers."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "The existing ProbabilityEdit HTTP tests remain the canonical proof for quota decrement math, `429` plus `Retry-After`, and per-agent isolation, so the missing work is route breadth plus a few quota-order sentinels rather than cloning the entire limiter matrix onto every protected route."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

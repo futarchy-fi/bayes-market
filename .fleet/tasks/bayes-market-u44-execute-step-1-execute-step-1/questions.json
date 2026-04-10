@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the route-breadth audit be proved with dedicated HTTP coverage for all five protected POST routes (`POST /v1/markets`, `POST /v1/markets/{id}/resolve`, `POST /v1/markets/{id}/comments`, `POST /v1/markets/{id}/orders/probability-edit`, and `POST /v1/markets/{id}/orders/event-trade`), or is a smaller representative subset plus one route-inventory assertion acceptable?",
+      "category": "requirements",
+      "why_it_matters": "The current auth/rate-limit suite is heavily concentrated on `probability-edit`, with only limited create-market and resolve coverage and no apparent comment-route coverage, so the expected breadth determines how much new testing is needed before touching backend code."
+    },
+    {
+      "id": "q2",
+      "question": "Which verification seam is expected to carry the new assertions: live HTTP tests through `BayesHandler.handle_api()` in `BayesMarketApiAuthRateLimitTests`, or lower-level unit tests that call `resolve_write_route_category(...)`, `resolve_write_request_agent(...)`, and `_enforce_write_controls()` directly?",
+      "category": "design",
+      "why_it_matters": "The repo already has an HTTP harness and header assertions in `BayesMarketApiAuthRateLimitTests`, but the task is explicitly about one pre-routing enforcement path and one post-routing header-emission seam, so the intended test layer affects both clarity and maintenance cost."
+    },
+    {
+      "id": "q3",
+      "question": "For each protected POST route, what exact response shapes need to be pinned to prove the shared header-emission seam: successful 2xx responses with quota headers when rate limiting is enabled, 401 agent-id failures with no quota headers, 429 responses with both `Retry-After` and quota headers, or only a narrower subset of those cases?",
+      "category": "requirements",
+      "why_it_matters": "Today `handle_api()` emits `rate_limit_headers(...)` only after successful routing and on `rate_limit_exceeded` errors, so the answer determines whether the new route-breadth tests are full contract tests for every route or only a lighter regression net around one or two outcomes."
+    },
+    {
+      "id": "q4",
+      "question": "What is the preferred minimal valid fixture for the currently unexercised `POST /v1/markets/{id}/comments` route in the auth/rate-limit suite, and should this step add a reusable helper for it alongside the existing create-market, resolve, and probability-edit helpers?",
+      "category": "codebase",
+      "why_it_matters": "The shared-path audit is easiest to prove with real HTTP requests, but the current helper set in `tests/test_bayes_market_api.py` does not appear to include a comment-post convenience wrapper, so fixture shape and placement need to be chosen before expanding coverage."
+    },
+    {
+      "id": "q5",
+      "question": "Should the 'no route-local quota-header writes' requirement be enforced purely through behavior-level HTTP tests, or is an implementation-level invariant also expected that proves `rate_limit_headers(...)` is only consumed from `handle_api()` and nowhere in route-local code?",
+      "category": "design",
+      "why_it_matters": "A source-level invariant would catch future direct header writes immediately, but it would also couple tests to internal structure; behavior-only tests are more resilient but may miss a duplicated header path until it changes externally."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The protected write surface is frozen to the five POST routes recognized today by both `resolve_write_route_category(...)` and `route_request(...)`, and unsupported POST routes should continue to bypass write controls and quota-header emission.",
+      "confidence": 0.98,
+      "if_wrong": "The audit would need to expand to additional routes or methods, and the planned route-breadth tests would be too narrow."
+    },
+    {
+      "id": "a2",
+      "assumption": "For JSON API responses, `BayesHandler.handle_api()` plus `send_json()` are intended to remain the only post-routing header-emission seam, while route handlers keep returning `(payload, status)` and never write rate-limit headers directly.",
+      "confidence": 0.97,
+      "if_wrong": "The task is not just a test expansion; it would require structural backend changes to remove competing header-write paths."
+    },
+    {
+      "id": "a3",
+      "assumption": "The correct first move is to extend `BayesMarketApiAuthRateLimitTests` with broader HTTP coverage and leave `backend/server.py` unchanged unless those new tests expose a real routing or header-seam gap.",
+      "confidence": 0.94,
+      "if_wrong": "The next phase may need lower-level unit tests or direct backend refactoring immediately instead of a test-first confirmation pass."
+    },
+    {
+      "id": "a4",
+      "assumption": "A minimal valid comment-post request can be exercised with a small JSON body containing `accountId` and `body`, which is enough to reach the shared auth/rate-limit path without introducing unrelated domain setup.",
+      "confidence": 0.87,
+      "if_wrong": "The comment route will need extra fixture plumbing before it can participate in the route-breadth tests."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

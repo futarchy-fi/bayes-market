@@ -1,0 +1,75 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep the protected-write scope pinned to the exact five POST routes recognized by `resolve_write_route_category(...)`: create market, post comment, resolve market, probability edit, and event trade. Unsupported POST paths stay outside this step's header-emission contract.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Treat only the order routes as protected writes for this backend audit.",
+        "Broaden the contract to unsupported POST paths that never match the shared write-route classifier."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Preserve `BayesHandler.handle_api()` plus `rate_limit_headers(...)` as the only quota-header emission seam for protected POSTs: `_enforce_write_controls()` keeps rate-limit enforcement pre-routing, success responses keep attaching the full `X-RateLimit-*` set including `X-RateLimit-Policy`, and failure-path headers stay limited to `429 rate_limit_exceeded` while disabled-limiter and missing-agent cases continue to omit quota headers.",
+      "based_on": ["q2", "q4", "q5"],
+      "alternatives_rejected": [
+        "Add route-local `X-RateLimit-*` header plumbing inside individual write handlers.",
+        "Broaden quota headers to all protected-write 400/409 application errors.",
+        "Narrow the contract by dropping `X-RateLimit-Policy`."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Treat this step as an audit-first backend checkpoint: only patch `backend/server.py` if the new route-breadth tests prove that one of the five protected POST routes bypasses the shared classifier or shared response adapter. If a patch is needed, keep it inside the shared path rather than specializing individual routes.",
+      "based_on": ["q2", "q6"],
+      "alternatives_rejected": [
+        "Proactively refactor backend write handlers before any test demonstrates a gap.",
+        "Accept route-specific header fixes to satisfy breadth tests faster."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Preserve the existing quota-accounting order where protected POSTs consume quota before route-specific idempotency replay or terminal rejection logic. This step should not change replay or rejection semantics unless a shared-path bug blocks the new breadth coverage.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Special-case idempotent replays so they avoid quota consumption.",
+        "Delay quota accounting until after route-specific acceptance checks."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit `backend/server.py` around `resolve_write_route_category(...)`, `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `handle_api()`, and `rate_limit_headers(...)` to confirm that all five protected POST routes share one pre-routing enforcement path and one post-routing header-emission seam, with no route-local quota-header writes.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Cross-check the audit against the route-breadth test intent so the only backend gaps worth fixing are shared-path misses such as misclassified protected routes, a protected POST code path that skips `handle_api()`, or incorrect shared header assembly for success and `429` responses.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "If the new breadth tests expose one of those shared-path gaps, patch only `backend/server.py` in the shared classifier or adapter path, while keeping unsupported POSTs outside scope, preserving `X-RateLimit-Policy`, and not broadening header emission to non-`429` application errors.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Verify that any backend patch still preserves the current quota-accounting order from `_enforce_write_controls()` through route-specific idempotency or terminal rejection logic, and that disabled-limiter or missing-agent cases continue to produce no quota headers.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Run the focused backend auth/rate-limit breadth tests once they are available in this checkout, confirm whether the audit required no backend change or that the shared-path patch is sufficient, then review the diff so this step remains scoped to backend code only.",
+      "depends_on": [3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

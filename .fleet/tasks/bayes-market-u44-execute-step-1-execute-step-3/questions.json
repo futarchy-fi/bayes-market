@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What concrete failing route-breadth case, if any, is expected to justify a backend patch in this checkout: a protected POST route missing success `X-RateLimit-*` headers, a protected POST route failing to reject missing agent ids before routing, or a mismatch where one of the five protected POSTs is not covered by `resolve_write_route_category(...)`?",
+      "category": "requirements",
+      "why_it_matters": "The current audit of `backend/server.py` shows one shared enforcement and header-emission seam, and this branch does not yet show the new breadth tests, so step 3 should not guess at a backend change without a precise shared-path failure."
+    },
+    {
+      "id": "q2",
+      "question": "Should the protected POST surface stay frozen to exactly the five classifier-matched routes: `POST /v1/markets`, `POST /v1/markets/{id}/resolve`, `POST /v1/markets/{id}/comments`, `POST /v1/markets/{id}/orders/probability-edit`, and `POST /v1/markets/{id}/orders/event-trade`, with unsupported POSTs such as `/v1/orders/probability-edit` remaining outside auth, rate limiting, and quota-header emission?",
+      "category": "requirements",
+      "why_it_matters": "If that boundary moves, a step-3 'fix' could accidentally broaden write controls or headers to routes the parent plan explicitly keeps out of scope."
+    },
+    {
+      "id": "q3",
+      "question": "If a backend fix is required, must it stay inside the shared classifier or adapter path (`resolve_write_route_category(...)`, `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `BayesHandler.handle_api()`, or `rate_limit_headers(...)`) instead of adding route-local header logic inside `create_market(...)`, `handle_comment_post(...)`, `handle_probability_edit(...)`, `handle_event_trade(...)`, or `handle_market_resolution(...)`?",
+      "category": "design",
+      "why_it_matters": "The task description narrows backend work to shared-path gaps, so this determines whether a failure should be fixed centrally or treated as evidence that the tests, not the server, are drifting."
+    },
+    {
+      "id": "q4",
+      "question": "Should successful protected POST responses continue to emit the full shared quota-header set from `rate_limit_headers(...)`, including `X-RateLimit-Policy`, rather than any route-specific subset or alternate header builder?",
+      "category": "requirements",
+      "why_it_matters": "Preserving `X-RateLimit-Policy` and one shared header builder is an explicit part of the contract for this step, so any patch needs that invariant spelled out up front."
+    },
+    {
+      "id": "q5",
+      "question": "Must protected POST application errors other than `429 rate_limit_exceeded` remain free of `X-RateLimit-*` headers even if `_enforce_write_controls()` has already accepted an agent id and consumed quota before route-specific validation, replay, or rejection logic runs?",
+      "category": "requirements",
+      "why_it_matters": "This is the main guardrail against accidentally broadening header emission while repairing a shared-path gap, especially for `400` and `409` responses."
+    },
+    {
+      "id": "q6",
+      "question": "Is the older HTTP expectation that a successful `POST /v1/markets/{id}/resolve` omits quota headers now definitively stale, or is market resolve supposed to remain an admin-write exception despite being classified as protected and currently flowing through the shared success-header branch in `BayesHandler.handle_api()`?",
+      "category": "codebase",
+      "why_it_matters": "Resolve success is the one visible place where existing tests and the audited shared-path behavior appear to diverge, so step 3 needs to know whether that is stale test coverage or a real contract exception."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "All POST requests handled by the server still flow through `BayesHandler.do_POST()` into `BayesHandler.handle_api(\"POST\")`, and `send_json()` remains the only shared point that actually emits response headers.",
+      "confidence": 0.99,
+      "if_wrong": "A protected POST path could bypass the shared adapter entirely, which would justify a backend patch even if the classifier itself is correct."
+    },
+    {
+      "id": "a2",
+      "assumption": "`rate_limit_headers(...)` is only used from the success and `rate_limit_exceeded` branches inside `BayesHandler.handle_api()`, so the current backend does not intentionally emit quota headers for non-`429` application errors.",
+      "confidence": 0.99,
+      "if_wrong": "Step 3 would first need to remove or reconcile alternate header-emission call sites before a narrow shared-path fix is possible."
+    },
+    {
+      "id": "a3",
+      "assumption": "`resolve_write_route_category(...)` and `route_request(...)` currently agree on the same five protected POST routes, while unsupported POSTs remain outside write-control enforcement.",
+      "confidence": 0.97,
+      "if_wrong": "A classifier or router mismatch would be a genuine shared-path defect that this step should patch in `backend/server.py`."
+    },
+    {
+      "id": "a4",
+      "assumption": "This checkout does not yet contain the new all-routes breadth tests that would prove a shared-path failure, so backend changes should wait for a concrete failing case rather than being applied speculatively.",
+      "confidence": 0.86,
+      "if_wrong": "The next builder should run or inspect the existing breadth tests immediately, because there may already be a reproducible backend gap in this branch."
+    },
+    {
+      "id": "a5",
+      "assumption": "The likeliest discrepancy around this step is stale test expectation on resolve-success headers, not a server-side need to special-case admin-write routes or remove `X-RateLimit-Policy`.",
+      "confidence": 0.9,
+      "if_wrong": "The backend contract may need an explicit protected-route exception or a narrower success-header rule than the current shared adapter implements."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
