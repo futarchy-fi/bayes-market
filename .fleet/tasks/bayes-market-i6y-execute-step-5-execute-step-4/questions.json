@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Relative to `ff/Tbayes-market-i6y-execute-step-4`, `HEAD` currently shows only `.fleet/tasks/bayes-market-i6y-execute-step-5*` additions and no edits to `backend/server.py` or `tests/test_bayes_market_api.py`. Should this step therefore treat the review as an immediate reject or blocked state because there is no product diff to audit yet, or is another prerequisite merge expected before the scope check becomes meaningful?",
+      "category": "requirements",
+      "why_it_matters": "The requested review is supposed to confirm that a real `/positions` contract change stayed isolated. If no product-file delta exists, the correct next action is either to fail the step for missing execution or to wait for another branch, and those are materially different outcomes."
+    },
+    {
+      "id": "q2",
+      "question": "When the task says 'with only this task's `.fleet` files added alongside them', should that mean only `.fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-4/*` may be newly introduced by this leaf while the already merged `.fleet/tasks/bayes-market-i6y-execute-step-5/*` and `...execute-step-1..3/*` paths are accepted inherited context, or must the audit normalize those earlier artifact additions out of the reported diff?",
+      "category": "requirements",
+      "why_it_matters": "This branch already inherits earlier step-5 child-task artifact merges, so the scope gate needs a precise rule for distinguishing expected inherited `.fleet` history from new spillover created by this leaf."
+    },
+    {
+      "id": "q3",
+      "question": "What exact evidence should the step-4 review preserve in its artifact: a `git diff --name-status` inventory, a `--stat` summary, or a short patch-level explanation confirming that `backend/server.py` and `tests/test_bayes_market_api.py` are the only product-file deltas against `ff/Tbayes-market-i6y-execute-step-4`?",
+      "category": "design",
+      "why_it_matters": "Later validation depends on a durable audit trail instead of an implicit eyeball check, and the repository already uses `.fleet` artifacts to record execution reasoning."
+    },
+    {
+      "id": "q4",
+      "question": "If `backend/server.py` and `tests/test_bayes_market_api.py` do appear in the final diff, is a path-only scope check sufficient, or must the review also confirm that the touched code stays limited to the `/v1/accounts/{id}/positions` contract seam and its focused regression coverage rather than unrelated behavior in those same large files?",
+      "category": "design",
+      "why_it_matters": "Both files own a broad backend surface. A file-boundary-only audit could miss unrelated contract or behavior changes unless the intended review depth is explicit."
+    },
+    {
+      "id": "q5",
+      "question": "Should `ff/Tbayes-market-i6y-execute-step-4..HEAD` serve as both the final scope gate and the attribution baseline, or is a second diff needed to explain whether any surviving product-file changes came from this leaf versus the inherited step-5 child-task merge history?",
+      "category": "codebase",
+      "why_it_matters": "This execution line is merge-based. Without a clear attribution rule, the review could either over-credit inherited changes or under-report new scope creep."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This worktree already contains the merged step-5 child-task history, so `git diff ff/Tbayes-market-i6y-execute-step-4..HEAD` currently shows only `.fleet/tasks/bayes-market-i6y-execute-step-5*` additions and no product-file edits.",
+      "confidence": 0.99,
+      "if_wrong": "The questions would be framed around the wrong starting diff and could miss backend or test changes already present on the branch."
+    },
+    {
+      "id": "a2",
+      "assumption": "The intended product scope for a successful audit is still backend-only: `backend/server.py` and `tests/test_bayes_market_api.py`, because the `/positions` serializer and its focused regression coverage both live there today.",
+      "confidence": 0.98,
+      "if_wrong": "The later review would need to widen to additional product files, and the current file-boundary questions would be incomplete."
+    },
+    {
+      "id": "a3",
+      "assumption": "The phrase 'only this task's `.fleet` files' refers to `.fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-4/*`, not the previously merged step-5 parent or execute-step-1..3 artifacts already present in branch history.",
+      "confidence": 0.84,
+      "if_wrong": "The audit may need a different baseline or an explicit inherited-artifact exclusion rule before it can make a correct scope verdict."
+    },
+    {
+      "id": "a4",
+      "assumption": "This leaf is meant to produce a review artifact rather than reopen `backend/server.py` or `tests/test_bayes_market_api.py` itself unless a later phase explicitly changes the mandate.",
+      "confidence": 0.95,
+      "if_wrong": "A later execution phase might still need corrective product changes instead of only recording the audit result."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the branch ancestry, current diff contents, and relevant `/positions` contract surface are all visible locally in this checkout.",
+      "confidence": 0.99,
+      "if_wrong": "Another investigation task would be needed before the review can choose the right baseline or scope rule."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
