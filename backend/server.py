@@ -161,6 +161,7 @@ OG_TITLE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:title[\"'][^>
 OG_DESCRIPTION_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:description[\"'][^>]*>", re.IGNORECASE)
 OG_TYPE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:type[\"'][^>]*>", re.IGNORECASE)
 OG_URL_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:url[\"'][^>]*>", re.IGNORECASE)
+PROCESS_START_MONOTONIC = time.monotonic()
 
 MARKETS: dict[str, dict[str, Any]] = deepcopy(INITIAL_MARKETS)
 CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {}
@@ -700,6 +701,11 @@ def error_payload(code: str, message: str, **details: object) -> dict[str, Any]:
         },
         "meta": make_meta(),
     }
+
+
+def uptime_seconds() -> float:
+    """Return process uptime in seconds for the imported server module."""
+    return round(time.monotonic() - PROCESS_START_MONOTONIC, 3)
 
 
 def health_payload() -> dict[str, Any]:
