@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "For this leaf, should `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` be treated strictly as attribution-only secondary context, with the actual scope verdict still coming from `ff/Tbayes-market-u44-execute-step-2...HEAD`?",
+      "category": "requirements",
+      "why_it_matters": "Step 3 needs to explain where the inherited backend delta entered history without accidentally turning the secondary range into a second authoritative scope gate."
+    },
+    {
+      "id": "q2",
+      "question": "Within that secondary range, what exact `backend/server.py` change should the later execute record isolate: the route-suffix classification constants, the agent-id normalization helpers, or the whole shared protected-write refactor introduced by step 4?",
+      "category": "codebase",
+      "why_it_matters": "The execute record needs a precise summary of the inherited backend delta so later validation can see it is describing prior step-4 history rather than a new step-5 product change."
+    },
+    {
+      "id": "q3",
+      "question": "Which local evidence should control the explanation that the green focused rerun does not justify absorbing the inherited `backend/server.py` delta: the step-4 `changes_requested` validation, the step-5 focused rerun result, or both together?",
+      "category": "requirements",
+      "why_it_matters": "The justification for leaving backend cleanup out of this leaf has to cite the right artifact trail instead of implying that a passing rerun created permission for extra backend work."
+    },
+    {
+      "id": "q4",
+      "question": "When the focused `BayesMarketApiAuthRateLimitTests` class passes, should this leaf explicitly state that the rerun proves only preserved auth/rate-limit coverage still holds and does not retroactively justify refactoring `resolve_write_route_category(...)` or `resolve_write_request_agent(...)`?",
+      "category": "design",
+      "why_it_matters": "The main interpretive risk is overstating what the green rerun means and silently blessing backend cleanup that was never triggered by a failing preserved sentinel."
+    },
+    {
+      "id": "q5",
+      "question": "Does this execute-step-3 leaf stop at documenting the inherited `backend/server.py` objection for the later execute artifact, or is it expected to recommend a revert or follow-up cleanup task before the parent step can be considered complete?",
+      "category": "requirements",
+      "why_it_matters": "That boundary determines whether this leaf remains an attribution-only evidence step or turns into corrective planning for the inherited backend change."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "`ff/Tbayes-market-u44-execute-step-3` is the merge-base ancestor of `ff/Tbayes-market-u44-execute-step-4`, so that range cleanly isolates the step-4 additions.",
+      "confidence": 0.99,
+      "if_wrong": "The secondary diff could mix unrelated history and would stop being reliable for attributing the inherited backend delta."
+    },
+    {
+      "id": "a2",
+      "assumption": "In `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4`, `backend/server.py` is the only product file and the remaining paths are `bayes-market-u44` task artifacts.",
+      "confidence": 0.99,
+      "if_wrong": "The later execute record would need to explain more than one inherited product delta, which would materially widen this leaf's attribution scope."
+    },
+    {
+      "id": "a3",
+      "assumption": "The step-4 validation artifact is the controlling local record for why the inherited backend change remains objectionable: the preserved auth/rate-limit class passed and no failing sentinel justified touching `backend/server.py`.",
+      "confidence": 0.98,
+      "if_wrong": "This leaf would need fresh reproduction or another authoritative artifact before it could explain why the backend cleanup should not be absorbed."
+    },
+    {
+      "id": "a4",
+      "assumption": "The `backend/server.py` delta is best described as shared protected-write cleanup or refactoring, including route-suffix constants and agent-id normalization helpers, rather than as a narrowly reproduced bug fix.",
+      "confidence": 0.93,
+      "if_wrong": "The question set could understate a behavior-fixing backend change that would need a different explanation in the execute record."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the relevant git ranges, validation history, and `backend/server.py` seam are all available locally in this worktree.",
+      "confidence": 0.99,
+      "if_wrong": "A separate exploration task would be needed to recover the correct branch ancestry or justification trail before this leaf could plan the execute record safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
