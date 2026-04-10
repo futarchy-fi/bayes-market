@@ -1,0 +1,57 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "How should the new `include_resolved` flag interact with the existing `status` filter, especially `status=resolved`: should `status=resolved` implicitly include resolved markets, or must callers also pass `include_resolved=true` for that case?",
+      "category": "requirements",
+      "why_it_matters": "The backend already supports `status=resolved`, and the frontend Market List UI already exposes that status filter. Without a rule for contradictory combinations, the new default could make an existing filter impossible to use or produce surprising empty results."
+    },
+    {
+      "id": "q2",
+      "question": "What exact query-parameter contract should `include_resolved` follow: accepted literals (`true`/`false` only or broader truthy values), default/blank behavior, and duplicate-param rejection semantics?",
+      "category": "requirements",
+      "why_it_matters": "The `GET /v1/markets` parser in `backend/server.py` already enforces single-value query params and structured `invalid_query` errors for `status`, `sort`, and `q`. The new flag needs a matching contract so tests and callers know what is valid."
+    },
+    {
+      "id": "q3",
+      "question": "Should `include_resolved` become part of the public read-model metadata and shared frontend filter model, meaning `meta.filters`, `MarketListFilters`, search-param helpers, query keys, and API-client tests all grow a new field, or is this task intended to stay backend-only?",
+      "category": "codebase",
+      "why_it_matters": "Current tests freeze the exact `meta.filters` object for `GET /v1/markets`, and the frontend client/query-key code also freezes the exact list-filter shape. That boundary determines whether this is a localized backend patch or an end-to-end contract update."
+    },
+    {
+      "id": "q4",
+      "question": "Which default `useMarkets()` consumers should keep seeing resolved markets by explicitly opting in after the backend default changes: only the Market List page when the user requests them, or also routes like System, Analytics, Portfolio, the graph view, and assumption/trading helpers?",
+      "category": "design",
+      "why_it_matters": "Several frontend surfaces currently call `useMarkets()` with no filters, which today returns all three seeded markets including `m3`. Changing the backend default will silently change counts, dropdown options, and aggregate stats across those screens unless they are updated intentionally."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "For this task, a market is considered resolved strictly when `market[\"status\"] == \"resolved\"`; there is no separate archival or terminal-state flag on the list surface.",
+      "confidence": 0.99,
+      "if_wrong": "Filtering only on `status` would miss some markets that should be excluded or would exclude markets that are still meant to appear."
+    },
+    {
+      "id": "a2",
+      "assumption": "Current `GET /v1/markets` behavior intentionally includes resolved markets by default; the seeded contract returns `m1`, `m2`, and resolved `m3`, and backend tests freeze that count, order, and `meta.filters` shape.",
+      "confidence": 0.98,
+      "if_wrong": "The planned change would not actually be a behavior change, and some of the expected backend test updates would be unnecessary."
+    },
+    {
+      "id": "a3",
+      "assumption": "A backend-only default change will affect multiple frontend screens immediately because `useMarkets()` and `listMarkets()` currently send no flag and therefore rely on the server default.",
+      "confidence": 0.97,
+      "if_wrong": "The scope is smaller than it appears, and only the backend list handler/tests would need to change."
+    },
+    {
+      "id": "a4",
+      "assumption": "Implementation should stay localized to market-list query parsing/filtering plus corresponding tests unless q3 explicitly requires the shared frontend filter contract to expose `include_resolved`.",
+      "confidence": 0.86,
+      "if_wrong": "The work expands into shared frontend types, URL-state helpers, query keys, and route behavior rather than remaining a small server-side filter patch."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
