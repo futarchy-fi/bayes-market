@@ -4648,7 +4648,7 @@ class BayesMarketExposureProjectionTests(unittest.TestCase):
             },
         )
 
-    def test_get_account_exposure_serializes_lexically_sorted_positions_and_account_timestamp(self):
+    def test_get_account_exposure_serializes_lexically_sorted_positions_and_skips_malformed_rows(self):
         account_id = "acct_exposure_view"
         account_timestamp = "2026-04-09T12:30:00Z"
         server.ACCOUNT_EXPOSURE[account_id] = {
@@ -4681,6 +4681,12 @@ class BayesMarketExposureProjectionTests(unittest.TestCase):
                     "updatedAt": "2026-04-09T11:00:00Z",
                     "lastOrderId": "ord_1",
                     "lastCommandId": "cmd_1",
+                },
+                "broken": {
+                    "marketId": "m3",
+                    "netSize": 4.0,
+                    "lastTradePrice": 0.9,
+                    "updatedAt": "2026-04-09T07:00:00Z",
                 },
             },
         }

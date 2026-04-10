@@ -1608,26 +1608,10 @@ def sync_account_risk_state(order: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def serialize_account_exposure_position(position: dict[str, Any]) -> dict[str, Any] | None:
-    """Project one canonical exposure row into the public response shape."""
-    net_size = round_exposure_value(position.get("netSize"))
-    if net_size == 0.0:
-        return None
-
-    return {
-        "marketId": str(position["marketId"]),
-        "outcomeId": str(position["outcomeId"]),
-        "netSize": net_size,
-        "absSize": round_risk_value(abs(net_size)),
-        "lastTradePrice": round_exposure_value(position.get("lastTradePrice")),
-        "updatedAt": str(position["updatedAt"]),
-        "lastOrderId": position.get("lastOrderId"),
-        "lastCommandId": position.get("lastCommandId"),
-    }
-
-
-def serialize_account_position(position: dict[str, Any]) -> dict[str, Any] | None:
-    """Project one live position row into the minimal public positions shape."""
+def normalize_account_position_projection(
+    position: dict[str, Any],
+) -> tuple[str, str, float, float] | None:
+    """Normalize one stored exposure row for public exposure and positions views."""
     market_id = position.get("marketId")
     outcome_id = position.get("outcomeId")
     if market_id is None or outcome_id is None:
@@ -1637,11 +1621,45 @@ def serialize_account_position(position: dict[str, Any]) -> dict[str, Any] | Non
     if net_size == 0.0:
         return None
 
+    return (
+        str(market_id),
+        str(outcome_id),
+        net_size,
+        round_exposure_value(position.get("lastTradePrice")),
+    )
+
+
+def serialize_account_exposure_position(position: dict[str, Any]) -> dict[str, Any] | None:
+    """Project one canonical exposure row into the public response shape."""
+    normalized_position = normalize_account_position_projection(position)
+    if normalized_position is None:
+        return None
+
+    market_id, outcome_id, net_size, last_trade_price = normalized_position
     return {
-        "marketId": str(market_id),
-        "outcomeId": str(outcome_id),
+        "marketId": market_id,
+        "outcomeId": outcome_id,
         "netSize": net_size,
-        "lastTradePrice": round_exposure_value(position.get("lastTradePrice")),
+        "absSize": round_risk_value(abs(net_size)),
+        "lastTradePrice": last_trade_price,
+        "updatedAt": str(position["updatedAt"]),
+        "lastOrderId": position.get("lastOrderId"),
+        "lastCommandId": position.get("lastCommandId"),
+    }
+
+
+def serialize_account_position(position: dict[str, Any]) -> dict[str, Any] | None:
+    """Project one live position row into the minimal public positions shape."""
+    normalized_position = normalize_account_position_projection(position)
+    if normalized_position is None:
+        return None
+
+    market_id, outcome_id, net_size, last_trade_price = normalized_position
+    return {
+        "marketId": market_id,
+        "outcomeId": outcome_id,
+        "netSize": net_size,
+        "lastTradePrice": last_trade_price,
     }
 
 
@@ -1719,6 +1737,8 @@ def get_account_positions(account_id: str) -> tuple[dict[str, Any], int]:
 
     positions = serialize_account_positions(account)
     if not positions:
+        # Position existence is projection-local: once all live rows are pruned,
+        # the account disappears from this read model and resolves as 404 again.
         raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
 
     return {
