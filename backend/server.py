@@ -4197,7 +4197,7 @@ class BayesHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         """Serve API routes first, fall back to static frontend files."""
         path = normalize_path(urlparse(self.path).path)
-        if path.startswith("/v1/") or path in LEGACY_HEALTH_ROUTES:
+        if path.startswith("/v1/") or path in PUBLIC_HEALTH_ROUTES:
             self.handle_api("GET")
             return
         if path == "/" and "application/json" in (self.headers.get("Accept") or ""):
