@@ -1,0 +1,15 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.8,
+  "plan_adherence_notes": "Steps 1-4 were implemented in `backend/server.py` and covered by new tests: the `max_position_size` constant, `ACCOUNT_EXPOSURE` plus `reset_state()` wiring, exposure account/position builders, signed net-size math, EventTrade exposure syncing, and exposure serializers/getter. Step 5 was not completed: there is no market-scoped exposure cleanup helper, `resolve_market_command()` still only calls `settle_market_account_risk(...)`, and a direct state check after accepting an EventTrade then resolving that market leaves the stale exposure row in `ACCOUNT_EXPOSURE`.",
+  "research_quality": 0.89,
+  "question_completeness": 0.74,
+  "missed_questions": [
+    "Should market resolution in this step invoke the new exposure cleanup helper immediately, or is the branch only expected to expose the helper for later wiring?",
+    "What return/update contract should the market-scoped exposure cleanup helper have so callers can verify which accounts/positions were pruned and that account `updatedAt` values were refreshed?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "The branch is incomplete against the planned scope. The exposure primitives, serializers, and reset-state wiring are in place and the backend tests pass (`pytest -q tests/test_bayes_market_api.py` and `pytest -q tests/test_bayes_market_formula_schema.py tests/test_bayes_market_inference_module.py tests/test_bayes_market_lmsr.py`), but the planned market-resolution cleanup helper is missing. Resolved markets still leave stale live exposure rows in `ACCOUNT_EXPOSURE`, which contradicts plan step 5 and the research decision that resolved-market positions must be removed from the live exposure projection.",
+  "spawn_children": false,
+  "children": []
+}

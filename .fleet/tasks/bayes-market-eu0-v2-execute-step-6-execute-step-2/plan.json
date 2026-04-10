@@ -1,0 +1,53 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep this step as a narrow additive change in `frontend/src/__tests__/api-client.test.ts` by adding only a happy-path `getAccountExposure(accountId)` regression beside the existing wrapper tests, without expanding scope into exposure-specific `BayesApiError` assertions.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Add new exposure-specific non-OK coverage in the same step.",
+        "Create a separate test file or broader client-test reorganization for one wrapper assertion."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Freeze the full backend-shaped `AccountExposureResponse` envelope in the new mock response and result assertion, including `account.id`, `exposure.maxPositionSize`, `exposure.updatedAt`, every `positions[]` field, and `meta`, so the frontend client test doubles as a contract check against the existing serializer/types.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Assert only a representative subset of the exposure payload after checking the path.",
+        "Use an arbitrary frontend-only fixture that is merely TypeScript-valid."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Follow the existing simple wrapper-test style and assert the plain request path `/v1/accounts/a1/exposure`, leaving explicit path-encoding coverage out of this step even though the production client uses `encodeURIComponent(accountId)`.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Use an account ID that requires escaping to freeze encoding behavior in this same regression."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Inspect `frontend/src/__tests__/api-client.test.ts`, `frontend/src/lib/api/client.ts`, and `frontend/src/lib/api/types.ts` together so the new case imports `getAccountExposure` if needed, matches the existing mocked-fetch style, and uses the exact `AccountExposureResponse` field set already exposed by the client/types.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Extend `frontend/src/__tests__/api-client.test.ts` with one `getAccountExposure(\"a1\")` success test that resolves `mockFetch` with a backend-derived exposure fixture, asserts `fetch` was called with `/v1/accounts/a1/exposure`, and verifies the returned value preserves the full frozen response envelope consumed by the frontend.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Run the targeted frontend regression command `pnpm --dir frontend test -- src/__tests__/api-client.test.ts` (or the equivalent file-scoped Vitest invocation accepted by the script) and confirm the new wrapper coverage passes without widening unrelated scope.",
+      "depends_on": [2]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

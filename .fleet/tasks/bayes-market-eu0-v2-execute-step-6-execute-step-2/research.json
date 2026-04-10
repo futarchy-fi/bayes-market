@@ -1,0 +1,97 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "This step should stay narrow and add only the happy-path `getAccountExposure(accountId)` regression in `frontend/src/__tests__/api-client.test.ts`, not new exposure-specific `BayesApiError` coverage. The step-6 plan names only request-path and frozen success-shape coverage for this file, the suite already has one generic non-OK `BayesApiError` assertion, and `getAccountExposure(...)` reuses the same shared `request(...)` error path as every other wrapper. If the branch later wants to pin raw `404 account_not_found` semantics specifically for exposure, that would be additive scope beyond this targeted gap-closing step.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6-execute-step-2/questions.json:6",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6/plan.json:63",
+        "frontend/src/__tests__/api-client.test.ts:50",
+        "frontend/src/__tests__/api-client.test.ts:143",
+        "frontend/src/lib/api/client.ts:33",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:27"
+      ],
+      "uncertainty": "The task text does not explicitly forbid adding an exposure-specific failure case, so there is some judgment involved. The strongest codebase signal is that the planned step boundary names only success-path client coverage here.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The new test should pin the full `AccountExposureResponse` envelope, not a representative subset. The earlier frontend type work explicitly froze `AccountExposureResponse` as an exact mirror of the backend `{ account, meta }` contract, and the current task says to assert the frozen exposure response shape used by the frontend client/types. That points to asserting `account.id`, the full `account.exposure` object, every position-row field, and `meta` in one literal response rather than only checking a couple of fields after the path assertion.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6-execute-step-2/questions.json:12",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-1/plan.json:16",
+        "frontend/src/lib/api/types.ts:195",
+        "frontend/src/lib/api/types.ts:206",
+        "tests/test_bayes_market_api.py:4479"
+      ],
+      "uncertainty": "The test does not need to prove every backend invariant such as lexical sorting or zero-row pruning if it uses only one static position row, but it should still freeze the full response envelope that the frontend consumes.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Use a backend-derived fixture shape rather than an arbitrary frontend-only fixture. It does not have to be a byte-for-byte copy of one backend test payload, but the mocked body should be clearly based on the checked-in `/v1/accounts/{id}/exposure` contract examples so this regression doubles as a frontend/backend contract freeze. A fixture that is merely TypeScript-valid would be weaker and could accidentally codify a local shape that drifts from the serializer and route tests.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-1/plan.json:16",
+        "backend/server.py:1497",
+        "backend/server.py:1533",
+        "tests/test_bayes_market_api.py:4479",
+        "frontend/src/lib/api/types.ts:206",
+        "frontend/src/__tests__/Portfolio.test.tsx:51"
+      ],
+      "uncertainty": "The codebase does not require a literal copy from one exact backend test case. The important point is preserving the backend-shaped envelope and field set, not reusing identical sample values.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Follow the existing simple-wrapper test style and assert a plain account ID such as `/v1/accounts/a1/exposure`, rather than widening this step to freeze escaping behavior with a specially encoded ID. The implementation already uses `encodeURIComponent(accountId)`, but the neighboring wrapper tests in `api-client.test.ts` prove endpoint selection with plain IDs. The step-6 plan also scopes this file change to request-path plus frozen response-shape coverage, not dedicated encoding-contract tests.",
+      "confidence": 0.9,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6-execute-step-2/questions.json:24",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6/plan.json:63",
+        "frontend/src/__tests__/api-client.test.ts:42",
+        "frontend/src/__tests__/api-client.test.ts:50",
+        "frontend/src/lib/api/client.ts:169"
+      ],
+      "uncertainty": "A targeted encoding assertion would be defensible because the production client does encode path parameters. The codebase pattern and task scope still point to keeping this particular regression as a plain-ID wrapper test.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "This is coverage-only work. The production client and type surface for exposure already exist, so the step is not blocked on missing runtime plumbing."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The additive regression belongs in `frontend/src/__tests__/api-client.test.ts`, alongside the existing thin mocked-fetch wrapper tests for peer client helpers."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The canonical exposure payload to freeze is the backend-shaped `{ account: { id, exposure }, meta }` envelope with the full per-position field set already reflected in frontend types."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.93,
+      "impact": "The smallest correct patch is one success-path `getAccountExposure(...)` regression. New exposure-specific `BayesApiError` cases are not required to satisfy this step's stated gap."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed. The codebase and existing `.fleet` artifacts provide enough evidence to resolve the scope and fixture-shape questions directly."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

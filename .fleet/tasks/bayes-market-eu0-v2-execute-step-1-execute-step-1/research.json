@@ -1,0 +1,96 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use the literal lowercase identifier `max_position_size`, not `MAX_POSITION_SIZE`. `backend/server.py` does use uppercase names for existing module-level constants, but the parent feature plan, the step-1 plan, and this step's own task text all freeze the new symbol as `max_position_size`. There is no checked-in reference to an uppercase `MAX_POSITION_SIZE`, so following convention here would create avoidable churn against the already-written rollout artifacts.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:125",
+        "backend/server.py:128",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:6",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:66",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:6",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:63",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-1/questions.json:6"
+      ],
+      "uncertainty": "No live code or test imports the symbol yet, so the exact-name requirement is coming from the checked-in task and plan artifacts rather than from existing runtime references.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Use `100.0` as the default numeric value. The step-1 plan already freezes `max_position_size = 100.0`, and that matches the only existing global trading/risk control scale in `backend/server.py`, where `ACCOUNT_RISK_LIMIT = 100.0`. It also fits the current EventTrade fixture scale, whose default request size is `12.5`, so adopting `100.0` does not force immediate fixture churn.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:6",
+        "backend/server.py:125",
+        "docs/t557-unconditional-solvency-contract-freeze.md:27",
+        "tests/test_bayes_market_api.py:57"
+      ],
+      "uncertainty": "There is no pre-existing runtime position-limit constant in live code; the exact number is frozen by the rollout artifacts rather than by an older product contract.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Make the new exposure store account-keyed at the top level, mirroring `ACCOUNT_RISK`: `accountId -> exposure document`, with each account document owning its live position slices internally. The current backend's account read models are organized this way, and the step-1 plan explicitly calls for account and position builder helpers plus an additive `{account, meta}` exposure serializer. A single global composite-key map would fight those builder/serializer seams and make later account-level pruning and `404` account semantics less natural.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:176",
+        "backend/server.py:1053",
+        "backend/server.py:1092",
+        "backend/server.py:1258",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:17",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:28",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:17",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:39"
+      ],
+      "uncertainty": "The internal layout inside each account document is still flexible; later steps can use a nested map or other helper-friendly structure for `(marketId, outcomeId)` slices as long as the top-level store remains account keyed.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "After `reset_state()`, the new exposure store should be completely empty, with no bootstrap or reconstruction from existing read models, orders, events, or resolved fixtures. `reset_state()` already clears mutable in-memory projections and only repopulates `MARKETS` from `INITIAL_MARKETS`; `ACCOUNT_RISK` is merely cleared and later rebuilt lazily on accepted writes. The exposure plan follows that same projection lifecycle, and the historical structures remain history rather than reset-time seed sources.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:232",
+        "backend/server.py:235",
+        "backend/server.py:251",
+        "backend/server.py:1092",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:17",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:49",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:17",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:63"
+      ],
+      "uncertainty": "This assumes the rollout continues to treat exposure as a live projection only. If a later requirement asks for reset-time rebuilds from history, that would be a deliberate change in projection semantics rather than something implied by current code.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The new store should be additive beside `ACCOUNT_RISK`; this step does not need to change `/v1/accounts/{id}/risk` or the current service-index route list."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.78,
+      "impact": "The `100.0` value is correct, but naming should not be driven by uppercase precedent alone because the checked-in plan artifacts explicitly freeze the lowercase symbol `max_position_size`."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The store should start as an account-keyed in-memory dictionary cleared by `reset_state()`, which matches the planned builder and serializer seams for later steps."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Step 1 only needs state registration and clearing; it does not need bootstrap logic from `ORDERS`, `EVENTS`, or market fixtures."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

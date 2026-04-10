@@ -1,0 +1,121 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Expose `/v1/accounts/{id}/exposure` in `routes.accounts` using the same bare-path style as `/v1/accounts/{id}/risk`, not as a method-qualified `GET ...` entry. The current service index uses bare paths for GET-only resources and switches to method-qualified entries only when one path supports multiple methods. Step 3 should therefore append `\"/v1/accounts/{id}/exposure\"` without changing the existing account-route style contract.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:710",
+        "backend/server.py:716",
+        "backend/server.py:732",
+        "backend/server.py:3748",
+        "tests/test_bayes_market_api.py:430",
+        "tests/test_bayes_market_api.py:436"
+      ],
+      "uncertainty": "This assumes the repo is not about to do a separate global service-index normalization. Nothing in this checkout indicates that kind of style rewrite.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "If the checkout still lacks exposure cleanup on resolution, step 3 should absorb that production wiring in the same patch rather than stay route-and-test only. The parent plan already defines exposure as live state that is removed on market resolution, step 1 explicitly scoped reusable cleanup helpers, and step 3 explicitly asks for a market-resolution cleanup regression. Current validation artifacts also call the branch incomplete because resolved markets leave stale `ACCOUNT_EXPOSURE` rows, while `resolve_market_command(...)` still only invokes `settle_market_account_risk(...)`. There is no in-tree evidence that a prerequisite branch is guaranteed to land first.",
+      "confidence": 0.9,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:48",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:61",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:70",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:49",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:82",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/validation.json:4",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-5/plan.json:67",
+        "backend/server.py:3035",
+        "backend/server.py:3138"
+      ],
+      "uncertainty": "A separate prerequisite branch could exist outside this checkout, but nothing here provides a reliable dependency guarantee or a merged implementation to consume.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Step 3 should primarily assert the public `/v1/accounts/{id}/exposure` read contract after writes, not keep these behaviors pinned only through internal `ACCOUNT_EXPOSURE` checks. The getter and serializer seam is already in place, and the point of this step is to register and freeze the public route. Use direct route-level read-after-write assertions for buy/sell netting, replay stability, and resolution cleanup, then keep targeted domain-store assertions only where the public read cannot fully prove the invariant by itself, such as confirming that a limit breach created no command/event/idempotency side effects.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:27",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:70",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-4/validation.json:4",
+        "backend/server.py:1486",
+        "tests/test_bayes_market_api.py:3674",
+        "tests/test_bayes_market_api.py:3749",
+        "tests/test_bayes_market_api.py:4055",
+        "tests/test_bayes_market_api.py:4241"
+      ],
+      "uncertainty": "The exact balance between public-read assertions and lower-level state assertions is still a test-design choice, but leaving the new route covered only indirectly would miss the main contract this step introduces.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "The `404 account_not_found` regression should not stop at the plain never-traded account case. `get_account_exposure(...)` defines account existence strictly by the live exposure projection, so step 3 should pin at least one cross-read-model case where the account still exists elsewhere but has no live exposure document. The strongest minimal set is: a never-traded account, a risk-only account created through `/risk`-producing writes, and the market-resolution cleanup path that removes the final live exposure row and then makes `/exposure` return `404`.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/server.py:1486",
+        "backend/server.py:1493",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:16",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:27",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/research.json:32",
+        "tests/test_bayes_market_api.py:972",
+        "tests/test_bayes_market_api.py:4241"
+      ],
+      "uncertainty": "The risk-only route case is not already present as a dedicated exposure test in this checkout, so that recommendation is inferred from the getter's projection-local lookup semantics and the parent live-state plan.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "The regression gate should also add threaded HTTP assertions for `GET /v1/accounts/{id}/exposure`, but they can stay targeted. This repo already keeps both direct route/getter tests and HTTP contract tests for `/v1/accounts/{id}/risk`, and `BayesHandler` still adds a distinct HTTP translation layer around `route_request(...)`. The best fit is to add a small HTTP parity set such as happy-path read-after-write, `404 account_not_found`, and `405 method_not_allowed`, while keeping the more detailed netting, side-effect, replay, and cleanup proofs in the direct backend suite.",
+      "confidence": 0.79,
+      "evidence": [
+        "backend/server.py:3973",
+        "backend/server.py:4035",
+        "tests/test_bayes_market_api.py:5190",
+        "tests/test_bayes_market_api.py:5248",
+        "tests/test_bayes_market_api.py:7319",
+        "tests/test_bayes_market_api.py:7405",
+        "tests/test_bayes_market_api.py:7412"
+      ],
+      "uncertainty": "The task text does not explicitly require HTTP duplication of every exposure scenario, so the exact size of the HTTP slice is still a judgment call.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Use `get_account_exposure(account_id)` as the thin route seam, mirroring the existing `/risk` dispatch pattern instead of inventing a second adapter layer."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Keep `/v1/accounts/{id}/risk` unchanged and add `/v1/accounts/{id}/exposure` as a separate read-only route and service-index entry."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Pin `404 account_not_found` as exposure-projection-local semantics, including cases where the account still has `ACCOUNT_RISK` or other read-model state."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.92,
+      "impact": "Treat EventTrade netting, side-effect-free limit breaches, and replay stability as existing write-path behavior that step 3 should surface through the new exposure read route, not redesign."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.88,
+      "impact": "If exposure cleanup is still missing in this checkout, step 3 should backfill that wiring so the requested resolution-cleanup regression can land green."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

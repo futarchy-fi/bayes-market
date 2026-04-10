@@ -1,0 +1,80 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat step 5 as a named-test backend gate that spans the smallest exposure-specific slice across `BayesMarketApiUnitTests`, `BayesMarketEventTradeTests`, `BayesMarketExposureProjectionTests`, `BayesMarketApiConcurrencyTests`, and `BayesMarketApiIntegrationTests`, instead of rerunning the whole file or dropping either HTTP layer. The slice should cover the root service index, direct route `404`/`405`, risk-only and fully pruned `404`, buy/sell netting, idempotent replay, over-limit side effects, threaded HTTP parity, and HTTP resolution cleanup reads.",
+      "based_on": ["q1", "q6"],
+      "alternatives_rejected": [
+        "Rerun all of `tests/test_bayes_market_api.py` as the only step-5 gate.",
+        "Limit the gate to `BayesMarketEventTradeTests` and `BayesMarketExposureProjectionTests` only.",
+        "Treat the threaded HTTP class as the only transport-layer proof and drop the plain integration exposure assertions."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep `routes.accounts` frozen as the exact ordered bare-path list `[\"/v1/accounts/{id}/risk\", \"/v1/accounts/{id}/exposure\"]`, treating both membership and order as part of the public service-index contract.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Assert only unordered membership while leaving order unspecified.",
+        "Switch the account service-index entries to method-qualified strings such as `GET /v1/accounts/{id}/exposure`."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Treat only response-local `meta.timestamp` as intentionally dynamic during step 5 tightening. Keep `account.exposure` payloads and structured `404`/`405` `error.details` as exact-equality contracts, and keep parity-style HTTP assertions focused on the stable `account` body when separate reads naturally produce different timestamps.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Loosen the whole `meta` envelope or other payload fields beyond `meta.timestamp`.",
+        "Downgrade stable error details to partial assertions such as checking only `error.code`."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Preserve projection-local existence semantics for `/v1/accounts/{id}/exposure`: never-traded accounts, risk-only accounts, accounts fully pruned by offsetting sells, and accounts fully pruned by market resolution should all continue to return `404 account_not_found` rather than `200` with `positions: []`.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Treat any account present in another read model as existing for `/exposure`.",
+        "Return `200` with an empty exposure document after final-position cleanup."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Strengthen the over-limit EventTrade regression to assert that the public `/v1/accounts/{id}/exposure` read is unchanged before and after the rejected trade, so the side-effect-free contract is frozen at the route level in addition to the existing internal-state snapshot checks.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Treat the internal `COMMANDS`/`EVENTS`/`IDEMPOTENCY_KEYS`/`ACCOUNT_EXPOSURE` snapshot proof as sufficient on its own.",
+        "Move the limit-breach invariant entirely into transport-layer tests."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Run a focused named-test slice in `tests/test_bayes_market_api.py` covering `BayesMarketApiUnitTests::{test_root_route_returns_service_index,test_account_exposure_requires_known_account,test_account_exposure_route_returns_404_for_risk_only_account,test_account_exposure_route_is_method_not_allowed_for_post,test_market_resolution_prunes_last_live_exposure_and_exposure_route_returns_404}`, `BayesMarketEventTradeTests::{test_event_trade_exposure_route_reflects_accepted_buy_then_sell_netting,test_event_trade_position_limit_exceeded_is_side_effect_free_and_idempotency_key_remains_reusable,test_event_trade_replays_idempotent_submission}`, `BayesMarketExposureProjectionTests::{test_get_account_exposure_serializes_lexically_sorted_positions_and_account_timestamp,test_get_account_exposure_raises_404_for_missing_or_fully_pruned_projection,test_settle_market_account_exposure_prunes_resolved_market_rows_and_updates_survivors}`, `BayesMarketApiConcurrencyTests::{test_account_exposure_threaded_http_happy_path_matches_direct_route_after_event_trade,test_account_exposure_threaded_http_unknown_account_returns_structured_error,test_account_exposure_threaded_http_rejects_non_get_methods}`, and `BayesMarketApiIntegrationTests::{test_market_resolve_http_settles_account_exposure,test_account_exposure_http_unknown_account_returns_structured_error,test_account_exposure_http_rejects_non_get_methods}`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "If the focused slice exposes assertion drift, tighten `tests/test_bayes_market_api.py` around the intended public contract rather than widening production behavior: keep the exact ordered service-index list, exact `account.exposure` bodies, exact structured `404`/`405` details, and only dynamic `meta.timestamp` handling.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Extend the over-limit EventTrade regression to capture `/v1/accounts/{id}/exposure` before and after the rejected submission, proving that the public read surface remains unchanged while the existing internal immutability assertions continue to guard `COMMANDS`, `EVENTS`, `IDEMPOTENCY_KEYS`, and `ACCOUNT_EXPOSURE`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Re-run the same focused backend slice after any edits and confirm the final gate still freezes projection-local `404 account_not_found` semantics for risk-only, offset-sell-pruned, and resolution-pruned accounts across both direct and HTTP coverage.",
+      "depends_on": [2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

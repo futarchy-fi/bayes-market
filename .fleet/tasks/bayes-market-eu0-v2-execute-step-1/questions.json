@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact default numeric value should the new global `max_position_size` constant use in `backend/server.py`?",
+      "category": "requirements",
+      "why_it_matters": "Step 1 explicitly adds the constant, but the parent plan only fixes its enforcement semantics, not its value. The number affects backend tests, frontend copy, and whether existing EventTrade fixtures will need size adjustments later in the rollout."
+    },
+    {
+      "id": "q2",
+      "question": "When opposite-side EventTrades net a `(accountId, marketId, outcomeId)` position back to exactly zero, should the live exposure projection delete that row immediately or retain a zero-size position until market resolution or some later archival step?",
+      "category": "design",
+      "why_it_matters": "Step 1 needs account/position builders and signed-size helpers that define the steady-state shape of the in-memory projection. Zero-net retention versus deletion changes the projection lifecycle, the serializer behavior, and the cleanup work needed in later trade-sync code."
+    },
+    {
+      "id": "q3",
+      "question": "If resolution cleanup or zero-net deletion removes an account's final live EventTrade position, should `GET /v1/accounts/{id}/exposure` thereafter return `404 account_not_found` or `200` with an empty exposure document, including for accounts that still exist in other read models such as `/risk` or `/pnl`?",
+      "category": "requirements",
+      "why_it_matters": "The parent plan freezes `404` for never-traded accounts, but step 1 also introduces market-scoped cleanup helpers. Whether an empty live-exposure account is deleted or preserved determines the account builder lifecycle and the resolution-cleanup implementation."
+    },
+    {
+      "id": "q4",
+      "question": "What deterministic ordering should the flat `/v1/accounts/{id}/exposure` `positions` list use: lexical `(marketId, outcomeId)` order like existing read models, or recency order such as newest `updatedAt` first?",
+      "category": "design",
+      "why_it_matters": "Step 1 includes the serializers for the future exposure response. Without a fixed order, backend tests and the portfolio UI can drift or become flaky even if the underlying projection state is correct."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The parent-plan decision is already sufficient to freeze the signed-size math: buys add positive size, sells add negative size, and limit checks later compare `abs(resulting_net_size)` to `max_position_size` for one `(accountId, marketId, outcomeId)` slice.",
+      "confidence": 0.98,
+      "if_wrong": "The step-1 helper layer would encode the wrong core arithmetic, and step 2 validation plus exposure syncing would need a different position model."
+    },
+    {
+      "id": "a2",
+      "assumption": "The new live exposure projection should remain separate from `ACCOUNT_RISK` and the existing `/v1/accounts/{id}/risk` and `/v1/accounts/{id}/pnl` contracts.",
+      "confidence": 0.97,
+      "if_wrong": "Step 1 would need to reshape existing account documents rather than add dedicated exposure-state builders and serializers."
+    },
+    {
+      "id": "a3",
+      "assumption": "Market resolution should clean only the live exposure projection for that market and leave historical `ORDERS` and `EVENTS` untouched, mirroring the existing `settle_market_account_risk(...)` pattern.",
+      "confidence": 0.94,
+      "if_wrong": "The cleanup helper would need archival or replay-aware behavior instead of simple market-scoped live-state removal."
+    },
+    {
+      "id": "a4",
+      "assumption": "The future exposure route will follow the parent plan's additive envelope shape `{ \"account\": { \"id\": ..., \"exposure\": ... }, \"meta\": ... }`, so step 1 can safely build serializers toward that response even before routing lands in step 3.",
+      "confidence": 0.95,
+      "if_wrong": "The step-1 serializers would be targeting the wrong public contract and would need to be replaced once the route is added."
+    },
+    {
+      "id": "a5",
+      "assumption": "Existing EventTrade orders already persist all metadata needed for the exposure projection and read serializer: `targetOutcomeId`, `side`, `size`, `price`, `filledAt`, `id`, and `commandId`.",
+      "confidence": 0.99,
+      "if_wrong": "Step 1 would need extra persistence changes on the order path before the exposure model could be updated or serialized correctly."
+    },
+    {
+      "id": "a6",
+      "assumption": "If no stronger product requirement appears, lexical `(marketId, outcomeId)` ordering is the safest serializer fallback because current `/risk` and `/pnl` read models also expose deterministically sorted lists.",
+      "confidence": 0.79,
+      "if_wrong": "The exposure serializer will need recency-aware ordering logic and the tests/UI should be written around that different contract."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

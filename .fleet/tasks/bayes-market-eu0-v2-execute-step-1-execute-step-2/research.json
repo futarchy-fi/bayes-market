@@ -1,0 +1,115 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Store live EventTrade positions in a flat composite-key map keyed by `(marketId|outcomeId)`, for example `account[\"positions\"][\"m1|yes\"]`, not a nested `markets[marketId][outcomeId]` tree. The only checked-in `ACCOUNT_EXPOSURE` fixture already uses that shape, and the closest in-tree precedent for per-account multidimensional slices is the LMSR ledger's composite `slice_key`, not the market-only nesting used by `ACCOUNT_RISK[accountId][\"markets\"]`. That flat map also matches the planned flat, lexically sorted public `positions` list and makes market-scoped cleanup a simple filter/remove pass over one position dictionary.",
+      "confidence": 0.95,
+      "evidence": [
+        "tests/test_bayes_market_api.py:351",
+        "tests/test_bayes_market_api.py:353",
+        "backend/server.py:1127",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:28",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:39",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:50"
+      ],
+      "uncertainty": "There is not yet a live builder implementation, so the decision is inferred from the existing exposure fixture, the LMSR composite-key precedent, and the rollout plans rather than from a shipped exposure helper.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. Treat `ensure_account_exposure_state(...)` and any position ensure helper as mutation-only seams for accepted-trade sync and later cleanup, not as read helpers for pre-acceptance preview. The existing risk code already splits those roles: `ensure_account_risk_state(...)` materializes state for accepted writes, while `preview_account_min_asset(...)` reads a missing account as an implicit default without creating anything. The exposure rollout freezes the same rule: position-limit preview happens before command materialization and limit breaches must stay side-effect free, while `/exposure` should return `404` when no live document exists. So preview code should read missing exposure as zero via lookup semantics, not call `ensure_*`.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:1095",
+        "backend/server.py:1106",
+        "backend/server.py:1213",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:28",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:39",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:49",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:66",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:28"
+      ],
+      "uncertainty": "The helper names can still mirror the risk API, but the caller split must stay explicit; using `ensure_*` inside preview would silently create empty exposure documents and violate the planned `404` semantics.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Serialize derived values from canonical stored fields instead of persisting redundant `absSize` and account-level `maxPositionSize` inside the live projection. `max_position_size` is already a single module-level constant, the only checked-in exposure fixture stores only canonical per-position data (`marketId`, `outcomeId`, `netSize`), and the existing risk read model already derives account-level summary fields at read time through `build_capacity_indicators(...)`. The exposure builders should therefore persist only the mutable live-state facts needed to maintain a position and audit freshness (`netSize`, timestamps, ids, lastTradePrice`, etc.), while serializer helpers compute `absSize = abs(netSize)` and inject `maxPositionSize` from the constant.",
+      "confidence": 0.92,
+      "evidence": [
+        "backend/server.py:126",
+        "backend/server.py:1031",
+        "backend/server.py:1283",
+        "backend/server.py:2987",
+        "tests/test_bayes_market_api.py:351",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:39",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:78"
+      ],
+      "uncertainty": "The codebase does sometimes store derived values in other read models, such as market-level risk utilization, so this is a design fit rather than a universal project rule. The strongest exposure-specific signals still favor storing the minimal canonical projection and deriving presentation fields.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "The exposure account's `updatedAt` should mean the latest live-projection mutation, not only the latest accepted EventTrade. Existing risk settlement already updates `ACCOUNT_RISK[accountId][\"updatedAt\"]` when market resolution removes market-specific state, and the regression tests assert that `/risk` `updatedAt` changes after resolution even though no new trade was accepted. The exposure cleanup helper is explicitly planned to mirror that pattern, so surviving exposure accounts should advance `updatedAt` on resolution-driven position removal; if cleanup removes the final position and prunes the account, there is no document left to read afterward.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:1224",
+        "backend/server.py:2791",
+        "backend/server.py:2822",
+        "tests/test_bayes_market_api.py:5985",
+        "tests/test_bayes_market_api.py:5986",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:49",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/plan.json:50"
+      ],
+      "uncertainty": "There is not yet an exposure-specific cleanup test in the branch, so the exact exposure helper behavior is inferred from the settled risk contract and the exposure rollout plan rather than from a current assertion against `ACCOUNT_EXPOSURE`.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The implementation can add exposure builders beside `ACCOUNT_RISK` without reshaping `/risk`; the new helpers stay scoped to live EventTrade state only."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The top-level layout is already fixed as `ACCOUNT_EXPOSURE[accountId]`, so this step only needs to choose and implement the per-account position container and its helpers."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Signed netting per `(accountId, marketId, outcomeId)`, exact-zero deletion, and account pruning remain the right primitives for the builder layer and later sync math."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Serializer helpers can target the planned `{account, meta}` contract with an `account.exposure` block and a flat lexically sorted positions list."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Accepted EventTrade orders already carry the identifiers, timestamps, side, size, and price needed to build and later serialize live exposure positions."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.89,
+      "impact": "The exposure projection should store canonical mutable position facts and derive `absSize` and account-level `maxPositionSize` during serialization to avoid drift across netting and cleanup mutations."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Pre-acceptance position-limit preview should remain read-only and treat missing exposure as zero rather than materializing empty accounts through `ensure_*` helpers."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

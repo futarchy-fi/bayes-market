@@ -1,0 +1,104 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use a new dedicated `400` ApiError contract for the limit breach: `error.code = \"position_limit_exceeded\"` and `error.message = \"Trade would exceed max position size\"`. Do not reuse `invalid_event_trade`, because that code is already the bucket for payload-shape validation such as missing/invalid `size`, `side`, and route/formula mismatches. The boundary is strict on the six-decimal previewed net position: reject only when `abs(resultingNetSize) > max_position_size`, so a trade that lands exactly on `100.0` still passes.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:16",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:53",
+        "backend/server.py:126",
+        "backend/server.py:1201",
+        "backend/server.py:2165",
+        "backend/server.py:2218"
+      ],
+      "uncertainty": "No material uncertainty in the contract itself; the parent step-2 plan explicitly freezes the code, message, and strict boundary.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. Step 2 should rely on a dedicated read-only EventTrade preview helper that reads `ACCOUNT_EXPOSURE` directly, defaults missing or malformed state to zero, and reuses `build_event_trade_position_net_change(...)` for the six-decimal `currentNetSize`/`signedDelta`/`resultingNetSize` math. That helper already exists as `preview_event_trade_position_net_change(...)`; it deliberately avoids `ensure_account_exposure_state(...)` and `ensure_account_exposure_position(...)`, while accepted-trade sync separately uses the same pure netting primitive after the write path passes.",
+      "confidence": 1.0,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:6",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:48",
+        "backend/server.py:1201",
+        "backend/server.py:1226",
+        "backend/server.py:1255",
+        "tests/test_bayes_market_api.py:3780",
+        "tests/test_bayes_market_api.py:3825"
+      ],
+      "uncertainty": "Only minor implementation details remain, such as whether the handler stores the preview object or recomputes via the same pure helper on the accepted path.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Keep the new max-position failure completely outside command, event, terminal-outcome, and idempotency-key persistence. The current EventTrade flow already does replay/conflict lookup before command creation, and idempotency keys are only bound when a terminal outcome is recorded. Because step 2 moves the limit check into that pre-command window, an over-limit `400` should persist nothing and should leave the same `idempotencyKey` reusable later if exposure changes.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:26",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:53",
+        "backend/server.py:2876",
+        "backend/server.py:2884",
+        "backend/server.py:3557",
+        "backend/server.py:3560",
+        "backend/server.py:3574",
+        "tests/test_bayes_market_api.py:3604",
+        "tests/test_bayes_market_api.py:3635"
+      ],
+      "uncertainty": "This would only change if product explicitly wanted replayable `400` validation failures, which would contradict both the recorded step-2 plan and the current idempotency binding path.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Keep the resulting-net-position preview internal to validation in step 2. The accepted EventTrade response and accepted journal event currently expose trade and pricing data, not exposure-preview scalars, and the step-2 plan explicitly rejects widening those contracts now. The dedicated read surface for live position data is the separate account-exposure path rather than the EventTrade success payload.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:39",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1-execute-step-4/plan.json:58",
+        "backend/server.py:1483",
+        "backend/server.py:3259",
+        "tests/test_bayes_market_api.py:3329",
+        "tests/test_bayes_market_api.py:3391"
+      ],
+      "uncertainty": "If product later wants additive preview fields on successful writes, that would be a separate contract expansion beyond the current step-2 scope.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Implementation and tests can treat one `(accountId, marketId, outcomeId)` slice as a signed six-decimal net position, with buys adding, sells subtracting, and the cap checked against `abs(resultingNetSize)` relative to the global `max_position_size = 100.0`."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "The preview path should remain read-only and direct-lookup based, so rejected requests do not create empty exposure accounts or rows and the `/v1/accounts/{id}/exposure` `404` semantics stay intact."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Idempotent replays of already-persisted accepted or terminally rejected EventTrades should remain the first gate and should bypass the new preview path entirely."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 2 stays confined to `ACCOUNT_EXPOSURE` and EventTrade write-path behavior; `ACCOUNT_RISK` and `/v1/accounts/{id}/risk` do not need contract or mutation changes."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The preview exists to gate acceptance, not to widen the successful EventTrade response. Live position inspection remains the job of the separate exposure read surface."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

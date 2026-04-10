@@ -1,0 +1,159 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The in-tree EventTrade contract treats `size` as the primary quantity and `notional` as derived data. `normalize_event_trade_payload(...)` validates and stores `size`, `create_event_trade_order(...)` persists `size`, and `notional` is computed as `size * price`; there is no existing holdings ledger that defines net, gross, or notional-based position exposure. Because the new feature is named `max_position_size` and also introduces `/v1/accounts/{id}/exposure`, the strongest codebase fit is a unit-based cap on resulting position size rather than a price-weighted notional cap. The remaining open choice is whether that means raw per-order `size` or post-trade resulting position.",
+      "confidence": 0.68,
+      "evidence": [
+        "backend/server.py:1921",
+        "backend/server.py:2007",
+        "backend/server.py:2977",
+        "backend/server.py:3004",
+        "backend/server.py:3035",
+        "tests/test_bayes_market_api.py:3299"
+      ],
+      "uncertainty": "The repo clearly distinguishes `size` from derived `notional`, but it does not freeze whether `max_position_size` applies to each request in isolation or to the resulting position after netting.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q2",
+      "answer": "If the cap is on resulting position, the codebase points to netting per `(accountId, marketId, outcomeId)`. EventTrade normalization collapses every accepted trade to one target market and one outcome, and accepted orders persist `targetOutcomeId`, `side`, and `size`. Market-level aggregation would throw away the outcome dimension that the command/order contract preserves. Separate long/short buckets are possible, but nothing in-tree requires them yet; the simplest compatible model is signed net size per outcome (buy positive, sell negative), with absolute exposure derived for enforcement and display.",
+      "confidence": 0.76,
+      "evidence": [
+        "backend/server.py:1983",
+        "backend/server.py:1985",
+        "backend/server.py:1993",
+        "backend/server.py:2999",
+        "backend/server.py:3001",
+        "tests/test_bayes_market_api.py:3322"
+      ],
+      "uncertainty": "If product wants gross long-plus-short exposure or separate close-vs-open accounting, the ledger shape has to expand beyond signed net size.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q3",
+      "answer": "There is no frozen `/v1/accounts/{id}/exposure` contract in this repo. The strongest existing pattern is an additive `{\"account\":{\"id\":..., ...},\"meta\":...}` read model like `/risk`, but with per-outcome position entries because EventTrade state is outcome-specific. A summary-only account document or per-market-only entries would discard the `targetOutcomeId` that every EventTrade order stores. The minimum useful fields the current order model can support are `marketId`, `outcomeId`, `netSize`, `lastTradePrice`, and `updatedAt` (optionally `lastOrderId` and `lastCommandId`). `side` is a per-trade field rather than a stable netted-position field, and `averagePrice` or position-level `notional` need an explicit accounting rule before they can be frozen.",
+      "confidence": 0.71,
+      "evidence": [
+        "backend/server.py:712",
+        "backend/server.py:1258",
+        "backend/server.py:1281",
+        "backend/server.py:2999",
+        "frontend/src/lib/api/types.ts:180",
+        "frontend/src/lib/api/client.ts:159",
+        "frontend/src/lib/query/hooks.ts:20"
+      ],
+      "uncertainty": "The repo does not decide the exact nesting shape (`markets[].positions[]` vs flat `positions[]`) or whether account-level aggregate totals should be included in the first version.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q4",
+      "answer": "Current account read-model precedent is `404 account_not_found` until a document exists. `get_account_risk(...)` raises that error, the router exposes only `/risk`, HTTP tests pin the `404` shape, and the portfolio page already interprets that error state as \"Account not found or no positions yet.\" So the least-disruptive default for `/v1/accounts/{id}/exposure` is also `404 account_not_found` for a never-traded account. Returning `200` with an empty document would be a deliberate new trader-UX contract, not something implied by existing read patterns.",
+      "confidence": 0.87,
+      "evidence": [
+        "backend/server.py:1258",
+        "backend/server.py:1262",
+        "backend/server.py:3472",
+        "tests/test_bayes_market_api.py:6778",
+        "tests/test_bayes_market_api.py:6799",
+        "frontend/src/routes/Portfolio.tsx:25"
+      ],
+      "uncertainty": "A new trader-facing endpoint could intentionally choose `200` empty for convenience, but that would be a new contract rather than a continuation of the current account-read behavior.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q5",
+      "answer": "The initial seam should be one global value in `backend/server.py`, adjacent to `ACCOUNT_RISK_LIMIT`. This backend currently keeps trade-control constants in that module, only a few generic runtime toggles are env-backed there, `backend/inference/config.py` is engine identity config rather than application trade config, and no market or account schema contains a limit field. Market-specific or account-specific `max_position_size` would require new schema and read-model plumbing that does not exist today.",
+      "confidence": 0.92,
+      "evidence": [
+        "backend/server.py:125",
+        "backend/server.py:128",
+        "backend/server.py:132",
+        "backend/server.py:301",
+        "backend/inference/config.py:1",
+        "backend/server.py:3787"
+      ],
+      "uncertainty": "If deploy-time tuning is required, the same global value could later be promoted to an env-backed setting, but the repo does not currently have a dedicated shared config layer for this class of control.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "The codebase has two distinct failure contracts. Validation-style `400` errors are raised as `ApiError` and serialized by `error_payload(...)` to `{error:{code,message,details},meta}` with no `result`; terminal business-rule rejections are built by `build_terminal_rejection_response(...)` after command materialization and return `409` with `error`, `result`, a persisted `CommandRejected` event, and replayable terminal outcomes. So if \"return 400 on limit exceeded\" is taken literally, the in-tree fit is a pre-acceptance `ApiError` with no command, order, or event persistence. The exact symbolic code is not frozen yet; the minimum useful `details` set would be `accountId`, `marketId`, `outcomeId`, `side`, `requestedSize`, `currentNetSize`, `resultingNetSize`, and `maxPositionSize`.",
+      "confidence": 0.8,
+      "evidence": [
+        "backend/server.py:214",
+        "backend/server.py:686",
+        "backend/server.py:2719",
+        "backend/server.py:3330",
+        "backend/server.py:3340",
+        "backend/server.py:3706",
+        "tests/test_bayes_market_api.py:2283",
+        "tests/test_bayes_market_api.py:3614"
+      ],
+      "uncertainty": "This is the strongest fit if the task really requires `400`. If the new rule is treated like existing business-rule failures instead, the route should probably stay on the terminal-rejection path with persisted command/event state and a non-400 status.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q7",
+      "answer": "Exposure should follow the existing live-state lifecycle: idempotent EventTrade replays should leave it untouched, and market resolution should remove resolved-market entries from the live exposure read model rather than keep them there as archives. The handler already replays matching EventTrade submissions before re-running order logic, and market resolution currently removes market-specific account-risk/LMSR state via `settle_market_account_risk(...)`. There is no separate archive/history store in-tree; the event journal is the historical source.",
+      "confidence": 0.91,
+      "evidence": [
+        "backend/server.py:2788",
+        "backend/server.py:2891",
+        "backend/server.py:3316",
+        "backend/server.py:3328",
+        "tests/test_bayes_market_api.py:2558",
+        "tests/test_bayes_market_api.py:3583"
+      ],
+      "uncertainty": "If product wants resolved-position history on `/v1/accounts/{id}/exposure`, that would be a new archival read model rather than the current live-state cleanup behavior.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "The implementation can stay scoped to EventTrade plus an additive exposure read model; ProbabilityEdit validation and `/v1/accounts/{id}/risk` do not need to be reopened."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Keeping `/risk` stable avoids breaking the existing backend route list, frontend client/query keys, and tests that already depend on that contract."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "New exposure state can reuse the current in-memory dictionary lifecycle and `reset_state()` semantics instead of introducing persistence infrastructure."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.88,
+      "impact": "A single global limit near `ACCOUNT_RISK_LIMIT` keeps the first implementation small; market-specific or account-specific limits would widen scope into schemas and configuration."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.76,
+      "impact": "If this assumption is wrong, limit breaches must preserve terminal rejection and idempotent replay semantics instead of being a plain validation-style `400` failure."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.84,
+      "impact": "Exposure should be derived from accepted EventTrade executions keyed by market and outcome, not from the existing probability-edit risk read model."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.82,
+      "impact": "Resolution handling should include exposure cleanup so live account reads do not retain stale resolved-market positions."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

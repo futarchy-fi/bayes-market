@@ -1,0 +1,98 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Step 1 should keep the existing shared `OrderResponse` stable for ProbabilityEdit flows and add a separate EventTrade-specific success type. The parent step-4 plan explicitly rejects overhauling the shared mutation response model in this step, and step 1 is scoped to additive exposure typing plus EventTrade-specific request/response typing. The live backend already returns richer accepted responses through a shared `{order, result, meta}` envelope, so the current frontend `OrderResponse` is stale, but widening that shared model now would reopen unrelated ProbabilityEdit/client surfaces beyond this task.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:15",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:49",
+        "frontend/src/lib/api/types.ts:208",
+        "frontend/src/lib/api/client.ts:167",
+        "backend/server.py:3006",
+        "backend/server.py:3322"
+      ],
+      "uncertainty": "ProbabilityEdit accepted responses are also richer than the current `OrderResponse`, so a later cleanup may still want to replace the shared type entirely; this answer is about the scope boundary for this step.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "`AccountExposureResponse` should mirror the backend success contract exactly as `{ account: { id, exposure: { maxPositionSize, updatedAt, positions } }, meta }`. `positions` is an array of live rows, not a map. Each row carries `marketId`, `outcomeId`, `netSize`, `absSize`, `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId`; zero-net rows are omitted and the array is sorted lexically by `(marketId, outcomeId)`. Because the backend state builder and serializer allow `lastOrderId` and `lastCommandId` to be null, the frontend type should allow `string | null` for those fields even though common 200-path examples use strings.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:1122",
+        "backend/server.py:1503",
+        "backend/server.py:1515",
+        "backend/server.py:1533",
+        "backend/server.py:1542",
+        "tests/test_bayes_market_api.py:4472"
+      ],
+      "uncertainty": "The public tests mostly exercise traded non-zero rows, so there is not a direct 200-path example with null `lastOrderId`/`lastCommandId`, but the serializer does not enforce non-null values.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. `EventTradePayload.size` should become the only public frontend request field now. The backend still accepts legacy `amount`, but that is a compatibility alias inside `normalize_event_trade_size(...)`; the normalized payload is canonicalized back to `size`, and the in-repo canonical callers/tests already submit `size`, not `amount`. Exposing `amount` in frontend TypeScript would surface a backend-only fallback that the current step explicitly intends to retire from the public frontend contract.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:15",
+        "backend/server.py:2226",
+        "backend/server.py:2312",
+        "tests/test_bayes_market_api.py:52"
+      ],
+      "uncertainty": "The backend alias may remain temporarily for compatibility, but that does not require the frontend-public request type to expose it.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. The EventTrade mutation return type should keep the existing `{order, result, meta}` success envelope and specialize only the `order` surface to the persisted backend order fields. In the live backend, accepted EventTrade orders include `id`, `type`, `marketId`, `accountId`, `commandId`, `submittedAt`, `status`, `payload`, `targetMarketId`, `targetOutcomeId`, `side`, `size`, `price`, `notional`, `createdAt`, `filledAt`, and optional `idempotencyKey`. Preview-only netting fields such as `currentNetSize` and `resultingNetSize` belong only to `position_limit_exceeded` rejection details and should not be pulled into the accepted EventTrade success type.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:16",
+        "backend/server.py:3006",
+        "backend/server.py:3297",
+        "backend/server.py:3329",
+        "backend/server.py:3663",
+        "tests/test_bayes_market_api.py:3469",
+        "tests/test_bayes_market_api.py:3930"
+      ],
+      "uncertainty": "If the frontend intentionally chooses a narrower accepted-order view, it could omit currently returned fields like `targetMarketId` and `targetOutcomeId`, but that would no longer be an exact mirror of the live backend order object.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The backend exposure route already exists in this checkout with the expected `{account, meta}` success contract and `404 account_not_found` behavior for missing or fully pruned projections, so the frontend patch can target the live API."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Exposure should be added as a separate additive model and route surface rather than merged into `AccountRiskResponse` or `/risk`."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Frontend TypeScript should expose canonical `size` only and leave the backend `amount` alias as an internal compatibility detail."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "This step should keep ProbabilityEdit typing stable and add an EventTrade-specific success type instead of reopening every mutation response contract."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The public EventTrade formula surface should stay market-id keyed in request and echoed order payloads even though shared/internal validation translates through variable ids."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,86 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat `pnpm --dir frontend install` as a normal prerequisite before running the required frontend test and build commands in this worktree.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Treat missing frontend dependencies as an external setup blocker and skip local frontend verification."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use the checked-in backend route behavior and backend API tests as the source of truth for any contract mismatch, then reconcile frontend and docs to that contract instead of rewriting the server during landing.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Prefer existing frontend declarations or stale docs over the live backend/test contract.",
+        "Rework backend behavior late in the landing pass unless a real executable mismatch is found."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Review both the read-surface docs that omit `/v1/accounts/{id}/exposure` and the older contract-freeze docs, but only edit the latter where their wording diverges from the live backend/test contract.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Limit the docs pass only to the read-surface memos.",
+        "Rewrite every older contract doc regardless of whether it still matches the executable contract."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Add direct frontend hook/query-client invalidation coverage for `useEventTrade(...)` and `useResolveMarket(...)` so the exposure refresh contract is proven at the React Query layer.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Rely only on existing component and API-client tests without direct invalidation proof."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Keep tracked frontend build artifacts in the landed patch when they are the intentional outputs of the verified source tree, and drop only clearly unrelated build churn.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Discard all generated frontend dist changes after the verification build."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Install frontend dependencies if `frontend/node_modules` is absent so the required frontend verification commands can run locally.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Audit the current implementation and diff across backend routes/tests, frontend API types/hooks/tests, and the scoped docs to find any remaining contract or documentation mismatches against the checked-in backend/test behavior.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add the missing React Query invalidation tests for `useEventTrade(...)` and `useResolveMarket(...)`, then make any source or doc updates needed to align stale frontend or documentation surfaces to the live contract.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Run the full landing verification suite: `python3 -m pytest tests/ -v --tb=short`, `pnpm --dir frontend test`, and `pnpm --dir frontend build`.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Inspect the resulting diff, including tracked `frontend/dist/*` artifacts and `frontend/tsconfig.tsbuildinfo`, keep intentional generated outputs, and remove only unrelated churn.",
+      "depends_on": [4]
+    },
+    {
+      "step": 6,
+      "task": "Stage the validated implementation changes and create the final landing commit for this task.",
+      "depends_on": [5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

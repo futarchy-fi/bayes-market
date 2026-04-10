@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This branch still has the pre-refactor `handle_event_trade(...)` flow in `backend/server.py` where fresh EventTrade commands are materialized before the active-market gate and `preview_event_trade_position_net_change(...)` is never consulted. Should this step-5 task absorb the missing step-2/3 implementation and step-4 regressions directly, or is there a specific prerequisite commit/branch that must be rebased or cherry-picked first?",
+      "category": "codebase",
+      "why_it_matters": "Without the intended EventTrade write-path patch and its regressions on the branch, there is no meaningful diff or targeted test slice to validate for persistence-order correctness."
+    },
+    {
+      "id": "q2",
+      "question": "What is the exact targeted backend validation slice for this task: only `BayesMarketEventTradeTests` and `BayesMarketExposureProjectionTests`, or should the gate also include the concurrent duplicate EventTrade idempotency test plus the exposure-settlement cases around market resolution and HTTP?",
+      "category": "requirements",
+      "why_it_matters": "Step 5 explicitly calls for a targeted backend slice. The answer determines whether validation is limited to the core EventTrade write path or also proves replay and downstream projection invariants that could regress when persistence ordering changes."
+    },
+    {
+      "id": "q3",
+      "question": "For the diff review, which persistence surfaces must be proven untouched on a fresh over-limit `position_limit_exceeded` submission: `COMMANDS`, `ORDERS`, `EVENTS`, `TERMINAL_OUTCOMES`, `IDEMPOTENCY_KEYS`, `ACCOUNT_EXPOSURE`, `ACCOUNT_RISK`, and the per-market event head/sequence state, or a narrower subset?",
+      "category": "design",
+      "why_it_matters": "The core correctness claim is that max-position validation runs before command materialization. That needs an explicit checklist for what counts as 'no persistence side effects' during review."
+    },
+    {
+      "id": "q4",
+      "question": "Should this step add an explicit non-regression assertion that `GET /v1/accounts/{id}/risk` is unchanged after an accepted EventTrade on an account that already has prior probability-edit risk state, or is the current clean-account invariant (`ACCOUNT_RISK` remains empty when it started empty) the intended contract boundary?",
+      "category": "requirements",
+      "why_it_matters": "The task says not to alter `/v1/accounts/{id}/risk`, but the current EventTrade tests mostly pin only the empty-risk case. A mixed-flow assertion would more directly prove the contract stayed unchanged."
+    },
+    {
+      "id": "q5",
+      "question": "Is the accepted EventTrade response and accepted-event payload also frozen in this step, meaning no new preview fields and `effects.assetDelta` must remain empty even though exposure is now synced internally, or is `/risk` the only public contract explicitly in scope?",
+      "category": "design",
+      "why_it_matters": "The preview and exposure-sync changes sit adjacent to `build_event_trade_acceptance_response(...)`, so the diff review needs to know whether widening the success contract is an automatic reject condition."
+    },
+    {
+      "id": "q6",
+      "question": "For replay validation, is state-based proof enough, or should the targeted slice explicitly assert that `preview_event_trade_position_net_change(...)` is bypassed for already-persisted accepted and terminally rejected `market_not_active` EventTrades?",
+      "category": "design",
+      "why_it_matters": "The ordering risk here is not only extra writes; replay could accidentally re-run the new preview gate while leaving external state unchanged. A helper-call assertion is the strongest guard if that behavior matters."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The current branch has not landed the EventTrade ordering/max-position implementation or the planned regression coverage yet; this task must either absorb that missing work or obtain it from a prerequisite commit before step-5 validation can happen.",
+      "confidence": 0.99,
+      "if_wrong": "The question set overemphasizes missing prerequisites and under-specifies a simpler validate-only task against an already-implemented branch."
+    },
+    {
+      "id": "a2",
+      "assumption": "The intended fresh active EventTrade flow remains `normalize -> idempotency replay/conflict -> active-market gate -> exposure preview -> max-position check -> command materialization -> order creation -> exposure sync -> acceptance response`.",
+      "confidence": 0.98,
+      "if_wrong": "The persistence-order review would target the wrong sequencing and could misclassify a correct patch as defective."
+    },
+    {
+      "id": "a3",
+      "assumption": "A fresh `position_limit_exceeded` EventTrade is a side-effect-free `400` ApiError with no command, order, event, terminal-outcome, idempotency, exposure, or risk persistence, and the same `idempotencyKey` remains reusable later after exposure changes.",
+      "confidence": 0.97,
+      "if_wrong": "The validation slice would need to expect persisted rejection artifacts or key binding on the limit path instead of complete pre-command isolation."
+    },
+    {
+      "id": "a4",
+      "assumption": "Accepted EventTrades continue to mutate `ACCOUNT_EXPOSURE` only; `/v1/accounts/{id}/risk`, `ACCOUNT_RISK`, and the public accepted EventTrade success contract stay behaviorally unchanged in this step.",
+      "confidence": 0.96,
+      "if_wrong": "The work expands from a write-ordering patch into broader API and read-model contract changes, and the targeted validation slice would be incomplete."
+    },
+    {
+      "id": "a5",
+      "assumption": "Already-persisted accepted and terminally rejected `market_not_active` EventTrades must still replay before any new preview or limit validation runs.",
+      "confidence": 0.97,
+      "if_wrong": "Replay regressions would need to expect fresh validation on stored commands, which would materially change the idempotency contract."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

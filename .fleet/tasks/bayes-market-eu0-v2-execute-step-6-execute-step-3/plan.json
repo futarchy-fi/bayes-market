@@ -1,0 +1,84 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Prove the exposure-refresh contract through public-hook behavior on a fresh `QueryClient`: mount `useAccountExposure(accountId)` as an active observer, execute the public mutation hooks, and pair the visible refetch assertions with focused invalidation-call checks instead of stopping at a bare `invalidateQueries(...)` spy.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Assert only that `QueryClient.invalidateQueries(...)` was called.",
+        "Hide the cache-refresh proof inside a broader route or component test."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Freeze the narrow EventTrade invalidation contract by testing that a successful `useEventTrade(marketId)` refreshes only `queryKeys.accountExposure(payload.accountId)` and uses the exact-key path, leaving other accounts' exposure queries untouched.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Accept any broad exposure-family invalidation for EventTrade.",
+        "Assert only that the submitting account eventually refreshes without checking the invalidation scope."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Freeze the broader ResolveMarket contract by testing that a successful `useResolveMarket(marketId)` invalidates the account-exposure key family across accounts while explicitly not broadening into `queryKeys.accountRisk(...)`.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Assert only a single mounted account's refresh after resolution.",
+        "Treat all `accounts` queries, including `accountRisk(...)`, as acceptable invalidation scope."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Include a direct `useAccountExposure(accountId)` contract assertion in the new suite by proving it reads through `queryKeys.accountExposure(accountId)` on a non-empty account, but keep the step focused and do not widen it into separate empty-account guard coverage unless that falls out naturally from the harness.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Skip the public read-hook contract and test only the mutations.",
+        "Expand the step into a broader regression suite for every `useAccountExposure(...)` edge case."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Keep the new hook suite happy-path only, covering successful EventTrade and ResolveMarket mutations that should refresh exposure data, and leave rejected-mutation no-refresh assertions for a separate hardening pass.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Add failure-path cache-safety assertions for both mutation hooks in this step.",
+        "Broaden the scope into a general mutation error-handling suite."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create a dedicated hook-level test file under `frontend/src/__tests__` with a per-test `QueryClient` wrapper, mocked API client functions, and a small probe/harness component that can keep one or more `useAccountExposure(accountId)` observers active while exposing mutation-hook actions.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add a direct `useAccountExposure(accountId)` regression in that suite that mounts the hook for a non-empty account, waits for the mocked exposure fetch to resolve, and asserts the cache entry is stored under the exact `queryKeys.accountExposure(accountId)` key rather than a broader account-scoped key.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add the successful `useEventTrade(marketId)` test by mounting exposure observers for the submitting account and a second account, mocking fresh post-trade exposure data, triggering the mutation, and asserting that only the submitting account refetches while any invalidation-call inspection pins the `exact: true` account-exposure key path.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Add the successful `useResolveMarket(marketId)` test by mounting exposure observers for multiple accounts and seeding an `accountRisk(...)` query, then triggering the mutation and asserting that exposure observers refresh across the exposure-key family while the risk query remains outside the invalidation scope.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 5,
+      "task": "Run targeted frontend verification for the new hook suite, confirm the isolated `QueryClient` cleanup prevents cross-test leakage, and adjust any mock timing or wait conditions so the tests prove real observer refresh behavior rather than only cache writes.",
+      "depends_on": [3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

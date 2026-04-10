@@ -1,0 +1,127 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "No specific prerequisite commit or branch is identifiable from the checkout. The repo artifacts only say to rebase or cherry-pick if the branch is still on the pre-refactor handler, and that was the starting state here. So this step had to absorb the missing step-2/3 EventTrade write-path refactor plus the focused step-4 regressions directly. The landed patch now does that in place: `handle_event_trade(...)` replays idempotency first, keeps inactive markets on the persisted `market_not_active` path, runs `preview_event_trade_position_net_change(...)` before any fresh command materialization, and only then creates the command and order.",
+      "confidence": 0.93,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-4/plan.json:6",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:53",
+        "backend/server.py:3577",
+        "backend/server.py:3603",
+        "tests/test_bayes_market_api.py:3674",
+        "tests/test_bayes_market_api.py:4095"
+      ],
+      "uncertainty": "An unpublished external branch could exist, but nothing in this checkout names one or makes it actionable. All observable evidence pointed to landing the missing work here.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The intended gate is the narrow backend slice centered on `BayesMarketEventTradeTests` and `BayesMarketExposureProjectionTests`. The step plan calls this a targeted EventTrade/exposure slice, and the regression plan places the exact-cap, over-limit, survivor-sync, and replay-ordering cases in those two clusters. The separate concurrent duplicate EventTrade idempotency coverage and the exposure-settlement admin/HTTP cases live in broader classes and are useful follow-on coverage, but they are not the minimum step-5 gate.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:67",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-4/plan.json:82",
+        "tests/test_bayes_market_api.py:3320",
+        "tests/test_bayes_market_api.py:3840",
+        "tests/test_bayes_market_api.py:5188",
+        "tests/test_bayes_market_api.py:6532"
+      ],
+      "uncertainty": "Running the broader concurrency and settlement cases would add confidence, but the checked-in step plans scope the required validation more narrowly.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Use the stronger no-side-effect checklist. A fresh over-limit `position_limit_exceeded` submission should leave `COMMANDS`, `ORDERS`, `EVENTS`, `TERMINAL_OUTCOMES`, `IDEMPOTENCY_KEYS`, `ACCOUNT_EXPOSURE`, `ACCOUNT_RISK`, and the per-market event head/sequence state untouched. In this patch the regression snapshot goes slightly broader and also guards `MARKETS` and `CONDITIONAL_MARGINALS`, which is fine. A narrower subset would miss bugs that leave store counts unchanged while still advancing journal head state or binding an idempotency key.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-4/plan.json:25",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-4/plan.json:68",
+        "tests/test_bayes_market_api.py:116",
+        "tests/test_bayes_market_api.py:132",
+        "tests/test_bayes_market_api.py:3674"
+      ],
+      "uncertainty": "The only discretion is whether to snapshot even more state than the required list. The required list itself is clear.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Do not expand this step into a mixed-flow `GET /v1/accounts/{id}/risk` assertion. The intended contract boundary here is narrower: keep EventTrade focused on `ACCOUNT_EXPOSURE`, preserve `ACCOUNT_RISK` and `/risk` behavior unchanged, and prove that by asserting accepted EventTrades leave `ACCOUNT_RISK` untouched. The regression plan explicitly rejected adding a separate `/risk` read-after-write assertion in this focused EventTrade step.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-4/plan.json:35",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-4/plan.json:40",
+        "tests/test_bayes_market_api.py:3668",
+        "tests/test_bayes_market_api.py:4110",
+        "tests/test_bayes_market_api.py:4147"
+      ],
+      "uncertainty": "A later mixed-flow integration test could still be worthwhile, but the checked-in scope for this step deliberately stops short of that broader assertion.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "The accepted EventTrade success contract is frozen too, not just `/risk`. This step should not add preview fields to the accepted response or accepted event payload, and `effects.assetDelta` stays empty even though exposure is synced internally. The write-path change is intentionally internal; the public success payload remains trade-and-pricing only.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:35",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2/plan.json:39",
+        "backend/server.py:3262",
+        "backend/server.py:3273",
+        "tests/test_bayes_market_api.py:3662",
+        "tests/test_bayes_market_api.py:3670"
+      ],
+      "uncertainty": "None material for this step. Any additive preview fields would be a separate contract change.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "Replay validation should use explicit helper-bypass assertions, not state-only proof. The ordering risk is specifically that replay could start hitting the new preview gate before returning the stored terminal outcome. The stronger regression is to patch `preview_event_trade_position_net_change(...)` and assert it is not called when replaying already-persisted accepted EventTrades or terminally rejected `market_not_active` EventTrades.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-4/plan.json:45",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-4/plan.json:77",
+        "backend/server.py:3563",
+        "tests/test_bayes_market_api.py:3749",
+        "tests/test_bayes_market_api.py:3795"
+      ],
+      "uncertainty": "State-based assertions are still useful as supporting checks, but they are not as strong for the replay-ordering risk this step is meant to cover.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "The branch started on the pre-refactor EventTrade path, so step-5 had to bundle the missing handler changes and regressions directly instead of waiting on a named prerequisite commit."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The canonical fresh-submission flow is now `normalize -> idempotency replay/conflict -> active-market gate -> exposure preview -> max-position check -> command materialization -> order creation -> exposure sync -> acceptance response`, which is the sequence the diff review should enforce."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "A fresh `position_limit_exceeded` EventTrade is treated as a side-effect-free `400` with no command, order, event, terminal-outcome, idempotency, exposure, risk, or journal-head persistence, and the same `idempotencyKey` remains reusable later."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Accepted EventTrades still mutate only `ACCOUNT_EXPOSURE`; `ACCOUNT_RISK`, `/v1/accounts/{id}/risk`, and the public accepted EventTrade contract remain behaviorally unchanged in this step."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Replay of already-persisted accepted and terminally rejected `market_not_active` EventTrades must stay ahead of the preview and limit gates, so explicit mock-based bypass checks belong in the targeted regression slice."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,18 +1,33 @@
-import { useMemo } from "react";
 import { useSession } from "@/features/session/context";
-import { useAccountRisk, useMarkets } from "@/lib/query/hooks";
+import { BayesApiError } from "@/lib/api/client";
+import { useAccountExposure, useAccountRisk, useMarkets } from "@/lib/query/hooks";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { Link } from "react-router-dom";
+import { formatProbability, formatRelativeTime } from "@/lib/utils/format";
+
+function isAccountNotFoundError(error: unknown): boolean {
+  return error instanceof BayesApiError
+    && error.status === 404
+    && error.code === "account_not_found";
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function formatSignedSize(value: number): string {
+  if (value > 0) return `+${value.toFixed(2)}`;
+  return value.toFixed(2);
+}
 
 export default function Portfolio() {
   const { session, isConfigured } = useSession();
-  const { data, isLoading, error } = useAccountRisk(session.accountId);
+  const exposureQuery = useAccountExposure(session.accountId);
+  const riskQuery = useAccountRisk(session.accountId);
   const marketsQuery = useMarkets();
-  const marketTitles = useMemo(() => {
-    const map = new Map<string, string>();
-    marketsQuery.data?.markets.forEach((m) => map.set(m.id, m.title));
-    return map;
-  }, [marketsQuery.data]);
+  const marketTitles = new Map(
+    (marketsQuery.data?.markets ?? []).map((market): [string, string] => [market.id, market.title]),
+  );
 
   if (!isConfigured) {
     return (
@@ -22,60 +37,104 @@ export default function Portfolio() {
     );
   }
 
-  if (isLoading) return <LoadingPage />;
-  if (error) return <ErrorMessage message="Account not found or no positions yet." />;
-  if (!data) return null;
+  const exposure = exposureQuery.data?.account.exposure;
+  const risk = riskQuery.data?.account.risk;
+  const hasExposure = exposure != null;
+  const hasRisk = risk != null;
+  const exposureMissing = isAccountNotFoundError(exposureQuery.error);
+  const riskMissing = isAccountNotFoundError(riskQuery.error);
+  const exposurePending = !hasExposure && exposureQuery.isPending;
+  const riskPending = !hasRisk && riskQuery.isPending;
+  const exposureError = exposureQuery.error && !exposureMissing ? exposureQuery.error : null;
+  const riskError = riskQuery.error && !riskMissing ? riskQuery.error : null;
+  const hasNoAccountData = !hasExposure && !hasRisk;
+  const waitingForMissingAccountCompanion = hasNoAccountData
+    && ((exposureMissing && riskPending) || (riskMissing && exposurePending));
+  const positions = [...(exposure?.positions ?? [])].sort(
+    (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+  );
 
-  const risk = data.account.risk;
-  const cap = risk.capacityIndicators;
-  const healthColor = cap.status === "healthy" ? "var(--color-success)"
-    : cap.status === "warning" ? "var(--color-warning)"
+  if (hasNoAccountData && ((exposurePending && riskPending) || waitingForMissingAccountCompanion)) {
+    return <LoadingPage />;
+  }
+
+  if (hasNoAccountData && exposureMissing && riskMissing) {
+    return <ErrorMessage message="Account not found or no positions yet." />;
+  }
+
+  if (hasNoAccountData && (exposureError || riskError)) {
+    return (
+      <ErrorMessage
+        message={getErrorMessage(exposureError ?? riskError, "Unable to load portfolio.")}
+      />
+    );
+  }
+
+  const cap = risk?.capacityIndicators;
+  const healthColor = cap?.status === "healthy" ? "var(--color-success)"
+    : cap?.status === "warning" ? "var(--color-warning)"
     : "var(--color-danger)";
 
   return (
     <div style={{ display: "grid", gap: "var(--space-lg)" }}>
       <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>Portfolio</h1>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "var(--space-md)" }}>
-        <MetricCard label="Limit" value={cap.limit.toFixed(2)} />
-        <MetricCard label="Available" value={cap.available.toFixed(2)} />
-        <MetricCard label="Consumed" value={cap.consumed.toFixed(2)} />
-        <MetricCard label="Utilization" value={`${(cap.utilization * 100).toFixed(1)}%`} />
-        <MetricCard label="Health" value={cap.status} color={healthColor} />
-        <MetricCard label="Min Asset (Overall)" value={risk.minAssets.overall.toFixed(2)} />
-      </div>
-      {risk.updatedAt && (
-        <div style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>
-          Last updated: {new Date(risk.updatedAt).toLocaleString()}
+      {risk && cap && (
+        <div style={{ display: "grid", gap: "var(--space-sm)" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "var(--space-md)" }}>
+            <MetricCard label="Limit" value={cap.limit.toFixed(2)} />
+            <MetricCard label="Available" value={cap.available.toFixed(2)} />
+            <MetricCard label="Consumed" value={cap.consumed.toFixed(2)} />
+            <MetricCard label="Utilization" value={`${(cap.utilization * 100).toFixed(1)}%`} />
+            <MetricCard label="Health" value={cap.status} color={healthColor} />
+            <MetricCard label="Min Asset (Overall)" value={risk.minAssets.overall.toFixed(2)} />
+          </div>
+          {risk.updatedAt && (
+            <div style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>
+              Last updated: {new Date(risk.updatedAt).toLocaleString()}
+            </div>
+          )}
         </div>
       )}
 
+      {riskError && (
+        <ErrorMessage message={getErrorMessage(riskError, "Unable to load risk metrics.")} />
+      )}
+
       <div>
-        <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--space-sm)" }}>Per-Market Positions</h2>
-        {risk.minAssets.markets.length === 0 ? (
-          <span style={{ color: "var(--color-text-muted)" }}>No positions.</span>
+        <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--space-sm)" }}>Live Outcome Holdings</h2>
+        {exposurePending ? (
+          <span style={{ color: "var(--color-text-muted)" }}>Loading live holdings...</span>
+        ) : exposureError ? (
+          <ErrorMessage message={getErrorMessage(exposureError, "Unable to load live holdings.")} />
+        ) : positions.length === 0 ? (
+          <span style={{ color: "var(--color-text-muted)" }}>No live EventTrade positions.</span>
         ) : (
           <div style={{ borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", overflow: "hidden" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
               <thead>
                 <tr style={{ background: "var(--color-bg-hover)" }}>
                   <th style={thStyle}>Market</th>
-                  <th style={thStyle}>Min Asset</th>
-                  <th style={thStyle}>Utilization</th>
-                  <th style={thStyle}>Trades</th>
+                  <th style={thStyle}>Outcome</th>
+                  <th style={thStyle}>Net Size</th>
+                  <th style={thStyle}>Abs Size</th>
+                  <th style={thStyle}>Last Price</th>
+                  <th style={thStyle}>Updated</th>
                 </tr>
               </thead>
               <tbody>
-                {risk.minAssets.markets.map((mr) => (
-                  <tr key={mr.marketId} style={{ borderTop: "1px solid var(--color-border)" }}>
+                {positions.map((position) => (
+                  <tr key={`${position.marketId}:${position.outcomeId}`} style={{ borderTop: "1px solid var(--color-border)" }}>
                     <td style={tdStyle}>
-                      <Link to={`/markets/${mr.marketId}`}>
-                        {marketTitles.get(mr.marketId) ?? mr.marketId}
+                      <Link to={`/markets/${position.marketId}`}>
+                        {marketTitles.get(position.marketId) ?? position.marketId}
                       </Link>
                     </td>
-                    <td style={tdStyle}>{mr.minAsset.toFixed(2)}</td>
-                    <td style={tdStyle}>{(mr.utilization * 100).toFixed(1)}%</td>
-                    <td style={tdStyle}>{mr.commandCount}</td>
+                    <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{position.outcomeId}</td>
+                    <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{formatSignedSize(position.netSize)}</td>
+                    <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{position.absSize.toFixed(2)}</td>
+                    <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>{formatProbability(position.lastTradePrice)}</td>
+                    <td style={tdStyle}>{formatRelativeTime(position.updatedAt)}</td>
                   </tr>
                 ))}
               </tbody>

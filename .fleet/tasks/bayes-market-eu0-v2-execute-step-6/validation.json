@@ -1,0 +1,14 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.52,
+  "plan_adherence_notes": "Execution followed the plan only partially. Relative to `ff/Tbayes-market-eu0-v2`, this branch does land step 2 and step 4 work: `frontend/src/__tests__/api-client.test.ts` now covers `getAccountExposure(accountId)` against `/v1/accounts/{id}/exposure`, and `frontend/src/routes/Portfolio.tsx` plus `frontend/src/__tests__/Portfolio.test.tsx` now hold the mixed-404 loading behavior and route regressions. The live API contract is internally consistent across `backend/server.py`, `tests/test_bayes_market_api.py`, `frontend/src/lib/api/client.ts`, `frontend/src/lib/api/types.ts`, `frontend/src/lib/query/hooks.ts`, and the touched frontend tests. But the branch does not execute the planned hook-level invalidation proof from step 3: there is still no dedicated React Query test covering `useAccountExposure(...)` refresh after `useEventTrade(...)` or `useResolveMarket(...)`. It also does not execute the planned docs reconciliation from step 5: no docs files changed, and the freeze docs still publish only `/v1/accounts/{id}/risk` or older EventTrade/acceptance wording. Step 6 verification is therefore only partially evidenced by the diff.",
+  "research_quality": 0.95,
+  "question_completeness": 0.9,
+  "missed_questions": [
+    "If the validation environment lacks `frontend/node_modules`, is dependency bootstrap allowed/expected as part of the landing verification step, or should the step be judged only against suites runnable from the checkout as provided?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "The research is strong and the plan follows from it, but the branch does not fully land the planned scope. The `getAccountExposure(...)` client test and the Portfolio mixed-404 fix/tests are present, yet the planned React Query invalidation coverage for `useEventTrade(...)` and `useResolveMarket(...)` is still absent and the planned contract-freeze/docs updates did not land. Validation results in this checkout: `python3 -m pytest tests/ -v --tb=short` passed with 271 tests; `pnpm --dir frontend test` could not run because `frontend/node_modules` is absent and `vitest` exits with `Permission denied` plus the missing-dependencies warning.",
+  "spawn_children": false,
+  "children": []
+}

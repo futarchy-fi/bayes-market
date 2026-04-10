@@ -1,0 +1,62 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Define the new backend-wide exposure cap in `backend/server.py` as the literal lowercase module-level constant `max_position_size = 100.0`, colocated with `ACCOUNT_RISK_LIMIT` so later validation and serializers share one source of truth without renaming churn against the checked-in rollout artifacts.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Introduce an uppercase `MAX_POSITION_SIZE` constant to match the surrounding convention.",
+        "Delay the constant until the EventTrade validation step lands.",
+        "Choose a default value other than `100.0`."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Add a dedicated top-level in-memory exposure projection beside the existing read models, keyed by `accountId` like `ACCOUNT_RISK`, so later account and position helpers can hang off an additive store without changing `/v1/accounts/{id}/risk`.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Flatten the store by `(accountId, marketId, outcomeId)` at the top level.",
+        "Fold EventTrade exposure into `ACCOUNT_RISK`.",
+        "Skip a persistent projection and rebuild exposure from orders or events on demand."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Wire the new exposure store into `reset_state()` exactly like the other mutable read models: clear it during process reset and do not seed or reconstruct any exposure rows from markets, orders, events, or existing risk documents.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Bootstrap the exposure store from `ORDERS`, `EVENTS`, or fixture markets during reset.",
+        "Leave exposure state outside the normal reset lifecycle.",
+        "Mirror `ACCOUNT_RISK` data into exposure during reset."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Insert `max_position_size = 100.0` into the module-level trading and risk constant block in `backend/server.py`, placed with `ACCOUNT_RISK_LIMIT` so later helpers can import one canonical default.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Declare the new account-keyed top-level exposure store in the in-memory state section of `backend/server.py`, adjacent to `ACCOUNT_RISK` and the other live projections.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Update `reset_state()` to clear the exposure store alongside `ACCOUNT_RISK` and the other mutable read models while keeping the existing fixture reload behavior limited to `MARKETS`.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Sanity-check the resulting state layout so this step remains additive only: no route changes, no `/risk` contract changes, and no reset-time exposure bootstrap logic introduced ahead of later helper work.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

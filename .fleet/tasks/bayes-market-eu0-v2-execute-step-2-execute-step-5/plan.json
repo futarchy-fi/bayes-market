@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat step-5 as validation-and-land work against the already-present EventTrade ordering/exposure patch on this branch, with any code edits limited to gaps exposed by the targeted slice or diff review in `backend/server.py` and `tests/test_bayes_market_api.py` rather than waiting on an external prerequisite rebase.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Pause for a missing prerequisite commit or branch that is not identifiable from this checkout.",
+        "Expand the task into a broader EventTrade or risk-model refactor outside the landed step-2/3 surface."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use the narrow backend gate `python3 -m pytest tests/test_bayes_market_api.py::BayesMarketEventTradeTests tests/test_bayes_market_api.py::BayesMarketExposureProjectionTests -v --tb=short` as the required validation slice, only reaching for broader concurrency or settlement coverage if this focused run reveals collateral regressions.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Gate the step on the full backend suite before confirming the focused EventTrade/exposure invariants.",
+        "Pull in separate duplicate-idempotency and market-resolution HTTP classes as mandatory step-5 coverage."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Review persistence-order correctness with the stronger checklist: a fresh `position_limit_exceeded` request must fail before command materialization and leave `COMMANDS`, `ORDERS`, `EVENTS`, `TERMINAL_OUTCOMES`, `IDEMPOTENCY_KEYS`, `ACCOUNT_EXPOSURE`, `ACCOUNT_RISK`, and per-market event/journal state untouched, while replayed accepted and terminal `market_not_active` EventTrades must explicitly bypass `preview_event_trade_position_net_change(...)`.",
+      "based_on": ["q3", "q6"],
+      "alternatives_rejected": [
+        "Inspect only coarse store counts and ignore journal-head or idempotency-binding side effects.",
+        "Accept state-only replay proof without a direct preview-helper bypass assertion."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Freeze the public contract while landing this patch: accepted EventTrade payloads and journal effects stay unchanged with `effects.assetDelta` still empty, exposure syncing remains internal to `ACCOUNT_EXPOSURE`, and `/v1/accounts/{id}/risk` plus `ACCOUNT_RISK` behavior must remain untouched in this step.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Add a new mixed-flow `/v1/accounts/{id}/risk` assertion or any risk-surface behavior change as part of this step.",
+        "Expose preview scalars or other new fields in accepted EventTrade responses or events."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Inspect the current EventTrade implementation surface in `backend/server.py` and the focused regression coverage in `tests/test_bayes_market_api.py`, then run `python3 -m pytest tests/test_bayes_market_api.py::BayesMarketEventTradeTests tests/test_bayes_market_api.py::BayesMarketExposureProjectionTests -v --tb=short` to establish whether the already-landed step-2 patch is green as-is.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "If the targeted slice or code review exposes a gap, patch only the EventTrade write path and its focused tests so the fresh submission sequence remains `normalize -> idempotency replay/conflict -> active-market gate -> preview_event_trade_position_net_change(...) -> strict max-position check -> command materialization/order creation -> sync_account_exposure_state(...) -> acceptance response`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Review the resulting diff for persistence-order correctness by checking that the over-limit path stays fully side-effect free across command, order, event, terminal-outcome, idempotency, exposure, risk, and market journal state, and that replay regressions still prove the preview helper is bypassed for already-persisted accepted and `market_not_active` submissions.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Re-run the same targeted pytest slice after any edits and verify the frozen public contract remains intact: accepted EventTrade responses do not grow preview fields, `effects.assetDelta` stays empty, and `ACCOUNT_RISK` or `/v1/accounts/{id}/risk` behavior does not change.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Stage and land the validated EventTrade ordering/exposure patch once the targeted slice passes and the diff review confirms the step stays within the EventTrade/exposure scope without altering `/v1/accounts/{id}/risk` contracts.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

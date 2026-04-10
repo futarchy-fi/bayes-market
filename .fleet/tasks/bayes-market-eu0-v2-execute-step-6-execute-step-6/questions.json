@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Is the landing bar for this step the full CI-aligned suite (`python3 -m pytest tests/ -v --tb=short`, `pnpm --dir frontend test`, and `pnpm --dir frontend build`), with `pnpm --dir frontend install` allowed as a local prerequisite because `frontend/node_modules` is absent in this worktree, or should dependency installation be treated as external setup?",
+      "category": "requirements",
+      "why_it_matters": "The required frontend verification commands cannot run in the current checkout until dependencies exist, so this determines whether environment setup is part of the landing task or an out-of-band blocker."
+    },
+    {
+      "id": "q2",
+      "question": "If the final diff review exposes an API-contract mismatch, which layer is authoritative for this branch: the checked-in backend route behavior and assertions in `backend/server.py` plus `tests/test_bayes_market_api.py`, or the existing docs/frontend declarations? In other words, should step 6 reconcile the frontend and docs to the backend contract rather than rewriting the server late in the landing pass?",
+      "category": "requirements",
+      "why_it_matters": "The live checkout already exposes `/v1/accounts/{id}/exposure` and accepted EventTrade fields in backend code, tests, and frontend types, while several docs still publish older wording. The source-of-truth decision changes whether landing is a consistency pass or an API rewrite."
+    },
+    {
+      "id": "q3",
+      "question": "Which contract-freeze docs are explicitly in scope for the final sync pass: only the account read-surface docs that still omit `/v1/accounts/{id}/exposure` (`docs/t539-mvp-launch-gate.md`, `docs/t556-scope-and-compatibility-boundary-freeze.md`, `docs/t563-journal-read-surface-freeze.md`, and related launch-gate memos), or also the older acceptance-envelope docs such as `docs/t586-full-chain-http-contract-freeze.md`, `docs/t1737-probability-edit-http-contract-freeze.md`, and `docs/t544-event-sourcing-contract.md` that still influence ProbabilityEdit/EventTrade response wording?",
+      "category": "codebase",
+      "why_it_matters": "Prior validation already flagged stale `/exposure` publication and a missed question about `docs/t1737-probability-edit-http-contract-freeze.md`. This answer sets how broad the docs portion of the landing diff must be."
+    },
+    {
+      "id": "q4",
+      "question": "Does step 6 still need new frontend tests at the public hook/query-client layer, specifically to prove that `useEventTrade(...)` invalidates the submitting account's exposure cache and `useResolveMarket(...)` invalidates exposure caches after market resolution, or is passing the existing component and API-client suites enough?",
+      "category": "requirements",
+      "why_it_matters": "This checkout already has `getAccountExposure(...)` client coverage and component tests for `Portfolio` and `EventTradePanel`, but there is still no direct invalidation proof for the React Query hooks that implement the exposure refresh contract."
+    },
+    {
+      "id": "q5",
+      "question": "When `pnpm --dir frontend build` rewrites the tracked `frontend/dist/*` assets or `frontend/tsconfig.tsbuildinfo`, should those generated deltas be committed as part of the landed patch whenever they match intentional source changes, or should the landing step discard build churn that is not itself part of the contract/UI review?",
+      "category": "design",
+      "why_it_matters": "Those build outputs are versioned in this repository, so the answer affects how to interpret the final diff and whether generated artifact churn is treated as required landing output or disposable verification noise."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This worktree already contains the main implementation branch for step 6 on top of `main`, including the backend `/v1/accounts/{id}/exposure` route, EventTrade acceptance fields, frontend exposure client/hooks/UI, and tracked frontend build outputs.",
+      "confidence": 0.98,
+      "if_wrong": "Question generation would be premature because the branch would still be blocked on missing feature work instead of landing-time verification and consistency review."
+    },
+    {
+      "id": "a2",
+      "assumption": "Frontend dependencies are not installed in the current checkout (`frontend/node_modules` is absent), so `pnpm --dir frontend install` is a prerequisite if this task is expected to execute the requested frontend test and build commands locally.",
+      "confidence": 1.0,
+      "if_wrong": "The landing step could proceed directly to `pnpm --dir frontend test` and `pnpm --dir frontend build`, and the setup question would be unnecessary."
+    },
+    {
+      "id": "a3",
+      "assumption": "The lower-level frontend gap has narrowed but is not fully closed: `frontend/src/__tests__/api-client.test.ts` already covers `getAccountExposure(...)`, and `frontend/src/__tests__/Portfolio.test.tsx` already covers the mixed `404 + pending` portfolio timing cases, but there is still no dedicated React Query invalidation test for `useEventTrade(...)` or `useResolveMarket(...)`.",
+      "confidence": 0.97,
+      "if_wrong": "Step 6 could focus only on suite execution and docs/build review, because the frontend contract would already be fully pinned by existing tests."
+    },
+    {
+      "id": "a4",
+      "assumption": "Tracked frontend build artifacts are intentional in this repo: `.gitignore` explicitly keeps `frontend/dist/`, and `frontend/dist/*` plus `frontend/tsconfig.tsbuildinfo` are already versioned.",
+      "confidence": 0.99,
+      "if_wrong": "A final build could produce misleading diff noise that should be excluded from the landed patch rather than reviewed and committed."
+    },
+    {
+      "id": "a5",
+      "assumption": "Backend route behavior/tests and frontend API types already agree on the additive `/v1/accounts/{id}/exposure` surface and accepted EventTrade `size`/`price`/`notional` fields, so the most likely remaining consistency risk is stale documentation rather than a live code-contract mismatch.",
+      "confidence": 0.88,
+      "if_wrong": "The landing step might uncover a real backend-vs-frontend contract bug and require source changes beyond tests, docs, and build-artifact review."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

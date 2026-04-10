@@ -1,0 +1,104 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. Step 3 should stay strictly inside `frontend/src/lib/query/hooks.ts` and add only the new exposure query key and hook. The checked-in consumers still read `useAccountRisk(...)`, there are no exposure consumers yet, and the parent step-4 plan explicitly separates hook plumbing in step 3 from invalidation in step 4 and coverage in step 5.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/routes/Portfolio.tsx:9",
+        "frontend/src/routes/MarketDetail.tsx:23",
+        "frontend/src/lib/query/hooks.ts:309",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:60"
+      ],
+      "uncertainty": "A later UI step may adopt exposure in Portfolio or MarketDetail, but nothing in this checkout makes that part of step 3.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. `queryKeys.accountExposure(accountId)` should mirror the existing flat `accountRisk` key layout as `[\"accounts\", accountId, \"exposure\"]`. The current query-key surface has only per-resource entries, no shared `queryKeys.account(...)` namespace, and the parent plan explicitly says to keep the existing per-surface layout for this additive step.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:14",
+        "frontend/src/lib/query/hooks.ts:20",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:6",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/questions.json:18"
+      ],
+      "uncertainty": "A broader account-query refactor is possible later, but there is no evidence it belongs in this focused hook-addition step.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. `useAccountExposure(accountId)` should be a thin `useQuery` wrapper that matches `useAccountRisk(accountId)` with only `queryKey`, `queryFn`, and `enabled: accountId.length > 0`. There is no account-specific precedent here for `staleTime`, polling, `select`, or placeholder data, and the parent plan freezes the new hook to that minimal shape.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:309",
+        "frontend/src/lib/query/hooks.ts:311",
+        "frontend/src/lib/query/hooks.ts:313",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:60"
+      ],
+      "uncertainty": "Exposure-specific cache policy could be added later if product behavior demands it, but that would be new design work beyond the current pattern.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. `useAccountExposure(accountId)` should surface the raw `BayesApiError` from `getAccountExposure(...)` unchanged. The shared client already throws `BayesApiError` for any non-OK response, `getAccountExposure(...)` is just another direct `request(...)` wrapper, `useAccountRisk(...)` does not normalize errors, and the parent plan explicitly says exposure `404 account_not_found` should stay raw rather than becoming synthetic empty data.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/lib/api/client.ts:33",
+        "frontend/src/lib/api/client.ts:57",
+        "frontend/src/lib/api/client.ts:169",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:27"
+      ],
+      "uncertainty": "A later UI helper could reinterpret `404` for presentation, but there is no shared normalization layer in this checkout and putting it in the base hook now would change the planned contract.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Step 3 should remain implementation-only, with dedicated verification deferred to the planned step-5 coverage work. The current frontend tests cover the API client and a couple of routes, but there is no checked-in React Query hook test for `hooks.ts`, and the parent step-4 plan explicitly schedules exposure API-client and query-hook coverage in step 5 rather than in this hook-plumbing step.",
+      "confidence": 0.98,
+      "evidence": [
+        "frontend/src/__tests__/api-client.test.ts:50",
+        "frontend/src/__tests__/Portfolio.test.tsx:8",
+        "frontend/src/__tests__/MarketDetail.test.tsx:58",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:70"
+      ],
+      "uncertainty": "This is based on the checked-in frontend test tree; if an external or untracked hook-test harness existed, it is not visible in this worktree.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "`frontend/src/lib/api/types.ts` already exports `AccountExposureResponse` and `frontend/src/lib/api/client.ts` already exports `getAccountExposure(accountId)`, so step 3 is not blocked on prerequisite API surface work."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keeping the change hook-scoped matches both the checked-in consumers and the parent plan, so step 3 can stay additive without folding in route or component adoption."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Using `[\"accounts\", id, \"exposure\"]` preserves the existing cache-key contract and gives later invalidation work a narrow, predictable target."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Mirroring `useAccountRisk(...)` keeps `useAccountExposure(...)` a parallel read hook and avoids introducing new cache-behavior policy in this step."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The necessary conventions are visible in local code and `.fleet` plan artifacts, so there is enough evidence to answer the step-3 questions without spawning child tasks."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

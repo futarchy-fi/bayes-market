@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should step 1 keep the existing generic `OrderResponse` for probability-edit flows and add a separate EventTrade-specific success type, or is this the point where the shared order response model is supposed to be widened for every mutation?",
+      "category": "design",
+      "why_it_matters": "The current frontend `OrderResponse` is stale for EventTrade, but broadening it would also change probability-edit typing. Step 1 needs the boundary before patching `frontend/src/lib/api/types.ts`."
+    },
+    {
+      "id": "q2",
+      "question": "What exact `/v1/accounts/{id}/exposure` success shape should `AccountExposureResponse` mirror: is the canonical contract `{ account: { id, exposure: { maxPositionSize, updatedAt, positions[] } }, meta }` with each position row carrying `marketId`, `outcomeId`, `netSize`, `absSize`, `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId`?",
+      "category": "codebase",
+      "why_it_matters": "The frontend has no exposure type today, so step 1 needs the backend-truth field list to avoid inventing or omitting properties in the new response model."
+    },
+    {
+      "id": "q3",
+      "question": "Should `EventTradePayload.size` become the only public frontend request field now, even if the backend still tolerates a legacy `amount` alias for compatibility?",
+      "category": "requirements",
+      "why_it_matters": "This determines whether the new frontend type stays strict and canonical or has to expose a transitional dual-field request contract."
+    },
+    {
+      "id": "q4",
+      "question": "For the EventTrade mutation return type, should the `order` surface expose only persisted backend fields such as `id`, `marketId`, `accountId`, `commandId`, `submittedAt`, `status`, `payload`, `side`, `size`, `price`, `notional`, `createdAt`, `filledAt`, and optional `idempotencyKey`, while continuing to share the existing `result/meta` envelope and excluding preview-only netting fields like `currentNetSize` or `resultingNetSize`?",
+      "category": "design",
+      "why_it_matters": "The backend now returns a richer order than the frontend types model, but not every internal preview field belongs on the public success type. Step 1 needs the exact response boundary."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This checkout already contains the backend exposure route and its live contract: `GET /v1/accounts/{id}/exposure` returns `{account, meta}` on success and raises `404 account_not_found` for missing or fully pruned exposure projections.",
+      "confidence": 0.99,
+      "if_wrong": "The frontend type patch would target a contract that does not actually exist or whose error semantics have not landed yet."
+    },
+    {
+      "id": "a2",
+      "assumption": "The new exposure typing should be additive and separate from `/risk`: add `AccountExposureResponse` instead of folding live exposure fields into `AccountRiskResponse`.",
+      "confidence": 0.98,
+      "if_wrong": "Step 1 would need a wider account-type refactor instead of a focused additive model."
+    },
+    {
+      "id": "a3",
+      "assumption": "Frontend TypeScript should treat `size` as the canonical EventTrade request field and should not surface a deprecated `amount` alias.",
+      "confidence": 0.97,
+      "if_wrong": "The payload type would need to expose backward-compatibility input that the current task is trying to retire."
+    },
+    {
+      "id": "a4",
+      "assumption": "Probability-edit typing should remain stable on the existing shared response model, and EventTrade should get its own specialized success type instead of redefining every order mutation response in this step.",
+      "confidence": 0.96,
+      "if_wrong": "The implementation would need to revisit all mutation/client typings that currently import `OrderResponse`, not just EventTrade."
+    },
+    {
+      "id": "a5",
+      "assumption": "The public EventTrade `formula` surface stays market-id keyed in request and echoed order payloads, even though backend validation internally translates to market variable ids.",
+      "confidence": 0.94,
+      "if_wrong": "The frontend request/response types would misrepresent the live API and encourage callers to send internal variable ids."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

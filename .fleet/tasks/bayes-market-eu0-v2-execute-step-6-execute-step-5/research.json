@@ -1,0 +1,120 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Update both sets, but keep the blast radius narrow. `t553`, `t556`, `t563`, and `t571` are the primary contract-freeze owners because they explicitly describe the live/public surface and currently omit `/v1/accounts/{id}/exposure`. `t538` and `t539` should also get small consistency edits because they explicitly summarize or gate the MVP API surface; leaving them unchanged would contradict the live service index, the contract test that advertises both account routes, and the frontend portfolio flow that queries both exposure and risk. This should stop at those named docs rather than expand into a repo-wide wording sweep.",
+      "confidence": 0.79,
+      "evidence": [
+        "backend/server.py:714",
+        "tests/test_bayes_market_api.py:436",
+        "frontend/src/routes/Portfolio.tsx:25",
+        "docs/t553-current-architecture-cache-boundary-freeze.md:24",
+        "docs/t556-scope-and-compatibility-boundary-freeze.md:159",
+        "docs/t563-journal-read-surface-freeze.md:36",
+        "docs/t571-per-market-engine-stats-contract-freeze.md:25",
+        "docs/t538-scope-matrix.md:29",
+        "docs/t539-mvp-launch-gate.md:70"
+      ],
+      "uncertainty": "This is partly an editorial-scope inference. The repo clearly shows that `t538` and `t539` are planning/gate docs rather than route-freeze docs, but they still make explicit API-surface claims that would otherwise remain stale.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Document `/v1/accounts/{id}/exposure` as an additive, projection-local read model, not as a guaranteed companion to `/v1/accounts/{id}/risk`. The server stores exposure separately, returns `404 account_not_found` when the exposure projection is missing, and intentionally reverts to `404` once all live exposure rows are pruned. The frontend portfolio flow also treats exposure and risk as independent companions: either one may exist first, and the UI only declares the account empty when both are missing.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:1542",
+        "backend/server.py:1550",
+        "tests/test_bayes_market_api.py:922",
+        "tests/test_bayes_market_api.py:4510",
+        "tests/test_bayes_market_api.py:2799",
+        "frontend/src/routes/Portfolio.tsx:40",
+        "frontend/src/__tests__/Portfolio.test.tsx:60"
+      ],
+      "uncertainty": "Only wording nuance remains: the docs can say `risk-only accounts` or more generally `accounts with no live exposure projection`, but the behavior itself is clear.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Treat the accepted EventTrade HTTP response shape as an HTTP-contract concern and document it in an HTTP-focused freeze note, not in `t547` or `t544`. `t547` is already scoped to formula validation and request identifier semantics, while `t544` owns persisted command/event envelopes. The actual route contract now comes from the shared terminal-response helper plus the EventTrade order builder, which yield `201` with `{order, result, meta}` and order fields such as `size`, `price`, and `notional`. The remaining editorial choice is whether to create a dedicated EventTrade HTTP freeze memo or extend the existing HTTP-contract family, but the canonical home should stay in that HTTP layer.",
+      "confidence": 0.91,
+      "evidence": [
+        "backend/server.py:3006",
+        "backend/server.py:3322",
+        "tests/test_bayes_market_api.py:3462",
+        "frontend/src/__tests__/api-client.test.ts:111",
+        "docs/t1737-probability-edit-http-contract-freeze.md:73",
+        "docs/t586-full-chain-http-contract-freeze.md:25",
+        "docs/t544-event-sourcing-contract.md:73",
+        "docs/t547-shared-event-formula-contract-freeze.md:41"
+      ],
+      "uncertainty": "The codebase resolves the layer choice (`HTTP-focused`, not `t547`/`t544`), but it does not force a single file choice between creating a new EventTrade-specific HTTP memo and extending an existing HTTP-contract memo.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Standardize the published public contract on `size` only. Keep `amount` as an unadvertised backward-compatibility alias if the backend wants to remain lenient, but do not publish it as a first-class field. The normalizer accepts `amount`, yet the normalized payload, persisted order, accepted event payload, frontend types, UI call sites, and client tests all converge on `size`.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:2226",
+        "backend/server.py:2312",
+        "backend/server.py:3291",
+        "frontend/src/lib/api/types.ts:290",
+        "frontend/src/__tests__/api-client.test.ts:111",
+        "frontend/src/__tests__/EventTradePanel.test.tsx:71",
+        "docs/t544-event-sourcing-contract.md:75"
+      ],
+      "uncertainty": "No checked-in tests exercise the `amount` alias end-to-end, so I cannot prove how durable that compatibility seam is. The evidence still points strongly to `size` as the only public field worth documenting.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes, make a minimal event-sourcing-freeze update too. Route-level request/response notes would still leave one stale contract hole: the emitted accepted EventTrade event already carries `pricing.unitPrice` and `payload.trade.{marketId,outcomeId,side,size,price,notional}`, and `t544` is the repo's event-contract reference for API tasks. The narrow version of this change is enough: add an EventTrade-specific accepted-event note or example under the `CommandAccepted` section rather than rewriting the generic envelope.",
+      "confidence": 0.86,
+      "evidence": [
+        "backend/server.py:3322",
+        "tests/test_bayes_market_api.py:3480",
+        "tests/test_bayes_market_api.py:3531",
+        "docs/t544-event-sourcing-contract.md:139",
+        "docs/t544-event-sourcing-contract.md:281"
+      ],
+      "uncertainty": "This is partly an editorial scope call. The generic `CommandAccepted` example in `t544` does not explicitly forbid extra fields, but leaving it unchanged would keep the EventTrade accepted-event details test-pinned rather than doc-pinned.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The active worktree already contains the backend exposure route, service-index advertising, frontend exposure client/types, and matching backend/frontend tests, so this phase can stay focused on documentation scope rather than feature implementation."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Risk remains a separate, meaningful read model. The docs should describe exposure as additive to risk rather than as a replacement."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The EventTrade success contract is already concrete in source and tests, so the docs step can safely freeze `{order,result,meta}`, `order.size/price/notional`, and the accepted-event `pricing` and `trade` fields."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "There is no dedicated EventTrade HTTP contract-freeze memo in the current docs set, so the response-shape publication work should live in a new or expanded HTTP-focused freeze artifact rather than assuming an existing EventTrade-specific owner."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "The checked-in backend, frontend, tests, and docs are sufficient to answer the open questions locally; no child investigation is needed."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

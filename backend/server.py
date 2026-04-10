@@ -123,6 +123,11 @@ MARKET_SUMMARY_FIELDS = (
 )
 
 ACCOUNT_RISK_LIMIT = 100.0
+max_position_size = 100.0
+ACCOUNT_SERVICE_INDEX_ROUTES = (
+    "/v1/accounts/{id}/risk",
+    "/v1/accounts/{id}/exposure",
+)
 ACCOUNT_LMSR_LEDGER_VERSION = "lmsr-ledger-v1"
 ACCOUNT_LMSR_RISK_READ_MODEL = "scalar-min-asset-v1"
 MAX_EVENT_FORMULA_CLAUSES = 16
@@ -174,6 +179,7 @@ _LOCK_REGISTRY_LOCK = threading.Lock()
 _EVENTS_LOCK = threading.RLock()
 _COMMENTS_LOCK = threading.RLock()
 ACCOUNT_RISK: dict[str, dict[str, Any]] = {}
+ACCOUNT_EXPOSURE: dict[str, dict[str, Any]] = {}
 MARKET_ENGINE_STATS: dict[str, dict[str, Any]] = {}
 _RATE_LIMIT_WINDOWS: dict[str, deque[float]] = {}
 _RATE_LIMIT_LOCK = threading.Lock()
@@ -249,6 +255,7 @@ def reset_state() -> None:
     LAST_EVENT_HASHES.clear()
     MARKET_WRITE_LOCKS.clear()
     ACCOUNT_RISK.clear()
+    ACCOUNT_EXPOSURE.clear()
     MARKET_ENGINE_STATS.clear()
     reset_rate_limit_state()
     ORDER_COUNTER = 0
@@ -726,7 +733,7 @@ def service_index_payload() -> dict[str, Any]:
                 "POST /v1/markets/{id}/orders/probability-edit",
                 "POST /v1/markets/{id}/orders/event-trade",
             ],
-            "accounts": ["/v1/accounts/{id}/risk"],
+            "accounts": list(ACCOUNT_SERVICE_INDEX_ROUTES),
         },
         "meta": make_meta(),
     }
@@ -1100,6 +1107,238 @@ def ensure_account_risk_state(account_id: str, timestamp: str) -> dict[str, Any]
     return account
 
 
+def round_exposure_value(value: Any, *, default: float = 0.0) -> float:
+    """Normalize one exposure scalar to the backend's canonical precision."""
+    if value is None:
+        return round_risk_value(default)
+    return round_risk_value(float(value))
+
+
+def account_exposure_position_key(market_id: str, outcome_id: str) -> str:
+    """Build the flat composite storage key for one exposure position row."""
+    return f"{market_id}|{outcome_id}"
+
+
+def build_account_exposure_position(
+    market_id: str,
+    outcome_id: str,
+    timestamp: str,
+    *,
+    net_size: float = 0.0,
+    last_trade_price: float = 0.0,
+    last_order_id: str | None = None,
+    last_command_id: str | None = None,
+) -> dict[str, Any]:
+    """Build the canonical mutable state for one live exposure position."""
+    return {
+        "marketId": str(market_id),
+        "outcomeId": str(outcome_id),
+        "netSize": round_exposure_value(net_size),
+        "lastTradePrice": round_exposure_value(last_trade_price),
+        "updatedAt": timestamp,
+        "lastOrderId": None if last_order_id is None else str(last_order_id),
+        "lastCommandId": None if last_command_id is None else str(last_command_id),
+    }
+
+
+def build_account_exposure_state(
+    account_id: str,
+    timestamp: str,
+    *,
+    positions: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build the default live-exposure projection for one account."""
+    return {
+        "accountId": str(account_id),
+        "updatedAt": timestamp,
+        "positions": deepcopy(positions) if positions is not None else {},
+    }
+
+
+def ensure_account_exposure_state(account_id: str, timestamp: str) -> dict[str, Any]:
+    """Return an exposure account document, creating or normalizing it as needed."""
+    account = ACCOUNT_EXPOSURE.get(account_id)
+    if account is None:
+        account = build_account_exposure_state(account_id, timestamp)
+        ACCOUNT_EXPOSURE[account_id] = account
+        return account
+
+    account["accountId"] = str(account_id)
+    if not isinstance(account.get("updatedAt"), str):
+        account["updatedAt"] = timestamp
+    positions = account.get("positions")
+    if not isinstance(positions, dict):
+        account["positions"] = {}
+    return account
+
+
+def ensure_account_exposure_position(
+    account: dict[str, Any],
+    market_id: str,
+    outcome_id: str,
+    timestamp: str,
+) -> dict[str, Any]:
+    """Return one canonical exposure position row for mutation-oriented callers."""
+    positions = account.get("positions")
+    if not isinstance(positions, dict):
+        positions = {}
+        account["positions"] = positions
+
+    composite_key = account_exposure_position_key(market_id, outcome_id)
+    position = positions.get(composite_key)
+    if not isinstance(position, dict):
+        position = build_account_exposure_position(market_id, outcome_id, timestamp)
+        positions[composite_key] = position
+        return position
+
+    position["marketId"] = str(market_id)
+    position["outcomeId"] = str(outcome_id)
+    position["netSize"] = round_exposure_value(position.get("netSize"))
+    position["lastTradePrice"] = round_exposure_value(position.get("lastTradePrice"))
+    if not isinstance(position.get("updatedAt"), str):
+        position["updatedAt"] = timestamp
+    position["lastOrderId"] = None if position.get("lastOrderId") is None else str(position["lastOrderId"])
+    position["lastCommandId"] = None if position.get("lastCommandId") is None else str(position["lastCommandId"])
+    return position
+
+
+def build_event_trade_position_net_change(
+    position: dict[str, Any] | None,
+    order: dict[str, Any],
+) -> dict[str, float]:
+    """Compute the signed net-size transition for one accepted EventTrade."""
+    current_net_size = 0.0 if position is None else round_exposure_value(position.get("netSize"))
+    size = round_exposure_value(order.get("size"))
+    side = str(order.get("side"))
+    if side == "buy":
+        signed_delta = size
+    elif side == "sell":
+        signed_delta = round_risk_value(-size)
+    else:
+        raise ValueError(f"Unsupported event-trade side: {side}")
+
+    resulting_net_size = round_risk_value(current_net_size + signed_delta)
+    if resulting_net_size == -0.0:
+        resulting_net_size = 0.0
+    return {
+        "currentNetSize": current_net_size,
+        "signedDelta": signed_delta,
+        "resultingNetSize": resulting_net_size,
+    }
+
+
+def preview_event_trade_position_net_change(
+    account_id: str,
+    market_id: str,
+    normalized_payload: dict[str, Any],
+) -> dict[str, float]:
+    """Preview one normalized EventTrade net-size transition without mutating exposure state."""
+    literal = normalized_payload["formula"][0][0]
+    outcome_id = str(literal["outcomeId"])
+    composite_key = account_exposure_position_key(market_id, outcome_id)
+
+    position: dict[str, Any] | None = None
+    account = ACCOUNT_EXPOSURE.get(account_id)
+    if isinstance(account, dict):
+        positions = account.get("positions")
+        if isinstance(positions, dict):
+            stored_position = positions.get(composite_key)
+            if isinstance(stored_position, dict):
+                position = stored_position
+
+    return build_event_trade_position_net_change(position, normalized_payload)
+
+
+def sync_account_exposure_state(order: dict[str, Any]) -> dict[str, Any]:
+    """Apply one accepted EventTrade order to the live account-exposure projection."""
+    account_id = str(order["accountId"])
+    market_id = str(order.get("targetMarketId") or order["marketId"])
+    outcome_id = str(order.get("targetOutcomeId") or order["payload"]["formula"][0][0]["outcomeId"])
+    timestamp = str(order["filledAt"])
+    composite_key = account_exposure_position_key(market_id, outcome_id)
+
+    account = ensure_account_exposure_state(account_id, timestamp)
+    positions = account["positions"]
+    current_position = positions.get(composite_key) if isinstance(positions, dict) else None
+    if not isinstance(current_position, dict):
+        current_position = None
+    net_change = build_event_trade_position_net_change(current_position, order)
+
+    if net_change["resultingNetSize"] == 0.0:
+        positions.pop(composite_key, None)
+        if positions:
+            account["updatedAt"] = timestamp
+        else:
+            ACCOUNT_EXPOSURE.pop(account_id, None)
+    else:
+        position = ensure_account_exposure_position(account, market_id, outcome_id, timestamp)
+        position["netSize"] = net_change["resultingNetSize"]
+        position["lastTradePrice"] = round_exposure_value(order.get("price"))
+        position["updatedAt"] = timestamp
+        position["lastOrderId"] = str(order["id"])
+        position["lastCommandId"] = str(order["commandId"])
+        account["updatedAt"] = timestamp
+
+    return {
+        "accountId": account_id,
+        "marketId": market_id,
+        "outcomeId": outcome_id,
+        **net_change,
+    }
+
+
+def settle_market_account_exposure(market_id: str, timestamp: str) -> list[dict[str, Any]]:
+    """Remove one resolved market from the live account-exposure projection."""
+    cleanup: list[dict[str, Any]] = []
+    composite_key_prefix = f"{market_id}|"
+
+    for account_id in sorted(list(ACCOUNT_EXPOSURE)):
+        account = ACCOUNT_EXPOSURE.get(account_id)
+        if not isinstance(account, dict):
+            continue
+
+        positions = account.get("positions")
+        if not isinstance(positions, dict):
+            continue
+
+        removed_keys = [
+            composite_key
+            for composite_key, position in list(positions.items())
+            if (
+                isinstance(position, dict)
+                and str(position.get("marketId")) == market_id
+            )
+            or (
+                isinstance(composite_key, str)
+                and composite_key.startswith(composite_key_prefix)
+            )
+        ]
+        if not removed_keys:
+            continue
+
+        for composite_key in removed_keys:
+            positions.pop(composite_key, None)
+
+        remaining_live_positions = serialize_account_exposure_positions(account)
+        pruned = not remaining_live_positions
+        if pruned:
+            ACCOUNT_EXPOSURE.pop(account_id, None)
+        else:
+            account["updatedAt"] = timestamp
+
+        cleanup.append(
+            {
+                "accountId": account_id,
+                "marketId": market_id,
+                "removedPositionCount": len(removed_keys),
+                "remainingPositionCount": len(remaining_live_positions),
+                "pruned": pruned,
+            }
+        )
+
+    return cleanup
+
+
 def preview_account_min_asset(account_id: str, impact_score: float) -> dict[str, Any]:
     """Preview the account-wide min-asset effect of a proposed impact score."""
     account = ACCOUNT_RISK.get(account_id)
@@ -1253,6 +1492,72 @@ def sync_account_risk_state(order: dict[str, Any]) -> dict[str, Any]:
         "beforeMinAsset": before_min_asset,
         "afterMinAsset": after_min_asset,
     }
+
+
+def serialize_account_exposure_position(position: dict[str, Any]) -> dict[str, Any] | None:
+    """Project one canonical exposure row into the public response shape."""
+    net_size = round_exposure_value(position.get("netSize"))
+    if net_size == 0.0:
+        return None
+
+    return {
+        "marketId": str(position["marketId"]),
+        "outcomeId": str(position["outcomeId"]),
+        "netSize": net_size,
+        "absSize": round_risk_value(abs(net_size)),
+        "lastTradePrice": round_exposure_value(position.get("lastTradePrice")),
+        "updatedAt": str(position["updatedAt"]),
+        "lastOrderId": position.get("lastOrderId"),
+        "lastCommandId": position.get("lastCommandId"),
+    }
+
+
+def serialize_account_exposure_positions(account: dict[str, Any]) -> list[dict[str, Any]]:
+    """Project all live exposure rows in deterministic lexical order."""
+    positions = account.get("positions")
+    if not isinstance(positions, dict):
+        return []
+
+    serialized_positions: list[dict[str, Any]] = []
+    for position in positions.values():
+        if not isinstance(position, dict):
+            continue
+        serialized_position = serialize_account_exposure_position(position)
+        if serialized_position is not None:
+            serialized_positions.append(serialized_position)
+
+    serialized_positions.sort(key=lambda position: (position["marketId"], position["outcomeId"]))
+    return serialized_positions
+
+
+def serialize_account_exposure(account: dict[str, Any]) -> dict[str, Any]:
+    """Project one stored exposure account into the public account.exposure shape."""
+    return {
+        "maxPositionSize": round_risk_value(max_position_size),
+        "updatedAt": str(account["updatedAt"]),
+        "positions": serialize_account_exposure_positions(account),
+    }
+
+
+def get_account_exposure(account_id: str) -> tuple[dict[str, Any], int]:
+    """Return the read model for one account's current live EventTrade exposure."""
+    account = ACCOUNT_EXPOSURE.get(account_id)
+    if account is None:
+        raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
+
+    exposure = serialize_account_exposure(account)
+    if not exposure["positions"]:
+        # Exposure existence is projection-local: once all live rows are pruned,
+        # the account disappears from this read model and resolves as 404 again.
+        raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
+
+    return {
+        "account": {
+            "id": account_id,
+            "exposure": exposure,
+        },
+        "meta": make_meta(),
+    }, 200
 
 
 def get_account_risk(account_id: str) -> tuple[dict[str, Any], int]:
@@ -2890,14 +3195,16 @@ def transition_market_to_resolved(
 
 def resolve_market_command(command: dict[str, Any]) -> dict[str, Any]:
     """Apply a market-resolution AdminOp and return the accepted event inputs."""
+    market_id = str(command["marketId"])
     resolved_at = utc_timestamp()
     resolution = transition_market_to_resolved(
-        str(command["marketId"]),
+        market_id,
         str(command["payload"]["outcomeId"]),
         deepcopy(command["payload"]["finalProbabilities"]),
         resolved_at=resolved_at,
     )
-    resolution["assetDelta"] = settle_market_account_risk(str(command["marketId"]), resolved_at)
+    resolution["assetDelta"] = settle_market_account_risk(market_id, resolved_at)
+    resolution["exposureCleanup"] = settle_market_account_exposure(market_id, resolved_at)
     return resolution
 
 
@@ -3327,17 +3634,17 @@ def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[
                     )
                 return replay_terminal_outcome(existing_command_id)
 
-        submitted_at = utc_timestamp()
-        command = materialize_event_trade_command(
-            market_id=market_id,
-            normalized_payload=normalized_payload,
-            account_id=account_id,
-            command_id=generate_command_id(),
-            submitted_at=submitted_at,
-            idempotency_key=idempotency_key,
-        )
         market = MARKETS[market_id]
         if market["status"] != "active":
+            submitted_at = utc_timestamp()
+            command = materialize_event_trade_command(
+                market_id=market_id,
+                normalized_payload=normalized_payload,
+                account_id=account_id,
+                command_id=generate_command_id(),
+                submitted_at=submitted_at,
+                idempotency_key=idempotency_key,
+            )
             return build_terminal_rejection_response(
                 command,
                 code="market_not_active",
@@ -3353,7 +3660,36 @@ def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[
                 scope_key=scope_key,
             )
 
+        preview = preview_event_trade_position_net_change(account_id, market_id, normalized_payload)
+        if abs(preview["resultingNetSize"]) > round_exposure_value(max_position_size):
+            literal = normalized_payload["formula"][0][0]
+            raise ApiError(
+                400,
+                "position_limit_exceeded",
+                "Trade would exceed max position size",
+                {
+                    "accountId": account_id,
+                    "marketId": market_id,
+                    "outcomeId": str(literal["outcomeId"]),
+                    "side": str(normalized_payload["side"]),
+                    "requestedSize": round_exposure_value(normalized_payload["size"]),
+                    "currentNetSize": preview["currentNetSize"],
+                    "resultingNetSize": preview["resultingNetSize"],
+                    "maxPositionSize": round_exposure_value(max_position_size),
+                },
+            )
+
+        submitted_at = utc_timestamp()
+        command = materialize_event_trade_command(
+            market_id=market_id,
+            normalized_payload=normalized_payload,
+            account_id=account_id,
+            command_id=generate_command_id(),
+            submitted_at=submitted_at,
+            idempotency_key=idempotency_key,
+        )
         order = create_event_trade_order(command)
+        sync_account_exposure_state(order)
         return build_event_trade_acceptance_response(command, order, scope_key)
 
 
@@ -3469,7 +3805,7 @@ def route_request(
         )
 
     parts = [part for part in path.split("/") if part]
-    if len(parts) == 4 and parts[:2] == ["v1", "accounts"] and parts[3] == "risk":
+    if len(parts) == 4 and parts[:2] == ["v1", "accounts"] and parts[3] in {"risk", "exposure"}:
         account_id = parts[2]
         if method != "GET":
             raise ApiError(
@@ -3478,7 +3814,9 @@ def route_request(
                 f"{method} is not allowed for this resource",
                 {"method": method, "path": path},
             )
-        return get_account_risk(account_id)
+        if parts[3] == "risk":
+            return get_account_risk(account_id)
+        return get_account_exposure(account_id)
 
     if len(parts) >= 3 and parts[:2] == ["v1", "markets"]:
         market_id = parts[2]

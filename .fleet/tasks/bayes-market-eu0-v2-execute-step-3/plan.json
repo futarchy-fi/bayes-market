@@ -1,0 +1,89 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Register `/v1/accounts/{id}/exposure` as an additive GET-only account route using the same bare-path service-index style as `/v1/accounts/{id}/risk`, with `route_request(...)` dispatching directly to the existing `get_account_exposure(account_id)` seam.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Switch the account service-index entries to method-qualified strings such as `GET /v1/accounts/{id}/exposure`.",
+        "Hide exposure behind a different account path or fold it into the existing `/risk` contract.",
+        "Add a second adapter layer instead of routing straight to `get_account_exposure(...)`."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Treat market-resolution exposure cleanup as part of this step if the checkout still lacks it, wiring the resolve path to prune resolved-market rows from `ACCOUNT_EXPOSURE` so the new route reflects live state and the requested cleanup regression can pass.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Keep step 3 route-and-test only and defer exposure cleanup to an assumed prerequisite branch.",
+        "Leave resolved-market positions visible in `/v1/accounts/{id}/exposure` until a later cleanup pass.",
+        "Test cleanup indirectly without landing the missing production wiring."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Make the new public `/v1/accounts/{id}/exposure` read contract the primary regression seam for buy/sell netting, idempotent replay stability, and market-resolution cleanup, while keeping lower-level store assertions only where the public read cannot fully prove a side-effect invariant.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Keep these behaviors covered only through direct `ACCOUNT_EXPOSURE` assertions with no public-route regression.",
+        "Duplicate every exposure invariant at both the route level and the store level.",
+        "Limit this step to router smoke tests and leave EventTrade behavior coverage unchanged."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Pin `404 account_not_found` to exposure-projection-local semantics by covering both never-traded accounts and accounts that still exist elsewhere but have no live exposure, including a risk-only account and the post-resolution cleanup path.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Cover only the never-traded-account case.",
+        "Treat any account with state in another read model as existing for `/exposure`.",
+        "Return `200` with an empty exposure document after final-position cleanup."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Add a small threaded HTTP parity slice for `GET /v1/accounts/{id}/exposure` alongside the direct backend tests, focusing on happy-path reads, structured `404 account_not_found`, and `405 method_not_allowed` without duplicating the full write-behavior matrix at the HTTP layer.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Stop at direct `route_request(...)` and getter coverage only.",
+        "Replicate the full netting, replay, limit-breach, and cleanup matrix through threaded HTTP tests.",
+        "Skip HTTP coverage because the route already exists behind `BayesHandler`."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Patch `backend/server.py` so the service index advertises `\"/v1/accounts/{id}/exposure\"`, `route_request(...)` accepts `GET /v1/accounts/{id}/exposure` with the same method-guard pattern used for `/risk`, and `resolve_market_command(...)` invokes exposure cleanup for resolved markets if that wiring is still missing.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Extend the direct backend routing tests in `tests/test_bayes_market_api.py` to cover the root service-index account-route list, the new exposure route's `GET` dispatch and `405` handling, and the `404 account_not_found` contract for both never-traded and risk-only accounts.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add direct read-after-write exposure regressions in `tests/test_bayes_market_api.py` that assert public `/v1/accounts/{id}/exposure` payloads after accepted buys and sells, prove netting and idempotent replay through the route response, verify that limit-breach attempts leave commands/events/idempotency state untouched, and confirm market resolution prunes the final live exposure so the route flips to `404`.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Add targeted threaded HTTP tests for `GET /v1/accounts/{id}/exposure` covering happy-path read-after-write parity, structured `404 account_not_found`, and `405 method_not_allowed`, reusing the existing `BayesHandler` test scaffolding instead of duplicating the entire direct-suite matrix.",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Run the focused backend test slices for the new exposure routing and regression coverage, then tighten any route-shape or error-detail expectations so the final patch freezes the intended public contract cleanly.",
+      "depends_on": [2, 3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

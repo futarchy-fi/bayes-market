@@ -1,0 +1,69 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Add the new regressions in tests/test_bayes_market_api.py as direct route-level tests that call GET /v1/accounts/{id}/exposure after EventTrade writes, so the assertions cover the public exposure contract instead of only inspecting ACCOUNT_EXPOSURE internals.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Assert only internal ACCOUNT_EXPOSURE state without reading through the route",
+        "Add HTTP-only integration coverage and duplicate existing router-level contract checks"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use accepted buy, accepted sell, and idempotent replay scenarios on one account/market/outcome bucket to prove signed netting and replay stability through the serialized exposure response.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Assert broader market-level aggregation across positions",
+        "Check only write responses and skip read-after-write exposure assertions"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Reuse snapshot_domain_state() and assert_domain_state_unchanged() for position-limit failures, with explicit focus on COMMANDS, EVENTS, ACCOUNT_EXPOSURE, and IDEMPOTENCY_KEYS remaining untouched because limit breaches are pre-command 400s.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Write partial assertions against only orders or exposure",
+        "Treat failed limit checks as stored idempotent rejections"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Add a route-level resolution regression for the last live exposure row only, proving settlement prunes the final projection entry and flips GET /v1/accounts/{id}/exposure to 404; leave mixed-survivor coverage with the existing tests.",
+      "based_on": ["q2", "q6"],
+      "alternatives_rejected": [
+        "Re-test survivor-row behavior already covered elsewhere",
+        "Assert only projection cleanup internals without the route 404"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add direct route_request read-after-write tests in the EventTrade-focused section that submit accepted buy and sell orders, then assert GET /v1/accounts/{id}/exposure returns the public payload shape with the expected netSize, absSize, lastTradePrice, updatedAt, lastOrderId, and lastCommandId values after each write.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Extend the same route-level coverage to idempotent replay by repeating an accepted EventTrade with an idempotency key, asserting the replay marker on the write response and confirming the subsequent exposure GET remains unchanged and still reflects the single netted bucket.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Broaden the limit-breach regression to verify the failed attempt leaves COMMANDS, EVENTS, ACCOUNT_EXPOSURE, and IDEMPOTENCY_KEYS untouched, and add a final-position market-resolution regression that resolves an account's only live exposure before asserting GET /v1/accounts/{id}/exposure now raises account_not_found.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Run the targeted bayes market API tests covering event-trade, exposure projection, and resolution behavior to verify the new route-level regressions without disturbing existing serializer or idempotency expectations.",
+      "depends_on": [1, 2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

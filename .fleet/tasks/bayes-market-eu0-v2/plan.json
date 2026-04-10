@@ -1,0 +1,92 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Add `max_position_size` as a single global backend constant in `backend/server.py` and enforce it against the post-trade absolute net position for one `(accountId, marketId, outcomeId)` EventTrade slice, with buys increasing signed size and sells decreasing it.",
+      "based_on": ["q1", "q2", "q5"],
+      "alternatives_rejected": [
+        "Treat `max_position_size` as a raw per-request `size` cap only.",
+        "Enforce the limit on price-weighted `notional` instead of unit size.",
+        "Aggregate exposure at the whole-market level or keep separate gross long/short buckets in v1."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Introduce a dedicated live exposure read model derived from accepted EventTrade executions, stored in-memory and cleared by `reset_state()`, while leaving the existing `ACCOUNT_RISK` document and `/v1/accounts/{id}/risk` contract unchanged.",
+      "based_on": ["q3", "q4", "q7"],
+      "alternatives_rejected": [
+        "Extend `ACCOUNT_RISK` and `/risk` to also carry EventTrade positions.",
+        "Compute account exposure from `ORDERS` or `EVENTS` on every read instead of maintaining a projection.",
+        "Rename or replace `/v1/accounts/{id}/risk` instead of adding a new read surface."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Expose `GET /v1/accounts/{id}/exposure` as an additive `{account, meta}` read route that returns `404 account_not_found` for never-traded accounts and a flat per-outcome positions list with `marketId`, `outcomeId`, `netSize`, `absSize`, `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId`, plus account-level `maxPositionSize` and `updatedAt`.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Return `200` with an empty exposure document for accounts with no EventTrade state.",
+        "Expose only account-level aggregates with no per-outcome positions.",
+        "Freeze `side`, `averagePrice`, or position `notional` in the first public contract."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Treat position-limit breaches as side-effect-free `400` validation failures before command, order, event, or idempotency persistence, using an explicit error code and details that include requested, current, and resulting position sizes.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Keep the existing terminal-rejection pattern and return a persisted `409 CommandRejected` outcome for limit breaches.",
+        "Persist a rejected command or partially materialized order before returning the error."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Keep exposure strictly as live state: fresh accepted EventTrades update the projection once, idempotent replays return the stored terminal outcome without reapplying exposure, and market resolution removes resolved-market positions from the live exposure model alongside current risk cleanup.",
+      "based_on": ["q2", "q7"],
+      "alternatives_rejected": [
+        "Keep resolved-market positions visible in `/v1/accounts/{id}/exposure` as archived history.",
+        "Rebuild exposure from historical orders on every replay path instead of trusting the stored projection lifecycle."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add backend exposure-state primitives in `backend/server.py`: the new global limit constant, account/position builders, signed-size math helpers, serializers for the exposure response, `reset_state()` integration, and resolution-cleanup helpers for market-scoped positions.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Patch the EventTrade write path so fresh submissions preview resulting net position after idempotency replay checks but before command materialization, reject trades that would exceed `max_position_size` with a `400` ApiError, and sync the exposure projection on accepted trades without changing `/risk` behavior.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Register `GET /v1/accounts/{id}/exposure` in routing and service-index code, and add backend regression tests for route shape, `404` empty-account behavior, buy/sell netting, limit-breach side effects, idempotent replay, and market-resolution cleanup.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Extend frontend API types, client methods, and React Query hooks for the exposure endpoint and the EventTrade `size` field, and invalidate exposure queries after successful trades and market resolution.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Update the trader-facing UI so the EventTrade panel collects position size and renders limit errors clearly, and add or switch the portfolio positions surface to read live per-outcome holdings from `/v1/accounts/{id}/exposure` while leaving existing `/risk` metrics intact where they still apply.",
+      "depends_on": [4]
+    },
+    {
+      "step": 6,
+      "task": "Add targeted frontend tests for the new trading and exposure flows, run the relevant backend and frontend suites, review the final diff for API-contract consistency, and land the implementation patch.",
+      "depends_on": [5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

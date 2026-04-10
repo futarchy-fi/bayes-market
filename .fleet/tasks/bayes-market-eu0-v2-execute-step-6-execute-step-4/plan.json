@@ -1,0 +1,59 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep the fix local to `frontend/src/routes/Portfolio.tsx` by adding a symmetric route-level guard for the mixed `404 account_not_found` plus pending account-query state, instead of changing the API client or query hooks.",
+      "based_on": ["q1", "q2", "q5"],
+      "alternatives_rejected": [
+        "Patch only the observed exposure-first timing path and leave the inverse risk-first path unspecified.",
+        "Normalize missing-account `404`s inside `useAccountExposure(...)`, `useAccountRisk(...)`, or the API client so the route never sees the transient state."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Only hold the route on the full `LoadingPage` while neither account query has produced usable data and one side is already a missing-account `404` while the companion query is still unsettled; once either exposure or risk data exists, continue rendering the existing partial-data views immediately.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Keep the current behavior that can briefly fall through to `No live EventTrade positions.` before the second query settles.",
+        "Broaden the loading gate to wait for both account queries even after one query has already returned usable exposure or risk data."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Freeze the transient-state contract in `frontend/src/__tests__/Portfolio.test.tsx` with controllable async account-query mocks that cover both early-`404` orderings, while preserving the existing settled exposure-only, risk-backed, and double-missing expectations.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Rely only on the current settled-state tests and leave the race condition unexercised.",
+        "Add a single exposure-first regression and leave the symmetric risk-first ordering untested."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Refactor the `Portfolio` route's top-level account-query gating into explicit booleans for usable exposure/risk data, missing-account `404`s, and the mixed missing-plus-pending case so the route can keep returning `LoadingPage` until both account queries settle when no data is available yet.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Update the route rendering conditions to preserve the current settled behavior boundaries: exposure-only holdings when risk is missing, risk summary plus empty holdings when exposure is missing, missing-account error only after both account queries settle to `404 account_not_found`, and existing non-`404` error handling.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Extend `frontend/src/__tests__/Portfolio.test.tsx` with a small local deferred-promise helper and new regressions for both query orderings where one account request rejects with `BayesApiError(404, \"account_not_found\")` before the other settles, asserting that the empty holdings copy does not render during the pending window and that the final settled UI still matches the existing contract.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Run the focused frontend Vitest coverage for `Portfolio` to confirm the new transient-state regressions and the existing settled-state scenarios all pass without widening the fix beyond the route.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

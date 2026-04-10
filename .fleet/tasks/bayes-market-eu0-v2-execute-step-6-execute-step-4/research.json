@@ -1,0 +1,117 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. The intended fix is a route-level loading guard: when neither account read has produced usable data yet and one of the two reads has already settled to `BayesApiError(404, \"account_not_found\")` while the companion read is still pending, `Portfolio` should remain on the full `LoadingPage` until both account queries settle. That is the explicit step-6 decision, and it closes the current fallthrough where the route stops matching the `both isLoading` gate, filters the 404 out of `exposureError`/`riskError`, and can briefly render the holdings empty copy from incomplete information.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6/plan.json:26",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6/plan.json:73",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-5/validation.json:4",
+        "frontend/src/routes/Portfolio.tsx:42",
+        "frontend/src/routes/Portfolio.tsx:50",
+        "frontend/src/routes/Portfolio.tsx:54",
+        "frontend/src/routes/Portfolio.tsx:99"
+      ],
+      "uncertainty": "The exact boolean shape of the new guard is still an implementation detail, but the behavioral target is explicit in the step-6 plan.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. The mixed `404 + pending` guard should be symmetric for both account reads, not just the observed exposure-first path. The recorded step-6 decision is written symmetrically (`/exposure` or `/risk` returns `404 account_not_found` while the other is still pending), and the route/test structure already treats the settled missing-account cases as a dual-read contract rather than a special case for only one query.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6/plan.json:26",
+        "frontend/src/routes/Portfolio.tsx:42",
+        "frontend/src/routes/Portfolio.tsx:43",
+        "frontend/src/__tests__/Portfolio.test.tsx:49",
+        "frontend/src/__tests__/Portfolio.test.tsx:93",
+        "frontend/src/__tests__/Portfolio.test.tsx:130"
+      ],
+      "uncertainty": "The only ambiguity is test breadth, not the behavioral rule; the step artifact itself already states the symmetric policy.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. The new loading guard is only meant to close the transient timing gap; it must preserve the final settled behaviors already covered by the route tests: exposure-only holdings when risk ends in `404`, risk summary plus empty holdings when exposure ends in `404`, and the shared missing-account error only after both reads settle to `404 account_not_found`.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6/plan.json:73",
+        "frontend/src/__tests__/Portfolio.test.tsx:49",
+        "frontend/src/__tests__/Portfolio.test.tsx:93",
+        "frontend/src/__tests__/Portfolio.test.tsx:130",
+        "frontend/src/routes/Portfolio.tsx:54",
+        "frontend/src/routes/Portfolio.tsx:75",
+        "frontend/src/routes/Portfolio.tsx:99"
+      ],
+      "uncertainty": "None beyond ordinary implementation risk; this preservation requirement is explicit in the task text and already reflected in the existing tests.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. `frontend/src/__tests__/Portfolio.test.tsx` should add an explicit deferred async regression that keeps one account query pending while the other rejects with `BayesApiError(404, \"account_not_found\")`, and it should assert that `No live EventTrade positions.` does not appear before the second query settles. Because the intended guard is symmetric, the strongest contract is to cover both orderings rather than only the observed exposure-first direction. A single exposure-first case would catch the currently reported flicker, but it would underspec the route-level policy that step 6 chose.",
+      "confidence": 0.85,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6/plan.json:26",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6/plan.json:73",
+        "frontend/src/__tests__/Portfolio.test.tsx:49",
+        "frontend/src/__tests__/Portfolio.test.tsx:93",
+        "frontend/src/__tests__/helpers.tsx:7"
+      ],
+      "uncertainty": "The repo does not already freeze the async harness pattern for this case, so the exact controllable-promise helper can stay local to the test file. If implementation time is constrained, one directional case is the minimum viable regression, but it is weaker than the symmetric contract implied elsewhere.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. The implementation boundary should stay local to `Portfolio.tsx`: keep `getAccountExposure(...)`, `useAccountExposure(...)`, and `useAccountRisk(...)` returning raw `404 account_not_found` errors, and solve the timing issue with a settled-vs-pending UI guard in the route. Both the prior and current plan artifacts explicitly reject normalizing missing-account 404s inside shared hooks, and the current code already follows that layering: the API client throws raw `BayesApiError`, the hooks are thin passthrough `useQuery(...)` wrappers, and `Portfolio` is the component that interprets `account_not_found` specially.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-5/plan.json:10",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6/plan.json:30",
+        "frontend/src/lib/api/client.ts:57",
+        "frontend/src/lib/api/client.ts:161",
+        "frontend/src/lib/api/client.ts:169",
+        "frontend/src/lib/query/hooks.ts:327",
+        "frontend/src/lib/query/hooks.ts:335",
+        "frontend/src/routes/Portfolio.tsx:8"
+      ],
+      "uncertainty": "None material; the existing layering is clear in the current checkout and the task artifacts reinforce it.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The route's settled-state contract is already covered, so this step can stay focused on the transient mixed `404 + pending` gap instead of adding broad new baseline coverage."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "A route-local fix is the right boundary. The API client and hooks preserve raw errors today, and `Portfolio` already owns the special `account_not_found` interpretation."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The loading gate only needs to cover the no-usable-data transient. Once either `exposure` or `risk` exists, the route should keep rendering that partial information immediately."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.93,
+      "impact": "The frontend test suite does not expose an obvious shared deferred helper, so a small local controllable-promise pattern in `Portfolio.test.tsx` is the likely fit for the regression."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed. The current route, tests, hooks, API client, and step artifacts were sufficient to answer the research questions."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
