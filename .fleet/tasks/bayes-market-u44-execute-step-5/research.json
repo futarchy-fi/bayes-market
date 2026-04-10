@@ -1,0 +1,106 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use the full class command `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` as the canonical focused step-5 rerun in this checkout. It is the stable backend HTTP auth/rate-limit gate already used by the step-4 validation trail, it still isolates the relevant surface, and it naturally includes the two step-3 breadth tests at `tests/test_bayes_market_api.py:6246` and `tests/test_bayes_market_api.py:6276`. I reran that command here and it passed: `Ran 21 tests in 0.643s`, `OK`. A narrower selector can be recorded as supporting evidence only; it should not replace the class-level gate.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:68",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/research.json:6",
+        "tests/test_bayes_market_api.py:6246",
+        "tests/test_bayes_market_api.py:6276"
+      ],
+      "uncertainty": "A narrower preserved-sentinel selector is still useful as supporting audit evidence, but the local task history points to the full class as the repeatable recorded gate.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Use `ff/Tbayes-market-u44-execute-step-2...HEAD` as the primary scope baseline for top-level step 5, because it is the last stable point before the merged step-3 and step-4 implementation history and therefore shows whether the full `u44` task stayed backend-and-tests only. In this checkout that baseline leaves workflow artifacts under `.fleet/tasks/...` plus only two product files: `backend/server.py` and `tests/test_bayes_market_api.py`. Use `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` only as a secondary decomposition baseline to explain the inherited step-4 backend delta.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:68",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/validation.json:4"
+      ],
+      "uncertainty": "A secondary baseline is still helpful for explaining where the inherited `backend/server.py` concern entered history, but it is not the primary proof for the full-task backend-and-tests-only gate.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The acceptable product-file boundary for step 5 is exactly `tests/test_bayes_market_api.py` plus `backend/server.py`, with `.fleet/tasks/...` treated as workflow artifacts. But the audit also needs a stricter verdict alongside that file-boundary check: step-4 validation already says the inherited `backend/server.py` edit was not justified by any failing preserved sentinel, so step 5 must explicitly report that inherited scope objection rather than silently treating file-boundary compliance as sufficient.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:68",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/validation.json:12",
+        "backend/server.py:195",
+        "tests/test_bayes_market_api.py:6246"
+      ],
+      "uncertainty": "The remaining ambiguity is only procedural: the artifact should state the inherited scope objection clearly, but it does not need to reopen the step-4 implementation branch inside this execute leaf.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "If the focused rerun passes but the inherited `backend/server.py` delta is still considered out of plan, step 5 should document that as an inherited scope failure and stop with an artifact-only execute commit. This leaf is not expected to clean up the backend change before committing, because the step-4 plan allowed backend edits only when preserved sentinels exposed a shared-seam regression, and the focused class rerun is green in this checkout.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:47",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:57",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/validation.json:12",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/validation.json:4"
+      ],
+      "uncertainty": "A separate follow-up task could still choose to revert or justify the inherited backend change later, but there is no local evidence that execute-step-5 itself should absorb that corrective scope.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "The durable execute-phase record should include both execution proof and a scope verdict: the exact canonical command, its pass/fail result, the primary `ff/Tbayes-market-u44-execute-step-2...HEAD` diff summary showing only backend/test product files plus workflow artifacts, a secondary note that `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` isolates the inherited `backend/server.py` delta, and an explicit yes/no verdict on whether the current branch clears the parent step-5 scope gate. Recording only the command and a raw diff summary is not enough, because prior validation already rejected plan-only history that lacked an execute-phase verdict.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:68",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/research.json:49",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/research.json:64"
+      ],
+      "uncertainty": "The exact artifact format is flexible, but it must contain an explicit scope-gate verdict rather than only command output or a file list.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "This worktree already sits on the merged step-3 and step-4 history, so step 5 should stay execution-and-audit focused instead of reopening feature implementation."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The full `BayesMarketApiAuthRateLimitTests` class is the safest canonical verification command for the execute artifact; narrower selectors are supplemental only."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Relative to `ff/Tbayes-market-u44-execute-step-2`, the meaningful product-file diff is still `tests/test_bayes_market_api.py` plus `backend/server.py`, with the rest of the delta under `.fleet/tasks/...`."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The remaining execution question is the inherited scope status of `backend/server.py`, not whether the focused auth/rate-limit class still runs; the class rerun is green."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed because branch ancestry, prior validation artifacts, backend seam, and the focused test class are all available locally."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

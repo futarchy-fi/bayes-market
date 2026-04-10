@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` as the canonical focused backend HTTP auth/rate-limit rerun for step 5. A narrower preserved-sentinel selector can be recorded as supporting evidence, but it should not replace the class-level gate already used by the task history.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Use only a narrower preserved-sentinel selector as the recorded gate.",
+        "Rerun a broader backend suite that dilutes the auth/rate-limit focus."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use `ff/Tbayes-market-u44-execute-step-2...HEAD` as the primary diff-audit baseline for the full `u44` scope review, and use `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` only as secondary context to isolate the inherited `backend/server.py` delta.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Audit only against the immediately previous commit in this worktree.",
+        "Use the step-3-to-step-4 baseline as the sole proof for the full-task scope gate."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Treat `tests/test_bayes_market_api.py` and `backend/server.py` as the only acceptable product-file boundary for this task, but record an explicit inherited scope objection if the backend delta remains unjustified by failing preserved sentinels instead of silently clearing the branch on file boundaries alone.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Mark the task complete based only on backend-and-tests file boundaries and ignore the prior step-4 objection.",
+        "Reopen step 4 and clean up `backend/server.py` inside this execute leaf despite the green focused rerun."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Write an execute-phase artifact that captures the canonical command, pass/fail result, primary and secondary diff summaries, and a clear yes/no scope-gate verdict before staging and committing the completed worktree. No child task is needed because the evidence and baselines are already available locally.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Record only raw test output without an explicit scope verdict.",
+        "Split execution and audit into child tasks even though the required context is already present in this worktree."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Run `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` and capture the exact pass/fail result as the canonical focused backend HTTP auth/rate-limit gate for this checkout.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Audit the file list and diff summary for `ff/Tbayes-market-u44-execute-step-2...HEAD` to confirm the overall task remains limited to workflow artifacts plus the product files `tests/test_bayes_market_api.py` and `backend/server.py`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Review `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` as secondary context so the execute record can isolate the inherited `backend/server.py` delta and explain that the green focused rerun does not justify absorbing backend cleanup into this leaf.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Write the execute artifact under `.fleet/tasks/bayes-market-u44-execute-step-5/` with the canonical command, observed result, both diff summaries, and an explicit verdict on whether the branch clears the parent step-5 backend-and-tests-only scope gate.",
+      "depends_on": [1, 2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Stage the resulting artifact-only updates and commit the completed worktree with the requested message after verifying the audit did not introduce unintended product edits.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

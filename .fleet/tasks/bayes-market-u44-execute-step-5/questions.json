@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact focused backend HTTP auth/rate-limit command should satisfy top-level step 5 in this checkout: rerun the whole `BayesMarketApiAuthRateLimitTests` class via `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests`, or a narrower selector limited to the step-3/step-4 touched tests and preserved sentinels?",
+      "category": "requirements",
+      "why_it_matters": "Step 5 is an execution gate. The branch already contains merged test and backend work, so it needs one repeatable verification command instead of an ad hoc rerun."
+    },
+    {
+      "id": "q2",
+      "question": "For the diff audit, what baseline should prove that the full `u44` task stayed backend-and-tests only: compare `HEAD` to `ff/Tbayes-market-u44-execute-step-2`, or use separate baselines for the step-3 test additions and the step-4 backend delta now that `ff/Tbayes-market-u44` already points at this merge commit?",
+      "category": "requirements",
+      "why_it_matters": "Using the wrong comparison point either hides the already-merged test diff or over-attributes prior history. The scope review is only meaningful if it uses a stable pre-implementation baseline."
+    },
+    {
+      "id": "q3",
+      "question": "When that audit runs, is the acceptable product-file boundary exactly `tests/test_bayes_market_api.py` plus `backend/server.py`, with `.fleet/tasks/...` treated as workflow artifacts, or does step 5 need a stricter verdict because step-4 validation already questioned whether the `backend/server.py` edit was justified?",
+      "category": "design",
+      "why_it_matters": "The parent step says 'backend-and-tests only', but the latest validation also challenged the inherited backend delta on scope grounds. The execute leaf needs to know whether it is checking file boundaries or reopening that earlier scope dispute."
+    },
+    {
+      "id": "q4",
+      "question": "If the focused rerun passes but the inherited `backend/server.py` delta is still considered out of plan for step 4, should top-level step 5 document that as an inherited failure and stop with an artifact-only execute commit, or is this leaf expected to clean up the backend change before committing?",
+      "category": "requirements",
+      "why_it_matters": "This decides whether step 5 is an execution-and-audit leaf or a corrective branch that must modify product files before it can be considered complete."
+    },
+    {
+      "id": "q5",
+      "question": "What durable execution evidence should be written under `.fleet/tasks/bayes-market-u44-execute-step-5/`: only the exact test command and pass/fail result plus diff summary, or also an explicit verdict about whether the current branch satisfies the parent step-5 scope gate?",
+      "category": "codebase",
+      "why_it_matters": "A clean worktree and a passing rerun are not enough by themselves if later validation cannot tell whether step 5 merely re-ran tests or actually completed the required scope audit."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This checkout already contains the merged step-3 and step-4 implementation history and starts clean, so top-level step 5 is primarily an execution-and-audit leaf rather than a feature-building leaf.",
+      "confidence": 0.99,
+      "if_wrong": "The task would first need missing product changes before any focused rerun or diff audit could be meaningful."
+    },
+    {
+      "id": "a2",
+      "assumption": "The simplest likely focused verification gate is the full `BayesMarketApiAuthRateLimitTests` class, because earlier validation already used that class-level command and it isolates the backend HTTP auth/rate-limit surface.",
+      "confidence": 0.91,
+      "if_wrong": "Step 5 would need a narrower selector so the recorded verification matches the intended test slice exactly."
+    },
+    {
+      "id": "a3",
+      "assumption": "Relative to `ff/Tbayes-market-u44-execute-step-2`, the meaningful product-file diff for the overall `u44` implementation is currently `tests/test_bayes_market_api.py` plus `backend/server.py`, with the rest of the visible history living under `.fleet/tasks/...`.",
+      "confidence": 0.98,
+      "if_wrong": "The scope audit would need to account for additional product files, which would materially change whether the task still qualifies as backend-and-tests only."
+    },
+    {
+      "id": "a4",
+      "assumption": "The existing step-4 validation concern about `backend/server.py` is the main unresolved execution question, not whether the auth/rate-limit test class still runs in this checkout.",
+      "confidence": 0.87,
+      "if_wrong": "A failing focused rerun would reopen the implementation path and make the scope-audit questions secondary."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the relevant branch ancestry, prior validation artifacts, backend seam, and focused auth/rate-limit tests are all available locally in this worktree.",
+      "confidence": 0.99,
+      "if_wrong": "A separate exploration task would be needed to reconstruct the correct baseline or test gate before execution could proceed safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

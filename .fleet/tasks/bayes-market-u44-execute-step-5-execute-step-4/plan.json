@@ -1,0 +1,84 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Reuse the merged checkout-authoritative result from `.fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json` as the parent step-5 canonical observed test result instead of rerunning `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests`, while still confirming the current checkout has not introduced new product drift since that merge.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Rerun `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` in this leaf even though the merged step-1 result is already marked authoritative for the checkout.",
+        "Omit the canonical command and observed result entirely and treat this leaf as a diff-only summary."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Write the parent execute artifact as `.fleet/tasks/bayes-market-u44-execute-step-5/execution.json`, following the existing local execute-phase naming precedent while extending the payload with the parent-specific diff summaries and scope-gate verdict.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Invent a new artifact filename just for the parent execute leaf.",
+        "Write free-form notes without using the local `execution.json` execute-phase convention."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Summarize the primary `ff/Tbayes-market-u44-execute-step-2...HEAD` audit with both the overall diff stat and a grouped path inventory that explicitly names `backend/server.py` and `tests/test_bayes_market_api.py` as the only product files and groups the remaining paths under the `bayes-market-u44` task-artifact lineage.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Record only the diff stat and leave the product-file boundary implicit.",
+        "Dump the full path list verbatim instead of producing a durable grouped summary."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Restate the surviving inherited `backend/server.py` delta by naming the agent-id normalization helper extraction around `_invalid_agent_id_reason(...)`, `_normalize_write_request_agent_id(...)`, and `resolve_write_request_agent(...)`, while citing the child execute-step-3 evidence instead of reproducing the full diff hunk.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Describe the inherited backend delta only as a generic `backend/server.py` change with no function-level specificity.",
+        "Inline the full secondary diff hunk into the parent artifact."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Record an explicit hard verdict that the branch does not clear the parent step-5 backend-and-tests-only scope gate, because the inherited `backend/server.py` helper extraction remains unjustified by any failing preserved sentinel even though the canonical auth/rate-limit result is green and the primary boundary stays within backend/tests plus task artifacts.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Treat the branch as a partial pass because the canonical focused test result is green.",
+        "Clear the scope gate based only on the file boundary and omit the inherited plan-adherence objection."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Inspect `.fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json` and the current checkout state to confirm the step-1 run result is still reusable, then capture the canonical command and observed pass result fields that must be carried into the parent execute artifact.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Collect the primary `ff/Tbayes-market-u44-execute-step-2...HEAD` diff evidence needed for the parent record: the overall diff stat and a grouped inventory showing that only `backend/server.py` and `tests/test_bayes_market_api.py` are product files while the remaining changes stay under `.fleet/tasks/bayes-market-u44-*` artifacts.",
+      "depends_on": []
+    },
+    {
+      "step": 3,
+      "task": "Collect the secondary `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` summary and the linked validation context so the parent record can name the surviving helper-extraction delta and explain why it still fails the scope gate.",
+      "depends_on": []
+    },
+    {
+      "step": 4,
+      "task": "Write `.fleet/tasks/bayes-market-u44-execute-step-5/execution.json` with the canonical command, reused observed result, primary diff summary, secondary diff summary, and the explicit `does not clear` parent scope-gate verdict in a schema consistent with the local execute-phase precedent.",
+      "depends_on": [1, 2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Verify the worktree still contains only the intended task-artifact edits, then stage all changes and commit them with `git commit --no-verify -m \"plan: bayes-market-u44-execute-step-5-execute-step-4\"`.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

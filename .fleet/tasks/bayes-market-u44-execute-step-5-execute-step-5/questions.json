@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Because `.fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json` already records a green `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` run but that child branch also carried a `backend/server.py` revert, can the final parent step-5 commit still reuse that recorded result as checkout-authoritative evidence, or must it rerun the focused class before writing the top-level execute artifact?",
+      "category": "requirements",
+      "why_it_matters": "This decides whether the remaining leaf is a synthesis-and-commit step or whether it still needs fresh runtime execution before the parent execute record can be considered complete."
+    },
+    {
+      "id": "q2",
+      "question": "What exact git comparison should prove that no new product edits landed after that step-1 run if the parent wants to reuse it: a direct diff of `backend/server.py` and `tests/test_bayes_market_api.py` between `ff/Tbayes-market-u44-execute-step-5-execute-step-1` and `HEAD`, a leaf-local diff from this branch's start commit `b45886e9`, or both?",
+      "category": "codebase",
+      "why_it_matters": "The task title explicitly requires verifying that the audit did not introduce unintended product edits. The final commit needs a concrete, reproducible git proof for that claim instead of an implicit assumption."
+    },
+    {
+      "id": "q3",
+      "question": "Must this leaf create the missing parent artifact `.fleet/tasks/bayes-market-u44-execute-step-5/execution.json` before staging, or is it acceptable to commit only `.fleet/tasks/bayes-market-u44-execute-step-5-execute-step-5/...` leaf metadata and leave the parent execute record absent?",
+      "category": "requirements",
+      "why_it_matters": "The latest `execute-step-4` validation rejected planning-only history specifically because the parent `execution.json` was still missing. This question determines what 'completed worktree' means for the commit step."
+    },
+    {
+      "id": "q4",
+      "question": "When staging the final commit, is the allowed leaf-local diff boundary strictly the new parent execute artifact plus this leaf's own task files under `.fleet/tasks/`, with any fresh edit to `backend/server.py` or `tests/test_bayes_market_api.py` treated as a blocker even though those files remain part of the inherited full-task audit?",
+      "category": "design",
+      "why_it_matters": "The branch already contains inherited backend-and-tests history that the parent artifact must summarize. The final step still needs a sharper rule for which paths this leaf itself is allowed to stage."
+    },
+    {
+      "id": "q5",
+      "question": "What final pre-commit verification sequence is required to certify the commit as artifact-only: should the leaf inspect both the working tree and the staged index, for example with `git diff --name-only` and `git diff --cached --name-only`, or is a single comparison against the branch-start merge commit enough?",
+      "category": "codebase",
+      "why_it_matters": "The commit instruction comes after an audit, so the branch needs a precise last-mile check that catches accidental staging drift instead of only proving the earlier research conclusions."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This checkout starts from merge commit `b45886e9` with the merged `execute-step-4` history already present and no leaf-local edits yet, so the remaining work for this branch should be additive task-artifact output rather than new product implementation.",
+      "confidence": 0.99,
+      "if_wrong": "The leaf would first need to resolve unexpected local changes or missing merged history before any artifact-only commit rule could be trusted."
+    },
+    {
+      "id": "a2",
+      "assumption": "The missing parent artifact `.fleet/tasks/bayes-market-u44-execute-step-5/execution.json` is still the main completion gap, because prior validation already said planning artifacts alone are insufficient for this step.",
+      "confidence": 0.99,
+      "if_wrong": "The commit step could finish without creating the parent execute record, which would materially change both the scope of the leaf and the staging boundary."
+    },
+    {
+      "id": "a3",
+      "assumption": "Relative to `ff/Tbayes-market-u44-execute-step-2`, the inherited task history still limits product files to `backend/server.py` and `tests/test_bayes_market_api.py`, so any fresh leaf-local product-file change would be an unintended regression rather than expected scope.",
+      "confidence": 0.98,
+      "if_wrong": "The final audit would need a broader allowed-file set, and the commit step could legitimately stage more than task artifacts."
+    },
+    {
+      "id": "a4",
+      "assumption": "The green 21-test result recorded in `.fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json` is the most likely reusable runtime proof, provided git confirms that `backend/server.py` and `tests/test_bayes_market_api.py` have not changed since that execution leaf was merged.",
+      "confidence": 0.94,
+      "if_wrong": "This leaf would need a fresh focused rerun before it could write or trust the parent execute artifact."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the relevant commit ancestry, prior validations, and candidate git baselines are all available locally in this worktree.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up exploration task would be needed to recover the correct reuse boundary or the correct pre-commit diff proof before planning could proceed safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

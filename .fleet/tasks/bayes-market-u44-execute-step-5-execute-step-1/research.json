@@ -1,0 +1,111 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` is the exact canonical focused backend HTTP auth/rate-limit gate for this leaf. The parent step-5 plan names that class command as the canonical rerun, rejects replacing it with a narrower selector, and this leaf is specifically asked to capture that gate for this checkout rather than inherit adjacent artifacts. I reran the exact command locally in this worktree and it passed with exit status 0: `Ran 21 tests in 0.628s` and `OK`.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/questions.json:6",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/questions.json:8",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:6",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:48",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/research.json:6"
+      ],
+      "uncertainty": "A narrower preserved-sentinel selector can still be useful as supplemental context, but the local task history is explicit that it does not replace the class-level canonical gate.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Capture more than a boolean. The durable result for this step should include the command's exit status and the literal unittest outcome block so later validation can distinguish a real test rerun from an invocation problem. For this checkout that means recording the successful summary alongside the pass result: exit status 0, `Ran 21 tests in 0.628s`, and `OK`. If the command had failed, the durable record should instead preserve the failing traceback or error block with the non-zero exit status.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/questions.json:12",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/questions.json:14",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:48",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/research.json:6",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/validation.json:4"
+      ],
+      "uncertainty": "The schema here does not force a separate field for raw command output, so the exact storage shape is inferred from the requirement to preserve the exact pass/fail result rather than explicitly prescribed.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Earlier green evidence under `.fleet/tasks/bayes-market-u44-execute-step-5/` is context only. This leaf is required to rerun the canonical class command in the current worktree and treat that fresh local output as authoritative for this checkout, even if it differs from adjacent artifacts. The parent plan says step 1 is to run and capture the result for 'this checkout', and prior validation explicitly noted that validation-side reruns were not sufficient because the reviewed branch history had not recorded its own execute-phase proof.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/questions.json:18",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/questions.json:20",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/questions.json:50",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:48",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/validation.json:4"
+      ],
+      "uncertainty": "None of the local artifacts says this in the exact phrase 'fresh output is authoritative,' but that is the direct implication of the checkout-specific rerun requirement and the rejection of validation-only evidence.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "If the canonical class rerun fails in this checkout, this step should stop after recording the exact failure output as the gate result. It is not expected to begin root-cause triage inside this leaf. The local step-5 plan sequences this leaf as run/capture first and artifact writing later, with no debugging or repair step, and the leaf assumptions already frame failure handling as record-the-gate rather than expand scope into code changes.",
+      "confidence": 0.88,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/questions.json:24",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/questions.json:26",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/questions.json:56",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:45",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:63",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:68"
+      ],
+      "uncertainty": "This is inferred from scope and step ordering rather than from an explicit 'do not debug' statement in the local artifacts.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. The intended invocation seam is the repo-root `python3` unittest entrypoint exactly as written, with no pytest wrapper, virtualenv-specific launcher, or extra environment overrides. The parent step-5 decision and step-1 task both preserve that exact command shape, and `tests/test_bayes_market_api.py` exposes a direct script entrypoint via `if __name__ == \"__main__\": unittest.main()`, so using the same repo-root `python3` invocation keeps this result comparable to the earlier step-5 validations.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/questions.json:30",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/questions.json:44",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:6",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:48",
+        "tests/test_bayes_market_api.py:8122",
+        "tests/test_bayes_market_api.py:8123"
+      ],
+      "uncertainty": "There is always a small possibility that a hidden environment prerequisite exists outside the tracked artifacts, but the command succeeded locally as written and the test file supports direct unittest execution.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The leaf should record the full class command as the canonical gate and not replace it with a narrower selector or inherited evidence."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The class is directly runnable from the repo root with `python3`; the observed gate result from this checkout is trustworthy without extra launcher changes."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "This step needed a fresh local rerun, so the newly observed `21 tests / OK` result is the authoritative execution proof for this checkout."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.88,
+      "impact": "If the gate were red, the right next action in this leaf would be to preserve the failure output, not to widen scope into immediate debugging or repair."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed because the command, prior task history, and execution seam were all fully answerable from the current worktree."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` strictly as attribution-only secondary context, while keeping `ff/Tbayes-market-u44-execute-step-2...HEAD` as the sole authoritative scope baseline for the parent step-5 verdict.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Promote the secondary range into a second authoritative scope gate.",
+        "Ignore the secondary range entirely and lose the ability to explain where the inherited backend delta entered history."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Describe the inherited `backend/server.py` change narrowly as the surviving agent-id normalization helper extraction around `_invalid_agent_id_reason(...)`, `_normalize_write_request_agent_id(...)`, and `resolve_write_request_agent(...)`, not as the reverted route-suffix constants and not as the whole original step-4 protected-write refactor package.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Summarize the inherited backend delta as the full step-4 refactor without accounting for later reverts.",
+        "Focus on the route-suffix classification constants even though execute-step-1 already removed that portion from the current branch."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Ground the non-absorption explanation in both local validation artifacts, with the step-4 `changes_requested` result as the controlling scope record and the green `BayesMarketApiAuthRateLimitTests` focused rerun as corroboration only. The execute record should state explicitly that the green rerun proves preserved auth/rate-limit coverage still holds and does not retroactively justify backend cleanup in `resolve_write_route_category(...)` or `resolve_write_request_agent(...)`.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Treat the green focused rerun as fresh permission to absorb backend cleanup into this leaf.",
+        "Rely only on the older validation artifact without recording how the later green rerun should be interpreted."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep this leaf documentation-only: write an execution artifact that records the inherited backend objection for the later parent execute record and stop there, without proposing a revert, adding cleanup work, or spawning child tasks.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Turn this leaf into a corrective backend cleanup or revert task.",
+        "Split the attribution work into child tasks even though the git history and validation trail are already available locally."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Review `git diff --name-only` and the relevant `backend/server.py` hunk for `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` to confirm that the range is attribution-only context and that `backend/server.py` is the lone product-file delta inside that secondary history slice.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Compare that raw step-4 backend diff with the current `backend/server.py` state and the execute-step-1 artifact so the later execute record isolates only the surviving helper-extraction portion around `_invalid_agent_id_reason(...)`, `_normalize_write_request_agent_id(...)`, and `resolve_write_request_agent(...)`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Re-read the step-4 `changes_requested` validation and the green step-5 focused rerun artifacts to frame the explanation that preserved auth/rate-limit coverage still passes, but that green result corroborates rather than overrides the earlier scope objection to absorbing backend cleanup.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Write this task's execute artifact under `.fleet/tasks/bayes-market-u44-execute-step-5-execute-step-3/` with the secondary diff summary, the narrowed inherited `backend/server.py` delta, and an explicit statement that the green focused rerun does not justify pulling backend cleanup into this leaf.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Stage the resulting task-artifact update and commit it with the requested message after confirming the leaf remained documentation-only outside `.fleet/tasks/`.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

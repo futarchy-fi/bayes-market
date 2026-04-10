@@ -192,15 +192,6 @@ WRITE_ROUTE_POLICIES: dict[str, dict[str, bool]] = {
     MARKET_ADMIN_WRITE_CATEGORY: {"requires_agent_id": True},
     TRADE_WRITE_CATEGORY: {"requires_agent_id": True},
 }
-# Keep the protected write surface closed so unsupported POST routes stay outside auth/rate-limit handling.
-MARKET_ADMIN_WRITE_ROUTE_SUFFIXES = frozenset({
-    ("resolve",),
-})
-TRADE_WRITE_ROUTE_SUFFIXES = frozenset({
-    ("comments",),
-    ("orders", "probability-edit"),
-    ("orders", "event-trade"),
-})
 
 
 class WriteRequestAgentContext(NamedTuple):
@@ -404,10 +395,11 @@ def resolve_write_route_category(method: str, raw_path: str) -> str | None:
     if len(parts) < 4 or parts[:2] != ["v1", "markets"]:
         return None
 
-    route_suffix = tuple(parts[3:])
-    if route_suffix in MARKET_ADMIN_WRITE_ROUTE_SUFFIXES:
+    if len(parts) == 4 and parts[3] == "resolve":
         return MARKET_ADMIN_WRITE_CATEGORY
-    if route_suffix in TRADE_WRITE_ROUTE_SUFFIXES:
+    if len(parts) == 4 and parts[3] == "comments":
+        return TRADE_WRITE_CATEGORY
+    if len(parts) == 5 and parts[3:] in (["orders", "probability-edit"], ["orders", "event-trade"]):
         return TRADE_WRITE_CATEGORY
     return None
 
