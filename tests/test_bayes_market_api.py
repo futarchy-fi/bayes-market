@@ -589,12 +589,71 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             payload["routes"]["accounts"],
             ["/v1/accounts/{id}/risk", "/v1/accounts/{id}/pnl"],
         )
+        self.assertEqual(payload["routes"]["health"], ["/health", "/healthz", "/v1/health"])
         self.assertIn("GET /v1/markets/{id}/analytics", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/meta", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/events", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/engine-stats", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/resolve", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/orders/event-trade", payload["routes"]["orders"])
+
+    def test_legacy_health_routes_return_legacy_health_payload(self):
+        legacy_payload = {
+            "service": "bayes-market",
+            "status": "ok",
+            "timestamp": "2026-04-10T00:00:00Z",
+        }
+
+        with (
+            patch.object(server, "health_payload", return_value=legacy_payload) as health_payload,
+            patch.object(server, "v1_health_payload", return_value={"status": "wrong"}) as v1_health_payload,
+        ):
+            for path in ("/health", "/healthz"):
+                with self.subTest(path=path):
+                    payload, status = server.route_request("GET", path)
+
+                    self.assertEqual(status, 200)
+                    self.assertEqual(payload, legacy_payload)
+
+        self.assertEqual(health_payload.call_count, 2)
+        v1_health_payload.assert_not_called()
+
+    def test_v1_health_route_returns_versioned_health_payload(self):
+        versioned_payload = {
+            "service": "bayes-market",
+            "status": "ok",
+            "timestamp": "2026-04-10T00:00:00Z",
+            "version": "9.9.9",
+            "uptime_seconds": 12.345,
+            "components": {
+                "db": {"status": "ok"},
+                "inference": {"status": "ok"},
+                "auth": {"status": "ok"},
+            },
+        }
+
+        with (
+            patch.object(server, "v1_health_payload", return_value=versioned_payload) as v1_health_payload,
+            patch.object(server, "health_payload", return_value={"status": "legacy"}) as health_payload,
+        ):
+            payload, status = server.route_request("GET", "/v1/health")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, versioned_payload)
+        v1_health_payload.assert_called_once_with()
+        health_payload.assert_not_called()
+
+    def test_v1_health_route_is_method_not_allowed_for_non_get(self):
+        for method in ("POST", "PUT", "DELETE"):
+            with self.subTest(method=method):
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(method, "/v1/health", {})
+
+                error = ctx.exception
+                self.assertEqual(error.status, 405)
+                self.assertEqual(error.code, "method_not_allowed")
+                self.assertEqual(error.details["method"], method)
+                self.assertEqual(error.details["path"], "/v1/health")
 
     def test_market_analytics_returns_multi_outcome_price_series_and_excludes_contextual_edits(self):
         unconditional_body = build_unconditional_probability_edit_body("acct_chart", "m2", "yes", 0.4)
@@ -6067,13 +6126,28 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         status, payload, _ = self.request_with_headers(method, path, body, headers=headers)
         return status, payload
 
-    def test_healthz_returns_service_payload(self):
-        status, payload = self.request("GET", "/healthz")
+    def test_legacy_health_http_routes_return_service_payload(self):
+        for path in ("/health", "/healthz"):
+            with self.subTest(path=path):
+                status, payload = self.request("GET", path)
+
+                self.assertEqual(status, 200)
+                self.assertEqual(payload["service"], "bayes-market")
+                self.assertEqual(payload["status"], "ok")
+                self.assertTrue(payload["timestamp"].endswith("Z"))
+                self.assertNotIn("version", payload)
+                self.assertNotIn("components", payload)
+
+    def test_v1_health_http_returns_versioned_service_payload(self):
+        status, payload = self.request("GET", "/v1/health")
 
         self.assertEqual(status, 200)
         self.assertEqual(payload["service"], "bayes-market")
         self.assertEqual(payload["status"], "ok")
         self.assertTrue(payload["timestamp"].endswith("Z"))
+        self.assertEqual(payload["version"], server.ENGINE_CONFIG.version)
+        self.assertIsInstance(payload["uptime_seconds"], float)
+        self.assertEqual(set(payload["components"]), {"db", "inference", "auth"})
 
     def test_create_market_http_returns_created_market_and_collection_entry(self):
         body = build_create_market_body(
