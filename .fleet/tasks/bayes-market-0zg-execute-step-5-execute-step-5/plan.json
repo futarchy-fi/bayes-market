@@ -1,0 +1,64 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep this leaf execution-only: treat the backend `/v1/markets` coverage and the refreshed frontend suites as already-implemented surfaces, and use the focused verification commands to distinguish real regressions from environment or runner issues before considering any code edits.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Reopen the frontend refresh itself as part of this leaf instead of first replaying the agreed verification matrix.",
+        "Escalate immediately to broad repo-wide suites when a focused command is the stated contract for this step."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Freeze the backend gate at the seven named `/v1/markets` methods inside `tests.test_bayes_market_api.BayesMarketApiUnitTests`: default exclusion, explicit `include_resolved=true` inclusion, bare `status=resolved`, `status=resolved` overriding `include_resolved=false`, and the blank, unsupported, and duplicate `include_resolved` contract-error cases.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Rerun the full `BayesMarketApiUnitTests` class or the entire `tests/test_bayes_market_api.py` module.",
+        "Drop the invalid-input selectors and rely only on the happy-path `/v1/markets` tests."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep the frontend gate anchored to the four refreshed files named in the parent plan, but preserve the repo-specific runner nuance in the execution record: run the literal `pnpm test -- ...` command from `frontend/`, note that the `test` script expands to `vitest run` and may execute more than the four requested files here, and use direct `pnpm exec vitest run ...` over the same file list only if a truly file-scoped confirmation is needed.",
+      "based_on": ["q1", "q6"],
+      "alternatives_rejected": [
+        "Pretend the `pnpm test -- ...` wrapper is inherently file-scoped in this repo and omit the runner-broadening nuance.",
+        "Replace the requested frontend command entirely with a full frontend suite run."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Confirm the workspace is in a runnable state for the focused checks: inspect the current diff for unrelated noise, verify the backend test module and `frontend/` test runner are available, and treat missing dependencies or permission errors as execution-environment findings rather than product regressions.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Run the seven named backend selectors in `tests.test_bayes_market_api.BayesMarketApiUnitTests`: `test_list_markets_excludes_resolved_by_default_and_returns_summary_shape`, `test_list_markets_include_resolved_true_returns_all_markets`, `test_list_markets_status_resolved_returns_only_resolved_markets`, `test_list_markets_status_resolved_overrides_include_resolved_false`, `test_blank_include_resolved_filter_returns_contract_error`, `test_unsupported_include_resolved_filter_returns_contract_error`, and `test_duplicate_include_resolved_filter_returns_contract_error`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "From `frontend/`, run the literal requested wrapper command `pnpm test -- src/__tests__/api-client.test.ts src/__tests__/MarketList.test.tsx src/__tests__/System.test.tsx src/__tests__/MarketDetail.test.tsx` and capture both the pass/fail result and whether Vitest broadens beyond the intended four-file slice in this checkout.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "If step 3 broadens the run or leaves the focused file scope ambiguous, immediately replay the same four frontend files with `pnpm exec vitest run src/__tests__/api-client.test.ts src/__tests__/MarketList.test.tsx src/__tests__/System.test.tsx src/__tests__/MarketDetail.test.tsx` so the execution record contains a true file-scoped verification alongside the required wrapper command.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Summarize the focused backend and frontend results, explicitly separating product regressions from environment/setup failures and noting the wrapper-command scope nuance so the subsequent execution/validation artifact can cite the exact commands and outcomes without re-investigating scope.",
+      "depends_on": [2, 3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
