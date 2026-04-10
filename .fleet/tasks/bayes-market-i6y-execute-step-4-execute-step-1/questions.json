@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Which existing tests should remain the canonical `/positions` contract sentinels for this step: `test_root_route_returns_service_index` in `BayesMarketApiUnitTests` plus the three `/positions` projection tests in `BayesMarketExposureProjectionTests`, or should step 1 consolidate that coverage into a new canonical success baseline before later ordering and P&L regressions build on top?",
+      "category": "codebase",
+      "why_it_matters": "The audit found the current baseline split across one root-route assertion and three projection-focused tests. Step 1 needs to know whether to preserve those seams and widen them in place or to reshape the baseline first."
+    },
+    {
+      "id": "q2",
+      "question": "Should `test_root_route_returns_service_index` continue freezing the full ordered `routes.accounts` list exactly as `[\"/v1/accounts/{id}/risk\", \"/v1/accounts/{id}/exposure\", \"/v1/accounts/{id}/positions\"]`, or is it enough for the test to assert that `/positions` is present even if account-route order changes?",
+      "category": "requirements",
+      "why_it_matters": "The current unit test already uses exact equality for `routes.accounts`, and the step-4 plan explicitly calls out exact service-index ordering. The answer determines whether the route list order is part of the public contract or just an implementation detail."
+    },
+    {
+      "id": "q3",
+      "question": "Once `unrealizedPnl` is available on the wire, should `test_get_account_positions_serializes_minimal_lexically_sorted_live_rows_and_route_parity` freeze the full exact ordered `account.positions` rows as the additive five-field shape `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}`, while still keeping malformed and rounded-zero rows excluded?",
+      "category": "design",
+      "why_it_matters": "That test is the current success-path baseline for `/positions`. Step 1 needs one precise row contract so later deterministic-order and P&L regressions extend the same canonical payload instead of creating competing baselines."
+    },
+    {
+      "id": "q4",
+      "question": "How should dynamic `meta` be handled in the refreshed baseline assertions for the root service index and successful `/positions` responses: should the tests assert only stable invariants such as `meta.timestamp` presence and format, or should they patch time and compare the entire `meta` object exactly?",
+      "category": "design",
+      "why_it_matters": "Both `service_index_payload()` and `get_account_positions()` currently call `make_meta()`, which generates runtime timestamps. The audit needs one consistent meta strategy before turning these tests into the canonical contract baseline."
+    },
+    {
+      "id": "q5",
+      "question": "The current checkout still exposes the older four-field `/positions` row and has no `unrealizedPnl` serializer or replay seam. Should step 1 update the baseline assertions now to the planned five-field contract and accept that they depend on the step-3 production work, or should this leaf stay green on the pre-P&L checkout until that prerequisite is rebased in?",
+      "category": "codebase",
+      "why_it_matters": "This determines whether step 1 is purely a test-baseline reshaping pass or whether it is expected to land only after the replay/P&L implementation exists. Without that call, the branch could end up with intentionally failing tests or an incomplete canonical baseline."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The current authoritative `/positions` baseline is concentrated in `test_root_route_returns_service_index`, `test_get_account_positions_serializes_minimal_lexically_sorted_live_rows_and_route_parity`, `test_get_account_positions_raises_404_for_missing_or_fully_pruned_projection`, and `test_account_positions_route_is_method_not_allowed_for_post`.",
+      "confidence": 0.99,
+      "if_wrong": "Step 1 could miss another contract-owning test seam and accidentally leave duplicate or conflicting `/positions` baselines behind."
+    },
+    {
+      "id": "a2",
+      "assumption": "Wire ordering for `/positions` is still defined by `serialize_account_positions(...)`, which filters malformed and rounded-zero rows and sorts surviving rows lexically by `(marketId, outcomeId)`.",
+      "confidence": 0.98,
+      "if_wrong": "The canonical success assertions would need a different ordering rule or different expectations about pruned rows."
+    },
+    {
+      "id": "a3",
+      "assumption": "The intended post-P&L `/positions` row contract remains the additive five-field shape `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` rather than the richer `/exposure` row shape.",
+      "confidence": 0.93,
+      "if_wrong": "Step 1 would freeze the wrong success payload and later regressions would need to be rebuilt around a different public contract."
+    },
+    {
+      "id": "a4",
+      "assumption": "Response `meta` should be treated as dynamic because both the root service index and `/positions` success payloads currently use `make_meta()` and therefore produce runtime timestamps.",
+      "confidence": 0.97,
+      "if_wrong": "The baseline tests should patch time or compare the full metadata object exactly instead of using invariant-only assertions."
+    },
+    {
+      "id": "a5",
+      "assumption": "The current branch does not yet contain the step-3 `unrealizedPnl` production seam, so any exact five-field `/positions` success assertion will either require a prerequisite rebase or intentionally stage ahead of passing production code.",
+      "confidence": 0.98,
+      "if_wrong": "Step 1 can update the canonical payload assertions immediately without worrying about missing implementation prerequisites."
+    },
+    {
+      "id": "a6",
+      "assumption": "No child task is needed because the relevant contract owners are local to `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `bayes-market-i6y` planning artifacts already present in this worktree.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up exploration task would be needed before implementation could safely update the baseline assertions."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
