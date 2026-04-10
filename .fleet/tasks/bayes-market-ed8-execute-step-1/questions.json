@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact JSON fields should each `/v1/health.components` entry expose beyond `status`, especially the concrete key names for the `db` store kind, the `inference` backend/version identity, and the `auth` agent-id requirement mode?",
+      "category": "requirements",
+      "why_it_matters": "Step 1 freezes the new payload contract in `backend/server.py`. The parent plan fixes the concepts to expose, but not the exact nested field names that tests and future clients will need to rely on."
+    },
+    {
+      "id": "q2",
+      "question": "What event should anchor `uptime_seconds` in this repo: module import time, `run_server()` startup, or the first successfully handled request?",
+      "category": "design",
+      "why_it_matters": "There is no existing process-lifecycle object in the backend. The choice affects where the new shared helper stores its start timestamp and what the value means during tests, direct module imports, and local scripts."
+    },
+    {
+      "id": "q3",
+      "question": "Should `reset_state()` leave the health start timestamp untouched, or should health uptime be treated as resettable test state alongside the in-memory markets, orders, events, and account projections?",
+      "category": "codebase",
+      "why_it_matters": "This suite calls `reset_state()` heavily between cases. If step 1 introduces a module-level process-start clock, the implementation needs to know whether that clock is part of domain state or intentionally monotonic for the life of the imported server module."
+    },
+    {
+      "id": "q4",
+      "question": "Should the `auth` and `inference` component helpers read the current mutable runtime globals (`AUTH_REQUIRE_AGENT_ID`, `ENGINE_BACKEND`, `ENGINE_VERSION`) or re-read environment/config sources on each request?",
+      "category": "codebase",
+      "why_it_matters": "The backend currently caches config at import time, and existing tests mutate `AUTH_REQUIRE_AGENT_ID` directly. Step 1 needs to know which source of truth the new helpers should follow so the health payload reflects real runtime behavior."
+    },
+    {
+      "id": "q5",
+      "question": "In the current all-in-memory checkout, is any component actually expected to report `degraded` or `unhealthy` today, or are those states only future-proof aggregation values until a real dependency can fail independently?",
+      "category": "design",
+      "why_it_matters": "Step 1 adds a generic top-level status aggregator, but the current `db`, `inference`, and `auth` signals all appear to be configuration-derived. Whether any non-`ok` component state should exist now changes both the helper logic and the tests we should write later."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new `/v1/health` payload should stay flat and top-level, without adding a `meta` envelope, because the parent plan describes it as the current health payload plus new fields rather than a conversion to the repo's standard `{..., meta}` API shape.",
+      "confidence": 0.88,
+      "if_wrong": "The shared helper will need to integrate with `make_meta()` or a different response builder, and the eventual tests will have to freeze a different top-level contract."
+    },
+    {
+      "id": "a2",
+      "assumption": "A process-start timestamp for health should be module-scoped and should not be reset by `reset_state()`, because the task explicitly asks for process start uptime rather than domain-state uptime.",
+      "confidence": 0.81,
+      "if_wrong": "The helper needs a different lifecycle hook, likely tied to test setup or `run_server()`, and later assertions about uptime monotonicity would need to change."
+    },
+    {
+      "id": "a3",
+      "assumption": "The `db` component refers to the backend's in-memory Python state store and should expose that storage kind while reporting `ok` when the process is serving requests.",
+      "confidence": 0.92,
+      "if_wrong": "Step 1 would need a different abstraction for persistence health, or it would need to represent a missing external database dependency that does not exist in this checkout."
+    },
+    {
+      "id": "a4",
+      "assumption": "The `auth` component should derive from the live `AUTH_REQUIRE_AGENT_ID` runtime flag and expose whether agent-id enforcement is required in a separate field rather than overloading the `status` string.",
+      "confidence": 0.84,
+      "if_wrong": "The helper would need to re-read environment variables or expose a different auth contract, and tests that mutate the global auth flag would not mirror the health response correctly."
+    },
+    {
+      "id": "a5",
+      "assumption": "The `inference` component should reuse the already-loaded engine identity (`ENGINE_BACKEND` and `ENGINE_VERSION`) and avoid live compile/query probes inside the health path.",
+      "confidence": 0.93,
+      "if_wrong": "Step 1 would need to add new inference readiness checks or error handling that are not currently present in the repo's shared helper layer."
+    },
+    {
+      "id": "a6",
+      "assumption": "Component statuses should reuse the same `ok` / `degraded` / `unhealthy` vocabulary as the top-level status, with informational values such as auth optional vs required carried in separate fields.",
+      "confidence": 0.75,
+      "if_wrong": "The aggregator and payload helper would need a broader component-state model, and later tests would need to freeze extra status strings or mapping rules."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
