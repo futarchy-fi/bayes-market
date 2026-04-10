@@ -6,6 +6,7 @@ import type {
   MarketCommentsResponse,
   EngineStatsResponse,
   AccountRiskResponse,
+  AccountExposureResponse,
   OrderResponse,
   EventTradeResponse,
   CommentResponse,
@@ -162,6 +163,14 @@ export function getAccountRisk(
 ): Promise<AccountRiskResponse> {
   return request<AccountRiskResponse>(
     `/v1/accounts/${encodeURIComponent(accountId)}/risk`,
+  );
+}
+
+export function getAccountExposure(
+  accountId: string,
+): Promise<AccountExposureResponse> {
+  return request<AccountExposureResponse>(
+    `/v1/accounts/${encodeURIComponent(accountId)}/exposure`,
   );
 }
 

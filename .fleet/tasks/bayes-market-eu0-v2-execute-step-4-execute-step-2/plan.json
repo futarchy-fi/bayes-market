@@ -1,0 +1,64 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat the EventTrade-specific success typing as already settled in this checkout and keep this step limited to the missing exposure helper plus the corresponding `client.ts` import wiring.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Reopen the broader mutation-response typing cleanup in this step.",
+        "Widen `submitEventTrade(...)` back to the generic `OrderResponse` contract."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Implement `getAccountExposure(accountId)` as a thin top-level wrapper beside `getAccountRisk(accountId)` that calls `request<AccountExposureResponse>(\"/v1/accounts/{id}/exposure\")` with no custom options.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Add custom fetch options or special-case parsing for exposure reads.",
+        "Introduce a broader account-client refactor instead of one additive helper."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Preserve the shared `request(...)` and `BayesApiError` behavior for exposure reads, including surfacing backend `404 account_not_found` responses unchanged rather than normalizing them in the client.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Translate missing exposure responses into an empty exposure document in `client.ts`.",
+        "Add exposure-specific non-OK handling that diverges from the rest of the API client."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep this execution client-only and defer dedicated `getAccountExposure(...)` test additions to the later testing step unless a verification issue forces scope expansion.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Expand this step to add new API-client assertions immediately.",
+        "Bundle hook or UI coverage into the same change."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Inspect `frontend/src/lib/api/client.ts` to confirm the current `submitEventTrade(...): Promise<EventTradeResponse>` signature and identify the exact import and placement change needed around the existing account-read helpers.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Patch `frontend/src/lib/api/client.ts` to import `AccountExposureResponse` from `./types` and export `getAccountExposure(accountId)` beside `getAccountRisk(accountId)` using `request<AccountExposureResponse>(`/v1/accounts/${encodeURIComponent(accountId)}/exposure`)` without changing the shared request helper or non-OK error flow.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Retain `submitEventTrade(...)` as `Promise<EventTradeResponse>` after the edit and run a focused verification pass for the touched client module without adding new exposure-specific tests in this step.",
+      "depends_on": [2]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
