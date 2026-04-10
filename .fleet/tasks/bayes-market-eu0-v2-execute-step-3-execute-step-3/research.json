@@ -1,0 +1,135 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The frozen public schema for `GET /v1/accounts/{id}/exposure` is `{\"account\":{\"id\":...,\"exposure\":{\"maxPositionSize\":...,\"updatedAt\":...,\"positions\":[...]}} ,\"meta\":...}`. Each exposure row contains exactly `marketId`, `outcomeId`, `netSize`, `absSize`, `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId`. The route does not expose `currentNetSize` or any market metadata; `route_request(...)` simply delegates the GET to `get_account_exposure(account_id)`, so the getter/serializer shape is the public contract.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:1502",
+        "backend/server.py:1532",
+        "backend/server.py:1541",
+        "backend/server.py:3805",
+        "tests/test_bayes_market_api.py:4296",
+        "tests/test_bayes_market_api.py:4303"
+      ],
+      "uncertainty": "Only a future intentional API-version change would alter this shape; there is no evidence of one in this checkout.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "`/v1/accounts/{id}/exposure` returns `404 account_not_found` whenever the live exposure projection is missing or has no non-zero live rows after serialization. That covers never-traded accounts, risk-only accounts that still exist in `ACCOUNT_RISK`, all-zero/pruned exposure documents, and accounts whose final live position was removed by market-resolution cleanup. It returns `200` only when at least one non-zero live exposure row remains.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:1498",
+        "backend/server.py:1543",
+        "backend/server.py:1547",
+        "backend/server.py:1322",
+        "tests/test_bayes_market_api.py:922",
+        "tests/test_bayes_market_api.py:4334"
+      ],
+      "uncertainty": "The current suite proves risk-only and zero-row `404`s directly; the post-resolution final-row `404` is inferred from the cleanup helper plus getter semantics rather than a dedicated route test.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The canonical netting bucket is one atomic `(accountId, marketId, outcomeId)` EventTrade leg. EventTrade formulas must collapse to a single literal, the preview reads only the matching `marketId|outcomeId` slice inside that account's exposure document, and accepted trades net signed size into that same bucket with buys positive and sells negative. There is no broader market-level or formula-level aggregation in the exposure route or position-limit preview.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:2268",
+        "backend/server.py:2285",
+        "backend/server.py:1209",
+        "backend/server.py:1237",
+        "backend/server.py:1257",
+        "tests/test_bayes_market_api.py:4019",
+        "tests/test_bayes_market_api.py:4145"
+      ],
+      "uncertainty": "This would only change if EventTrade were expanded beyond atomic literals, which the current validator explicitly forbids.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "The route is backed by a dedicated persisted in-memory exposure projection, `ACCOUNT_EXPOSURE`, not by on-read reconstruction from `ORDERS`. Accepted EventTrades update that projection through `sync_account_exposure_state(...)`, market resolution prunes it through `settle_market_account_exposure(...)`, `get_account_exposure(...)` reads it directly, and both `reset_state()` and the domain-state snapshot helpers already treat it as first-class mutable state. The untouched-state regressions should therefore assert that `ACCOUNT_EXPOSURE` remains unchanged alongside `ORDERS`, `COMMANDS`, `EVENTS`, `TERMINAL_OUTCOMES`, and `IDEMPOTENCY_KEYS`.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:177",
+        "backend/server.py:253",
+        "backend/server.py:1251",
+        "backend/server.py:1289",
+        "backend/server.py:1543",
+        "tests/test_bayes_market_api.py:116",
+        "tests/test_bayes_market_api.py:354"
+      ],
+      "uncertainty": "There is no reconstruction path today; the only uncertainty would be a future refactor that adds one in parallel with the persisted projection.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. `position_limit_exceeded` is currently a plain pre-command `400` error. The EventTrade handler previews the resulting net size and raises `ApiError` before materializing a command, creating an order, recording a terminal outcome, or binding the idempotency key. The existing regression also proves that the failed attempt leaves domain state untouched and that the same idempotency key can later succeed once the position is reduced, which means repeated failures recompute the preview instead of replaying a stored rejection.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:3617",
+        "backend/server.py:3660",
+        "backend/server.py:3663",
+        "backend/server.py:3679",
+        "tests/test_bayes_market_api.py:3764",
+        "tests/test_bayes_market_api.py:3809",
+        "tests/test_bayes_market_api.py:3817"
+      ],
+      "uncertainty": "The exact 'recompute on every repeated failure' behavior is an inference from the absence of any persisted binding before the limit check; the suite proves the externally visible consequence through state immutability and later key reuse.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "Yes. Resolution removes only the resolved market's exposure rows. If the account still has unrelated live positions, `/v1/accounts/{id}/exposure` keeps returning `200` with those surviving rows and a refreshed account `updatedAt`; the route flips to `404` only when the resolved market was the account's last non-zero live exposure and the account gets pruned from `ACCOUNT_EXPOSURE`.",
+      "confidence": 0.96,
+      "evidence": [
+        "backend/server.py:1303",
+        "backend/server.py:1321",
+        "backend/server.py:1323",
+        "backend/server.py:1547",
+        "tests/test_bayes_market_api.py:2626",
+        "tests/test_bayes_market_api.py:2706",
+        "tests/test_bayes_market_api.py:6722",
+        "tests/test_bayes_market_api.py:6768",
+        "tests/test_bayes_market_api.py:4369"
+      ],
+      "uncertainty": "The surviving-position `200` path is tested directly; the final-position `404` path is derived from the same prune logic plus the getter's empty-projection semantics.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep `/v1/accounts/{id}/exposure` scoped to live EventTrade positions; do not merge probability-edit risk or LMSR state into this route."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Netting and limit previews should continue using signed size within one atomic market/outcome bucket, with buys positive and sells negative."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Limit-breach regressions should expect no command, event, terminal-outcome, order, exposure, or idempotency-key mutation on fresh failures."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Projection-local emptiness is the exposure contract: accounts with no live rows, even if other account projections exist, should surface as `404 account_not_found`."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "WRONG",
+      "confidence": 0.99,
+      "impact": "This checkout already has the needed projection seam and test helpers. Reuse `ACCOUNT_EXPOSURE`, `sync_account_exposure_state(...)`, `settle_market_account_exposure(...)`, `reset_state()`, and `snapshot_domain_state()` rather than introducing reconstruction logic."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
