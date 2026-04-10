@@ -5870,6 +5870,58 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         self.assertEqual(payload["result"]["status"], "accepted")
         self.assert_rate_limit_headers(response_headers, limit=2, remaining=1)
 
+    def test_protected_post_routes_emit_rate_limit_headers_on_first_success(self):
+        server.RATE_LIMIT_PER_MIN = 2
+
+        route_requests = (
+            (
+                "create-market",
+                lambda agent_id: self.create_market_with_headers(agent_id=agent_id),
+            ),
+            (
+                "probability-edit",
+                lambda agent_id: self.probability_edit_with_headers(
+                    0.8,
+                    account_id="acct_http_headers_breadth_probability",
+                    agent_id=agent_id,
+                ),
+            ),
+            (
+                "market-resolve",
+                lambda agent_id: self.market_resolution_with_headers(
+                    market_id="m2",
+                    account_id="ops_http_headers_breadth_resolve",
+                    outcome_id="delayed",
+                    agent_id=agent_id,
+                ),
+            ),
+            (
+                "comment-post",
+                lambda agent_id: self.comment_post_with_headers(
+                    market_id="m1",
+                    account_id="acct_http_headers_breadth_comment",
+                    comment_body="HTTP auth breadth comment",
+                    agent_id=agent_id,
+                ),
+            ),
+            (
+                "event-trade",
+                lambda agent_id: self.event_trade_with_headers(
+                    market_id="m1",
+                    outcome_id="yes",
+                    account_id="acct_http_headers_breadth_trade",
+                    agent_id=agent_id,
+                ),
+            ),
+        )
+
+        for label, request in route_requests:
+            with self.subTest(label=label):
+                status, _, response_headers = request(f"agent-header-breadth-{label}")
+
+                self.assertEqual(status, 201)
+                self.assert_rate_limit_headers(response_headers, limit=2, remaining=1)
+
     def test_probability_edit_http_decrements_remaining_quota_headers_per_agent_id(self):
         server.RATE_LIMIT_PER_MIN = 3
 
