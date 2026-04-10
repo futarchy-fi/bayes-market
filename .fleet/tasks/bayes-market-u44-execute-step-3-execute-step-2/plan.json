@@ -1,0 +1,60 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Add the new coverage directly inside `BayesMarketApiAuthRateLimitTests` as one shared success-path breadth test that iterates over the five protected POST routes using the existing `*_with_headers(...)` helpers, instead of introducing new HTTP plumbing or separate route-local tests for this step.",
+      "based_on": ["q1", "q4", "q5", "q6"],
+      "alternatives_rejected": [
+        "Add five standalone success-path header tests, one per route, for the breadth sweep.",
+        "Patch backend route handlers even though the current gap is in tests rather than request handling."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Run the shared breadth test with a positive limiter such as `RATE_LIMIT_PER_MIN = 2` and a distinct explicit `agent_id` per `subTest(...)` case so every route can assert the same `assert_rate_limit_headers(..., limit=2, remaining=1)` contract after its first accepted request.",
+      "based_on": ["q2", "q5"],
+      "alternatives_rejected": [
+        "Reuse one shared agent id across all cases and assert descending remaining quota values through the loop.",
+        "Reset rate-limit state between cases just to keep a shared agent id viable.",
+        "Enable `AUTH_REQUIRE_AGENT_ID` even though the success-path header contract does not require it."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep each subtest minimal by relying on the existing helper defaults and `setUp()` reset behavior for valid success fixtures, only naming the route labels explicitly as create-market, probability-edit, market-resolve, comment-post, and event-trade.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Inline custom request bodies for every route inside the breadth loop.",
+        "Duplicate route-specific payload assertions in this shared header-focused test."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit `BayesMarketApiAuthRateLimitTests` in `tests/test_bayes_market_api.py` to confirm the available header-returning helpers, the shared `assert_rate_limit_headers(...)` assertion, and the current success-path coverage gaps for the five protected POST routes.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add a shared success-path breadth test in `BayesMarketApiAuthRateLimitTests` that sets a positive `RATE_LIMIT_PER_MIN`, loops through explicit `subTest(label=...)` cases for create-market, probability-edit, market-resolve, comment-post, and event-trade, performs one accepted request per route with a distinct explicit agent id, and asserts `status == 201` plus `assert_rate_limit_headers(..., limit=2, remaining=1)` for each response.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Run the focused `BayesMarketApiAuthRateLimitTests` slice covering the new breadth test to verify the shared helpers and limiter-enabled headers behave consistently across all five routes without backend changes.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Inspect the diff to confirm the change stays scoped to test coverage and keep the worktree ready for the implementation commit requested by the parent task.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
