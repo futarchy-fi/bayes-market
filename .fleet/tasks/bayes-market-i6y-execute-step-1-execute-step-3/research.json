@@ -1,0 +1,113 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The minimum acceptable value at `account.positions` is already a list-shaped serialization of the live rows, not an unrelated placeholder. This child step freezes the outer `{ \"account\": { \"id\": ..., \"positions\": ... }, \"meta\": ... }` envelope and says the row serialization should be \"deliberately minimal,\" which still implies a thin positions list sourced from live `ACCOUNT_EXPOSURE` rows. What remains deferred is the final row schema, ordering helper, and P&L-specific fields, not whether `account.positions` itself is a live-row list.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:1656",
+        "backend/server.py:1677",
+        ".fleet/tasks/bayes-market-i6y/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y/plan.json:55",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:26",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:58"
+      ],
+      "uncertainty": "The exact temporary row fields are not frozen in this child step. The strong contract is that `account.positions` is the public slot and is list-shaped for live rows, while the detailed row serializer lands later.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. `get_account_positions(account_id)` should mirror `/v1/accounts/{id}/exposure` for projection-local account existence: raise `404 account_not_found` when `ACCOUNT_EXPOSURE` has no entry for the account or when live-row filtering leaves no surviving rows. Raw membership in `ACCOUNT_EXPOSURE` is not enough, because the existing exposure getter treats a fully pruned or rounded-zero projection as absent and the rollout plan explicitly says `/positions` should keep that same lifecycle.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:1656",
+        "tests/test_bayes_market_api.py:1135",
+        "tests/test_bayes_market_api.py:4723",
+        ".fleet/tasks/bayes-market-i6y/plan.json:16",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:36",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:58"
+      ],
+      "uncertainty": "This would only change if `/positions` were intentionally designed to diverge from `/exposure` and return `200` for risk-only or fully pruned accounts, but the current code and plans reject that.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "It should avoid using `serialize_account_exposure_positions(account)` as the public source for `account.positions`. That helper emits the richer `/exposure` row contract, including `absSize`, `updatedAt`, `lastOrderId`, and `lastCommandId`, while the parent positions plan explicitly rejects reusing that richer shape and says this phase should keep serialization deliberately minimal. Reusing its filtering or lexical-order behavior as an implementation reference is fine, but exposing its row payload under `/positions` would freeze the wrong contract too early.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:1611",
+        "backend/server.py:1629",
+        ".fleet/tasks/bayes-market-i6y/plan.json:27",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:26",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:58"
+      ],
+      "uncertainty": "If product later decided that `/positions` should deliberately alias `/exposure`, this conclusion would change, but the checked-in plan points the other way.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "This getter should stay strictly minimal in this phase: return only `account.id`, `account.positions`, and the top-level `meta`, with no extra account-level metadata like `account.updatedAt` and no nested wrapper object such as `account.positions.positions`. The positions plan says the route should return the rows directly at `account.positions`, and it explicitly rejects adding account-level metadata that is not required by the task.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:1656",
+        "backend/server.py:1677",
+        ".fleet/tasks/bayes-market-i6y/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y/plan.json:27",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:26",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:58"
+      ],
+      "uncertainty": "A later phase could still introduce route-level metadata if a new contract decision requires it, but there is no evidence to add it in this getter-only step.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "The minimum regression boundary for this getter-only step is direct `get_account_positions(...)` coverage for the happy path and the `404 account_not_found` cases. Waiting for `/v1/accounts/{id}/positions` route tests would couple this child step to dispatcher wiring that is explicitly assigned to step 4 and is not present in the current router, which still only recognizes `risk` and `exposure`. The repo already uses direct getter tests for `get_account_exposure(...)`, so that is the safest executable seam here.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:3932",
+        "tests/test_bayes_market_api.py:4685",
+        "tests/test_bayes_market_api.py:4723",
+        ".fleet/tasks/bayes-market-i6y/plan.json:65",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:58",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:63"
+      ],
+      "uncertainty": "The integrated implementation will still need route-level regressions later. This answer is only about the smallest safe seam for the getter-only phase.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Build `get_account_positions(...)` on top of `ACCOUNT_EXPOSURE`. The current backend declares `ACCOUNT_RISK` and `ACCOUNT_EXPOSURE`, but no separate `ACCOUNT_POSITIONS` store or standalone account registry."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Freeze the standard `{account, meta}` envelope now. The remaining flexibility is the thin row serializer placed at `account.positions`, not the outer shape."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep `/positions` projection-local like `/exposure`: missing `ACCOUNT_EXPOSURE` entries and accounts whose live rows collapse away should resolve as `404 account_not_found`."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Do not freeze the richer `/exposure` row schema under `/positions` in this phase. The temporary getter should stay thinner than `serialize_account_exposure_positions(account)`."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No child task is needed. The relevant contract owners are concentrated in `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `bayes-market-i6y` planning artifacts."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
