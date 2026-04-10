@@ -12,7 +12,11 @@ const mockMarkets = {
     { id: "m2", title: "BTC ETF Approval", status: "resolved" as const, liquidity: 89000, volume: 23000, expires_at: "2026-03-14T23:59:59Z" },
   ],
   count: 2,
-  meta: { apiVersion: "1.0", timestamp: "2026-04-08T00:00:00Z" },
+  meta: {
+    apiVersion: "1.0",
+    timestamp: "2026-04-08T00:00:00Z",
+    filters: { status: null, include_resolved: false },
+  },
 };
 
 describe("MarketList", () => {

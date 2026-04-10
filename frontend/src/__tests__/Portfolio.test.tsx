@@ -33,7 +33,11 @@ beforeEach(() => {
       },
     ],
     count: 1,
-    meta: { apiVersion: "1.0", timestamp: "2026-04-10T00:00:00Z" },
+    meta: {
+      apiVersion: "1.0",
+      timestamp: "2026-04-10T00:00:00Z",
+      filters: { status: null, include_resolved: false },
+    },
   });
 });
 

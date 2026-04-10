@@ -9,7 +9,13 @@ const mockClient = vi.hoisted(() => ({
   listMarkets: vi.fn(),
 }));
 
-vi.mock("@/lib/api/client", () => mockClient);
+vi.mock("@/lib/api/client", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api/client")>("@/lib/api/client");
+  return {
+    ...actual,
+    ...mockClient,
+  };
+});
 
 describe("System", () => {
   beforeEach(() => {
@@ -32,7 +38,11 @@ describe("System", () => {
         { id: "m1", title: "Test", status: "active", liquidity: 1000, volume: 500, expires_at: "2026-12-31T00:00:00Z" },
       ],
       count: 1,
-      meta: { apiVersion: "1.0.0", timestamp: "2026-04-08T12:00:00Z" },
+      meta: {
+        apiVersion: "1.0.0",
+        timestamp: "2026-04-08T12:00:00Z",
+        filters: { status: null, include_resolved: false },
+      },
     });
   });
 
@@ -70,7 +80,11 @@ describe("System", () => {
         { id: "m2", title: "B", status: "resolved", liquidity: 2000, volume: 1500, expires_at: "2026-12-31T00:00:00Z" },
       ],
       count: 2,
-      meta: { apiVersion: "1.0.0", timestamp: "2026-04-08T12:00:00Z" },
+      meta: {
+        apiVersion: "1.0.0",
+        timestamp: "2026-04-08T12:00:00Z",
+        filters: { status: null, include_resolved: false },
+      },
     });
     renderWithProviders(<System />);
     await waitFor(() => {
