@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Is step 4 intentionally preservation-only for negative auth/header coverage, meaning the existing no-header assertions on ProbabilityEdit, market-resolve, create-market, and the unsupported POST control are sufficient, or should comment-post and event-trade now get route-local missing/invalid-agent or disabled-limiter tests as well?",
+      "category": "requirements",
+      "why_it_matters": "The current suite has success-path breadth for all five protected POST routes but negative auth/no-header coverage only on a subset. This decides whether step 4 is a narrow preservation pass or a broader route-breadth expansion."
+    },
+    {
+      "id": "q2",
+      "question": "Should the current ProbabilityEdit HTTP tests remain the sole shared regression seam for remaining-quota decrement, `429 rate_limit_exceeded`, `Retry-After`, and per-agent isolation, rather than duplicating that limiter matrix on create-market, comment-post, market-resolve, or event-trade?",
+      "category": "requirements",
+      "why_it_matters": "The limiter and quota-header logic are centralized in `_enforce_write_controls()` plus `BayesHandler.handle_api()`. Clarifying whether ProbabilityEdit stays representative keeps this step scoped to preserving the shared seam instead of cloning redundant assertions onto every route."
+    },
+    {
+      "id": "q3",
+      "question": "For the step-4 preservation pass, which existing tests should be treated as the authoritative sentinels that must survive unchanged: the ProbabilityEdit missing/blank/malformed/disabled/429/quota tests, the resolve missing/blank/malformed and disabled-limiter tests, the create-market missing-agent test, the unsupported POST router `404` no-header test, and the duplicate-header `resolve_write_request_agent(...)` check?",
+      "category": "codebase",
+      "why_it_matters": "Execution will be safer if the canonical coverage set is explicit. Otherwise a cleanup could accidentally weaken a negative-control test or move an invalid-agent assertion without realizing it was part of the intended regression seam."
+    },
+    {
+      "id": "q4",
+      "question": "If the step-3 success-path breadth work reveals a disagreement with one of these absence-path tests, what should count as a real bug worth fixing: only a mismatch in the shared protected-write path (`resolve_write_route_category(...)`, `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `rate_limit_headers(...)`, `BayesHandler.handle_api()`), or can step 4 add or reshape route-local tests without any shared-seam change?",
+      "category": "design",
+      "why_it_matters": "The task description frames this step as preservation of an existing shared contract. This question prevents scope drift into speculative route-local fixes or new negative matrices that are not required by the shared implementation."
+    },
+    {
+      "id": "q5",
+      "question": "For `invalid_agent_id`, is the intended preserved matrix just the current HTTP blank and invalid-format cases plus the direct duplicate-header-line check in `resolve_write_request_agent(...)`, or should step 4 also add end-to-end HTTP coverage for comma-separated or repeated agent-id values on a protected POST route?",
+      "category": "design",
+      "why_it_matters": "The code handles multiple raw agent-id values as a distinct `invalid_agent_id` reason, but the suite currently proves part of that behavior directly at the classifier seam rather than through full HTTP requests. Clarifying the desired level of coverage decides whether step 4 stays focused or broadens into additional transport-level cases."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "All five protected POST routes still flow through the shared agent-validation and limiter path in `BayesHandler.handle_api()` via `resolve_write_request_agent(...)` and `_enforce_write_controls()`, so negative auth/header behavior is centrally enforced.",
+      "confidence": 0.99,
+      "if_wrong": "A route-specific bypass would justify new route-local tests or backend fixes instead of relying on representative shared coverage."
+    },
+    {
+      "id": "a2",
+      "assumption": "The current `BayesMarketApiAuthRateLimitTests` already contain the intended representative no-header negatives for this step: ProbabilityEdit missing/blank/malformed/disabled, market-resolve missing/blank/malformed/disabled, create-market missing-agent, and unsupported POST router `404`.",
+      "confidence": 0.95,
+      "if_wrong": "The step may need extra negative coverage just to preserve the intended contract, especially on comment-post or event-trade."
+    },
+    {
+      "id": "a3",
+      "assumption": "Comment-post and event-trade are intentionally still missing route-local absence-path tests after step 3, and step 4 is more likely to preserve the current subset than to expand negative breadth to every protected POST route.",
+      "confidence": 0.82,
+      "if_wrong": "Implementation would need to add at least some new comment-post or event-trade auth/no-header tests instead of stopping at preservation."
+    },
+    {
+      "id": "a4",
+      "assumption": "The existing ProbabilityEdit tests remain sufficient as the shared limiter regression seam for quota decrement, `429`, `Retry-After`, and per-agent isolation because quota is spent before route dispatch and quota headers are emitted centrally.",
+      "confidence": 0.94,
+      "if_wrong": "Step 4 would need at least one additional non-ProbabilityEdit route to prove the shared limiter contract did not diverge after the breadth changes."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the relevant backend seam and all current auth/rate-limit tests are local to this checkout and already expose the remaining scope questions.",
+      "confidence": 0.99,
+      "if_wrong": "A separate exploration task would be needed to inventory missing negative coverage or confirm which tests are considered canonical before implementation."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
