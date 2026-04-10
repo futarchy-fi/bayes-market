@@ -1,0 +1,54 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep the existing shared `OrderResponse` stable for ProbabilityEdit callers and add a dedicated EventTrade success type in `frontend/src/lib/api/types.ts` so this step fixes the stale EventTrade surface without reopening unrelated mutation typing.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Broaden the shared `OrderResponse` for every mutation in this step.",
+        "Keep EventTrade on the stale generic order model that omits persisted trade fields like `size`, `side`, `price`, and `notional`."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Add an additive `AccountExposureResponse` that mirrors the backend `{ account, meta }` contract exactly, including `maxPositionSize`, `updatedAt`, array-based `positions`, and nullable `lastOrderId`/`lastCommandId` fields on each position row.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Fold exposure fields into `AccountRiskResponse` or reuse the `/risk` model.",
+        "Invent a looser exposure type that hides backend nullability or changes the response structure."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Make `size` the canonical public EventTrade request field and model the specialized accepted-order response around persisted backend fields only, leaving the backend-only legacy `amount` alias and preview-only netting fields out of the frontend public type surface.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Expose both `size` and deprecated `amount` in the public payload type.",
+        "Pull preview-only `currentNetSize` or `resultingNetSize` fields into the accepted EventTrade success type."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Patch `frontend/src/lib/api/types.ts` to introduce the exposure support interfaces and `AccountExposureResponse` next to the existing account risk types, matching backend field names, nesting, and nullability exactly.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Refine the EventTrade request and response types in the same file by adding canonical `EventTradePayload.size` and introducing a dedicated EventTrade mutation success type whose `order` shape includes the persisted backend trade fields while keeping `OrderResponse` unchanged for ProbabilityEdit.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Sanity-check the resulting type exports against current frontend consumers so the new models remain additive, downstream client updates can swap EventTrade to the specialized response cleanly, and no probability-edit typing regresses.",
+      "depends_on": [1, 2]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
