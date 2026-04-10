@@ -1,0 +1,64 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` as the canonical focused rerun for step 5 because prior step-4 validation artifacts treat the full 21-test class as the recorded auth/rate-limit preservation gate; keep the narrower 19-test preserved-only selector as optional corroboration rather than the primary execute-phase proof.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Record only the 19-test preserved-only pytest selector and omit the full class gate used by earlier validation.",
+        "Broaden the execute gate beyond the established auth/rate-limit class into unrelated Bayes market coverage."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use two diff baselines during execution: `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` to judge whether the inherited step-4 history stayed inside the intended preservation seam, and `504af7c8...HEAD` to prove this execute-step-5 leaf remains task-artifact-only.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Use only the parent branch diff, which would hide whether this leaf introduced extra changes.",
+        "Use only the current branch-start diff, which would not answer whether the inherited step-4 delta already exceeded the intended preservation scope."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep the final implementation artifact-only under `.fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/` and explicitly record whether the inherited `backend/server.py` delta still violates the step-4 preservation-only boundary, rather than widening this leaf into cleanup code changes when the focused rerun passes.",
+      "based_on": ["q3", "q4", "q5"],
+      "alternatives_rejected": [
+        "Treat the inherited `backend/server.py` scope breach as irrelevant as long as this leaf adds no new product-file edits.",
+        "Absorb backend cleanup into this execute-step leaf despite the preserved auth/rate-limit gate already passing."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Reconfirm the current checkout still matches the researched preservation contract by locating the `BayesMarketApiAuthRateLimitTests` class and the relevant branch baselines so the execution record references the correct focused gate and scope-audit targets.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Run `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` as the canonical focused rerun for the preserved auth and rate-limit sentinels, and keep the optional 19-test preserved-only selector available only if supporting confirmation is needed.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Inspect `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` to determine whether the inherited step-4 diff still carries `backend/server.py` outside the intended preservation seam, then inspect `504af7c8...HEAD` to verify this execute-step-5 leaf itself adds only task-local artifacts.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Record the execute-phase evidence in this task's artifact set: the canonical rerun command and result, both diff summaries, and an explicit yes-or-no verdict on whether the merged step-4 branch still violates the preservation-only boundary.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Stage the task artifacts and create the requested execute-step commit once the focused rerun and dual-baseline diff audit are recorded, without adding new product-file changes outside `.fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/`.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
