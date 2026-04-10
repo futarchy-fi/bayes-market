@@ -1708,12 +1708,17 @@ def serialize_account_exposure(account: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def get_account_exposure(account_id: str) -> tuple[dict[str, Any], int]:
-    """Return the read model for one account's current live EventTrade exposure."""
+def get_account_exposure_projection_state(account_id: str) -> dict[str, Any]:
+    """Return one exposure-backed account document or raise projection-local 404."""
     account = ACCOUNT_EXPOSURE.get(account_id)
     if account is None:
         raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
+    return account
 
+
+def get_account_exposure(account_id: str) -> tuple[dict[str, Any], int]:
+    """Return the read model for one account's current live EventTrade exposure."""
+    account = get_account_exposure_projection_state(account_id)
     exposure = serialize_account_exposure(account)
     if not exposure["positions"]:
         # Exposure existence is projection-local: once all live rows are pruned,
@@ -1731,10 +1736,7 @@ def get_account_exposure(account_id: str) -> tuple[dict[str, Any], int]:
 
 def get_account_positions(account_id: str) -> tuple[dict[str, Any], int]:
     """Return the read model for one account's current live open positions."""
-    account = ACCOUNT_EXPOSURE.get(account_id)
-    if account is None:
-        raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
-
+    account = get_account_exposure_projection_state(account_id)
     positions = serialize_account_positions(account)
     if not positions:
         # Position existence is projection-local: once all live rows are pruned,
