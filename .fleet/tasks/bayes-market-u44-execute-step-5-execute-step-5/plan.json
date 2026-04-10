@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Reuse the recorded execute-step-1 green run as the authoritative focused test evidence for the final step-5 artifact instead of planning a fresh rerun, but only if `backend/server.py` and `tests/test_bayes_market_api.py` are unchanged between `ff/Tbayes-market-u44-execute-step-5-execute-step-1` and `HEAD`.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Always rerun `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` before writing the parent execute artifact.",
+        "Reuse the recorded run without proving product-file identity from the step-1 branch to `HEAD`."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use two git baselines in the implementation: `ff/Tbayes-market-u44-execute-step-5-execute-step-1..HEAD` restricted to `backend/server.py` and `tests/test_bayes_market_api.py` for runtime-proof reuse, and `b45886e9..HEAD` for proving this leaf stays artifact-only.",
+      "based_on": ["q2", "q5"],
+      "alternatives_rejected": [
+        "Use only the branch-start baseline and skip the step-1-to-HEAD product-identity proof.",
+        "Use only the step-1 baseline and skip the leaf-local artifact-only audit."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Treat creation of `.fleet/tasks/bayes-market-u44-execute-step-5/execution.json` as mandatory completion scope for this step, alongside this leaf's own task artifacts, because planning-only history was already rejected as incomplete.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Commit only `.fleet/tasks/bayes-market-u44-execute-step-5-execute-step-5/` metadata and leave the parent execute artifact absent.",
+        "Defer the parent execute artifact to a later leaf after this final commit step."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Treat any fresh leaf-local edit to `backend/server.py` or `tests/test_bayes_market_api.py` as a blocker and limit the staged output to the new parent execute artifact plus this leaf's task files under `.fleet/tasks/bayes-market-u44...`.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Allow product-file edits in the final staging step because those files already exist in inherited audit history.",
+        "Rely on a single historical diff without checking the live working tree and staged index before committing."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Confirm the step-1 focused test result is still reusable by proving `ff/Tbayes-market-u44-execute-step-5-execute-step-1..HEAD -- backend/server.py tests/test_bayes_market_api.py` is empty.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Audit `b45886e9..HEAD` to confirm this leaf has introduced only task-artifact changes and that no fresh product-file drift has appeared since the merged start point.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Write `.fleet/tasks/bayes-market-u44-execute-step-5/execution.json` with the reused focused-test evidence, the diff-audit proof, and an explicit artifact-only scope verdict for the completed parent step.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Inspect the live worktree for unexpected drift, then stage the intended artifact updates and verify the staged index still contains only the allowed `.fleet/tasks/bayes-market-u44...` paths.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Commit the completed worktree with the requested message once the worktree and staged-index checks both confirm the final change set is artifact-only.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
