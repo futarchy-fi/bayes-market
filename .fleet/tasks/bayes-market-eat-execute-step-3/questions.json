@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact wire contract should `GET /v1/stats` freeze in this step: top-level keys, metric key casing (`totalTrades`/`totalAccounts`/`totalVolume` vs `total_trades`/`total_accounts`/`total_volume`), and whether a standard `meta` block is required?",
+      "category": "requirements",
+      "why_it_matters": "The repo has no existing `/v1/stats` route, payload helper, frontend type, or tests, and the task text names metrics in snake_case while every existing JSON API surface in `backend/server.py` uses camelCase."
+    },
+    {
+      "id": "q2",
+      "question": "How should the root service index advertise the new endpoint: under a new `stats` route group, with what exact string (`\"/v1/stats\"` vs `\"GET /v1/stats\"`), and in what insertion order relative to `health`, `markets`, `orders`, and `accounts`?",
+      "category": "codebase",
+      "why_it_matters": "`service_index_payload()` currently returns only those four groups, and the existing System page renders `Object.entries(index.data.routes)` in order, so discoverability and ordering are observable behavior."
+    },
+    {
+      "id": "q3",
+      "question": "Should `total_trades` be sourced from accepted trade-like orders only, ideally by reusing the same accepted `ProbabilityEdit`/`EventTrade` join semantics as `normalize_accepted_activity_rows(...)`, or from broader stores such as `COMMANDS`, `EVENTS`, or raw `ORDERS`?",
+      "category": "design",
+      "why_it_matters": "In the current code, comments and market resolution add commands/events, but only probability edits and event trades add orders that represent trading activity; the future test needs one unambiguous source of truth."
+    },
+    {
+      "id": "q4",
+      "question": "What exactly should `total_accounts` count: unique account IDs from accepted trade orders, all accounts seen in write commands, or accounts present in projection stores like `ACCOUNT_RISK`/`ACCOUNT_EXPOSURE`?",
+      "category": "design",
+      "why_it_matters": "Accepted event trades currently mutate exposure without creating a new `ACCOUNT_RISK` row, while comments and resolution introduce fresh command account IDs, so each candidate source yields different totals."
+    },
+    {
+      "id": "q5",
+      "question": "Is `total_volume` intentionally defined as the sum of current market snapshot `volume` fields across all markets and statuses, even after new accepted trades occur, rather than as derived activity volume from impact scores or notionals?",
+      "category": "requirements",
+      "why_it_matters": "Fresh reset state already has a non-zero baseline market-volume sum (`188000.0` from the seeded fixtures), accepted probability edits and event trades do not mutate `MARKETS[*][\"volume\"]` today, and the task explicitly says `total_volume` should continue to reflect market snapshot volume."
+    },
+    {
+      "id": "q6",
+      "question": "For the mutation proof, should the test resolve a market that already has open accepted trading activity to prove totals stay stable through settlement side effects, or is resolving any market with an unused admin account sufficient?",
+      "category": "codebase",
+      "why_it_matters": "Resolving an active traded market can prune `ACCOUNT_RISK` and `ACCOUNT_EXPOSURE` state, so the chosen setup determines whether the new test is only a surface smoke test or a stronger guard against using projection tables as the stats source."
+    },
+    {
+      "id": "q7",
+      "question": "Does 'baseline `/v1/stats` contract coverage' for this step include the usual non-`GET` `405 method_not_allowed` assertion, or should the new test slice stop at successful `GET` coverage plus root-index discoverability?",
+      "category": "requirements",
+      "why_it_matters": "Most read-only routes in `tests/test_bayes_market_api.py` freeze both the success payload and method rejection contract, but the task text only mentions baseline coverage and discoverability."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new endpoint is additive: existing service-index route groups stay intact and a `stats` group is appended rather than reclassifying `/v1/stats` under `markets` or `accounts`.",
+      "confidence": 0.97,
+      "if_wrong": "The work expands from a narrow stats addition into a public index restructuring, and the future tests will need to rewrite existing discoverability assertions rather than add one."
+    },
+    {
+      "id": "a2",
+      "assumption": "`total_trades` is meant to count accepted `ProbabilityEdit` and `EventTrade` activity only, not comment posts, admin resolution commands, or other non-order writes.",
+      "confidence": 0.95,
+      "if_wrong": "The implementation would need a broader command or event definition of trade, and the negative mutation checks described in the task would need to be rewritten."
+    },
+    {
+      "id": "a3",
+      "assumption": "`total_accounts` is meant to come from unique accepted trader account IDs, not `ACCOUNT_RISK`, because accepted event trades currently succeed without creating a new risk document.",
+      "confidence": 0.92,
+      "if_wrong": "A stats implementation based on projection tables would produce different results than the task description implies, and the future tests would need a different mutation setup or expectations."
+    },
+    {
+      "id": "a4",
+      "assumption": "`total_volume` should remain the seeded market snapshot sum after reset (`188000.0`) and should not change when the mutation test posts probability edits, event trades, comments, or resolution commands.",
+      "confidence": 0.94,
+      "if_wrong": "The route is expected to compute live transactional volume instead of snapshot market volume, which is a materially different contract than the task text suggests."
+    },
+    {
+      "id": "a5",
+      "assumption": "The step-3 test additions can live in the existing direct-router unit suite around the root index and analytics or engine-stats read routes, without requiring extra threaded HTTP coverage.",
+      "confidence": 0.88,
+      "if_wrong": "The implementation phase will need broader `BayesHandler` integration assertions before the task can be considered complete."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
