@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This checkout already has `/v1/accounts/{id}/positions` in the service index plus basic getter, route-parity, and `404` tests, but those assertions still pin the pre-P&L row shape. For step 4, should the existing `get_account_positions(...)` baseline test be updated in place to include `unrealizedPnl`, with the new replay scenarios kept additive, or is a separate P&L-only cluster preferred?",
+      "category": "design",
+      "why_it_matters": "The answer decides how much existing route-shape coverage to rewrite versus where to keep the new replay-focused regressions isolated. The current file already freezes lexical ordering and `404` lifecycle behavior, so step 4 needs a clear additive boundary."
+    },
+    {
+      "id": "q2",
+      "question": "Where should the new deterministic-ordering and replay-math regressions primarily live: direct helper or getter coverage in `BayesMarketExposureProjectionTests`, full `route_request(\"GET\", \"/v1/accounts/{id}/positions\")` assertions, or a mix with helper-level ordering math plus route-level serialization smoke?",
+      "category": "design",
+      "why_it_matters": "The task title is test-only, but the existing suite mixes pure helper tests with route parity checks. Deterministic replay order and weighted-average cost math are easiest to control below the router, while the task still needs confidence that `/positions` serializes the computed P&L correctly."
+    },
+    {
+      "id": "q3",
+      "question": "To freeze deterministic fill ordering, should the regression explicitly seed `ORDERS` out of insertion order with same-`filledAt` ties so it proves the `(filledAt, id)` sort seam directly, or is it acceptable to drive the scenario only through accepted EventTrade writes even though the normal write path may not naturally hit that edge case?",
+      "category": "codebase",
+      "why_it_matters": "The current backend stores orders in a plain dict and the planned replay helper is order-sensitive. If the test only uses normal write flow, it may never exercise the unstable ordering seam that this step is supposed to pin."
+    },
+    {
+      "id": "q4",
+      "question": "For the missing-history fallback on directly seeded `ACCOUNT_EXPOSURE` rows, should the regression only assert that the live row still serializes with `unrealizedPnl: 0.0`, or should it also prove that `query_market_atomic_probability_for_inference(...)` is bypassed when there is no usable replay history?",
+      "category": "requirements",
+      "why_it_matters": "The route contract cares about the fallback value, but an internal call assertion is the strongest proof that the read path really short-circuits instead of accidentally marking an unpriceable row and masking the bug with fixture probabilities."
+    },
+    {
+      "id": "q5",
+      "question": "For the representative weighted-average, partial-close, and sign-flip survivor cases, should tests prefer accepted EventTrade POSTs so fixtures inherit canonical rounding and persisted order shape, or is direct `ORDERS` seeding acceptable when that makes fill prices and timestamps easier to control?",
+      "category": "codebase",
+      "why_it_matters": "The answer determines whether step 4 optimizes for write-path realism or for narrowly isolated replay fixtures. That choice materially affects test setup size and how much the regressions depend on unrelated EventTrade acceptance behavior."
+    },
+    {
+      "id": "q6",
+      "question": "When patching the mark-query seam for stable P&L expectations, should the regressions assert only the computed `unrealizedPnl` values, or should they also verify the patched `query_market_atomic_probability_for_inference(...)` call arguments so the tests prove each live row is marked from the intended `(marketId, outcomeId)` slice?",
+      "category": "design",
+      "why_it_matters": "The new `/positions` math depends on both replayed basis and the current mark source. Verifying only the scalar P&L could miss a bug where the code prices the right number from the wrong market or outcome under current fixtures."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The `/v1/accounts/{id}/positions` route, service-index entry, and baseline `404` plus lexical-order tests already present in this checkout are prerequisites, so this leaf should stay focused on replay and P&L regressions rather than reopen router wiring.",
+      "confidence": 0.99,
+      "if_wrong": "The task would need to absorb missing route or serializer work before the new regressions could be made authoritative."
+    },
+    {
+      "id": "a2",
+      "assumption": "The natural home for the new coverage is still `tests/test_bayes_market_api.py`, most likely the existing `BayesMarketExposureProjectionTests` cluster that already owns exposure and positions helper coverage.",
+      "confidence": 0.97,
+      "if_wrong": "The test additions would need to be split across another class or a different module, which changes how much shared setup can be reused."
+    },
+    {
+      "id": "a3",
+      "assumption": "At least one regression will need direct state seeding, because accepted EventTrade writes alone do not reliably create out-of-order `ORDERS` insertion or same-timestamp tie cases for deterministic replay ordering.",
+      "confidence": 0.95,
+      "if_wrong": "The suite could stay entirely on write-path fixtures, and the deterministic-order case would need to be expressed without directly manipulating `ORDERS`."
+    },
+    {
+      "id": "a4",
+      "assumption": "Mark-sensitive P&L regressions should patch `query_market_atomic_probability_for_inference(...)` so failures isolate replay and serialization logic from unrelated inference behavior or future fixture-price changes.",
+      "confidence": 0.99,
+      "if_wrong": "The tests would need to assert against live inference probabilities, which would make the replay regressions more coupled to the inference backend than the parent plan intends."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the remaining open seams are local to `backend/server.py`, the existing `tests/test_bayes_market_api.py` clusters, and the checked-in `bayes-market-i6y` task artifacts already available in this worktree.",
+      "confidence": 0.97,
+      "if_wrong": "A separate child investigation would be needed before test implementation could be scoped confidently."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

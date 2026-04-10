@@ -1,0 +1,104 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Update the existing `get_account_positions(...)` baseline test in place to freeze the additive `unrealizedPnl` field, and keep the new replay-focused regressions as additive cases inside `BayesMarketExposureProjectionTests` instead of creating a separate P&L-only cluster.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Create a separate P&L-only cluster that duplicates the existing `/positions` baseline and route-parity coverage.",
+        "Leave the baseline test unchanged and rely on new replay cases alone to imply the wire-shape change."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep deterministic-ordering and replay-math coverage primarily at the helper/getter level in `BayesMarketExposureProjectionTests`, with route-level checks limited to the updated baseline serialization parity and only representative `/positions` smoke where it adds value.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Drive every regression entirely through `route_request(\"GET\", \"/v1/accounts/{id}/positions\")`.",
+        "Test only helper internals and skip route-level serialization coverage entirely."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Directly seed `ORDERS` out of insertion order, including same-`filledAt` ties, for the deterministic replay-order regression so the suite proves the `(filledAt, id)` seam explicitly instead of hoping the normal EventTrade write path reaches it.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Use only accepted EventTrade writes and assume they naturally exercise unstable replay order.",
+        "Cover only different-timestamp cases and leave same-timestamp ties unpinned."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "For directly seeded live `ACCOUNT_EXPOSURE` rows with no replayable history, assert both that the row still serializes with `unrealizedPnl: 0.0` and that `query_market_atomic_probability_for_inference(...)` is bypassed.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Assert only the fallback scalar and ignore whether the mark helper was called.",
+        "Treat missing history as a dropped row or a `404` instead of preserving existing liveness semantics."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Build the representative weighted-average, partial-close, and sign-flip survivor scenarios through accepted EventTrade POSTs so the tests inherit canonical order shape and exposure syncing, while reserving direct state seeding for edge cases the write path does not naturally create.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Seed all representative survivor scenarios directly in `ORDERS` and `ACCOUNT_EXPOSURE`.",
+        "Force the public write path to cover the artificial deterministic-order edge case as well."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Patch `query_market_atomic_probability_for_inference(...)` in the representative P&L regressions and assert both the computed `unrealizedPnl` values and the `(marketId, outcomeId)` arguments used for each live row's mark lookup.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Assert only the scalar P&L values and ignore which slice was marked.",
+        "Use live inference probabilities instead of a patched seam, coupling replay regressions to fixture prices."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Update `test_get_account_positions_serializes_minimal_lexically_sorted_live_rows_and_route_parity` in `tests/test_bayes_market_api.py` so the baseline `/positions` contract now includes `unrealizedPnl` on the existing directly seeded live rows while preserving lexical ordering, malformed-row skipping, and getter-versus-route parity assertions.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add a deterministic replay-order regression in `BayesMarketExposureProjectionTests` that directly seeds one live `ACCOUNT_EXPOSURE` row plus matching filled `EventTrade` rows in `ORDERS` out of insertion order, including same-`filledAt` ties, and proves the resulting `/positions` math follows stable `(filledAt, id)` replay order.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add a missing-history fallback regression for a directly seeded live exposure row with no usable matching fill history, patching `query_market_atomic_probability_for_inference(...)` so the test can assert both `unrealizedPnl: 0.0` and that the mark helper is never called.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Add a representative multi-fill weighted-average accumulation regression built through accepted EventTrade POSTs, patch the mark-query seam for stable prices, and assert both the replayed `unrealizedPnl` value and the mark-helper call arguments for the survivor slice.",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Add a representative partial-close survivor regression built through accepted EventTrade POSTs, using a patched mark so the test proves the surviving same-sign remainder keeps the pre-close average-cost basis implied by the computed `unrealizedPnl`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Add a representative sign-flip survivor regression built through accepted EventTrade POSTs, using a patched mark so the test proves the opposite-sign remainder is repriced from the crossing fill rather than carrying the pre-flip basis forward.",
+      "depends_on": [1]
+    },
+    {
+      "step": 7,
+      "task": "Run the focused `/positions` and `BayesMarketExposureProjectionTests` test selections, confirm the updated baseline shape and new replay regressions pass together, and then commit the implementation changes.",
+      "depends_on": [2, 3, 4, 5, 6]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
