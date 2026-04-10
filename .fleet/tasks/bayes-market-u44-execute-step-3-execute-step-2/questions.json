@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "In the new shared success-path breadth test, should each labeled `subTest(...)` assert the same first-hit quota state (`remaining == RATE_LIMIT_PER_MIN - 1`) by isolating agent/state per route, or should the test intentionally reuse one agent across routes and expect decreasing `X-RateLimit-Remaining` values?",
+      "category": "requirements",
+      "why_it_matters": "The task asks for one accepted request per route, but the limiter bucket is keyed only by agent id, so the header expectations change materially depending on whether quota state is shared or isolated across subtests."
+    },
+    {
+      "id": "q2",
+      "question": "What isolation strategy is intended inside one shared breadth test: should each `subTest(...)` call `server.reset_state()` and `server.reset_rate_limit_state()`, or should the test preserve one process state and choose route inputs that avoid cross-case interference from create-market and market-resolve mutations?",
+      "category": "design",
+      "why_it_matters": "`BayesMarketApiAuthRateLimitTests.setUp()` only resets once per test method, while create-market appends a market and resolve changes market status, so a single breadth test needs an explicit state-isolation plan."
+    },
+    {
+      "id": "q3",
+      "question": "Which existing resolve test is the canonical place to fix the stale success expectation: should `test_market_resolve_http_requires_valid_agent_id_when_enabled` absorb the header-presence assertion when `RATE_LIMIT_PER_MIN > 0`, or should the older duplicate resolve auth test be consolidated first?",
+      "category": "codebase",
+      "why_it_matters": "The class currently has two resolve auth tests, and the helper-based one explicitly asserts header absence on the successful resolve path, so step 2 needs a clear edit target to avoid overlapping or contradictory coverage."
+    },
+    {
+      "id": "q4",
+      "question": "For the uncovered comment-post success path, should step 2 add a first-class request helper or body builder in `BayesMarketApiAuthRateLimitTests`, or is an inline `request_with_headers(...)` call with a minimal `{accountId, body}` payload the preferred shape for the shared breadth test?",
+      "category": "design",
+      "why_it_matters": "`tests/test_bayes_market_api.py` currently has no comment-route coverage or comment payload helper, so the implementation needs a reusable setup pattern before it can add the new labeled success case cleanly."
+    },
+    {
+      "id": "q5",
+      "question": "Should create-market and event-trade breadth coverage remain as explicit success-only cases inside the new shared test, or is step 2 also expected to introduce reusable route helpers parallel to `probability_edit_with_headers(...)` and `market_resolution_with_headers(...)` for those POST routes?",
+      "category": "design",
+      "why_it_matters": "The current auth/rate-limit suite has dedicated helpers only for probability-edit and resolve; create-market uses inline requests and event-trade has no auth/rate-limit helper at all, so the chosen abstraction will shape how maintainable the new breadth matrix is."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The breadth target for step 2 is the exact protected POST surface selected by `resolve_write_route_category(...)`: create-market, market-resolve, comment-post, probability-edit, and event-trade.",
+      "confidence": 0.99,
+      "if_wrong": "The shared test will either miss an in-scope protected write route or over-constrain a route that is not supposed to participate in the header audit."
+    },
+    {
+      "id": "a2",
+      "assumption": "The stale resolve success expectation is the helper-based `valid_headers` assertion in `test_market_resolve_http_requires_valid_agent_id_when_enabled`, and it should flip to `assert_rate_limit_headers(...)` whenever the limiter is enabled and the resolve is accepted.",
+      "confidence": 0.98,
+      "if_wrong": "The implementation may patch the wrong resolve test or preserve duplicate resolve success coverage with conflicting expectations."
+    },
+    {
+      "id": "a3",
+      "assumption": "`BayesHandler.handle_api()` is already the shared success-path seam for these routes, because `_enforce_write_controls()` runs before `route_request(...)` and successful protected POSTs receive headers only through `rate_limit_headers(agent_id)`.",
+      "confidence": 0.99,
+      "if_wrong": "A route-specific bypass exists, and step 2 will need backend changes rather than only test updates."
+    },
+    {
+      "id": "a4",
+      "assumption": "Comment-post needs new first-class coverage in `BayesMarketApiAuthRateLimitTests`, because the repo currently has no comment-route tests or comment request helper in `tests/test_bayes_market_api.py`.",
+      "confidence": 0.99,
+      "if_wrong": "There is hidden existing comment coverage or helper code that should be reused instead of adding fresh setup in the auth/rate-limit suite."
+    },
+    {
+      "id": "a5",
+      "assumption": "To keep each route assertion on a first accepted request, the eventual breadth test will need either unique agent ids per subtest or an explicit rate-limit reset between cases; otherwise `X-RateLimit-Remaining` will become order-dependent within the shared test.",
+      "confidence": 0.9,
+      "if_wrong": "The intended contract is cross-route quota depletion inside the same test, so the breadth test should deliberately reuse agent state and assert different remaining counts per label."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
