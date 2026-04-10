@@ -764,6 +764,15 @@ def auth_health_component() -> dict[str, Any]:
     }
 
 
+def v1_health_components() -> dict[str, dict[str, Any]]:
+    """Build v1 health component records from in-process configuration only."""
+    return {
+        "db": db_health_component(),
+        "inference": inference_health_component(),
+        "auth": auth_health_component(),
+    }
+
+
 def health_payload() -> dict[str, Any]:
     """Build the service health response payload."""
     return {
@@ -776,11 +785,7 @@ def health_payload() -> dict[str, Any]:
 def v1_health_payload() -> dict[str, Any]:
     """Build the versioned service health response payload."""
     payload = health_payload().copy()
-    components = {
-        "db": db_health_component(),
-        "inference": inference_health_component(),
-        "auth": auth_health_component(),
-    }
+    components = v1_health_components()
     payload["status"] = aggregate_component_status(components)
     payload["version"] = ENGINE_CONFIG.version
     payload["uptime_seconds"] = uptime_seconds()
