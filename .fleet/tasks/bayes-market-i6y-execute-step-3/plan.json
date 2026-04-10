@@ -1,0 +1,99 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Replay matching EventTrade fills in ascending `(filledAt, id)` order so cost-basis reconstruction is deterministic even when `ORDERS` insertion order is arbitrary or multiple fills share the same timestamp.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Rely on raw `ORDERS` dict iteration order.",
+        "Sort only by `filledAt` and leave ties unstable.",
+        "Use `createdAt` as the secondary tiebreaker even though it is often identical to `filledAt`."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep `ACCOUNT_EXPOSURE` as the sole liveness gate for `/v1/accounts/{id}/positions`, and when a live row has no replayable filled EventTrade history, still serialize it with `unrealizedPnl: 0.0` instead of skipping the row or failing the request.",
+      "based_on": ["q2", "q5"],
+      "alternatives_rejected": [
+        "Drop live rows whose order history is missing or incomplete.",
+        "Fail `/positions` when replay cannot recover a basis for one row.",
+        "Rebuild the open-position set from `ORDERS` alone."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Scope replay to `ORDERS` rows with `type == \"EventTrade\"`, `status == \"filled\"`, and matching `accountId`, `targetMarketId`/`targetOutcomeId`, falling back to `marketId` plus the payload literal outcome when the target fields are absent.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Scan every order type stored in `ORDERS`.",
+        "Match only on `marketId` and ignore `outcomeId`.",
+        "Treat order history as authoritative for whether a position is live."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Implement signed average-cost replay as a small state machine: same-side fills resize the position and recompute weighted average cost, partial offsets preserve the prior basis on the surviving same-sign remainder, full closes zero the basis, and zero-crossing offsets reset the opposite-sign survivor's basis to the crossing fill price.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Infer basis from `lastTradePrice` alone.",
+        "Carry the pre-flip basis through a sign change.",
+        "Switch to FIFO or LIFO lots for this endpoint."
+      ],
+      "reversibility": "hard"
+    },
+    {
+      "id": "d5",
+      "decision": "Compute wire-level P&L from the account perspective as `unrealizedPnl = (mark - averageCost) * netSize`, using `query_market_atomic_probability_for_inference(marketId, outcomeId)` for the current mark and preserving positive P&L for profitable shorts via the signed `netSize` convention.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Use separate long and short formulas.",
+        "Mark against `lastTradePrice` instead of the current inference probability.",
+        "Expose basis or side fields on the wire instead of one signed P&L scalar."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d6",
+      "decision": "Test replay math by patching `query_market_atomic_probability_for_inference(...)` in the representative `/positions` regressions so assertions isolate order replay and P&L math from unrelated inference behavior.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Assert against live fixture-market inference values in all replay regressions.",
+        "Skip explicit P&L regressions and rely only on end-to-end route smoke tests."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add backend helper utilities in `backend/server.py` to resolve one exposure row's `(marketId, outcomeId)` slice, filter matching filled EventTrade orders from `ORDERS`, and return them in stable `(filledAt, id)` replay order.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Implement a read-time replay accumulator in `backend/server.py` that walks the ordered fills for one live slice and derives the surviving signed `netSize`, signed average cost, and a 'history found' signal while handling same-side accumulation, partial offsets, full closes, and sign flips.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Thread the replay helper into the positions serializer/read model so each live row keeps the existing liveness and lexical ordering behavior, falls back to `unrealizedPnl: 0.0` when no replayable history exists, and otherwise marks the surviving basis to `query_market_atomic_probability_for_inference(...)` with the `(mark - averageCost) * netSize` formula.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Extend `tests/test_bayes_market_api.py` with focused regressions for deterministic fill ordering, missing-history fallback on directly seeded exposure rows, multi-fill weighted-average accumulation, partial close survivors, and sign-flip survivors, patching the mark query seam where P&L expectations need stable prices.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Run the targeted backend tests covering `/v1/accounts/{id}/positions` and the new replay helpers, confirm no contract regressions in the serialized positions shape, and then commit the implementation.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
