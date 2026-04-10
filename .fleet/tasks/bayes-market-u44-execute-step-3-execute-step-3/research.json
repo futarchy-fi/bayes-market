@@ -1,0 +1,121 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The dedicated test should freeze the full accepted comment-post envelope, not only the stable fields: `201`, the `comment` object, and the `meta` envelope are the route-local success contract. The stable fields (`marketId`, `seq`, `accountId`, `body`) should be asserted exactly, while generated fields (`commentId`, `createdAt`, `meta.timestamp`) should still be asserted but only structurally and semantically, e.g. by prefix/presence, `endswith(\"Z\")`, or equality to the stored comment, rather than by hard-coded literal values.",
+      "confidence": 0.9,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-3/plan.json:36",
+        ".fleet/tasks/bayes-market-u44-execute-step-3/plan.json:58",
+        "backend/server.py:215",
+        "backend/server.py:3383",
+        "backend/server.py:3401",
+        "backend/server.py:520",
+        "tests/test_bayes_market_api.py:449",
+        "tests/test_bayes_market_api.py:973"
+      ],
+      "uncertainty": "The exact assertion style for generated values is still a test-design choice; the codebase is clear that they belong to the response, but not whether the test should use prefix checks, stored-state equality, or another structural check.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Keep the dedicated test centered on the immediate HTTP response plus `assert_rate_limit_headers(...)`; that is the explicit step-3 seam. If one persistence tie-out is added, it should be a light direct-state check against `server.COMMENTS` and `MARKET_COMMENT_SEQUENCES` so the returned generated fields are anchored to stored state, but this step should not expand into a follow-up `GET /v1/markets/{id}/comments` read-path test.",
+      "confidence": 0.75,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-3/plan.json:58",
+        "backend/server.py:1891",
+        "backend/server.py:3383",
+        "backend/server.py:3401",
+        "tests/test_bayes_market_api.py:6427",
+        "tests/test_bayes_market_api.py:6564"
+      ],
+      "uncertainty": "The plan text does not explicitly require a persistence cross-check, so the direct-state tie-out is an inference from how other auth/rate-limit success tests verify that an accepted write actually mutated state.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Reuse the same one-shot limiter-enabled setup and add route-local payload assertions; the dedicated test's unique value is freezing the accepted comment-post contract, not inventing a second quota scenario. Because `setUp()` resets state before each test, the first successful post already gives the natural route-local invariant `seq == 1`; there is no need to post a second comment for `seq == 2`, and body-normalization coverage should only be folded in if it still fits that single accepted request.",
+      "confidence": 0.84,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-3/plan.json:36",
+        ".fleet/tasks/bayes-market-u44-execute-step-3/plan.json:52",
+        ".fleet/tasks/bayes-market-u44-execute-step-3/plan.json:58",
+        "tests/test_bayes_market_api.py:5945",
+        "tests/test_bayes_market_api.py:6246",
+        "tests/test_bayes_market_api.py:6272",
+        "backend/server.py:3360",
+        "backend/server.py:3385"
+      ],
+      "uncertainty": "The codebase does not explicitly forbid using a whitespace-padded body to pin normalization in the dedicated test; the stronger signal is that step 3 is about first-success contract coverage rather than a multi-request or replay scenario.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. Idempotency is intentionally out of scope for this dedicated success test. The existing `comment_post_with_headers(...)` helper only covers the fresh accepted path, and the step plan calls for accepted-comment response coverage plus rate-limit headers, not a replay or conflict matrix. The backend does support `idempotencyKey`, replay, conflicts, and `meta.idempotencyKeyEcho`, but exercising those paths here would require a different helper and broaden the test beyond first-success auth/rate-limit coverage.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-3/plan.json:36",
+        ".fleet/tasks/bayes-market-u44-execute-step-3/plan.json:58",
+        "tests/test_bayes_market_api.py:6108",
+        "backend/server.py:2921",
+        "backend/server.py:2958",
+        "backend/server.py:2974",
+        "backend/server.py:3447"
+      ],
+      "uncertainty": "A later route-local comment-post suite could still add replay and conflict cases; this answer is about the intended scope of this specific success-path test.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. This step should remain success-path only for comment-post. The parent plan explicitly sequences success-path breadth first and keeps absence-path assertions as the next concern, while the current auth/rate-limit class still concentrates route-local missing-agent, blank-agent, malformed-agent, disabled-limiter, and `429` coverage on ProbabilityEdit and resolve. Comment-post currently appears only as helper scaffolding and the new shared breadth case, so adding its negative auth/no-header matrix now would start the follow-on phase instead of finishing this one.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:58",
+        ".fleet/tasks/bayes-market-u44/plan.json:63",
+        ".fleet/tasks/bayes-market-u44-execute-step-3/plan.json:52",
+        ".fleet/tasks/bayes-market-u44-execute-step-3/plan.json:62",
+        "tests/test_bayes_market_api.py:6092",
+        "tests/test_bayes_market_api.py:6246",
+        "tests/test_bayes_market_api.py:6317",
+        "tests/test_bayes_market_api.py:6431"
+      ],
+      "uncertainty": "This is a sequencing judgment, not a claim that comment-post negative auth/rate-limit tests are unnecessary forever.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "This step can stay tests-only in `tests/test_bayes_market_api.py`: successful protected writes get quota headers from the shared `handle_api()` plus `rate_limit_headers(...)` seam, and comment-post is already present in the breadth loop."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "A fresh `POST /v1/markets/m1/comments` through `comment_post_with_headers(...)` with an explicit agent id and positive `RATE_LIMIT_PER_MIN` is the reset-safe happy path. `setUp()` resets state before every test, and `m1` starts active."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The dedicated test should assert the distinct `{\"comment\": ..., \"meta\": ...}` success envelope and should not expect a terminal `result` block on comment-post."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The shared breadth test already proves the exact first-success quota contract for comment-post, so the standalone test can focus on route-local accepted-comment behavior while still asserting the same header helper once."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed. The relevant plan context, helper surface, comment-post handler, and HTTP auth/rate-limit seam are already present and inspectable in this checkout."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
