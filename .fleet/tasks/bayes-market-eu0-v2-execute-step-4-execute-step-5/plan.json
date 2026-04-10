@@ -1,0 +1,84 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep step 5 narrowly frontend-scoped and coverage-only by testing the new exposure client/query surface directly, without widening into `Portfolio.tsx`, `MarketDetail.tsx`, or broader `/risk` UI behavior.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Expand this step into route-level assertions for exposure rendering or broader account-query behavior.",
+        "Reopen production UI work instead of closing the remaining test gap."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Extend `frontend/src/__tests__/api-client.test.ts` with the new `getAccountExposure(accountId)` assertion instead of creating a separate API-client suite or reorganizing the existing thin-wrapper coverage.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Create a new API-client test file just for exposure coverage.",
+        "Refactor the whole client test layout before adding the missing assertion."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Add a dedicated React Query hook test file under `frontend/src/__tests__` and exercise public hooks through a fresh test `QueryClient` wrapper rather than exporting private invalidation helpers or hiding cache assertions inside route-component tests.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Export private invalidation helpers from `frontend/src/lib/query/hooks.ts` for direct unit tests.",
+        "Bury exposure cache assertions inside `Portfolio` or `MarketDetail` component tests."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Freeze the exposure cache contract in tests by asserting the exact `queryKeys.accountExposure(accountId)` shape and the two invalidation paths: `useEventTrade(...)` invalidates only the submitting account's exposure key, while `useResolveMarket(...)` invalidates the exposure-key family without broadening into `queryKeys.accountRisk(...)`.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Assert only that some `invalidateQueries(...)` call happened without pinning the key shape.",
+        "Use a broad `[\"accounts\"]` matcher that would also refresh `accountRisk(...)`."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Use targeted frontend verification for the touched coverage files plus `npm run build` in `frontend/`, because that build script is the compile and type-safety gate for the package.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Rerun unrelated frontend suites as the default validation step.",
+        "Rely on lint alone and skip the frontend compile/build gate."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Extend `frontend/src/__tests__/api-client.test.ts` with a focused `getAccountExposure(accountId)` case that mirrors the existing `getAccountRisk(...)` request-shape assertion and pins the `/v1/accounts/{id}/exposure` client wrapper behavior.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add a new dedicated hook test file, likely `frontend/src/__tests__/query-hooks.test.tsx`, with a fresh `QueryClientProvider` test wrapper and mocked API module so `useAccountExposure(accountId)` can be exercised through the public hook contract.",
+      "depends_on": []
+    },
+    {
+      "step": 3,
+      "task": "In the new hook test file, assert that `useAccountExposure(accountId)` uses `queryKeys.accountExposure(accountId)` exactly and add mutation-hook coverage showing `useEventTrade(marketId)` invalidates only the submitting account's exposure key with `exact: true`.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Add the complementary `useResolveMarket(marketId)` hook test that proves resolution invalidates the exposure-key family matcher while leaving `queryKeys.accountRisk(...)` outside the invalidation scope.",
+      "depends_on": [2]
+    },
+    {
+      "step": 5,
+      "task": "Run targeted Vitest coverage for `frontend/src/__tests__/api-client.test.ts` and the new hook test file, then run `npm run build` in `frontend/` so the added tests, types, and hooks compile cleanly.",
+      "depends_on": [1, 3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

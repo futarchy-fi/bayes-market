@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This checkout already has the step-1 type work: `frontend/src/lib/api/types.ts` exports both `AccountExposureResponse` and the specialized `EventTradeResponse`, and `submitEventTrade(...)` in `client.ts` is already typed as `Promise<EventTradeResponse>`. Should step 2 treat that signature as settled and limit the file change to preserving it while adding the missing exposure client helper, or is a broader client/type cleanup still expected here?",
+      "category": "codebase",
+      "why_it_matters": "The answer determines whether step 2 is a small gap-fill in `client.ts` or a wider revisit of EventTrade response typing that may touch more than the new exposure helper."
+    },
+    {
+      "id": "q2",
+      "question": "Should `getAccountExposure(accountId)` be a thin wrapper that exactly mirrors `getAccountRisk(accountId)` by calling `request<AccountExposureResponse>(\"/v1/accounts/{id}/exposure\")` with no custom options and no special-case error handling?",
+      "category": "design",
+      "why_it_matters": "Step 2 is specifically about wiring the new client method without changing the shared `request(...)` and `BayesApiError` contract. Any normalization or custom fetch behavior would widen scope and public behavior."
+    },
+    {
+      "id": "q3",
+      "question": "For `GET /v1/accounts/{id}/exposure`, should the frontend client preserve the backend's raw `404 account_not_found` behavior all the way through `BayesApiError`, or is this step expected to start translating that case into an empty exposure document before the React Query hook and UI work land?",
+      "category": "requirements",
+      "why_it_matters": "This freezes the observable behavior of the new client method and determines whether later hooks and components build on standard error handling or synthetic empty data."
+    },
+    {
+      "id": "q4",
+      "question": "Is step 2 intentionally client-only, with focused exposure-read coverage deferred to the later testing step, or should `frontend/src/__tests__/api-client.test.ts` already gain a `getAccountExposure(...)` assertion in the same change because `client.ts` is being touched now?",
+      "category": "codebase",
+      "why_it_matters": "The parent plan schedules API-client coverage later, but the active worktree already has EventTrade payload tests. The answer sets whether this step stays narrow or expands into early verification."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "`frontend/src/lib/api/types.ts` is already the single source of truth for this step's imported response types: `AccountExposureResponse` and `EventTradeResponse` exist there and should be reused rather than redefined in `client.ts`.",
+      "confidence": 0.99,
+      "if_wrong": "Step 2 would need prerequisite type edits or local interface duplication before the client helper can compile."
+    },
+    {
+      "id": "a2",
+      "assumption": "The backend exposure route is live in this checkout, so `client.ts` can target `/v1/accounts/{id}/exposure` directly and rely on the existing shared `request(...)` helper to parse successful JSON and throw `BayesApiError` for non-OK responses.",
+      "confidence": 0.98,
+      "if_wrong": "The frontend client change would point at a route or error contract that has not actually landed yet."
+    },
+    {
+      "id": "a3",
+      "assumption": "The current `submitEventTrade(...): Promise<EventTradeResponse>` signature in `frontend/src/lib/api/client.ts` is already the intended EventTrade-specific success contract and should only be preserved, not widened back to the generic `OrderResponse`.",
+      "confidence": 0.97,
+      "if_wrong": "This step would need a broader revisit of EventTrade success typing and possibly of downstream consumers or tests."
+    },
+    {
+      "id": "a4",
+      "assumption": "`getAccountExposure(accountId)` should follow the existing account-read placement and naming pattern by living beside `getAccountRisk(accountId)` as another top-level exported client function, not as part of a broader account namespace refactor.",
+      "confidence": 0.95,
+      "if_wrong": "The client file would need a larger organizational rewrite rather than one additive helper."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the remaining scope and open questions are visible from the checked-in frontend client, types, tests, and the existing `.fleet` plan artifacts for step 4.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up exploration task would be needed to locate an external contract source before step 2 could be scoped safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

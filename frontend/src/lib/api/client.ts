@@ -6,7 +6,9 @@ import type {
   MarketCommentsResponse,
   EngineStatsResponse,
   AccountRiskResponse,
+  AccountExposureResponse,
   OrderResponse,
+  EventTradeResponse,
   CommentResponse,
   ApiError,
   CommentPayload,
@@ -164,6 +166,14 @@ export function getAccountRisk(
   );
 }
 
+export function getAccountExposure(
+  accountId: string,
+): Promise<AccountExposureResponse> {
+  return request<AccountExposureResponse>(
+    `/v1/accounts/${encodeURIComponent(accountId)}/exposure`,
+  );
+}
+
 export function submitProbabilityEdit(
   marketId: string,
   payload: ProbabilityEditPayload,
@@ -239,8 +249,8 @@ export function submitEventTrade(
   marketId: string,
   payload: EventTradePayload,
   session: Session,
-): Promise<OrderResponse> {
-  return request<OrderResponse>(
+): Promise<EventTradeResponse> {
+  return request<EventTradeResponse>(
     `/v1/markets/${encodeURIComponent(marketId)}/orders/event-trade`,
     {
       method: "POST",

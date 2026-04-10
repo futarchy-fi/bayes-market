@@ -18,6 +18,7 @@ export const queryKeys = {
   marketComments: (id: string) => ["markets", id, "comments"] as const,
   engineStats: (id: string) => ["markets", id, "engine-stats"] as const,
   accountRisk: (id: string) => ["accounts", id, "risk"] as const,
+  accountExposure: (id: string) => ["accounts", id, "exposure"] as const,
   health: () => ["health"] as const,
   serviceIndex: () => ["service-index"] as const,
 };
@@ -38,6 +39,23 @@ function invalidateMarketDependentQueries(qc: QueryClient, marketId: string) {
   void qc.invalidateQueries({ queryKey: queryKeys.marketEvents(marketId) });
   void qc.invalidateQueries({ queryKey: queryKeys.engineStats(marketId) });
   void invalidateMarketCollectionQueries(qc);
+}
+
+function invalidateAccountExposureQuery(qc: QueryClient, accountId: string) {
+  return qc.invalidateQueries({
+    queryKey: queryKeys.accountExposure(accountId),
+    exact: true,
+  });
+}
+
+function invalidateAccountExposureQueries(qc: QueryClient) {
+  return qc.invalidateQueries({
+    predicate: ({ queryKey }) => Array.isArray(queryKey)
+      && queryKey.length === 3
+      && queryKey[0] === "accounts"
+      && typeof queryKey[1] === "string"
+      && queryKey[2] === "exposure",
+  });
 }
 
 function refetchMarketRouteQueries(qc: QueryClient, marketId: string) {
@@ -89,11 +107,13 @@ function parseMarketPriceMessage(value: unknown): MarketPriceMessage | null {
     return null;
   }
 
-  const resolutionProbabilities = value.resolutionProbabilities == null
-    ? undefined
-    : parseMarginals(value.resolutionProbabilities);
-  if (value.resolutionProbabilities != null && !resolutionProbabilities) {
-    return null;
+  let resolutionProbabilities: Record<string, number> | undefined;
+  if (value.resolutionProbabilities != null) {
+    const parsedResolutionProbabilities = parseMarginals(value.resolutionProbabilities);
+    if (!parsedResolutionProbabilities) {
+      return null;
+    }
+    resolutionProbabilities = parsedResolutionProbabilities;
   }
 
   return {
@@ -312,6 +332,14 @@ export function useAccountRisk(accountId: string) {
   });
 }
 
+export function useAccountExposure(accountId: string) {
+  return useQuery({
+    queryKey: queryKeys.accountExposure(accountId),
+    queryFn: () => api.getAccountExposure(accountId),
+    enabled: accountId.length > 0,
+  });
+}
+
 export function useCreateMarket() {
   const qc = useQueryClient();
   return useMutation({
@@ -346,6 +374,7 @@ export function useResolveMarket(marketId: string) {
       void qc.invalidateQueries({ queryKey: queryKeys.marketEvents(marketId) });
       void qc.invalidateQueries({ queryKey: queryKeys.engineStats(marketId) });
       void qc.invalidateQueries({ queryKey: queryKeys.markets() });
+      void invalidateAccountExposureQueries(qc);
     },
   });
 }
@@ -355,10 +384,11 @@ export function useEventTrade(marketId: string) {
   return useMutation({
     mutationFn: ({ payload, session }: { payload: EventTradePayload; session: Session }) =>
       api.submitEventTrade(marketId, payload, session),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void qc.invalidateQueries({ queryKey: queryKeys.market(marketId) });
       void qc.invalidateQueries({ queryKey: queryKeys.marketEvents(marketId) });
       void qc.invalidateQueries({ queryKey: queryKeys.engineStats(marketId) });
+      void invalidateAccountExposureQuery(qc, variables.payload.accountId);
     },
   });
 }

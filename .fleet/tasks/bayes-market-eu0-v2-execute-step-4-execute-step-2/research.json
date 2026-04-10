@@ -1,0 +1,97 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Step 2 should treat the EventTrade-specific success typing as already settled in this checkout and limit `client.ts` work to preserving that signature while adding the missing `getAccountExposure(accountId)` helper and its type import. The parent step-4 plan scopes step 2 to the exposure client helper plus preserving the EventTrade-specific return type, and the recorded step-1 validation already says that broader EventTrade typing work landed without reopening shared mutation-response cleanup.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:16",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:54",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-1/validation.json:4",
+        "frontend/src/lib/api/types.ts:206",
+        "frontend/src/lib/api/types.ts:324",
+        "frontend/src/lib/api/client.ts:239"
+      ],
+      "uncertainty": "A later cleanup could still choose to modernize the shared `OrderResponse` model, but that would be outside the planned scope of this step-2 client patch.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. `getAccountExposure(accountId)` should be a thin top-level wrapper that mirrors `getAccountRisk(accountId)` and simply calls `request<AccountExposureResponse>(\"/v1/accounts/{id}/exposure\")` with no custom options and no special-case error handling. The step-4 plan keeps this work additive and explicitly says step 2 must preserve the shared `request(...)` and `BayesApiError` behavior for non-OK responses.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:6",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:54",
+        "frontend/src/lib/api/client.ts:32",
+        "frontend/src/lib/api/client.ts:56",
+        "frontend/src/lib/api/client.ts:160",
+        "frontend/src/lib/api/types.ts:206"
+      ],
+      "uncertainty": "The only open implementation detail is exact placement within `client.ts`, but the existing account-read pattern points to placing it beside `getAccountRisk(...)` rather than introducing a broader namespace refactor.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The frontend client should preserve the backend's raw `404 account_not_found` behavior and let it surface through `BayesApiError`; this step should not translate exposure misses into an empty exposure document. The parent plan explicitly freezes that error contract, the shared `request(...)` helper already throws `BayesApiError` for any non-OK response, and the backend exposure route deliberately returns `account_not_found` both for missing accounts and for fully pruned exposure projections.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:27",
+        "frontend/src/lib/api/client.ts:56",
+        "backend/server.py:1542",
+        "backend/server.py:1549",
+        "tests/test_bayes_market_api.py:7877"
+      ],
+      "uncertainty": "Later UI or hook work may decide to normalize that error into an empty-state presentation, but the plan says that normalization belongs later and not in the shared client contract.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Step 2 is intentionally client-only. Focused frontend coverage for `getAccountExposure(...)` is deferred to the later testing step, which explicitly names extending `frontend/src/__tests__/api-client.test.ts` and related hook coverage after the client and hook work land. Adding an exposure assertion now would be harmless, but it is outside the recorded step-2 scope rather than a requirement of this phase.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:54",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:69",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:70",
+        "frontend/src/__tests__/api-client.test.ts:50",
+        "frontend/src/__tests__/api-client.test.ts:75"
+      ],
+      "uncertainty": "The repo has accepted minor scope drift in earlier frontend steps when tests were needed to keep changed callers aligned, so a small early test would not be unreasonable; it is just not what the current parent plan requires for step 2.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "`frontend/src/lib/api/types.ts` already defines both `AccountExposureResponse` and `EventTradeResponse`, so step 2 should reuse those exported types in `client.ts` instead of redefining local interfaces."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The backend exposure route is live and part of the advertised account surface, so the frontend client can target `/v1/accounts/{id}/exposure` directly and rely on the existing shared `request(...)` helper for success parsing and `BayesApiError` on non-OK responses."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The current `submitEventTrade(...): Promise<EventTradeResponse>` signature should be preserved as the intended success contract for this step rather than widened back to `OrderResponse`."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The missing exposure helper should be added beside `getAccountRisk(accountId)` as another top-level exported client function, keeping the existing additive per-surface layout intact."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed because the active frontend files, backend route/tests, and the checked-in step-4 plan artifacts answer the remaining scope questions directly with high confidence."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

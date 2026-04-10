@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { listMarkets, getMarket, getMarketPreview, getAccountRisk, BayesApiError } from "@/lib/api/client";
+import {
+  listMarkets,
+  getMarket,
+  getMarketPreview,
+  getAccountRisk,
+  submitEventTrade,
+  BayesApiError,
+} from "@/lib/api/client";
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
@@ -63,6 +70,74 @@ describe("API Client", () => {
     const result = await getMarketPreview("m1");
     expect(mockFetch).toHaveBeenCalledWith("/v1/markets/m1/meta", expect.any(Object));
     expect(result.preview.marketId).toBe("m1");
+  });
+
+  it("submitEventTrade posts the canonical size payload", async () => {
+    const payload = {
+      accountId: "acct_1",
+      formula: [[{ variableId: "m1", outcomeId: "yes", negated: false }]],
+      size: 12.5,
+      side: "buy" as const,
+      idempotencyKey: "idem_1",
+    };
+    const body = {
+      order: {
+        id: "ord_1",
+        type: "EventTrade",
+        marketId: "m1",
+        accountId: "acct_1",
+        commandId: "cmd_1",
+        submittedAt: "2026-04-09T12:00:00Z",
+        status: "filled",
+        payload: {
+          formula: payload.formula,
+          size: payload.size,
+          side: payload.side,
+        },
+        targetMarketId: "m1",
+        targetOutcomeId: "yes",
+        side: "buy",
+        size: 12.5,
+        price: 0.65,
+        notional: 8.125,
+        createdAt: "2026-04-09T12:00:00Z",
+        filledAt: "2026-04-09T12:00:00Z",
+        idempotencyKey: "idem_1",
+      },
+      result: {
+        terminal: true,
+        status: "accepted",
+        eventType: "CommandAccepted",
+        eventId: "evt_1",
+        commandId: "cmd_1",
+        emittedAt: "2026-04-09T12:00:00Z",
+      },
+      meta: {
+        apiVersion: "1.0",
+        timestamp: "",
+        idempotencyKeyEcho: "idem_1",
+      },
+    };
+    mockFetch.mockResolvedValue(jsonResponse(body, 201));
+
+    const result = await submitEventTrade("m1", payload, {
+      accountId: "acct_1",
+      agentId: "agent_1",
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/v1/markets/m1/orders/event-trade",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(payload),
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+          "X-Bayes-Agent-Id": "agent_1",
+        }),
+      }),
+    );
+    expect(result.order.id).toBe("ord_1");
+    expect(result.order.size).toBe(12.5);
   });
 
   it("throws BayesApiError on non-ok response", async () => {

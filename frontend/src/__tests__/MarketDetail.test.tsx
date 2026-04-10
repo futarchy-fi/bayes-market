@@ -35,6 +35,18 @@ const mockEvents = {
   meta: { apiVersion: "1.0", timestamp: "2026-04-08T00:00:00Z" },
 };
 
+const mockComments = {
+  marketId: "m1",
+  comments: [],
+  pagination: {
+    fromSeq: 0,
+    limit: 20,
+    returned: 0,
+    nextFromSeq: null,
+  },
+  meta: { apiVersion: "1.0", timestamp: "2026-04-08T00:00:00Z" },
+};
+
 const mockEngineStats = {
   marketId: "m1",
   engine: { mode: "exact", backend: "junction-tree", version: "1.0", precision: "float64", compile_id: null, compile_type: null, source_state_hash: null },
@@ -47,7 +59,9 @@ describe("MarketDetail", () => {
   beforeEach(() => {
     vi.mocked(api.getMarket).mockResolvedValue(mockMarket);
     vi.mocked(api.getMarketEvents).mockResolvedValue(mockEvents);
+    vi.mocked(api.getMarketComments).mockResolvedValue(mockComments);
     vi.mocked(api.getEngineStats).mockResolvedValue(mockEngineStats);
+    vi.mocked(api.getMarketPricesWebSocketUrl).mockReturnValue("ws://localhost/ws/markets/m1/prices");
     vi.mocked(api.listMarkets).mockResolvedValue({
       markets: [{ id: "m1", title: "ETH Price > $3000 on March 15", status: "active" as const, liquidity: 150000, volume: 45000, expires_at: "2026-12-31T23:59:59Z" }],
       count: 1,

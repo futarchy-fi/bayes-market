@@ -1,0 +1,129 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. Step 5 should stay narrowly frontend-scoped and add only focused coverage for the new exposure surface. The parent step-4 plan defines this step as test work after the client, query hook, and invalidation changes already landed, and it specifically names `api-client.test.ts` plus a query-hook test rather than UI adoption in `Portfolio` or `MarketDetail`. The current production code already exposes `getAccountExposure(...)`, `useAccountExposure(...)`, and the exposure invalidation paths, so the remaining gap is coverage, not more UI wiring.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:69",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:70",
+        "frontend/src/lib/api/client.ts:169",
+        "frontend/src/lib/query/hooks.ts:21",
+        "frontend/src/lib/query/hooks.ts:335",
+        "frontend/src/lib/query/hooks.ts:367",
+        "frontend/src/lib/query/hooks.ts:382"
+      ],
+      "uncertainty": "None material. The only implementation choice left is where to place the new hook test file, not whether this step should expand into UI behavior changes.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. `getAccountExposure(accountId)` coverage should be added by extending `frontend/src/__tests__/api-client.test.ts` directly. That file already contains the thin request-shape assertions for peer client wrappers such as `getAccountRisk(...)`, and `getAccountExposure(...)` mirrors that client pattern exactly with a single `request<AccountExposureResponse>(\"/v1/accounts/{id}/exposure\")` call. Adding one more case there is the smallest patch that closes the intentionally deferred client-test gap from step 2.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/__tests__/api-client.test.ts:2",
+        "frontend/src/__tests__/api-client.test.ts:50",
+        "frontend/src/lib/api/client.ts:161",
+        "frontend/src/lib/api/client.ts:169",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:70",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-2/validation.json:9"
+      ],
+      "uncertainty": "The exact mock body can be minimal, as with the existing `getAccountRisk(...)` assertion, or can assert a realistic `positions` payload. Either fits the current suite pattern.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. Step 5 should add a new dedicated query-hook test file and exercise the public hooks through a test `QueryClient` wrapper rather than exporting helper internals or hiding invalidation assertions in route-component tests. The exposure invalidation helpers are private functions inside `hooks.ts`, while the observable contract lives on exported hooks such as `useAccountExposure(...)`, `useResolveMarket(...)`, and `useEventTrade(...)`. The current frontend suite has provider scaffolding and component tests, but it has no existing React Query hook-test file or helper-specific export seam, so a small dedicated hook test is the clean additive option.",
+      "confidence": 0.97,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:44",
+        "frontend/src/lib/query/hooks.ts:51",
+        "frontend/src/lib/query/hooks.ts:335",
+        "frontend/src/lib/query/hooks.ts:367",
+        "frontend/src/lib/query/hooks.ts:382",
+        "frontend/src/__tests__/helpers.tsx:1",
+        "frontend/src/__tests__/helpers.tsx:7",
+        "frontend/src/__tests__/helpers.tsx:27",
+        "frontend/src/__tests__/Portfolio.test.tsx:3",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-4/plan.json:35",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-4/plan.json:36"
+      ],
+      "uncertainty": "The exact harness can be either `renderHook(...)` with a wrapper or a minimal test component rendered through a `QueryClientProvider`. The codebase evidence fixes the boundary around public hooks, not the exact test utility API.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. The hook-level coverage should pin the cache contract itself: `queryKeys.accountExposure(accountId)` must stay `[\"accounts\", accountId, \"exposure\"]`; `useEventTrade(...)` should invalidate only the submitting account's exposure key with an exact match; and `useResolveMarket(...)` should invalidate the exposure-key family without broadening into `queryKeys.accountRisk(...)`. Those behaviors are the substantive surface added in steps 3 and 4, and the parent decisions explicitly distinguish the narrow trade invalidation from the broader resolve-time family invalidation while preserving `/risk` freshness.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:20",
+        "frontend/src/lib/query/hooks.ts:21",
+        "frontend/src/lib/query/hooks.ts:44",
+        "frontend/src/lib/query/hooks.ts:51",
+        "frontend/src/lib/query/hooks.ts:335",
+        "frontend/src/lib/query/hooks.ts:367",
+        "frontend/src/lib/query/hooks.ts:382",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:37",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:60",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:65",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-4/plan.json:16",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-4/plan.json:26"
+      ],
+      "uncertainty": "A test can prove the resolve matcher either by spying on `invalidateQueries(...)` arguments or by seeding caches and observing invalidation state. The exact assertion style is flexible, but the protected contract is not.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "The relevant verification gate is a targeted frontend test run for the touched coverage files plus `npm run build`. This package exposes only `test`, `test:watch`, `build`, and `lint`, with `build` already serving as the compile/type-safety check via `tsc -b && vite build`. The earlier step-2 validation used that same pattern with `npm test -- api-client.test.ts` and `npm run build`, and the parent step-4 plan asks for relevant frontend verification rather than a full-suite rerun. For this step, the proportional gate is the targeted Vitest slice for `api-client.test.ts` and the new hook test file, followed by `npm run build`.",
+      "confidence": 0.98,
+      "evidence": [
+        "frontend/package.json:6",
+        "frontend/package.json:8",
+        "frontend/package.json:10",
+        "frontend/package.json:12",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:69",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:70",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-2/validation.json:9",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-4/plan.json:62"
+      ],
+      "uncertainty": "If the new hook test ends up exercising shared helpers used by route tests, a slightly wider Vitest pattern may be reasonable. The compile gate still remains `npm run build`.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "Step 5 is not blocked on missing production plumbing; the client, query key, hook, and exposure invalidation paths already exist and are ready for focused coverage."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The missing `getAccountExposure(...)` regression belongs in the existing API-client test file, so no broader client-test reorganization is needed."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "A new dedicated hook test can be added with the current React Query test dependencies and provider scaffolding, without exporting private invalidation helpers from production code."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "The expected compile/type verification for this package is `npm run build`, so step-5 validation should include it after the targeted Vitest run."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No child task is needed. Even though the dedicated step-5 task folder was missing, the parent plan, adjacent step artifacts, and current frontend code are sufficient to recover the intended research decisions."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,15 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.72,
+  "plan_adherence_notes": "Steps 1-4 from the recorded plan are implemented: `AccountExposureResponse`, `getAccountExposure(accountId)`, `queryKeys.accountExposure(accountId)`, `useAccountExposure(accountId)`, and exposure invalidation after EventTrade and resolve all landed in the expected frontend API/query files. Adherence is not complete because step 5 coverage was only partial: `frontend/src/__tests__/api-client.test.ts` adds an EventTrade payload test, but there is no `getAccountExposure(...)` client test and no query-hook/invalidation test for the new exposure cache behavior. Execution also drifted beyond the recorded scope by changing `frontend/src/features/trading/EventTradePanel.tsx` and adjusting `frontend/src/__tests__/MarketDetail.test.tsx`, even though the research/plan explicitly kept component adoption for a later step.",
+  "research_quality": 0.92,
+  "question_completeness": 0.78,
+  "missed_questions": [
+    "Making `EventTradePayload.size` required breaks the existing `EventTradePanel` caller unless this step either hardcodes a temporary default or introduces UI. Is a user-facing size control allowed in step 4, or should the panel stay UI-stable until the later component step?",
+    "What exact automated coverage is required for the new exposure surface and invalidation behavior (`getAccountExposure`, `useAccountExposure`, EventTrade account-scoped invalidation, and resolve-all exposure invalidation), so step 5 cannot be satisfied by an unrelated EventTrade payload test?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "The core API/client/hook work follows from the research, but the branch did not fully follow the recorded plan: the planned exposure read/invalidation coverage is missing, and the implementation crossed the stated step boundary by adding user-facing `EventTradePanel` changes. Verification was also incomplete on the frontend side because `npm test` could not run in this worktree without a local JS install; targeted backend EventTrade/exposure contract tests did pass.",
+  "spawn_children": false,
+  "children": []
+}

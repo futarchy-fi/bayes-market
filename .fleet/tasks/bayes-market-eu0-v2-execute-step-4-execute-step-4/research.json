@@ -1,0 +1,122 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. Step 4 should preserve the current `/risk` freshness behavior and add only exposure-specific invalidation. In this branch, the existing invalidation helpers and both relevant mutation hooks still target only market-scoped keys, while `accountRisk(id)` and `accountExposure(id)` are separate account families. The parent step-4 plan explicitly says this step should add focused exposure invalidation without reintroducing grouped account invalidation or changing `/risk` freshness behavior.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:14",
+        "frontend/src/lib/query/hooks.ts:20",
+        "frontend/src/lib/query/hooks.ts:21",
+        "frontend/src/lib/query/hooks.ts:29",
+        "frontend/src/lib/query/hooks.ts:38",
+        "frontend/src/lib/query/hooks.ts:350",
+        "frontend/src/lib/query/hooks.ts:364",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:64"
+      ],
+      "uncertainty": "None material; the only remaining choice is the exact helper implementation that isolates exposure keys without touching risk keys.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. `useEventTrade(marketId)` should invalidate exactly `queryKeys.accountExposure(variables.payload.accountId)` after a successful trade and no other exposure caches. `EventTradePayload` already carries `accountId`, and the hook already closes over `marketId`, so the mutation has all the context needed for a single exact-key exposure invalidation. The recorded step-4 decision explicitly says EventTrade should invalidate only the submitting account's exposure query.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/lib/api/types.ts:290",
+        "frontend/src/lib/query/hooks.ts:21",
+        "frontend/src/lib/query/hooks.ts:364",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:37",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:64"
+      ],
+      "uncertainty": "This assumes `onSuccess` uses the mutation `variables` argument or an equivalent captured payload; the current callback body does not yet read it.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. For `useResolveMarket(marketId)`, \"invalidate all cached exposure queries\" should mean a focused helper that matches every cached key in the exposure family shaped like `[\"accounts\", <id>, \"exposure\"]`, regardless of `payload.accountId`. That is the intended middle ground: broader than the resolver's own account, because resolution can settle multiple traders, but narrower than a raw `[\"accounts\"]` prefix, which would also invalidate `accountRisk(...)`. The parent plan explicitly rejects both payload-only invalidation and broad account-family invalidation.",
+      "confidence": 0.98,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:20",
+        "frontend/src/lib/query/hooks.ts:21",
+        "frontend/src/lib/query/hooks.ts:350",
+        "frontend/src/lib/api/client.ts:192",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:37",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:40",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:41",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:64"
+      ],
+      "uncertainty": "The exact React Query matcher API is not frozen by the plan. A predicate over `queryKey[0] === \"accounts\" && queryKey[2] === \"exposure\"` is the clearest fit, but any implementation with the same narrow match contract would satisfy the requirement.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. The new focused exposure invalidation should live as private `QueryClient` helpers inside `frontend/src/lib/query/hooks.ts`, next to the existing local invalidation helpers. This file already owns cache invalidation helpers such as `invalidateMarketCollectionQueries(...)` and `invalidateMarketDependentQueries(...)`, and the parent step-4 task scopes the new work to `hooks.ts` rather than to shared utilities or another query-key refactor.",
+      "confidence": 0.98,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:29",
+        "frontend/src/lib/query/hooks.ts:38",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-3/plan.json:6",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-3/plan.json:16",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:6",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:64"
+      ],
+      "uncertainty": "The repo evidence fixes the helper location and scope, but it does not prescribe exact helper names or whether trade and resolution share one helper or two.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Step 4 should stay implementation-only, with dedicated invalidation coverage deferred to step 5. The parent step-4 plan explicitly reserves test work for a later step, calling out API-client coverage plus a query-hook test for the new exposure key and invalidation behavior after step 4 lands. The current frontend test surface contains API-client and route/component tests plus a shared React Query provider helper, but no dedicated hook test file or assertions around `useEventTrade(...)`, `useResolveMarket(...)`, or `invalidateQueries(...)`.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/plan.json:68",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-3/plan.json:6",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-3/plan.json:10",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-3/plan.json:47",
+        "frontend/src/__tests__/helpers.tsx:1",
+        "frontend/src/__tests__/api-client.test.ts:22",
+        "frontend/src/__tests__/MarketDetail.test.tsx:58",
+        "frontend/src/__tests__/Portfolio.test.tsx:8"
+      ],
+      "uncertainty": "Adding opportunistic tests in step 4 would be acceptable, but the recorded plan does not require them until the dedicated coverage step.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "Step 4 is not blocked on prerequisite exposure query plumbing; `queryKeys.accountExposure(...)` and `useAccountExposure(...)` already exist in `hooks.ts`."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Both mutations already have the data needed for targeted invalidation, so no payload-shape or hook-signature expansion is required before wiring the new helpers."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Any invalidation helper that matches `queryKeys.accountRisk(...)` or a raw `[\"accounts\"]` prefix would widen `/risk` freshness beyond the recorded scope and should be avoided."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Resolve-time family invalidation should target only the exposure key family `[\"accounts\", id, \"exposure\"]`, typically via a focused predicate, rather than every account-scoped query."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed; the checked-in code, payload types, plan artifacts, and visible frontend test layout already answer the scope and testing questions for this step."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should step 5 stay narrowly frontend-scoped, adding only focused coverage for the new exposure API/query surface instead of widening into `Portfolio.tsx`, `MarketDetail.tsx`, or broader `/risk` behavior assertions?",
+      "category": "requirements",
+      "why_it_matters": "The parent step-4 plan names this as a coverage-only follow-up after the client and hook plumbing landed. Confirming that scope avoids reopening user-facing UI work or unrelated account-query behavior."
+    },
+    {
+      "id": "q2",
+      "question": "Should `getAccountExposure(accountId)` coverage be added by extending `frontend/src/__tests__/api-client.test.ts` directly, mirroring the existing `getAccountRisk(...)` request assertion, instead of introducing a separate API-client test file or broader client-suite refactor?",
+      "category": "codebase",
+      "why_it_matters": "The task title explicitly calls out `api-client.test.ts`, and the current suite already concentrates thin REST-wrapper coverage there. The answer determines whether step 5 is a small additive test patch or a test-layout reorganization."
+    },
+    {
+      "id": "q3",
+      "question": "Because the exposure invalidation helpers are private inside `frontend/src/lib/query/hooks.ts` and the current frontend suite has no dedicated React Query hook tests, should step 5 add a new query-hook test file that exercises public hooks like `useAccountExposure(...)`, `useEventTrade(...)`, and `useResolveMarket(...)` through a test `QueryClient` wrapper rather than exporting helpers or hiding invalidation assertions inside route-component tests?",
+      "category": "design",
+      "why_it_matters": "This fixes the implementation boundary for the planned hook coverage. Exporting helper internals or burying cache assertions in route tests would widen scope and make the new cache-contract coverage less direct."
+    },
+    {
+      "id": "q4",
+      "question": "Should the hook-level coverage freeze the exposure cache contract itself by asserting the exact `queryKeys.accountExposure(accountId)` shape and the two distinct invalidation paths: `useEventTrade(...)` invalidates only the submitting account's exposure key, while `useResolveMarket(...)` invalidates the exposure key family without touching `queryKeys.accountRisk(...)`?",
+      "category": "requirements",
+      "why_it_matters": "The cache key shape and invalidation matchers are the substantive behavior added in steps 3 and 4. If step 5 does not pin them, the new exposure surface remains weakly specified despite the dedicated coverage task."
+    },
+    {
+      "id": "q5",
+      "question": "What is the relevant frontend verification gate for this step: targeted Vitest runs for the touched coverage files plus `npm run build` so the new tests, types, and hooks compile cleanly, rather than rerunning unrelated frontend suites or adding extra lint-only requirements?",
+      "category": "codebase",
+      "why_it_matters": "Step 5 explicitly calls for running relevant frontend verification. The answer determines the concrete validation commands and keeps the task proportional to the files being changed."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The prerequisite frontend work has already landed in this checkout: `frontend/src/lib/api/client.ts` exports `getAccountExposure(accountId)`, `frontend/src/lib/query/hooks.ts` defines `queryKeys.accountExposure(accountId)` and `useAccountExposure(accountId)`, and the mutation hooks already contain the new exposure invalidation wiring.",
+      "confidence": 0.99,
+      "if_wrong": "Step 5 would be blocked by missing production surface area and would have to absorb unfinished implementation instead of adding coverage."
+    },
+    {
+      "id": "a2",
+      "assumption": "The existing `frontend/src/__tests__/api-client.test.ts` file is the intended home for additive REST-wrapper assertions like `getAccountExposure(...)`, because that file already covers other thin client entry points such as `getAccountRisk(...)` and `submitEventTrade(...)`.",
+      "confidence": 0.98,
+      "if_wrong": "The step would need a new client-test layout or a broader test-suite reorganization before adding the missing exposure assertion."
+    },
+    {
+      "id": "a3",
+      "assumption": "No dedicated React Query hook-test file exists yet, but the current frontend test dependencies and provider helper are sufficient to add one without changing production exports.",
+      "confidence": 0.97,
+      "if_wrong": "Step 5 would need extra harness work, new test dependencies, or exported helper seams before the invalidation behavior could be tested directly."
+    },
+    {
+      "id": "a4",
+      "assumption": "For this frontend package, `npm run build` is the compile/type-safety gate because the script runs `tsc -b && vite build`, and there is no separate `typecheck` script.",
+      "confidence": 0.99,
+      "if_wrong": "The planned verification commands would miss the actual compile gate and could leave new test or hook typing errors undetected."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child research task is needed even though the dedicated step-5 task folder was missing, because the parent step-4 plan, adjacent step artifacts, and current frontend code are enough to recover the intended decisions for this coverage task.",
+      "confidence": 0.95,
+      "if_wrong": "A follow-up child task would be needed to recover missing task metadata before planning the coverage patch safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

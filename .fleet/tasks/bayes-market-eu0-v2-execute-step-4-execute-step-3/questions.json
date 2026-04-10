@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This checkout already has `AccountExposureResponse` in `frontend/src/lib/api/types.ts` and `getAccountExposure(accountId)` in `frontend/src/lib/api/client.ts`. Should step 3 stay strictly inside `frontend/src/lib/query/hooks.ts`, adding only the new query key and hook export without wiring `Portfolio.tsx`, `MarketDetail.tsx`, or other consumers to exposure data yet?",
+      "category": "codebase",
+      "why_it_matters": "The parent plan separates hook plumbing from later invalidation and coverage work. Confirming that boundary keeps this change additive and avoids mixing shared query-surface work with UI adoption."
+    },
+    {
+      "id": "q2",
+      "question": "Should `queryKeys.accountExposure(accountId)` mirror the existing `queryKeys.accountRisk(accountId)` shape exactly as `[\"accounts\", accountId, \"exposure\"]`, preserving the current flat per-resource key layout instead of introducing a grouped `queryKeys.account(...)` namespace or other account-key refactor in this step?",
+      "category": "design",
+      "why_it_matters": "The key shape becomes part of the cache contract that step 4 will invalidate after trades and market resolution. A different namespace choice would widen the scope beyond one additive hook."
+    },
+    {
+      "id": "q3",
+      "question": "Should `useAccountExposure(accountId)` be a thin `useQuery` wrapper that exactly follows the existing `useAccountRisk(accountId)` pattern with only `queryKey`, `queryFn`, and `enabled: accountId.length > 0`, and no extra `staleTime`, `refetchInterval`, `select`, or placeholder-data behavior?",
+      "category": "design",
+      "why_it_matters": "This determines whether step 3 is just a parallel read hook or also the place where exposure polling, transformation, or cache-behavior policy is introduced."
+    },
+    {
+      "id": "q4",
+      "question": "For accounts that the backend exposure projection treats as missing, should `useAccountExposure(accountId)` surface the raw `BayesApiError` from `getAccountExposure(...)` unchanged rather than normalizing `404 account_not_found` into an empty `{ positions: [] }` result at the hook layer?",
+      "category": "requirements",
+      "why_it_matters": "This freezes the public behavior of the new hook and decides whether empty-state handling belongs in later UI code or becomes hidden inside the shared React Query layer."
+    },
+    {
+      "id": "q5",
+      "question": "The current frontend test suite includes API-client coverage but no dedicated React Query hook tests. Should step 3 remain implementation-only with verification deferred to the planned step-5 coverage work, or is this hook addition expected to add immediate tests even though the broader plan separates testing later?",
+      "category": "codebase",
+      "why_it_matters": "The answer sets whether this step stays narrowly focused on `hooks.ts` or expands into new test scaffolding before the invalidation work in step 4."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The prerequisite frontend surfaces for this step are already present in the worktree: `frontend/src/lib/api/types.ts` exports `AccountExposureResponse`, and `frontend/src/lib/api/client.ts` exports `getAccountExposure(accountId)`.",
+      "confidence": 0.99,
+      "if_wrong": "Step 3 would be blocked by missing imports and would need prerequisite type or client work before `hooks.ts` could compile."
+    },
+    {
+      "id": "a2",
+      "assumption": "This step should stay additive and hook-scoped inside `frontend/src/lib/query/hooks.ts`, leaving exposure consumption in `Portfolio`, `MarketDetail`, and other components for later planned work.",
+      "confidence": 0.97,
+      "if_wrong": "The patch would need to expand from a shared hook addition into user-facing component changes and broader behavior review."
+    },
+    {
+      "id": "a3",
+      "assumption": "`queryKeys.accountExposure(accountId)` should follow the established account-risk naming pattern as `[\"accounts\", id, \"exposure\"]` rather than introducing a new grouped account namespace.",
+      "confidence": 0.98,
+      "if_wrong": "Step 3 would need a wider query-key reorganization that could also affect step-4 invalidation and any future account-scoped hooks."
+    },
+    {
+      "id": "a4",
+      "assumption": "`useAccountExposure(accountId)` should mirror `useAccountRisk(accountId)` closely by using the same thin `useQuery` shape and the same `enabled: accountId.length > 0` guard, without adding custom query options.",
+      "confidence": 0.98,
+      "if_wrong": "The implementation would need additional design work around exposure refresh cadence, derived data, or placeholder behavior rather than a simple parallel hook."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the relevant conventions and open questions are visible in the checked-in `hooks.ts`, current frontend consumers, test layout, and the parent `.fleet` step-4 plan.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up exploration task would be needed to locate another contract source before the hook work could be scoped safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

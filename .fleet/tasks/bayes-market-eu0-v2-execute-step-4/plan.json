@@ -1,0 +1,76 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep step 4 additive and frontend-scoped: add `AccountExposureResponse`, `getAccountExposure(accountId)`, `queryKeys.accountExposure(accountId)`, and `useAccountExposure(accountId)` in the existing per-surface query-key layout instead of reopening the broader account-query architecture or `/risk` contract.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Reintroduce a grouped `queryKeys.account(...)` namespace and broad account invalidation in this step.",
+        "Fold exposure into the existing `/v1/accounts/{id}/risk` types and hook instead of adding a separate exposure surface."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Make `size` the canonical frontend EventTrade request field and freeze an EventTrade-specific success type that matches the backend `order` payload with `size`, `side`, `price`, and `notional`, without broadening unrelated mutation response types or preview-only fields.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Keep the legacy request shape without `size` and rely on backend `amount` compatibility.",
+        "Overhaul the shared `OrderResponse` type for every mutation in this step.",
+        "Expose preview-only `currentNetSize` or `resultingNetSize` on the public EventTrade response."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Preserve the raw API error contract for exposure reads: `getAccountExposure(...)` should throw `BayesApiError` on `404 account_not_found`, and `useAccountExposure(...)` should surface that error unchanged so any empty-state normalization stays in later UI code.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Normalize `404` exposure misses into an empty `{ positions: [] }` result in the shared client or hook.",
+        "Add hook-level fallback data that hides the backend `account_not_found` semantics."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Invalidate exposure caches narrowly on successful writes: EventTrade should invalidate only the submitting account's `accountExposure(accountId)` query, while ResolveMarket should invalidate all cached exposure queries via a predicate or prefix match because resolution mutates exposure for multiple traders.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Invalidate only `payload.accountId` after market resolution.",
+        "Introduce broad invalidation for every account-scoped query family.",
+        "Rely on market-price subscriptions instead of post-mutation exposure invalidation."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Patch `frontend/src/lib/api/types.ts` to add the additive exposure response model and EventTrade-specific request/response typing: introduce `AccountExposureResponse` matching the backend `{account, meta}` contract, add canonical `EventTradePayload.size`, and specialize the EventTrade mutation return type so its `order` shape includes backend fields such as `size`, `side`, `price`, and `notional` while leaving probability-edit typing stable.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Update `frontend/src/lib/api/client.ts` to export `getAccountExposure(accountId)` against `/v1/accounts/{id}/exposure`, wire the new type imports, and have `submitEventTrade(...)` return the EventTrade-specific response type while preserving the shared `request(...)` and `BayesApiError` behavior for non-OK responses.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Extend `frontend/src/lib/query/hooks.ts` with `queryKeys.accountExposure(accountId)` and `useAccountExposure(accountId)` following the existing `useAccountRisk(...)` pattern, including `enabled: accountId.length > 0` and no hook-level 404 normalization.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Add focused exposure invalidation helpers in `frontend/src/lib/query/hooks.ts`, then wire `useEventTrade(...)` to invalidate the submitting account's exposure key after success and `useResolveMarket(...)` to invalidate all cached exposure queries in addition to the existing market-scoped keys, without reintroducing grouped account invalidation or changing `/risk` freshness behavior.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Add focused frontend coverage for the new surface, likely by extending `frontend/src/__tests__/api-client.test.ts` for `getAccountExposure(...)` and adding a query-hook test for the new exposure key and invalidation behavior, then run the relevant frontend verification commands so the added types and hooks compile cleanly.",
+      "depends_on": [2, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

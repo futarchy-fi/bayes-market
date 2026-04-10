@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The current `useEventTrade(...)` and `useResolveMarket(...)` hooks in `frontend/src/lib/query/hooks.ts` only invalidate market-scoped queries, and no mutation currently invalidates `queryKeys.accountRisk(...)`. Should step 4 preserve that existing `/risk` freshness behavior and add only exposure-specific invalidation, instead of reintroducing any broad `accounts` prefix invalidation while touching these hooks?",
+      "category": "requirements",
+      "why_it_matters": "This is the main scope guard for the change. It decides whether the new helpers must match only exposure keys or whether the step is allowed to widen into a broader account-cache refactor."
+    },
+    {
+      "id": "q2",
+      "question": "For `useEventTrade(marketId)`, should a successful trade invalidate exactly `queryKeys.accountExposure(variables.payload.accountId)` for the submitting account and no other exposure caches, since the trade request payload already identifies the affected account directly?",
+      "category": "requirements",
+      "why_it_matters": "This determines whether the trade path uses a narrow exact-key helper or a broader account-family invalidation that could touch unrelated cached data."
+    },
+    {
+      "id": "q3",
+      "question": "For `useResolveMarket(marketId)`, does \"invalidate all cached exposure queries\" mean adding a helper that matches every cached key shaped like `[\"accounts\", <id>, \"exposure\"]` regardless of `payload.accountId`, rather than invalidating only the resolver's own account or using a raw `[\"accounts\"]` prefix?",
+      "category": "design",
+      "why_it_matters": "Market resolution can settle exposure for multiple traders, but the cache family must still stay narrower than all account-scoped queries. The helper's matching rule is the core design choice in this step."
+    },
+    {
+      "id": "q4",
+      "question": "Should the new focused exposure invalidation live as private `QueryClient` helpers inside `frontend/src/lib/query/hooks.ts`, alongside the existing local invalidation helpers such as `invalidateMarketCollectionQueries(...)` and `invalidateMarketDependentQueries(...)`, instead of exporting new shared utilities or changing `queryKeys` structure again?",
+      "category": "codebase",
+      "why_it_matters": "This sets the implementation boundary. A local helper keeps the step additive inside `hooks.ts`, while a new shared utility or query-key refactor would widen the patch surface."
+    },
+    {
+      "id": "q5",
+      "question": "The current frontend test suite in this worktree has no dedicated React Query mutation-hook coverage around `invalidateQueries(...)`. Should step 4 stay implementation-only with verification deferred to the planned step-5 coverage work, or is immediate hook-level invalidation testing expected as part of this mutation wiring step?",
+      "category": "codebase",
+      "why_it_matters": "The answer determines whether this step remains a focused hook patch or also has to introduce new test harness work before the dedicated coverage step."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Step 3 has already landed in this worktree: `frontend/src/lib/query/hooks.ts` now defines both `queryKeys.accountExposure(accountId)` and `useAccountExposure(accountId)`.",
+      "confidence": 0.99,
+      "if_wrong": "Step 4 would be blocked by missing prerequisite query-key and hook plumbing, and the mutation invalidation work could not compile as written."
+    },
+    {
+      "id": "a2",
+      "assumption": "Both write paths already expose the data needed for targeted invalidation: `EventTradePayload` and `ResolveMarketPayload` include `accountId`, and the mutation hooks already capture `marketId` from their enclosing scope.",
+      "confidence": 0.98,
+      "if_wrong": "The invalidation helpers would need different inputs or a wider mutation-signature change before the hooks could target the correct cache entries."
+    },
+    {
+      "id": "a3",
+      "assumption": "The explicit instruction to avoid changing `/risk` freshness means step 4 must not invalidate `queryKeys.accountRisk(...)` directly or indirectly through grouped `accounts` prefix matching.",
+      "confidence": 0.98,
+      "if_wrong": "The step would expand into a broader account-cache behavior change and could alter existing portfolio refresh semantics beyond the requested exposure work."
+    },
+    {
+      "id": "a4",
+      "assumption": "In this branch, \"all cached exposure queries\" refers only to the exposure query family shaped like `[\"accounts\", id, \"exposure\"]`, not to every account-scoped query under the `accounts` root.",
+      "confidence": 0.96,
+      "if_wrong": "A helper that looks correct by current naming could still be too narrow or too broad, and the implementation would need a different cache-matching contract."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the relevant open decisions are all discoverable from the checked-in `frontend/src/lib/query/hooks.ts`, current API payload types, existing `.fleet` plan artifacts, and the visible frontend test layout.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up exploration task would be needed before the invalidation helpers could be scoped safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
