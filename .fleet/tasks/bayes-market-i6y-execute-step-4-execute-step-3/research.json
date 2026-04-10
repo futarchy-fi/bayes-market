@@ -1,0 +1,142 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "This leaf should not weaken itself to stay green against the current pre-P&L serializer. The deterministic `(filledAt, id)` replay-order proof depends on the missing step-3 replay helper and `unrealizedPnl` seam, so the right expectation is to land or rebase onto that prerequisite first, or bundle the production backfill in the same patch. The route, service-index entry, and baseline lexical-order/404 tests are already present; what is missing is the replay/P&L behavior the new regressions are supposed to prove.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:1651",
+        "backend/server.py:1737",
+        "tests/test_bayes_market_api.py:4767",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/validation.json:4",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:68",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:78"
+      ],
+      "uncertainty": "Process-wise, the missing step-3 seam could still be bundled into this leaf instead of arriving via rebase. The codebase evidence only rules out staging a watered-down pre-seam ordering test as the intended end state.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Ownership should stay in `tests/test_bayes_market_api.py`, centered on `BayesMarketExposureProjectionTests`. Extend the existing `/positions` baseline and add nearby additive ordering regressions there rather than creating a separate top-level helper-only cluster. That class already owns the exposure builders, preview helper seams, accepted EventTrade exposure sync, exact `/positions` payload parity, and the `404`/`405` route contract for this read model.",
+      "confidence": 0.97,
+      "evidence": [
+        "tests/test_bayes_market_api.py:4322",
+        "tests/test_bayes_market_api.py:4411",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4836",
+        "tests/test_bayes_market_api.py:4896",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:16"
+      ],
+      "uncertainty": "If the replay helper later becomes a heavily reused production seam, a tightly scoped helper subsection inside the same class would still be reasonable. The current ownership evidence does not support a separate competing cluster.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "For the deterministic replay-order regression itself, explicitly seed `ORDERS` out of insertion order and include same-`filledAt` ties. Accepted EventTrade POSTs should still be used for the representative weighted-average, partial-close, and sign-flip cases, but they are the wrong seam for proving the ordering contract: `create_event_trade_order(...)` stamps `createdAt` and `filledAt` from one `utc_timestamp()` call and persists each order to `ORDERS` in acceptance order, so it does not naturally force the unstable chronology edge that this regression is meant to pin.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:3476",
+        "backend/server.py:3488",
+        "backend/server.py:3504",
+        "backend/server.py:3510",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:25",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:45",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:45"
+      ],
+      "uncertainty": "A public-write fixture could still cover different-timestamp ordering incidentally, but it would not reliably freeze same-timestamp ties or arbitrary insertion order.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Use exact equality after the backend's canonical six-decimal exposure rounding, not an extra tolerance band. `ACCOUNT_EXPOSURE` net size is normalized with `round_exposure_value(...)`, the replay plan freezes six-decimal rounding at each fill transition, and the prior step-3 research already resolved replay/live `netSize` disagreement as a per-row `unrealizedPnl: 0.0` fallback rather than something to smooth over. For a directly seeded ordering fixture, the replayed survivor should therefore count as compatible only when its rounded `netSize` exactly matches the live row's rounded `netSize`; otherwise keep the live row and treat pricing history as unusable.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/server.py:1224",
+        "backend/server.py:1250",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-2/plan.json:16",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-2/research.json:66",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/plan.json:15",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/plan.json:71",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/validation.json:8"
+      ],
+      "uncertainty": "No checked-in artifact says the words `exact rounded equality` verbatim. This rule is inferred from the shared canonical rounding seam plus the already-frozen mismatch fallback policy.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Both contracts should be covered, but not by a single overloaded assertion. Keep lexical wire order in the existing exact `account.positions` success baseline once `unrealizedPnl` exists, and add a separate additive multi-row regression that proves wire order stays lexical even when the underlying replay chronology is deliberately seeded differently. The step-4 plan already distinguishes exact ordered wire payloads from the focused `(filledAt, id)` replay-order regression because chronology and wire ordering are separate guarantees.",
+      "confidence": 0.96,
+      "evidence": [
+        "backend/server.py:1666",
+        "backend/server.py:1680",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4815",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:16",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:68",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:15",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:25"
+      ],
+      "uncertainty": "The exact final test names are not frozen yet. What is frozen is the split of responsibilities: baseline wire-order ownership plus an additive chronology-focused regression.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "One representative route smoke is enough. Most deterministic-order proofs should stay at the getter or projection seam inside `BayesMarketExposureProjectionTests`, with the existing baseline `/positions` test preserving getter-versus-route parity. The router branch is just a one-line GET delegation to `get_account_positions(account_id)`, and the checked-in step artifacts explicitly narrow replay-helper coverage to helper/getter tests plus baseline or representative route smoke where it adds value.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:4010",
+        "backend/server.py:4024",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4808",
+        "tests/test_bayes_market_api.py:4836",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:15",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-5/research.json:50",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4-execute-step-2/research.json:60"
+      ],
+      "uncertainty": "Adding one extra representative route-level ordering smoke would still be compatible with the current style. The evidence only says it is not required for every seeded case.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep this leaf focused on deterministic-order coverage. The `/positions` route, service-index entry, and baseline 404/405 wiring are already present and do not need to be reopened."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Keep the new work in `tests/test_bayes_market_api.py`, centered on `BayesMarketExposureProjectionTests`, so it can reuse the existing projection helpers, baseline payload assertions, and route-parity seam."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "At least one regression needs direct `ORDERS` and `ACCOUNT_EXPOSURE` seeding. Accepted EventTrade writes alone do not reliably create arbitrary insertion order or same-`filledAt` ties for the `(filledAt, id)` proof."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Stable public wire order remains lexical `(marketId, outcomeId)`, and `meta` should stay dynamic because the route still calls `make_meta()`."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Directly seeded replay fixtures should mimic canonical filled EventTrade rows, including the normal slice-identifying and execution fields, so failures isolate ordering or replay compatibility instead of malformed-order filtering."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "No child task is needed. The route contract, serializer behavior, order shape, and prior i6y decisions are all visible in this worktree."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
