@@ -86,6 +86,17 @@ def build_market_resolution_body(
     return body
 
 
+def build_market_close_body(
+    account_id: str,
+    *,
+    idempotency_key: str | None = None,
+) -> dict[str, object]:
+    body: dict[str, object] = {"accountId": account_id}
+    if idempotency_key is not None:
+        body["idempotencyKey"] = idempotency_key
+    return body
+
+
 def expected_market_resolution_payload(market_id: str, outcome_id: str) -> dict[str, object]:
     return {
         "kind": "ResolveMarket",
@@ -3689,17 +3700,86 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             server.route_request(
                 "POST",
                 "/v1/markets/m1/close",
-                {
-                    "accountId": "ops_admin",
-                    "idempotencyKey": "idem-close",
-                    "unexpected": "noise",
-                },
+                build_market_close_body("ops_admin", idempotency_key="idem-close") | {"unexpected": "noise"},
             )
 
         error = ctx.exception
         self.assertEqual(error.status, 501)
         self.assertEqual(error.code, "market_close_not_implemented")
         self.assertEqual(error.message, "Market close is not implemented yet")
+        assert_domain_state_unchanged(self, before_state)
+
+    def test_market_close_route_rejects_invalid_account_id_with_close_specific_error(self):
+        cases = (
+            ("missing", {}, "accountId is required", {"field": "accountId"}),
+            ("non_string", {"accountId": 123}, "accountId is required", {"field": "accountId"}),
+            ("blank", {"accountId": "   "}, "accountId is required", {"field": "accountId"}),
+        )
+
+        for label, body, expected_message, expected_details in cases:
+            with self.subTest(label=label):
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/close", body)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_close")
+                self.assertEqual(error.message, expected_message)
+                self.assertEqual(error.details, expected_details)
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_close_route_rejects_invalid_idempotency_key_with_close_specific_error(self):
+        cases = (
+            (
+                "non_string",
+                build_market_close_body("ops_admin") | {"idempotencyKey": 123},
+                "idempotencyKey must be a non-empty string when provided",
+                {"field": "idempotencyKey"},
+            ),
+            (
+                "blank",
+                build_market_close_body("ops_admin", idempotency_key="   "),
+                "idempotencyKey must be a non-empty string when provided",
+                {"field": "idempotencyKey"},
+            ),
+        )
+
+        for label, body, expected_message, expected_details in cases:
+            with self.subTest(label=label):
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/close", body)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_close")
+                self.assertEqual(error.message, expected_message)
+                self.assertEqual(error.details, expected_details)
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_close_route_trims_envelope_values_before_scope_derivation(self):
+        before_state = snapshot_domain_state()
+
+        with patch.object(
+            server,
+            "idempotency_scope_key",
+            autospec=True,
+            return_value=("m1", "ops_admin", "idem-close"),
+        ) as scope_mock:
+            with self.assertRaises(server.ApiError) as ctx:
+                server.route_request(
+                    "POST",
+                    "/v1/markets/m1/close",
+                    build_market_close_body("  ops_admin  ", idempotency_key="  idem-close  "),
+                )
+
+        error = ctx.exception
+        self.assertEqual(error.status, 501)
+        self.assertEqual(error.code, "market_close_not_implemented")
+        scope_mock.assert_called_once_with("m1", "ops_admin", "idem-close")
         assert_domain_state_unchanged(self, before_state)
 
     def test_market_resolution_accepts_final_probabilities_body_and_canonicalizes_command_payload(self):

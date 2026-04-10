@@ -4270,7 +4270,9 @@ def handle_comment_post(market_id: str, payload: dict[str, Any] | None) -> tuple
         idempotency_key = idempotency_key.strip()
 
     account_id = account_id.strip()
-    scope_key = idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
+    _scope_key = (
+        idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
+    )
 
     with get_market_write_lock(market_id):
         normalized_payload = normalize_comment_post_payload(market_id, body)
@@ -4570,6 +4572,24 @@ def handle_market_close(market_id: str, payload: dict[str, Any] | None) -> tuple
     """Temporary seam for the forthcoming AdminOp-backed market-close lifecycle."""
     body = payload if payload is not None else {}
     normalize_market_close_payload(market_id, body)
+
+    account_id = body.get("accountId")
+    if not isinstance(account_id, str) or not account_id.strip():
+        raise ApiError(400, "invalid_market_close", "accountId is required", {"field": "accountId"})
+
+    idempotency_key = body.get("idempotencyKey")
+    if idempotency_key is not None:
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise ApiError(
+                400,
+                "invalid_market_close",
+                "idempotencyKey must be a non-empty string when provided",
+                {"field": "idempotencyKey"},
+            )
+        idempotency_key = idempotency_key.strip()
+
+    account_id = account_id.strip()
+    scope_key = idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
 
     raise ApiError(501, "market_close_not_implemented", "Market close is not implemented yet")
 
