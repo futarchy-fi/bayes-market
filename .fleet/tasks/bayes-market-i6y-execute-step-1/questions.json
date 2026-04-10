@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "How should the root service index advertise `/v1/accounts/{id}/positions`: as the same bare path style used for the existing account routes, and should it be appended after `/v1/accounts/{id}/exposure` so the exact `routes.accounts` order becomes `[risk, exposure, positions]`?",
+      "category": "requirements",
+      "why_it_matters": "The root-route regression currently asserts the full `routes.accounts` array exactly, so both string format and ordering are part of the observable contract for this step."
+    },
+    {
+      "id": "q2",
+      "question": "Should `/v1/accounts/{id}/positions` inherit the same GET-only contract as `/risk` and `/exposure`, returning `405 method_not_allowed` for non-GET methods on the same path once the dispatcher recognizes it?",
+      "category": "requirements",
+      "why_it_matters": "The current account-read dispatcher centralizes method handling for matched account paths. Extending that branch changes the public error contract, not just the happy path."
+    },
+    {
+      "id": "q3",
+      "question": "Because step 2 is the serializer-focused phase, is step 1 allowed to land a thin `get_account_positions(account_id)` entrypoint that temporarily delegates to minimal read logic, or must this first route-registration step already freeze the final `{\"account\": {\"id\": ..., \"positions\": ...}, \"meta\": ...}` shape at `account.positions`?",
+      "category": "design",
+      "why_it_matters": "This determines whether step 1 is only route plumbing plus an entrypoint seam, or whether it must already establish the public response body before the dedicated serialization work lands."
+    },
+    {
+      "id": "q4",
+      "question": "What should `get_account_positions(account_id)` treat as the source of truth for account existence in this phase: only the live `ACCOUNT_EXPOSURE` projection, or a broader notion of 'known account' that would include accounts with `/risk` state but no open exposure rows?",
+      "category": "requirements",
+      "why_it_matters": "There is no separate account registry in this checkout, and the choice drives whether the new entrypoint inherits `/exposure`'s projection-local `404 account_not_found` behavior or needs new cross-read-model logic."
+    },
+    {
+      "id": "q5",
+      "question": "What is the minimum regression boundary for this step: direct `get_account_positions(...)` and `route_request(...)` coverage in `tests/test_bayes_market_api.py`, or should the first `/positions` route patch also add threaded HTTP tests like the existing `/risk` and `/exposure` suites?",
+      "category": "codebase",
+      "why_it_matters": "This repository regularly keeps both direct router coverage and end-to-end HTTP coverage for public routes, and the step title does not say which layer is the required gate for the new account-read surface."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Step 1 is intended to stay backend-only in `backend/server.py` plus backend tests, because the task text only names that file and the frontend still explicitly consumes `/v1/accounts/{id}/exposure`.",
+      "confidence": 0.97,
+      "if_wrong": "The change set would have to expand into the API client, query hooks, and Portfolio route instead of remaining a focused account-read surface extension."
+    },
+    {
+      "id": "a2",
+      "assumption": "The new `/positions` route is additive beside `/risk` and `/exposure`, not a replacement for either existing account read.",
+      "confidence": 0.96,
+      "if_wrong": "The router and service index would be part of a broader account-API migration, and preserving current `/exposure` consumers would need a more coordinated rollout."
+    },
+    {
+      "id": "a3",
+      "assumption": "The only credible source of open per-outcome holdings for `get_account_positions(...)` is `ACCOUNT_EXPOSURE`, because the codebase has no `ACCOUNT_POSITIONS` store or separate historical position projection.",
+      "confidence": 0.99,
+      "if_wrong": "The implementation would need a different persistence or replay layer than the one used by current EventTrade exposure reads."
+    },
+    {
+      "id": "a4",
+      "assumption": "Existing account-route conventions should carry forward to `/positions`: bare-path service-index entries and `405 method_not_allowed` on non-GET requests after path match.",
+      "confidence": 0.93,
+      "if_wrong": "The new route would become a contract exception inside the account-read surface, and tests could not safely mirror the `/risk` and `/exposure` patterns."
+    },
+    {
+      "id": "a5",
+      "assumption": "Exact account-route ordering matters, because the current root-route test asserts the full `routes.accounts` list rather than checking membership only.",
+      "confidence": 0.91,
+      "if_wrong": "The step can treat the service index as an unordered discovery set and the new route's relative position should not be frozen in tests."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
