@@ -1160,6 +1160,32 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.details["method"], "POST")
         self.assertEqual(error.details["path"], "/v1/accounts/acct_test/pnl")
 
+    def test_market_close_route_dispatches_to_close_handler(self):
+        body = build_market_close_body("ops_admin", idempotency_key="idem-close-router")
+        expected_payload = {
+            "market": {"id": "m1", "status": "closed"},
+            "result": {"status": "accepted"},
+        }
+
+        with patch.object(server, "handle_market_close", return_value=(expected_payload, 202)) as close_mock:
+            payload, status = server.route_request("POST", "/v1/markets/m1/close", body)
+
+        close_mock.assert_called_once_with("m1", body)
+        self.assertIs(payload, expected_payload)
+        self.assertEqual(status, 202)
+
+    def test_market_close_route_is_method_not_allowed_for_non_post_methods(self):
+        for method in ("GET", "PUT", "DELETE"):
+            with self.subTest(method=method):
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(method, "/v1/markets/m1/close")
+
+                error = ctx.exception
+                self.assertEqual(error.status, 405)
+                self.assertEqual(error.code, "method_not_allowed")
+                self.assertEqual(error.details["method"], method)
+                self.assertEqual(error.details["path"], "/v1/markets/m1/close")
+
     def test_list_markets_returns_summary_shape(self):
         payload, status = server.route_request("GET", "/v1/markets")
 
