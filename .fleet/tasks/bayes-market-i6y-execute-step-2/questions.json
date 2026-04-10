@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the new `/positions` serializers freeze each row to only `marketId`, `outcomeId`, `netSize`, and `lastTradePrice`, or should any `/exposure`-only fields such as `absSize`, `updatedAt`, `lastOrderId`, and `lastCommandId` still be carried through?",
+      "category": "requirements",
+      "why_it_matters": "The route and getter seam already exist in this worktree, so step 2's main contract choice is whether `/positions` is a thin public view or effectively an alias of the richer `/exposure` row shape."
+    },
+    {
+      "id": "q2",
+      "question": "Should rounded-zero pruning for `/positions` reuse the existing `round_exposure_value(...)` normalization before comparing to zero, so tiny residuals like `0.0000004` disappear the same way they do in `/exposure`?",
+      "category": "codebase",
+      "why_it_matters": "`ACCOUNT_EXPOSURE` stores floats under the backend's canonical rounding rules. If step 2 uses raw float equality instead, the new serializer can drift from the established exposure liveness contract and return rows that `/exposure` would treat as absent."
+    },
+    {
+      "id": "q3",
+      "question": "When a stored exposure row is malformed for the `/positions` view, such as missing `marketId` or `outcomeId`, should the serializer silently skip that row or fail the whole response?",
+      "category": "design",
+      "why_it_matters": "The planned helper sits directly on top of mutable in-memory `ACCOUNT_EXPOSURE` state. This choice determines whether one bad row breaks all reads or simply participates in the existing prune-to-404 lifecycle if no valid rows survive."
+    },
+    {
+      "id": "q4",
+      "question": "Should `get_account_positions(account_id)` preserve `/exposure`'s projection-local lifecycle exactly by raising `404 account_not_found` both when `ACCOUNT_EXPOSURE` has no account entry and when serialization prunes every row, rather than returning `200` with an empty list?",
+      "category": "requirements",
+      "why_it_matters": "The route surface is already wired, so step 2 needs one exact empty-state contract for the serializer and getter to share."
+    },
+    {
+      "id": "q5",
+      "question": "Should step 2 introduce dedicated `serialize_account_position(...)` and `serialize_account_positions(...)` helpers instead of reusing `serialize_account_exposure_position(...)` and `serialize_account_exposure_positions(...)` then trimming fields afterward?",
+      "category": "design",
+      "why_it_matters": "Separate helpers keep `/positions` decoupled from the richer `/exposure` contract and make later changes to either read model less risky."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "`ACCOUNT_EXPOSURE` is the sole source of truth for this step's open-position rows; there is no separate account-positions store or broader account registry to consult.",
+      "confidence": 0.99,
+      "if_wrong": "Step 2 would be built on the wrong persistence model and the serializer could miss the real position source."
+    },
+    {
+      "id": "a2",
+      "assumption": "The field set for step 2 stops at `marketId`, `outcomeId`, `netSize`, and `lastTradePrice`; `unrealizedPnl` and other cost-basis logic are deferred to the later replay/P&L step.",
+      "confidence": 0.95,
+      "if_wrong": "The serializer phase would actually need order-replay and market-mark logic now, which is a materially larger implementation than the step title suggests."
+    },
+    {
+      "id": "a3",
+      "assumption": "Rounded-zero filtering should reuse the backend's canonical exposure rounding, so values like `0.0000004` prune away while ordinary values round to six decimals on output.",
+      "confidence": 0.98,
+      "if_wrong": "The endpoint could disagree with `/exposure` about whether a row is live, and boundary-value tests would need a different rule."
+    },
+    {
+      "id": "a4",
+      "assumption": "Malformed rows should be skipped rather than raising, and if every row is skipped or rounded to zero the getter should fall back to the existing `404 account_not_found` lifecycle.",
+      "confidence": 0.83,
+      "if_wrong": "The implementation needs stricter invariant enforcement and a new error contract for corrupt projection data."
+    },
+    {
+      "id": "a5",
+      "assumption": "The public wire order should remain lexical by `(marketId, outcomeId)`, with any recency sorting left to callers such as the frontend portfolio view.",
+      "confidence": 0.98,
+      "if_wrong": "The serializer would need a different sort key, and tests plus any client-side ordering assumptions would need to change."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

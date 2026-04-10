@@ -1,0 +1,15 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.28,
+  "plan_adherence_notes": "The executed diff does not materially perform plan steps 1-4 as written: `serialize_account_position(...)`, `serialize_account_positions(...)`, `get_account_positions(...)`, and the planned `/positions` test coverage were already present in the parent commit. The only product-code change on this branch is the shared `normalize_account_position_projection(...)` refactor in `backend/server.py`, which is then applied to both `/positions` and `/exposure`, plus a matching `/exposure` test update. That means execution drifted from the plan/research scope by widening `/exposure` to skip malformed rows instead of keeping the change isolated to `/positions`. Validation testing was green: `python3 -m pytest tests/test_bayes_market_api.py -k BayesMarketExposureProjectionTests -v --tb=short` and `python3 -m pytest tests/test_bayes_market_api.py -v --tb=short` both passed.",
+  "research_quality": 0.91,
+  "question_completeness": 0.78,
+  "missed_questions": [
+    "If a shared normalization helper is introduced, must `/exposure` preserve its pre-existing malformed-row behavior instead of silently skipping invalid rows?",
+    "Is the requested `/positions` serializer behavior already present in the branch base, making this step a no-op or test-only confirmation rather than new production code?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "The branch is test-green, but the execution does not match the planned `/positions` implementation work. Instead it mainly refactors shared serialization and changes `/exposure` to tolerate malformed rows, which is outside the researched scope and conflicts with the research note that `/positions` was the tolerant projection while `/exposure` remained canonical. The branch should either remove the `/exposure` behavior change or update the plan/research to justify that contract change explicitly.",
+  "spawn_children": false,
+  "children": []
+}
