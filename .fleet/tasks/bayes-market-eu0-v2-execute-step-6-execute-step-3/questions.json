@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "When this step says to prove successful mutations invalidate or refresh the account-scoped exposure cache, should the new tests stop at asserting the `QueryClient.invalidateQueries(...)` calls, or should they mount `useAccountExposure(accountId)` and prove an actual post-mutation refetch to fresh data for an active observer?",
+      "category": "requirements",
+      "why_it_matters": "React Query treats invalidation and visible refresh as related but not identical behavior. The answer determines whether the new file is a narrow cache-key regression or a stronger end-to-end hook test that exercises live observer refresh semantics."
+    },
+    {
+      "id": "q2",
+      "question": "For `useEventTrade(marketId)`, should the test freeze the current narrow invalidation contract by proving that only `queryKeys.accountExposure(payload.accountId)` is invalidated with `exact: true`, leaving exposure caches for other accounts untouched?",
+      "category": "design",
+      "why_it_matters": "The hook currently routes EventTrade exposure refresh through `invalidateAccountExposureQuery(...)`, which is more specific than the market-resolution path. The test needs to know whether to lock in that precision or accept any exposure-family invalidation."
+    },
+    {
+      "id": "q3",
+      "question": "For `useResolveMarket(marketId)`, is the intended contract to invalidate the whole exposure-key family across accounts while explicitly not broadening into `queryKeys.accountRisk(...)`, or is it enough to show that the currently mounted account exposure query refreshes after resolution?",
+      "category": "design",
+      "why_it_matters": "The production hook uses the broader `invalidateAccountExposureQueries(...)` predicate. The answer decides whether the new test should pin the cross-account invalidation scope and non-risk boundary, or only assert one visible refresh on the active account."
+    },
+    {
+      "id": "q4",
+      "question": "Besides the mutation paths, should this file also freeze the exact `useAccountExposure(accountId)` query contract by asserting `queryKeys.accountExposure(accountId)` and the empty-account `enabled: accountId.length > 0` guard, or should it stay focused only on the successful non-empty account read needed for the cache-refresh proof?",
+      "category": "requirements",
+      "why_it_matters": "This determines whether the new hook test is only mutation-oriented or also becomes the first direct regression for the public `useAccountExposure(...)` read contract."
+    },
+    {
+      "id": "q5",
+      "question": "Should this step stay happy-path only, as the title suggests, or is it also expected to prove that rejected `useEventTrade(...)` or `useResolveMarket(...)` mutations do not invalidate or refetch account exposure data?",
+      "category": "requirements",
+      "why_it_matters": "Adding failure-path assertions materially widens the scope and mock setup. The current task text emphasizes successful mutations, but cache safety on mutation errors is a plausible adjacent requirement if the intent is broader than the title."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The runtime hook surface for this task already exists in the worktree: `useAccountExposure(accountId)`, `useEventTrade(marketId)`, `useResolveMarket(marketId)`, and the supporting exposure query keys and invalidation helpers are all present in `frontend/src/lib/query/hooks.ts`, so this step is coverage-only work.",
+      "confidence": 0.99,
+      "if_wrong": "The step would be blocked by unfinished production hook plumbing and would need to absorb implementation work before dedicated tests could be added."
+    },
+    {
+      "id": "a2",
+      "assumption": "The intended home for the new coverage is a dedicated file under `frontend/src/__tests__`, because the repo already keeps frontend tests there and there is no existing lower-level React Query invalidation test that closes this gap.",
+      "confidence": 0.98,
+      "if_wrong": "The change might need a broader test-layout refactor or a different test location instead of one additive hook-level suite."
+    },
+    {
+      "id": "a3",
+      "assumption": "The current production cache contract is intentionally asymmetric: `useEventTrade(...)` invalidates only `queryKeys.accountExposure(accountId)` with `exact: true`, while `useResolveMarket(...)` invalidates the `['accounts', <id>, 'exposure']` family across accounts and does not target `queryKeys.accountRisk(...)`.",
+      "confidence": 0.97,
+      "if_wrong": "The new tests could freeze an implementation detail that is about to be refactored, or they could miss a broader account-cache refresh policy the branch actually wants."
+    },
+    {
+      "id": "a4",
+      "assumption": "The existing shared render helper is not sufficient by itself for this step because `frontend/src/__tests__/helpers.tsx` creates a `QueryClient` internally and does not expose it for cache seeding or invalidation inspection, so these tests will likely need a dedicated wrapper with an isolated client per case.",
+      "confidence": 0.94,
+      "if_wrong": "The implementation could reuse the current helper pattern directly and keep the new test file smaller than expected."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the relevant hook behavior, test utilities, package dependencies, and prior `.fleet` step artifacts in this worktree provide enough local context to scope the missing tests.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up exploration task would be needed before the test work could be scoped confidently."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
