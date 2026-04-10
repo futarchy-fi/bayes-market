@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact focused test command should satisfy step 5 now that the implementation is already present in `BayesMarketApiAuthRateLimitTests`: rerun the whole class, or a narrower slice anchored on `test_comment_post_http_returns_accepted_comment_contract_with_rate_limit_headers`, `test_protected_post_routes_emit_rate_limit_headers_on_first_success`, and the resolve split tests?",
+      "category": "requirements",
+      "why_it_matters": "Step 5 is an execution gate, and this checkout already contains both new success-path assertions plus the resolve refactor. A concrete selector is needed so verification is repeatable and does not drift into unrelated auth or rate-limit cases."
+    },
+    {
+      "id": "q2",
+      "question": "For the diff-inspection step, what should be the comparison baseline: the pre-step-3 branch `ff/Tbayes-market-u44-execute-step-2`, which still lacks the new breadth, comment-post, and resolve test edits, or the current parent branch `ff/Tbayes-market-u44-execute-step-3`, which is already at this merged HEAD?",
+      "category": "requirements",
+      "why_it_matters": "Comparing to the wrong baseline either hides the implementation diff entirely or over-attributes unrelated history. Step 5 needs a stable review target to prove the change stayed in coverage rather than runtime code."
+    },
+    {
+      "id": "q3",
+      "question": "When step 5 says the change should stay in test coverage, is the acceptable diff boundary 'only `tests/test_bayes_market_api.py` among product files, plus this task's `.fleet` artifacts', or must the review ignore prior `.fleet` commits and prove that no backend runtime file such as `backend/server.py` moved relative to the chosen baseline?",
+      "category": "design",
+      "why_it_matters": "The current branch diff already includes many `.fleet/tasks/...` files from earlier substeps alongside the one real product-file change in `tests/test_bayes_market_api.py`. The review needs an explicit rule for what counts as scoped correctly."
+    },
+    {
+      "id": "q4",
+      "question": "Should the focused execution slice include `test_market_resolve_http_omits_rate_limit_headers_when_limiter_disabled` in addition to the new header-present success tests, or is the gate intentionally limited to the two new success-path assertions and the shared breadth loop?",
+      "category": "codebase",
+      "why_it_matters": "The step-4 refactor removed the stale enabled-limiter no-header expectation by separating the disabled-limiter resolve seam. If that split test is omitted from step-5 execution, the run proves header presence without proving the preserved no-header branch still works."
+    },
+    {
+      "id": "q5",
+      "question": "Given that this worktree already sits on merged `ff/Tbayes-market-u44-execute-step-3` history with earlier `execute:` and `validate:` commits, should step 5 add a fresh commit that only records the final execution-phase artifact and verification result, or is it expected to recommit the existing test implementation under the new requested message?",
+      "category": "codebase",
+      "why_it_matters": "The branch topology is no longer a simple uncommitted patch. The final step needs a clear expectation for what the new commit actually contains and how it relates to the already-landed implementation history."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This checkout already contains the intended step-3 implementation in `tests/test_bayes_market_api.py`: the dedicated comment-post success test, the shared five-route header breadth test, and the split disabled-limiter resolve no-header sentinel.",
+      "confidence": 0.99,
+      "if_wrong": "Step 5 would not be a pure execute-and-review phase; it would first need to absorb missing implementation work or a backend fix."
+    },
+    {
+      "id": "a2",
+      "assumption": "The meaningful diff baseline for proving that the implementation stayed in test coverage is `ff/Tbayes-market-u44-execute-step-2`, because comparing against `ff/Tbayes-market-u44-execute-step-3` would collapse the merged implementation diff to zero.",
+      "confidence": 0.93,
+      "if_wrong": "The diff-review command and the scope conclusion would need to change, or step 5 could report an empty audit even though the branch does contain the test changes."
+    },
+    {
+      "id": "a3",
+      "assumption": "The acceptable product-file diff for this task should remain confined to `tests/test_bayes_market_api.py`; `backend/server.py` should stay untouched because the shared header behavior already exists and the current branch implementation is tests-only.",
+      "confidence": 0.97,
+      "if_wrong": "Step 5 could still expose a real shared-path runtime regression, and the task would need to widen into backend code plus a broader validation pass."
+    },
+    {
+      "id": "a4",
+      "assumption": "The smallest meaningful focused run probably needs the dedicated comment-post success test, the shared protected-route breadth loop, and the split disabled-limiter resolve test, because those are the seams changed across step 3 and step 4.",
+      "confidence": 0.88,
+      "if_wrong": "The execution selector is either too broad or too narrow, and the final verification command should be adjusted before step 5 is carried out."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the relevant test names, diff scope, and branch ancestry are all visible in this checkout and can be scoped locally.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up exploration task would be needed before step 5 could be planned or executed confidently."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
