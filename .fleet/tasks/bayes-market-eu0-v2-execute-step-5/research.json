@@ -1,0 +1,113 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. `/v1/accounts/{id}/exposure` should become the primary source for the portfolio holdings table, and the route should no longer let a `/risk` 404 hide live EventTrade positions. The current `Portfolio` route hard-gates the whole page on `useAccountRisk(...)`, but accepted EventTrades intentionally populate `/exposure` while leaving `ACCOUNT_RISK` untouched, so exposure-only trader accounts are valid. The parent V2 step-5 task also says to switch the portfolio positions surface to live per-outcome holdings from `/exposure` while keeping existing `/risk` metrics only where they still apply. In practice, the route should fetch both read models, drive the positions table from exposure, and render risk cards only when risk data exists.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:81",
+        "frontend/src/routes/Portfolio.tsx:9",
+        "frontend/src/routes/Portfolio.tsx:25",
+        "backend/server.py:1542",
+        "tests/test_bayes_market_api.py:3461",
+        "tests/test_bayes_market_api.py:3811"
+      ],
+      "uncertainty": "The remaining UI choice is how to phrase the empty state when exposure is missing too, but the source-of-truth split between exposure holdings and optional risk data is clear.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Use a full switch for the current positions table: replace the existing `risk.minAssets.markets` rows with a live per-outcome exposure table, while keeping the existing `/risk` summary cards as a separate optional risk summary when risk data exists. The step text names one portfolio positions surface and says it should read live per-outcome holdings from `/exposure`; that points to swapping the table's data model, not keeping the old per-market risk rows as a second positions-like section. `AccountExposureResponse.positions` is the only holdings-shaped contract here, while the risk document remains a metrics summary.",
+      "confidence": 0.87,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:81",
+        "frontend/src/routes/Portfolio.tsx:39",
+        "frontend/src/routes/Portfolio.tsx:53",
+        "frontend/src/lib/api/types.ts:180",
+        "frontend/src/lib/api/types.ts:195",
+        "tests/test_bayes_market_api.py:2626"
+      ],
+      "uncertainty": "If product later wants a dedicated per-market risk table again, that would be a follow-up UI expansion beyond the step text's singular 'positions surface'.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Step 5 can render raw `outcomeId` values in the portfolio table instead of adding extra market-detail hydration. `listMarkets()` and `MarketSummary` expose market titles but not outcomes, so the current `useMarkets()` lookup pattern can label markets but cannot derive human-readable outcome names. Showing outcome names would require additional `getMarket(...)` fetching per market or a new richer list contract. The existing UI already treats raw outcome ids as an acceptable fallback when no name lookup is available, so the smallest in-scope portfolio patch is market title plus raw `outcomeId`.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/lib/api/types.ts:6",
+        "frontend/src/lib/api/types.ts:15",
+        "backend/server.py:116",
+        "backend/server.py:742",
+        "frontend/src/routes/Portfolio.tsx:10",
+        "frontend/src/features/trading/EventTradePanel.tsx:155"
+      ],
+      "uncertainty": "If UX later requires full outcome names in portfolio rows, that likely needs either extra `getMarket(...)` hydration or an expanded market-list response.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Step 5 looks intentionally limited to `EventTradePanel` plus the portfolio route. The parent V2 plan names only the trader-facing EventTrade panel and the portfolio positions surface, and the prior frontend step explicitly deferred `Portfolio`, `MarketDetail`, and `EventTradePanel` consumer adoption to this later UI step without separately naming `MarketDetail`'s `PositionCard`. `PositionCard` is still a narrow risk-summary card wired directly to `useAccountRisk(...)`, so converting it to live exposure would be extra scope and would force a separate detail-page design decision. It can stay risk-based for now, even though exposure-only accounts will still not see that card.",
+      "confidence": 0.84,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:81",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/questions.json:50",
+        "frontend/src/routes/MarketDetail.tsx:23",
+        "frontend/src/routes/MarketDetail.tsx:53",
+        "frontend/src/routes/MarketDetail.tsx:102"
+      ],
+      "uncertainty": "This leaves a known market-detail gap for EventTrade-only accounts. If product wants detail-page parity with the portfolio view, that should be an explicit follow-up change.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Keep the panel submit-driven and special-case the backend `position_limit_exceeded` error after submit rather than adding an upfront `useAccountExposure(session.accountId)` headroom widget. Step 5 only calls for collecting size and rendering limit errors clearly, and the backend already returns all scalars needed for a precise message: `requestedSize`, `currentNetSize`, `resultingNetSize`, and `maxPositionSize`. `EventTradePanel` already has local size input/state, so the missing UX is error translation, not size collection. Adding proactive exposure reads would widen the scope into exposure-query loading, 404 handling, and per-outcome headroom calculations that the step text does not require.",
+      "confidence": 0.92,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:81",
+        "frontend/src/features/trading/EventTradePanel.tsx:39",
+        "frontend/src/features/trading/EventTradePanel.tsx:122",
+        "frontend/src/features/trading/EventTradePanel.tsx:162",
+        "backend/server.py:3663",
+        "tests/test_bayes_market_api.py:3889"
+      ],
+      "uncertainty": "A later enhancement could show live headroom once there is a concrete UX requirement for it; the current task wording only freezes clear post-submit limit messaging.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 5 is not blocked on lower-level plumbing. The frontend already has `getAccountExposure(...)`, `useAccountExposure(...)`, and the expected exposure invalidation paths after EventTrade and market resolution."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The `/risk` cards should remain additive summary metrics. Probability-edit accounts still have meaningful `/risk` data even when `/exposure` is absent, so the UI should keep those metrics instead of folding them into the exposure table."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Missing exposure or risk should be normalized at the route/component layer, not by changing the shared hooks. The step-4 frontend work explicitly preserved raw `404 account_not_found` behavior in the client and query hook surface."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Clear limit messaging can be built entirely from the existing backend error details, so step 5 does not need a new preview endpoint or extra backend fields to satisfy the UI requirement."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.84,
+      "impact": "Unless the scope is explicitly widened later, the intended live-holdings switch is the portfolio route. `MarketDetail.tsx` can keep its current risk-based `PositionCard` while this step focuses on the EventTrade panel and portfolio surface named in the plan."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

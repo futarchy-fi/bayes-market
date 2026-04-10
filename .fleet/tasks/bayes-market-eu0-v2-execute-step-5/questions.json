@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "In `frontend/src/routes/Portfolio.tsx`, should `/v1/accounts/{id}/exposure` become the primary source for the positions table even when `/v1/accounts/{id}/risk` returns `404 account_not_found`, with the existing risk metric cards rendered only when risk data actually exists?",
+      "category": "requirements",
+      "why_it_matters": "Accepted EventTrades populate `/exposure` without creating any `/risk` document, so the current risk-gated route would still hide live holdings for the main trader flow unless step 5 explicitly supports exposure-only accounts."
+    },
+    {
+      "id": "q2",
+      "question": "What exactly should replace or augment the current per-market risk table in `frontend/src/routes/Portfolio.tsx`: a full switch to a per-outcome exposure table, or a split layout that keeps the old `/risk` market rows as a separate risk section alongside live holdings?",
+      "category": "design",
+      "why_it_matters": "The current page uses one table for `risk.minAssets.markets`, but the step title says to read live per-outcome holdings from `/exposure` while leaving `/risk` metrics intact where they still apply. The answer determines the page structure instead of just the data source."
+    },
+    {
+      "id": "q3",
+      "question": "Because `AccountExposurePosition` exposes only `marketId` and `outcomeId`, while `listMarkets()` provides market titles but not outcome names, is step 5 allowed to render raw `outcomeId` values in the portfolio table, or should it add extra market-detail hydration to show human-readable outcome labels?",
+      "category": "codebase",
+      "why_it_matters": "This decides whether the portfolio patch stays inside the existing `useMarkets()` lookup pattern or expands into additional fetching and loading/error states just to label exposure rows cleanly."
+    },
+    {
+      "id": "q4",
+      "question": "On the market detail route, is step 5 intentionally limited to `frontend/src/features/trading/EventTradePanel.tsx` plus the portfolio route, or should the nearby `PositionCard` in `frontend/src/routes/MarketDetail.tsx` also stop depending on `/risk` and show live exposure for the current market?",
+      "category": "requirements",
+      "why_it_matters": "The current market-detail trader summary is still risk-based and therefore invisible for EventTrade-only accounts. Whether that card is in scope determines if step 5 is a focused panel/portfolio change or a broader market-detail rewrite."
+    },
+    {
+      "id": "q5",
+      "question": "For limit handling in `EventTradePanel`, should the UI only special-case the backend `position_limit_exceeded` error after submit, or should it also read `useAccountExposure(session.accountId)` up front to show current net position, max-position headroom, and possibly a suggested allowable size before the trader submits?",
+      "category": "design",
+      "why_it_matters": "The panel already has a numeric size input, but it currently surfaces only a generic mutation error. The answer sets the boundary between simple error translation and a more proactive sizing/limits UX."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The prerequisite plumbing from step 4 is already landed in this checkout: `frontend/src/lib/api/client.ts` exports `getAccountExposure(accountId)`, `frontend/src/lib/query/hooks.ts` exports `useAccountExposure(accountId)`, and EventTrade/resolve mutations already invalidate exposure queries.",
+      "confidence": 0.99,
+      "if_wrong": "Step 5 would be blocked by missing API/query infrastructure and would have to absorb unfinished lower-level work before any UI changes could start."
+    },
+    {
+      "id": "a2",
+      "assumption": "The existing `/risk` summary cards in `Portfolio.tsx` are still valid for probability-edit accounts and should remain additive summary metrics rather than being removed or folded into the new exposure table.",
+      "confidence": 0.9,
+      "if_wrong": "The portfolio update would need a broader redesign that rethinks or deletes the current `/risk` metrics instead of just changing the positions surface."
+    },
+    {
+      "id": "a3",
+      "assumption": "If the UI wants empty-state behavior for missing exposure or risk documents, that normalization should happen in the route/component layer, not by changing the shared `useAccountExposure(...)` or `useAccountRisk(...)` hooks.",
+      "confidence": 0.98,
+      "if_wrong": "Step 5 would widen into shared client/hook behavior changes and could reopen the raw `404 account_not_found` contract intentionally preserved in step 4."
+    },
+    {
+      "id": "a4",
+      "assumption": "Clear limit messaging can be built from the current backend `position_limit_exceeded` error details (`requestedSize`, `currentNetSize`, `resultingNetSize`, `maxPositionSize`) without needing a new preview endpoint or backend response field.",
+      "confidence": 0.87,
+      "if_wrong": "The frontend would need extra backend support for headroom or partial-size guidance before it could satisfy the 'renders limit errors clearly' requirement."
+    },
+    {
+      "id": "a5",
+      "assumption": "Unless the product scope is explicitly widened, the intended live-holdings switch is the portfolio route, and `MarketDetail.tsx` can stay risk-based outside the EventTrade panel itself.",
+      "confidence": 0.62,
+      "if_wrong": "The implementation would need additional market-detail changes beyond the portfolio table and trade-panel error handling."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
