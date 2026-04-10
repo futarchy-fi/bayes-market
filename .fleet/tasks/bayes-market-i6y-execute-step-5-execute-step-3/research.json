@@ -1,0 +1,113 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Treat this leaf as prerequisite backfill, not a no-op validation rerun. The current checkout still serves the legacy four-field `/positions` row, the checked-in baseline test still freezes that older shape, and the parent step-5 plan explicitly says this branch must first land the missing replay-backed `unrealizedPnl` seam before the focused selector is a meaningful gate. Earlier validation on this same line also rejected the branch precisely because the selector was green without any backend or test work for replay/P&L.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:1651",
+        "backend/server.py:1737",
+        "tests/test_bayes_market_api.py:4767",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:59",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-2/validation.json:4"
+      ],
+      "uncertainty": "A separate branch outside the refs and task artifacts visible in this checkout could exist, but nothing local points to an already-landed replay/P&L prerequisite.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. Freeze the completed `/positions` contract as the additive five-field row `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` while preserving the current `{account, meta}` envelope, lexical `(marketId, outcomeId)` ordering, malformed-row skipping, and projection-local `404 account_not_found` behavior when no live rows survive. That is consistent with the current getter/router contract and the parent step-5 decision that the replay/P&L work is additive rather than a redesign.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:1666",
+        "backend/server.py:1680",
+        "backend/server.py:1737",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4836",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:25"
+      ],
+      "uncertainty": "The exact five-field row is frozen only in task history today, not in shipped code, so the confidence comes from local plan continuity rather than an implemented contract.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Use incremental canonical rounding. The replay-backed path should normalize the signed average-cost accumulator through the existing six-decimal helpers after each fill transition, and the final `unrealizedPnl` wire value should also be emitted through that same canonical rounding. That matches the backend's existing `round_risk_value` and `round_exposure_value` discipline and the checked-in step-5 execution plan that explicitly rejects delaying rounding until final serialization.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:1132",
+        "backend/server.py:1224",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-1/plan.json:37",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-1/plan.json:41",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-1/plan.json:66"
+      ],
+      "uncertainty": "This rounding rule is clearly stated in local task planning, but the backend has not implemented the replay seam yet, so there is no product code to confirm against.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Preserve the row and fall back to `unrealizedPnl: 0.0`. The mark lookup seam should degrade per row, not fail the request or omit the position, so `/v1/accounts/{id}/positions` stays projection-local and resilient even when `query_market_atomic_probability_for_inference(...)` cannot produce a mark for an otherwise live exposure row.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:972",
+        "backend/server.py:975",
+        "backend/server.py:985",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-1/plan.json:48",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-1/plan.json:49",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:16"
+      ],
+      "uncertainty": "If product later wants stronger observability, it may add diagnostics around degraded rows, but the current local contract direction is clearly `0.0` fallback rather than request failure.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Keep the live `ACCOUNT_EXPOSURE` row authoritative for liveness, wire `netSize`, rounded-zero pruning, and lexical ordering. Replay should contribute only average-cost/P&L, and if replayed survivor size or sign disagrees with the live row after canonical rounding, `/positions` should preserve the live row and downgrade only `unrealizedPnl` to `0.0` instead of silently overriding the public payload from history.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:1366",
+        "backend/server.py:1381",
+        "backend/server.py:1388",
+        "backend/server.py:1737",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-1/plan.json:15",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-1/plan.json:49"
+      ],
+      "uncertainty": "If the product later adds repair tooling for projection drift, that tooling could choose replay as the repair source, but the read path in this branch should not hide mismatches by rewriting the row from history.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "This checkout still exposes the legacy four-field `/positions` serializer and no replay-backed `unrealizedPnl` production seam, so the targeted selector is not yet exercising the intended completed contract."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The focused selector is green because `BayesMarketExposureProjectionTests` still lock only the current baseline positions/exposure behavior, not the planned replay-backed exact-P&L regressions."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The intended `/positions` change remains additive: keep the current envelope, ordering, malformed-row handling, and projection-local lifecycle, and add `unrealizedPnl` per surviving row."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "The relevant work stays backend-only in `backend/server.py` and `tests/test_bayes_market_api.py`; nothing in this checkout suggests frontend or docs are prerequisites for the targeted gate."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "No child investigation is needed because the current serializer state, test slice, and prior `bayes-market-i6y` decisions are all visible locally and answer the open questions with high confidence."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
