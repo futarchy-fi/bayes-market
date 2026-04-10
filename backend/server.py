@@ -804,7 +804,7 @@ def service_index_payload() -> dict[str, Any]:
         "service": "bayes-market",
         "status": "ok",
         "routes": {
-            "health": ["/health", "/healthz"],
+            "health": ["/health", "/healthz", "/v1/health"],
             "markets": [
                 "GET /v1/markets",
                 "POST /v1/markets",
@@ -3878,6 +3878,16 @@ def route_request(
 
     if method == "GET" and path in {"/health", "/healthz"}:
         return health_payload(), 200
+
+    if path == "/v1/health":
+        if method == "GET":
+            return v1_health_payload(), 200
+        raise ApiError(
+            405,
+            "method_not_allowed",
+            f"{method} is not allowed for this resource",
+            {"method": method, "path": path},
+        )
 
     if path == "/v1/markets":
         if method == "GET":
