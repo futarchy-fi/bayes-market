@@ -3643,6 +3643,65 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.MARKETS["m1"]["resolution"], "yes")
         self.assertEqual(server.MARKETS["m1"]["resolutionProbabilities"], {"yes": 1.0, "no": 0.0})
 
+    def test_normalize_market_close_payload_returns_canonical_payload_and_strips_extra_keys(self):
+        normalized_payload = server.normalize_market_close_payload(
+            "m1",
+            {
+                "accountId": "ops_admin",
+                "idempotencyKey": "idem-close",
+                "kind": "ClientSuppliedCloseKind",
+                "unexpected": {"noise": True},
+            },
+        )
+
+        self.assertEqual(normalized_payload, {"kind": "CloseMarket"})
+
+    def test_normalize_market_close_payload_requires_existing_market(self):
+        before_state = snapshot_domain_state()
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.normalize_market_close_payload("missing-market", {})
+
+        error = ctx.exception
+        self.assertEqual(error.status, 404)
+        self.assertEqual(error.code, "market_not_found")
+        self.assertEqual(error.message, "Market not found")
+        self.assertEqual(error.details, {"market_id": "missing-market"})
+        assert_domain_state_unchanged(self, before_state)
+
+    def test_normalize_market_close_payload_requires_object_body(self):
+        before_state = snapshot_domain_state()
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.normalize_market_close_payload("m1", [])
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_body")
+        self.assertEqual(error.message, "payload must be an object")
+        self.assertEqual(error.details, {})
+        assert_domain_state_unchanged(self, before_state)
+
+    def test_market_close_route_preserves_not_implemented_after_close_payload_normalization(self):
+        before_state = snapshot_domain_state()
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request(
+                "POST",
+                "/v1/markets/m1/close",
+                {
+                    "accountId": "ops_admin",
+                    "idempotencyKey": "idem-close",
+                    "unexpected": "noise",
+                },
+            )
+
+        error = ctx.exception
+        self.assertEqual(error.status, 501)
+        self.assertEqual(error.code, "market_close_not_implemented")
+        self.assertEqual(error.message, "Market close is not implemented yet")
+        assert_domain_state_unchanged(self, before_state)
+
     def test_market_resolution_accepts_final_probabilities_body_and_canonicalizes_command_payload(self):
         final_probabilities = {"yes": 0.0, "no": 0.0, "delayed": 1.0}
 

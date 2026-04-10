@@ -3527,6 +3527,20 @@ def normalize_market_resolution_payload(market_id: str, payload: dict[str, Any])
     }
 
 
+def normalize_market_close_payload(market_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize and validate a market-close request body."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    if not isinstance(payload, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
+
+    return {
+        "kind": "CloseMarket",
+    }
+
+
 def normalize_probability_edit_payload(market_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Normalize and validate a probability-edit request body."""
     market = MARKETS.get(market_id)
@@ -4554,12 +4568,8 @@ def handle_market_resolution(market_id: str, payload: dict[str, Any] | None) -> 
 
 def handle_market_close(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
     """Temporary seam for the forthcoming AdminOp-backed market-close lifecycle."""
-    if market_id not in MARKETS:
-        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
-
     body = payload if payload is not None else {}
-    if not isinstance(body, dict):
-        raise ApiError(400, "invalid_body", "payload must be an object")
+    normalize_market_close_payload(market_id, body)
 
     raise ApiError(501, "market_close_not_implemented", "Market close is not implemented yet")
 
