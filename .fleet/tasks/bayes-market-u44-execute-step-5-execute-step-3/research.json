@@ -1,0 +1,112 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. Treat `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` strictly as attribution-only secondary context. The authoritative scope verdict still comes from `ff/Tbayes-market-u44-execute-step-2...HEAD`, because the top-level step-5 plan explicitly uses that range as the primary diff-audit baseline and uses the step-3-to-step-4 range only to explain where the inherited `backend/server.py` delta entered history.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:15",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:16",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:53",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:58",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-2/research.json:6"
+      ],
+      "uncertainty": "The secondary range is still useful for attribution, but the local artifacts do not support treating it as a second independent scope gate.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The later execute record should isolate the inherited agent-id normalization helper refactor around `resolve_write_request_agent(...)`, not the reverted route-suffix constants and not the whole original step-4 refactor package. Step 4 originally introduced both pieces in `backend/server.py`, but execute-step-1 already reverted the route-suffix classification constants and restored the inline `resolve_write_route_category(...)` matcher. In the current top-level audit, the surviving inherited backend delta is `_invalid_agent_id_reason(...)` plus `_normalize_write_request_agent_id(...)` and their use from `resolve_write_request_agent(...)`.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json:7",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json:9",
+        "backend/server.py:384",
+        "backend/server.py:418",
+        "backend/server.py:427",
+        "backend/server.py:464"
+      ],
+      "uncertainty": "Inside the raw step-3-to-step-4 diff, the change was broader than the helper extraction alone. The narrower phrasing here is specific to what still survives in the current branch history after the later route-matcher revert.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Use both together, but with the step-4 `changes_requested` validation as the controlling explanation. That validation is the authoritative local record that no failing preserved sentinel justified absorbing `backend/server.py` cleanup into step 4. The green step-5 focused rerun is corroborating evidence only: it shows the preserved auth/rate-limit class still passes, which reinforces that this leaf has no new test-driven reason to absorb the inherited backend delta, but it does not replace the earlier scope finding.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/validation.json:12",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json:13",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json:16",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/validation.json:4"
+      ],
+      "uncertainty": "If the focused rerun had gone red, the weighting would change. In this checkout it is green, so it supports the scope explanation instead of governing it.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. This leaf should say explicitly that a green `BayesMarketApiAuthRateLimitTests` rerun proves only that the preserved auth/rate-limit coverage still holds. Step 4 allowed `backend/server.py` edits only if preserved sentinels exposed a real shared-seam regression, and the local validation trail shows the focused class is green. So the rerun does not retroactively justify refactoring `resolve_write_route_category(...)` or `resolve_write_request_agent(...)`; it only confirms the preserved seam still behaves.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:26",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:48",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:58",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/validation.json:4",
+        "backend/server.py:384",
+        "backend/server.py:464"
+      ],
+      "uncertainty": "None materially. The only nuance is historical: step 4 did introduce a backend refactor, but the local plan and validation never treat a green rerun as permission to broaden that work.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "This execute-step-3 leaf stops at documenting the inherited `backend/server.py` objection for the later execute artifact. It is not expected to recommend a revert or a new cleanup task before the parent step can be considered complete. The top-level step-5 plan makes this leaf an attribution step feeding the final execute record, and the top-level research already says that if the focused rerun is green while the inherited backend scope objection remains, step 5 should finish with an artifact-only execute commit rather than absorb corrective backend work here.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:57",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:63",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/research.json:46",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/research.json:55",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/research.json:60"
+      ],
+      "uncertainty": "A later parent or follow-up task could still choose to recommend cleanup, but this leaf's local role is evidence and attribution, not corrective planning.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "The secondary `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` diff cleanly isolates the step-4 additions, so it is reliable attribution context for the inherited backend delta."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Within that secondary range, `backend/server.py` is the only product file. That keeps this leaf focused on one inherited backend delta rather than a wider product-scope explanation."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The step-4 validation artifact remains the controlling local explanation for why the inherited backend change is objectionable, with the later green rerun serving as corroboration rather than replacement."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The raw step-4 backend delta was a shared protected-write refactor rather than a narrowly reproduced bug fix. For the current execute record, that broader refactor should be narrowed to the surviving helper-extraction portion because the route-suffix constants were later reverted."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed. The relevant git ancestry, diff baselines, validation trail, and `backend/server.py` seam are all available locally in this worktree."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
