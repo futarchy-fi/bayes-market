@@ -125,6 +125,9 @@ MARKET_SUMMARY_FIELDS = (
 )
 
 ACCOUNT_RISK_LIMIT = 100.0
+LEGACY_HEALTH_ROUTES = ("/health", "/healthz")
+VERSIONED_HEALTH_ROUTE = "/v1/health"
+PUBLIC_HEALTH_ROUTES = (*LEGACY_HEALTH_ROUTES, VERSIONED_HEALTH_ROUTE)
 ACCOUNT_LMSR_LEDGER_VERSION = "lmsr-ledger-v1"
 ACCOUNT_LMSR_RISK_READ_MODEL = "scalar-min-asset-v1"
 MAX_EVENT_FORMULA_CLAUSES = 16
@@ -799,7 +802,7 @@ def service_index_payload() -> dict[str, Any]:
         "service": "bayes-market",
         "status": "ok",
         "routes": {
-            "health": ["/health", "/healthz", "/v1/health"],
+            "health": list(PUBLIC_HEALTH_ROUTES),
             "markets": [
                 "GET /v1/markets",
                 "POST /v1/markets",
@@ -4213,10 +4216,10 @@ def route_request(
     if method == "GET" and path == "/":
         return service_index_payload(), 200
 
-    if method == "GET" and path in {"/health", "/healthz"}:
+    if method == "GET" and path in LEGACY_HEALTH_ROUTES:
         return health_payload(), 200
 
-    if path == "/v1/health":
+    if path == VERSIONED_HEALTH_ROUTE:
         if method == "GET":
             return v1_health_payload(), 200
         raise ApiError(
@@ -4541,7 +4544,7 @@ class BayesHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         """Serve API routes first, fall back to static frontend files."""
         path = normalize_path(urlparse(self.path).path)
-        if path.startswith("/v1/") or path in {"/health", "/healthz"}:
+        if path.startswith("/v1/") or path in LEGACY_HEALTH_ROUTES:
             self.handle_api("GET")
             return
         if path == "/" and "application/json" in (self.headers.get("Accept") or ""):
