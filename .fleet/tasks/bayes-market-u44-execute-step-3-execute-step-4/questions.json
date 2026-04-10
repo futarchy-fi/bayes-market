@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Now that `test_protected_post_routes_emit_rate_limit_headers_on_first_success` already asserts `assert_rate_limit_headers(...)` for the `market-resolve` case with the limiter enabled, should step 4 treat that shared breadth test as the canonical enabled-limiter resolve success proof and only remove or refactor the stale `assert_rate_limit_headers_absent(valid_headers)` branch from `test_market_resolve_http_requires_valid_agent_id_when_enabled`, or is a second dedicated resolve-success test still expected?",
+      "category": "requirements",
+      "why_it_matters": "This decides whether the smallest correct patch is a narrow cleanup in the mixed resolve auth test or an additive test, and it determines whether the enabled-limiter success contract should be owned by the new shared helper-backed breadth test or duplicated elsewhere."
+    },
+    {
+      "id": "q2",
+      "question": "If the successful branch is split out of `test_market_resolve_http_requires_valid_agent_id_when_enabled`, where should the resolve-specific disabled-limiter no-header proof live: stay as a successful request in that test with `RATE_LIMIT_PER_MIN` left disabled, or move into a separate dedicated resolve test while the missing-agent, blank-agent, and malformed-agent assertions remain grouped together?",
+      "category": "design",
+      "why_it_matters": "That successful branch is currently the only resolve-specific assertion site proving that a valid resolve response omits quota headers when the limiter is disabled. Removing it without relocating the assertion would silently drop one of the seams the task explicitly says to preserve."
+    },
+    {
+      "id": "q3",
+      "question": "Given that `BayesMarketApiAuthRateLimitTests` still contains both `test_market_resolve_http_requires_valid_agent_id_when_enabled` and the older `test_market_resolve_http_requires_agent_id_when_enabled`, should step 4 leave the older simple auth test untouched or consolidate or rename the overlapping resolve-auth coverage while refactoring the stale no-header expectation?",
+      "category": "codebase",
+      "why_it_matters": "The class already has two resolve auth tests with overlapping intent but different assertion depth. Clarifying whether overlap is acceptable affects how minimal the refactor should be and which test name should communicate the surviving disabled-limiter versus enabled-limiter responsibilities."
+    },
+    {
+      "id": "q4",
+      "question": "For the limiter-enabled resolve success path, is the intended assertion still the full shared `assert_rate_limit_headers(..., limit=2, remaining=1)` contract used by the new breadth loop, rather than a weaker resolve-specific header-presence check?",
+      "category": "requirements",
+      "why_it_matters": "The task wording says to move resolve success to header presence via the shared helper. Confirming that the shared helper remains the exact contract boundary prevents the refactor from weakening the newly added success-path coverage while cleaning up the stale resolve-specific expectation."
+    },
+    {
+      "id": "q5",
+      "question": "Is step 4 intentionally scoped to resolve-only test refactoring, preserving the existing ProbabilityEdit no-header and `429` matrix as the shared regression seam and leaving any missing-agent or invalid-agent breadth gaps on create-market, comment-post, and event-trade for later work?",
+      "category": "requirements",
+      "why_it_matters": "The current branch already added the success-path breadth loop and dedicated comment-post success coverage. This question keeps the follow-on patch from expanding past the stale resolve seam into broader absence-path coverage that the parent plan still treats separately."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This task should stay tests-only in `tests/test_bayes_market_api.py`; `backend/server.py` already emits quota headers for successful protected writes through `BayesHandler.handle_api()`, and the current shared breadth test already exercises resolve on that path.",
+      "confidence": 0.99,
+      "if_wrong": "A real backend regression would need a shared-path patch in `backend/server.py`, and the task would expand beyond a narrow resolve-test refactor."
+    },
+    {
+      "id": "a2",
+      "assumption": "The new `test_protected_post_routes_emit_rate_limit_headers_on_first_success` test already serves as the limiter-enabled resolve success assertion via `market_resolution_with_headers(...)` and `assert_rate_limit_headers(..., limit=2, remaining=1)`.",
+      "confidence": 0.98,
+      "if_wrong": "Step 4 would still need to add dedicated limiter-enabled resolve success coverage instead of only removing the stale no-header expectation."
+    },
+    {
+      "id": "a3",
+      "assumption": "The successful branch inside `test_market_resolve_http_requires_valid_agent_id_when_enabled` is currently the only resolve-specific disabled-limiter no-header proof, so any refactor must preserve that behavior somewhere even if the test is split.",
+      "confidence": 0.99,
+      "if_wrong": "The patch could simplify the existing resolve auth test more aggressively because another test would already lock the disabled-limiter resolve contract."
+    },
+    {
+      "id": "a4",
+      "assumption": "`market_resolution_with_headers()` remains a reset-safe resolve fixture for both disabled-limiter and limiter-enabled success requests because it defaults to active market `m2` with valid outcome `delayed` and `setUp()` resets server state before each test.",
+      "confidence": 0.99,
+      "if_wrong": "The refactor would need extra fixture setup or explicit per-test overrides before it could preserve and move the resolve assertions safely."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the stale resolve assertion, the shared breadth helper coverage, and the overlapping older resolve auth test are all visible in this checkout and can be scoped locally.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up exploration task would be needed before implementation could decide which resolve test should own each surviving seam."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
