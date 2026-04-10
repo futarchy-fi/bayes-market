@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The step-4 plan assumes steps 1-3 already landed, but the current checkout still does not expose `/v1/accounts/{id}/positions` or any matching replay helpers in `backend/server.py`. Should this task assume those prerequisites arrive first on another branch, or is step 4 expected to backfill the missing production code alongside the regressions?",
+      "category": "codebase",
+      "why_it_matters": "A tests-only implementation cannot pass in the current tree without the missing route, serializer, and replay logic. The answer determines whether this task is purely a regression addition or a combined production-and-test change."
+    },
+    {
+      "id": "q2",
+      "question": "Which coverage layers in `tests/test_bayes_market_api.py` are in scope for step 4: only direct route/unit and projection-level regressions, or also the threaded HTTP and integration classes that currently mirror `/exposure` route coverage?",
+      "category": "codebase",
+      "why_it_matters": "The file already spreads account-route coverage across `BayesMarketApiUnitTests`, `BayesMarketEventTradeTests`, `BayesMarketExposureProjectionTests`, `BayesMarketApiConcurrencyTests`, and `BayesMarketApiIntegrationTests`. The task says 'backend regressions' but does not say which layers must move now."
+    },
+    {
+      "id": "q3",
+      "question": "For the new service-index and successful `GET /v1/accounts/{id}/positions` regressions, should the tests freeze exact ordered payloads, including the full `routes.accounts` list and complete `account.positions` rows while treating `meta` as dynamic, or should they use looser membership/subset assertions?",
+      "category": "design",
+      "why_it_matters": "Existing tests mix exact account-payload equality with flexible `meta` handling. The regression strictness has to be explicit so the new route locks down the public contract without becoming brittle on incidental timestamps."
+    },
+    {
+      "id": "q4",
+      "question": "When the task says 'missing-or-pruned account 404s', should `/v1/accounts/{id}/positions` mirror `/exposure` for every projection-local empty-account case, including risk-only or probability-edit-only accounts that exist in `ACCOUNT_RISK` but have no live `ACCOUNT_EXPOSURE` document?",
+      "category": "requirements",
+      "why_it_matters": "The current suite already treats `/exposure` as projection-local and returns `404 account_not_found` for both missing accounts and risk-only accounts. Step 4 needs to know whether `/positions` inherits that whole lifecycle or only a narrower subset of 404 cases."
+    },
+    {
+      "id": "q5",
+      "question": "Does 'deterministic ordering' in step 4 refer only to the visible wire ordering of returned positions by lexical `(marketId, outcomeId)`, or must the regressions also pin deterministic replay order for fills, such as `(filledAt, id)`, because fill chronology changes multi-fill, partial-close, and sign-flip P&L results?",
+      "category": "design",
+      "why_it_matters": "The task text names deterministic ordering and representative P&L math in the same step. The response list order and the replay order are separate contracts, and only one of them is directly visible without deeper helper assertions."
+    },
+    {
+      "id": "q6",
+      "question": "For the representative P&L scenarios, should the regressions patch `query_market_atomic_probability_for_inference(...)` to fixed marks and assert exact `unrealizedPnl` values, or should they rely on live fixture-market probabilities and assert only relative behavior?",
+      "category": "design",
+      "why_it_matters": "Exact P&L expectations depend on the current mark source. Stabilizing the mark seam would isolate replay math, while relying on live fixture probabilities would make the regressions more end-to-end but also more coupled to inference behavior."
+    },
+    {
+      "id": "q7",
+      "question": "Are the new P&L regressions expected to construct account history exclusively through accepted `POST /v1/markets/{id}/orders/event-trade` writes, or may they directly seed `ORDERS` and `ACCOUNT_EXPOSURE` when a narrow replay or pruned-account fixture would otherwise be awkward to set up through the public API?",
+      "category": "codebase",
+      "why_it_matters": "This test file already mixes black-box route requests with direct state seeding in lower-level projection tests. The choice here affects how readable and stable the new multi-fill and sign-flip cases will be."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Step 4 is intended to stay focused on `tests/test_bayes_market_api.py`, while the missing `/positions` route and replay helpers remain prerequisite production work from steps 1-3 even though they are not present in the current checkout.",
+      "confidence": 0.78,
+      "if_wrong": "The implementation plan for this step would need to absorb production backfill in `backend/server.py`, not just regression additions."
+    },
+    {
+      "id": "a2",
+      "assumption": "The public `/positions` contract is still additive beside `/exposure`, using the standard `{account, meta}` envelope and rows limited to `marketId`, `outcomeId`, `netSize`, `lastTradePrice`, and `unrealizedPnl`.",
+      "confidence": 0.9,
+      "if_wrong": "The step-4 regression shape, service-index assertions, and test placement would all need to be reconsidered."
+    },
+    {
+      "id": "a3",
+      "assumption": "Account existence for `/v1/accounts/{id}/positions` remains projection-local on `ACCOUNT_EXPOSURE`, so missing accounts, risk-only accounts, and fully pruned live-position accounts should all resolve as `404 account_not_found`.",
+      "confidence": 0.86,
+      "if_wrong": "The new tests would need a different empty-account contract, likely `200` with an empty collection or a distinction between missing and pruned states."
+    },
+    {
+      "id": "a4",
+      "assumption": "Representative P&L regressions are supposed to isolate replay math by stabilizing the mark seam, most likely by patching `query_market_atomic_probability_for_inference(...)` rather than asserting against live inference outputs.",
+      "confidence": 0.84,
+      "if_wrong": "The tests would need to compute expectations from live fixture probabilities and become more integration-coupled than the current task wording suggests."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the relevant owners and seams are already visible in `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `bayes-market-i6y` task artifacts.",
+      "confidence": 0.93,
+      "if_wrong": "A follow-up child investigation would be needed to find another hidden contract owner before implementation planning is safe."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

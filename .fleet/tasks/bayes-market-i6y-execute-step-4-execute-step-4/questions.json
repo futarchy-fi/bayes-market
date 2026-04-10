@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The current checkout still lacks the step-3 replay and `unrealizedPnl` production seam in `backend/server.py`. Should this leaf assume that prerequisite is rebased in first, or is it expected to bundle the missing production backfill alongside the new representative `/positions` P&L regressions?",
+      "category": "codebase",
+      "why_it_matters": "The three exact P&L regressions cannot pass against the current minimal `/positions` serializer, so build scope depends on whether this leaf is tests-only or production-plus-tests."
+    },
+    {
+      "id": "q2",
+      "question": "Should the representative P&L cases live in `BayesMarketExposureProjectionTests` and primarily assert the direct getter or projection seam, with at most one representative `route_request(\"GET\", \"/v1/accounts/{id}/positions\")` parity smoke, or should every scenario also exercise the HTTP route?",
+      "category": "codebase",
+      "why_it_matters": "The router is already covered by the baseline `/positions` tests, so this determines whether the new work stays focused on replay math or duplicates transport assertions in every scenario."
+    },
+    {
+      "id": "q3",
+      "question": "For the multi-fill weighted-average, partial-close survivor, and sign-flip survivor scenarios, should fixtures be built mostly through accepted `POST /v1/markets/{id}/orders/event-trade` writes and only fall back to direct `ORDERS` or `ACCOUNT_EXPOSURE` seeding when the public write path cannot express the setup cleanly?",
+      "category": "design",
+      "why_it_matters": "The task title says 'built mostly from accepted EventTrade writes', but the file already mixes black-box writes and direct state seeding. The boundary affects readability and how much replay behavior is exercised through real acceptance flow."
+    },
+    {
+      "id": "q4",
+      "question": "When patching `query_market_atomic_probability_for_inference(...)` to fixed marks, should each regression only pin the exact survivor `unrealizedPnl`, or should it also freeze the full survivor row and ordered `/positions` payload so `netSize`, `lastTradePrice`, and lexical ordering are reasserted in the same scenarios?",
+      "category": "design",
+      "why_it_matters": "A pure P&L scalar assertion isolates replay math, but full-row equality catches bugs where the survivor size or wire ordering is wrong even if the chosen mark happens to mask it."
+    },
+    {
+      "id": "q5",
+      "question": "Do the partial-close and sign-flip survivor regressions need explicit companion assertions that replay preserved the correct surviving signed `netSize`, or is exact `unrealizedPnl` alone considered sufficient once the baseline `/positions` contract tests already freeze row shape and ordering?",
+      "category": "requirements",
+      "why_it_matters": "Different combinations of survivor size and average cost can sometimes produce the same mark-to-market scalar, so it matters whether this leaf is expected to prove both survivor identity and P&L or only the final scalar."
+    },
+    {
+      "id": "q6",
+      "question": "For the sign-flip survivor specifically, should the regression assume the opposite-sign survivor resets basis to the crossing fill price and then reports account-perspective `unrealizedPnl` from the signed formula `(mark - averageCost) * netSize`, including profitable shorts showing positive P&L?",
+      "category": "design",
+      "why_it_matters": "The sign-flip case is the easiest place for replay math and public P&L sign conventions to diverge, so the expected survivor-basis and profitable-short behavior must be explicit before writing exact assertions."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The service-index entry, additive `/v1/accounts/{id}/positions` route, baseline success payload, and missing-or-pruned `404` lifecycle are already present in this checkout, so this leaf should stay focused on the representative P&L regressions rather than reopening route plumbing.",
+      "confidence": 0.99,
+      "if_wrong": "This task would need to absorb earlier route or contract baseline work before the new P&L coverage could be trusted."
+    },
+    {
+      "id": "a2",
+      "assumption": "The actual blocker in the current tree is the missing step-3 replay and `unrealizedPnl` production seam in `backend/server.py`, not the `/positions` route itself.",
+      "confidence": 0.98,
+      "if_wrong": "The question set is aimed at the wrong prerequisite, and the build would need a different code-path audit before writing new regressions."
+    },
+    {
+      "id": "a3",
+      "assumption": "The natural home for these regressions is still `BayesMarketExposureProjectionTests` in `tests/test_bayes_market_api.py`, with only light route-parity coverage because the route branch is already frozen elsewhere.",
+      "confidence": 0.97,
+      "if_wrong": "The implementation would need to spread the new cases into other classes or add broader HTTP duplication than this leaf currently assumes."
+    },
+    {
+      "id": "a4",
+      "assumption": "The representative survivor scenarios are supposed to be driven mostly by accepted EventTrade writes on a simple live slice, while direct `ORDERS` or `ACCOUNT_EXPOSURE` seeding remains primarily for adjacent deterministic-order or missing-history fixtures.",
+      "confidence": 0.93,
+      "if_wrong": "These P&L regressions would need a heavier direct-seeding strategy and would become more projection-internal than the task title suggests."
+    },
+    {
+      "id": "a5",
+      "assumption": "Exact P&L assertions should isolate replay math by patching `query_market_atomic_probability_for_inference(...)` to fixed marks instead of depending on live inference outputs from the fixture markets.",
+      "confidence": 0.98,
+      "if_wrong": "Expected values would need to be derived from live market probabilities, making the regressions more integration-coupled and less stable."
+    },
+    {
+      "id": "a6",
+      "assumption": "Once the replay seam exists, the public survivor row contract for these cases remains the additive five-field `/positions` shape `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` in lexical wire order, with `meta` still treated as dynamic.",
+      "confidence": 0.92,
+      "if_wrong": "The leaf would need a different success-payload baseline or a richer row shape than the current i6y plan and neighboring artifacts imply."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
