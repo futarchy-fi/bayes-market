@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should step 2 treat `git diff ff/Tbayes-market-u44-execute-step-2...HEAD` as the single authoritative scope baseline, or does the audit need any secondary comparison to separate inherited step-3/step-4 history from this execute leaf?",
+      "category": "requirements",
+      "why_it_matters": "The audit only means something if it uses the branch comparison that the parent plan expects. The wrong baseline could either hide inherited scope or over-attribute unrelated history."
+    },
+    {
+      "id": "q2",
+      "question": "For this scope check, are all paths under `.fleet/tasks/...` acceptable workflow artifacts, or should the audit allow only the specific `bayes-market-u44` task-chain artifacts and treat any other added task files as out of scope?",
+      "category": "requirements",
+      "why_it_matters": "The current diff includes many task-artifact additions. Step 2 needs a clear rule for whether that entire namespace is allowed or whether it must flag unexpected workflow spillover."
+    },
+    {
+      "id": "q3",
+      "question": "Is the allowed product-file boundary for this audit exactly `tests/test_bayes_market_api.py` and `backend/server.py`, with any additional non-workflow file automatically failing the backend-and-tests-only gate?",
+      "category": "requirements",
+      "why_it_matters": "This is the core pass/fail boundary for step 2. Without an explicit allowlist, the diff review cannot produce a defensible scope verdict."
+    },
+    {
+      "id": "q4",
+      "question": "Does step 2 end once the file list and diff stat confirm the branch is limited to workflow artifacts plus those two product files, or must it also carry forward the prior objection that the inherited `backend/server.py` delta may still be unjustified even if it stays inside the file boundary?",
+      "category": "design",
+      "why_it_matters": "The parent step mixes a structural scope audit with an inherited plan-adherence concern. This determines whether step 2 is purely a file-boundary check or part of the stricter preservation verdict."
+    },
+    {
+      "id": "q5",
+      "question": "Because `HEAD` is already a merge commit for `ff/Tbayes-market-u44-execute-step-5-execute-step-1`, should the audit reason over the merged branch history as recorded in git rather than only new local worktree changes created in this leaf?",
+      "category": "codebase",
+      "why_it_matters": "The scope gate is about the overall task state, not just unstaged edits. Step 2 needs to know whether merged execute-step history counts as part of the audited surface."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Relative to `ff/Tbayes-market-u44-execute-step-2`, the current branch diff is limited to `.fleet/tasks/...` artifacts plus the product files `backend/server.py` and `tests/test_bayes_market_api.py`.",
+      "confidence": 0.99,
+      "if_wrong": "The audit would need to account for additional product files, which would change the scope verdict and potentially invalidate the parent step."
+    },
+    {
+      "id": "a2",
+      "assumption": "This execute-step-2 leaf is evidence-gathering only and should not introduce fresh product edits beyond recording the question artifact.",
+      "confidence": 0.96,
+      "if_wrong": "The task would not be a pure audit-preparation step, and the branch could need corrective code changes before the scope review is meaningful."
+    },
+    {
+      "id": "a3",
+      "assumption": "The relevant code seams behind this audit are the protected-write/rate-limit helpers in `backend/server.py` and the `BayesMarketApiAuthRateLimitTests` coverage in `tests/test_bayes_market_api.py`.",
+      "confidence": 0.94,
+      "if_wrong": "The generated questions could miss another product area that should be part of the step-2 scope review."
+    },
+    {
+      "id": "a4",
+      "assumption": "No child task is needed because the branch ancestry, diff baselines, prior validation artifacts, and touched product files are all available locally in this worktree.",
+      "confidence": 0.99,
+      "if_wrong": "A separate exploration task would be needed to reconstruct the correct baseline or to classify unexpected files before planning the audit."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
