@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Which documentation set should this step update to publish the additive account read surface: only the contract-freeze memos that enumerate live routes (`t553`, `t556`, `t563`, `t571`), or also planning/gate docs such as `t538` and `t539` that still summarize the API surface as markets, orders, engine stats, and account risk only?",
+      "category": "requirements",
+      "why_it_matters": "Several docs still list only `/v1/accounts/{id}/risk`. The answer sets the intended blast radius of the docs patch instead of turning a targeted freeze update into an open-ended repo wording sweep."
+    },
+    {
+      "id": "q2",
+      "question": "How should `/v1/accounts/{id}/exposure` be described in the frozen contract: as an additive, projection-local read model that can return `404 account_not_found` for risk-only accounts or fully pruned exposure, or as a guaranteed companion resource whenever an account exists?",
+      "category": "design",
+      "why_it_matters": "The live code and tests make `/exposure` intentionally ephemeral and separate from `/risk`. The wording needs to match that behavior so the docs do not imply a stronger existence guarantee than the server provides."
+    },
+    {
+      "id": "q3",
+      "question": "What should be treated as the canonical documentation home for the accepted EventTrade HTTP response shape: expand `t547`/`t544`, or add/update an HTTP-focused freeze note analogous to `t1737`/`t586` for `POST /v1/markets/{id}/orders/event-trade`?",
+      "category": "design",
+      "why_it_matters": "The current repo freezes EventTrade formula validation and persisted command shape, but the live HTTP success envelope `{order,result,meta}` with `size`, `price`, and `notional` is mostly pinned by code and tests. The docs pass needs a clear owner for that contract."
+    },
+    {
+      "id": "q4",
+      "question": "When reconciling stale EventTrade `size` notes, should the docs preserve the backend's compatibility alias `amount`, or standardize the published public contract on `size` only since normalized commands, accepted orders, frontend types, and tests all use `size`?",
+      "category": "codebase",
+      "why_it_matters": "`normalize_event_trade_size(...)` currently accepts both inputs, but the rest of the branch speaks only in terms of `size`. The docs need to decide whether to advertise the alias or treat it as an internal or temporary compatibility seam."
+    },
+    {
+      "id": "q5",
+      "question": "Should this docs step also update the event-sourcing freeze to mention EventTrade-specific accepted-event fields such as `pricing.unitPrice` and `payload.trade.{marketId,outcomeId,side,size,price,notional}`, or is the scope limited to account-read docs plus route-level request and response notes?",
+      "category": "requirements",
+      "why_it_matters": "`tests/test_bayes_market_api.py` now pins accepted EventTrade event payload details that are not reflected in the generic `CommandAccepted` example in `t544`. That affects whether the patch is a narrow publication fix or a broader event-contract reconciliation."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The active worktree already contains the live `/v1/accounts/{id}/exposure` implementation in `backend/server.py`, service-index exposure-route advertising, frontend API and types support, and backend and frontend tests that consume it.",
+      "confidence": 0.99,
+      "if_wrong": "Any docs change could freeze behavior that is not actually merged in this branch, so the step would need to shift back into feature implementation or branch reconciliation first."
+    },
+    {
+      "id": "a2",
+      "assumption": "`/v1/accounts/{id}/risk` remains a valid and separately meaningful read model for probability-edit solvency state; `/exposure` supplements it rather than replacing it.",
+      "confidence": 0.96,
+      "if_wrong": "The docs update would need to rewrite existing account-risk positioning instead of describing `/exposure` as an additive surface."
+    },
+    {
+      "id": "a3",
+      "assumption": "The accepted EventTrade success contract is already concrete in source and tests: HTTP returns `{order,result,meta}`, `order` includes `size`, `price`, and `notional`, and the emitted accepted event includes `pricing.unitPrice` plus a `trade` object.",
+      "confidence": 0.98,
+      "if_wrong": "The docs pass would be underspecified and would need more code and test work or a separate contract decision before it could safely publish an EventTrade response shape."
+    },
+    {
+      "id": "a4",
+      "assumption": "The repo does not currently have a dedicated EventTrade HTTP contract-freeze memo, so any response-shape publication work will need to extend an existing formula or event doc or create or update a nearby HTTP freeze artifact.",
+      "confidence": 0.92,
+      "if_wrong": "There may already be a canonical EventTrade HTTP freeze file that should be updated instead of spreading the contract across multiple docs."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child tasks are needed because the relevant ambiguities are discoverable from the checked-in backend route, tests, frontend types, and contract-freeze docs in this worktree.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up child task would be needed to inspect additional repo history or external contract references before the docs step could be scoped confidently."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
