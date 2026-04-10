@@ -1,0 +1,84 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Implement `GET /v1/health` as an additive backend-only route. Keep `/health` and `/healthz` on their existing minimal payload so the frontend System page, existing API tests, and ops probes remain compatible.",
+      "based_on": ["q2", "q7"],
+      "alternatives_rejected": [
+        "Replacing `/health` and `/healthz` with the richer `/v1/health` payload",
+        "Expanding this task into a frontend health-client and System-page migration"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Freeze `/v1/health` as the current health payload plus `version`, `uptime_seconds`, and `components`, where `uptime_seconds` is a float and `components` is an object keyed exactly as `db`, `inference`, and `auth`. Each component stays minimal: `db` exposes the store kind, `inference` exposes backend/version identity, and `auth` exposes whether agent-id enforcement is required.",
+      "based_on": ["q1", "q4", "q6"],
+      "alternatives_rejected": [
+        "A flat string map like `{ \"db\": \"ok\" }` without per-component objects",
+        "A much richer diagnostics schema with probe timings or nested readiness details"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Model the `db` component as the backend's in-memory state store and report it healthy when the process is serving requests, rather than pretending an external database exists or permanently marking the service degraded for missing infrastructure that is not part of this checkout.",
+      "based_on": ["q3", "q5"],
+      "alternatives_rejected": [
+        "Returning `db` as permanently `degraded` or `not_configured`",
+        "Omitting `db` from the payload even though the requested contract names it explicitly"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Derive component status from configuration/readiness, not live probes: inference is healthy when the current engine config and model bindings are loaded, auth is healthy with its required/optional mode derived from `BAYES_REQUIRE_AGENT_ID`, and the top-level status reduces component states with `unhealthy > degraded > ok`.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Running a market-specific inference query inside the health path",
+        "Basing auth health on request credentials or a separate authentication round-trip"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Use the existing backend engine version as the `version` value for `/v1/health` until the service gains a dedicated runtime version constant, because `ENGINE_CONFIG.version` is the only checked-in version source already exposed by backend diagnostics.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Inventing a new unrelated service-version constant as part of this small endpoint task",
+        "Leaving `version` undefined despite the requested response fields"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add shared health helpers in `backend/server.py` for process start uptime, per-component status assembly, top-level status aggregation, and the new `/v1/health` response payload contract.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Wire `route_request()` to serve `GET /v1/health`, keep `/health` and `/healthz` returning the legacy payload, and update the root service index health-route list to advertise the new endpoint alongside the legacy probes.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Extend `tests/test_bayes_market_api.py` with response-shape coverage for `/v1/health`, including the exact top-level fields, component keys, float `uptime_seconds`, inherited service/timestamp fields, and compatibility assertions for the unchanged legacy health routes.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Run the targeted backend health-route tests, then run the broader backend API test module if the focused assertions pass, to confirm the additive route does not regress the existing HTTP surface.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Review the diff for scope creep, then commit the implementation once the backend route and tests are green.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
