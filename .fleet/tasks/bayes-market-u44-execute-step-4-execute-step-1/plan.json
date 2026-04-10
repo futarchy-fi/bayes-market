@@ -1,0 +1,59 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use the current negative auth and rate-limit tests in `BayesMarketApiAuthRateLimitTests` as the authoritative preserved sentinel inventory for this step: the existing ProbabilityEdit missing/blank/malformed/disabled/429 cases, market-resolve missing/blank/malformed plus disabled-limiter coverage including the older missing-agent overlap, create-market missing-agent coverage, the unsupported POST router `404` control, and the direct duplicate-header `resolve_write_request_agent(...)` check.",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Trim the older market-resolve missing-agent test because the grouped valid-agent test already covers missing, blank, and malformed cases.",
+        "Expand the preserved sentinel inventory to new route-local comment-post or event-trade auth negatives during this step."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Treat `test_comment_post_http_returns_accepted_comment_contract_with_rate_limit_headers` and `test_protected_post_routes_emit_rate_limit_headers_on_first_success` as settled step-3 breadth coverage that should remain untouched here. Leave the separate ProbabilityEdit anonymous no-header success and quota-accounting tests intact, but do not recast them as new step-4 absence-path sentinels.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Reshape the step-3 breadth tests into the preserved negative-sentinel inventory.",
+        "Broaden this step into a new pass over all success-path or anonymous-success rate-limit assertions."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "If execution uncovers a regression, fix only the preserved tests or the shared protected-write seam in `backend/server.py` (`resolve_write_request_agent(...)`, `_enforce_write_controls()`, `rate_limit_headers(...)`, or `BayesHandler.handle_api()`) rather than adding new transport-specific duplicate-header cases or cloning route-local auth/rate-limit matrices.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Add end-to-end duplicate-header transport tests or comma-separated single-header cases as part of this preservation step.",
+        "Duplicate the full auth and limiter matrix across every protected POST route instead of relying on the shared backend seam."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit `tests/test_bayes_market_api.py` against the researched inventory and confirm the preserved sentinel set still matches the current ProbabilityEdit missing/blank/malformed/disabled/429 coverage, market-resolve missing/blank/malformed plus disabled-limiter coverage, create-market missing-agent coverage, the unsupported POST router `404` control, and the direct duplicate-header check after the step-3 breadth additions.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "If any preserved sentinel has drifted, update only the affected tests to restore the current absence-path contract while keeping the older market-resolve missing-agent overlap and the direct duplicate-header seam intact.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Only if the restored sentinel tests expose a real defect, patch the shared protected-write path in `backend/server.py` so the existing auth and rate-limit behavior holds without route-local special cases or new breadth obligations.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Run the focused Bayes market auth/rate-limit test slice covering the preserved sentinels, verify the diff stays limited to the intended preservation scope, then stage and commit the task artifact with the requested message.",
+      "depends_on": [2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
