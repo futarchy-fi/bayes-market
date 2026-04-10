@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "For the step-6 landing pass, should the remaining frontend coverage gap be closed with lower-level tests, specifically an explicit `getAccountExposure(accountId)` client test plus public-hook invalidation coverage for `useEventTrade(...)` and `useResolveMarket(...)`, or is the current component coverage considered sufficient?",
+      "category": "requirements",
+      "why_it_matters": "The live worktree already has `EventTradePanel` and `Portfolio` component tests, but step-4 validation still called out missing `getAccountExposure(...)` client coverage and missing exposure invalidation proof."
+    },
+    {
+      "id": "q2",
+      "question": "Is it acceptable to introduce a new hook-level React Query test harness with an isolated `QueryClient` in `frontend/src/__tests__`, or should exposure invalidation be proven only through route/component tests built on `renderWithProviders(...)`?",
+      "category": "design",
+      "why_it_matters": "The current frontend suite has provider-backed component tests but no existing hook/invalidation test file, and direct cache-behavior assertions are much easier to express at the hook layer."
+    },
+    {
+      "id": "q3",
+      "question": "What exact exposure invalidation contract should step 6 freeze for the public mutation hooks: targeted invalidation of `queryKeys.accountExposure(accountId)` after a successful EventTrade, and broad invalidation of all account-exposure queries after market resolution?",
+      "category": "design",
+      "why_it_matters": "The current hook code already treats EventTrade and resolve differently, so the new tests need to lock in the intended granularity instead of accidentally asserting the wrong cache scope."
+    },
+    {
+      "id": "q4",
+      "question": "In `Portfolio`, if `/v1/accounts/{id}/exposure` or `/v1/accounts/{id}/risk` returns `404 account_not_found` while the companion account query is still pending, should the route stay in a loading state until both settle, or is the current brief empty-holdings fallback acceptable?",
+      "category": "requirements",
+      "why_it_matters": "The route only shows the full-page loader when both account queries are loading, so a single early `404` can currently produce a transient `No live EventTrade positions.` state from incomplete data."
+    },
+    {
+      "id": "q5",
+      "question": "When reconciling stale contract-freeze references, should `/v1/accounts/{id}/exposure` be published as an additive account read surface with its projection-local `404 account_not_found` behavior, and which existing freeze docs that still mention only `/risk` are expected to be updated in this landing pass?",
+      "category": "design",
+      "why_it_matters": "Backend routes and tests already advertise both `/risk` and `/exposure`, but several docs still describe the current account read surface as risk-only, so the landing scope needs a clear documentation boundary."
+    },
+    {
+      "id": "q6",
+      "question": "What verification boundary satisfies `run the relevant backend and frontend suites` for the landing patch: the full CI-aligned commands (`python3 -m pytest tests/ -v --tb=short`, `pnpm --dir frontend test`, and `pnpm --dir frontend build`) or only targeted subsets after the audit?",
+      "category": "requirements",
+      "why_it_matters": "This branch spans backend contracts, frontend hooks/tests, docs, and tracked frontend build artifacts, so step 6 needs a clear pass bar before the final patch is considered landed."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This worktree already contains the merged step-1 through step-5 implementation for the `/v1/accounts/{id}/exposure` backend route, frontend exposure types/hooks, the EventTrade size UI, and the portfolio exposure surface, so step 6 is a test/docs/verification pass rather than a feature build.",
+      "confidence": 0.99,
+      "if_wrong": "The landing work would still be blocked on unfinished feature implementation, and these audit questions would be premature."
+    },
+    {
+      "id": "a2",
+      "assumption": "The live frontend coverage gap is still lower-level: `frontend/src/__tests__/api-client.test.ts` does not assert `getAccountExposure(accountId)`, and there is no current hook-level test that proves exposure invalidation after EventTrade or market resolution.",
+      "confidence": 0.99,
+      "if_wrong": "Step 6 could focus on the Portfolio timing edge, docs cleanup, and suite execution without adding new lower-level frontend tests."
+    },
+    {
+      "id": "a3",
+      "assumption": "The `Portfolio` mixed-404 timing behavior is still unresolved in the current route because it only renders the full-page loader when both account queries are loading and only renders the missing-account state once both have resolved to `404 account_not_found`.",
+      "confidence": 0.93,
+      "if_wrong": "No route change would be needed for the timing edge, and the remaining work would narrow to tests plus docs."
+    },
+    {
+      "id": "a4",
+      "assumption": "Contract-freeze docs are stale on account read surfaces: the backend service index and tests now expose `/v1/accounts/{id}/risk` plus `/v1/accounts/{id}/exposure`, but current freeze/launch docs still mostly mention only `/risk`.",
+      "confidence": 0.97,
+      "if_wrong": "The docs pass could stay minimal or be skipped if an existing freeze memo already fully covers the additive exposure route."
+    },
+    {
+      "id": "a5",
+      "assumption": "The intended final verification boundary for this landing step is the same one used by `.github/workflows/ci.yml`: backend pytest, frontend Vitest, and a frontend production build after dependencies are installed.",
+      "confidence": 0.96,
+      "if_wrong": "The implementation could either overrun the required validation scope or land with less verification than the branch expects."
+    },
+    {
+      "id": "a6",
+      "assumption": "No child tasks are needed for question generation because the remaining unknowns are answerable from the local worktree, existing task artifacts, validation notes, and checked-in docs/tests.",
+      "confidence": 0.98,
+      "if_wrong": "A follow-up research subtask would be needed before the landing work could be scoped confidently."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
