@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Is `/v1/health` an additive route that must leave `/health` and `/healthz` on their current `{service,status,timestamp}` contract, or should all health routes be upgraded to the new component-status payload?",
+      "category": "requirements",
+      "why_it_matters": "`backend/server.py` currently serves `/health` and `/healthz` from one shared `health_payload()`, while docs, probes, and the frontend `getHealth()` client already depend on those legacy routes; changing them would broaden the task far beyond adding one backend route."
+    },
+    {
+      "id": "q2",
+      "question": "What exact response contract is frozen for `GET /v1/health`: top-level fields, whether `meta` is required because it is a `/v1/*` route, where the timestamp lives, and what status vocabulary is valid for the aggregate and each component (`ok` vs `healthy|warning|critical|degraded`)?",
+      "category": "requirements",
+      "why_it_matters": "The existing health payload is intentionally minimal and does not use `make_meta()`, while most versioned API routes do; the frontend system page also keys off `status === \"ok\"`, so the precise schema and vocabulary need to be fixed before tests can lock them in."
+    },
+    {
+      "id": "q3",
+      "question": "Which concrete components is this endpoint supposed to report in this repo: only API/inference internals, or also logical stores such as markets/event journal/account-risk read models, or even frontend/static availability?",
+      "category": "design",
+      "why_it_matters": "This service is mostly an in-process backend backed by module-level dictionaries plus the inference adapter, with no database or queue in the repo, so the component list determines whether the implementation is a lightweight self-report or a much broader runtime audit."
+    },
+    {
+      "id": "q4",
+      "question": "Should the new route become discoverable through `service_index_payload()` and any existing health consumers, or is step 5 intentionally backend-only so `frontend/src/lib/api/client.ts` and `frontend/src/routes/System.tsx` stay pointed at `/health` for now?",
+      "category": "codebase",
+      "why_it_matters": "The root index already advertises health routes, and the frontend has an active `/health` consumer; without a scope boundary, a backend route addition can easily turn into a frontend/client/service-index migration."
+    },
+    {
+      "id": "q5",
+      "question": "What HTTP status behavior is required when one or more reported components are unhealthy: should `/v1/health` always return `200` with degraded component details, or should aggregate failures promote the response to `503` or another non-2xx status?",
+      "category": "requirements",
+      "why_it_matters": "Current health handling is unconditional `200`, and the surrounding docs and probes treat the health route as a liveness check; changing the status-code contract affects both implementation shape and what the backend tests should assert."
+    },
+    {
+      "id": "q6",
+      "question": "What test surface is expected to freeze this work: direct `route_request(\"GET\", \"/v1/health\")` unit coverage, threaded HTTP integration coverage through `BayesHandler`, or both, and should backward-compatibility tests for `/health` and `/healthz` be part of the same step?",
+      "category": "codebase",
+      "why_it_matters": "The repo already uses both pure routing tests and HTTP-server integration tests in `tests/test_bayes_market_api.py`, but only `/healthz` currently has explicit HTTP coverage, so the intended verification layer is still ambiguous."
+    },
+    {
+      "id": "q7",
+      "question": "When step 5 says to review the diff for scope creep and commit once the backend route and tests are green, is the accepted implementation boundary limited to `backend/server.py`, `tests/test_bayes_market_api.py`, and task artifacts, with docs/frontend follow-up explicitly out of scope?",
+      "category": "requirements",
+      "why_it_matters": "The current repo has live documentation, operational runbooks, and frontend code that all mention the legacy health surface, so a precise diff boundary is necessary to decide what counts as intentional work versus scope creep."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new `/v1/health` route is intended to be additive, while `/health` and `/healthz` remain backward-compatible for existing docs, probes, and frontend callers.",
+      "confidence": 0.95,
+      "if_wrong": "Reusing or widening `health_payload()` would require a broader compatibility update across backend tests, frontend health consumers, and operational documentation."
+    },
+    {
+      "id": "a2",
+      "assumption": "Step 5 is meant to stay backend-only; the existing frontend health hook can continue calling `/health` until a separate step migrates consumers to `/v1/health`.",
+      "confidence": 0.9,
+      "if_wrong": "The implementation would need to touch frontend API clients, React query hooks, the System route, and related tests, which materially changes the task scope."
+    },
+    {
+      "id": "a3",
+      "assumption": "The only plausible component-status inputs in this checkout are in-process backend surfaces already visible in `backend/server.py`, especially the inference adapter/config and the in-memory state stores, not external infrastructure that is absent from the repo.",
+      "confidence": 0.82,
+      "if_wrong": "The endpoint would need new dependency probes or configuration seams for systems that the current codebase does not model, which would expand both design and test setup."
+    },
+    {
+      "id": "a4",
+      "assumption": "Unless the task explicitly says otherwise, `/v1/health` should probably keep the existing health-route behavior of returning `200` and express degradation inside the payload rather than by switching to a failure HTTP status.",
+      "confidence": 0.71,
+      "if_wrong": "The implementation and tests would need a stronger availability contract, and any consumers or probes treating health as a simple liveness check would need reconsideration."
+    },
+    {
+      "id": "a5",
+      "assumption": "The primary gate for this step will be backend coverage in `tests/test_bayes_market_api.py`, and any implementation diff beyond `backend/server.py` plus that test file is likely scope creep unless the task owner clarifies otherwise.",
+      "confidence": 0.89,
+      "if_wrong": "A correct solution would need to include additional files such as service-index consumers, frontend health clients, or docs/runbooks before the final commit could be considered complete."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

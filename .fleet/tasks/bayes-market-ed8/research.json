@@ -1,0 +1,144 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The repo does not already freeze an exact `/v1/health` schema. The only existing public health contract is the minimal payload `{ \"service\": \"bayes-market\", \"status\": \"ok\", \"timestamp\": <ISO-8601> }`, and both the backend test and frontend client are aligned to that older shape. For the new route, the smallest codebase-consistent additive contract is a superset of the current fields plus `version`, `uptime_seconds`, and `components` keyed exactly as `db`, `inference`, and `auth`, with each component represented by a minimal object carrying at least `status`. The exact nested component fields are not defined anywhere in the repo and need to be frozen by this task's new test. `uptime_seconds` is also not typed anywhere today; if it is added now, a float is more consistent with the backend's existing runtime-duration fields (`mean_ms`, percentiles, `compile_time_ms`) than an integer counter, but that is still an inference rather than an existing contract.",
+      "confidence": 0.63,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/questions.json:6",
+        ".fleet/tasks/bayes-market-ed8/questions.json:8",
+        "backend/server.py:705",
+        "tests/test_bayes_market_api.py:6515",
+        "backend/server.py:756",
+        "backend/server.py:992"
+      ],
+      "uncertainty": "There is no checked-in `/v1/health` implementation, type definition, or doc that freezes the inner `components` object shape or the numeric type of `uptime_seconds`.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q2",
+      "answer": "The codebase strongly points to `/v1/health` being purely additive. `/health` and `/healthz` are already wired into the backend router, the public service index, backend integration tests, frontend health client, and ops runbooks. Changing those legacy routes would turn this into a compatibility migration across backend, frontend, and deployment docs. The least-risk interpretation is: add `/v1/health`, keep `/health` and `/healthz` stable, and do not require the older endpoints to adopt the richer payload unless the task is explicitly widened.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:719",
+        "backend/server.py:3792",
+        "backend/server.py:4100",
+        "frontend/src/lib/api/client.ts:240",
+        "tests/test_bayes_market_api.py:6515",
+        "docs/t581-dns-cloudflare-tunnel-public-runbook.md:10",
+        "docs/t539-mvp-launch-gate.md:92"
+      ],
+      "uncertainty": "A legacy route could technically return a superset payload without breaking current consumers that ignore extra fields, but the repo does not require that and the task brief does not ask for a health-surface migration.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "There is no real database dependency in this checkout. The backend stores markets, orders, commands, events, comments, account state, and engine stats in process-local Python dictionaries, and the router is explicitly described as handling requests with in-memory handlers. So the `db` component cannot honestly mean a live persistence adapter here. The codebase-consistent interpretation is either a synthetic in-process state-store status or an explicit `not_configured`/placeholder component. If the task expects genuine database health, that dependency does not exist in the repo yet.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:165",
+        "backend/server.py:181",
+        "backend/server.py:239",
+        "backend/server.py:3785",
+        "docs/t563-journal-read-surface-freeze.md:14"
+      ],
+      "uncertainty": "The repo proves that no DB exists, but it does not say whether the new contract should expose a placeholder `db` status, a synthetic in-memory-store status, or omit the notion entirely.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q4",
+      "answer": "The repo supports configuration/readiness-derived component status more strongly than live probing. Inference is imported and bound at module load through `CURRENT_MODEL_COMPILER`, `CURRENT_MODEL_QUERY_BACKEND`, and `ENGINE_CONFIG`; there is no existing global inference health probe, and any real compile/query check is market-specific and can fail because of runtime market data rather than engine boot state. Auth is even clearer: it is just optional write-route enforcement derived from `BAYES_REQUIRE_AGENT_ID`, and it only applies to POST write categories. So the codebase-aligned rule is to derive `inference` from successful module/config initialization and derive `auth` from configuration state or write-policy readiness, not from request credentials or a live authenticated probe.",
+      "confidence": 0.86,
+      "evidence": [
+        "backend/server.py:30",
+        "backend/server.py:145",
+        "backend/server.py:333",
+        "backend/server.py:379",
+        "backend/server.py:384",
+        "backend/server.py:809",
+        "backend/server.py:839"
+      ],
+      "uncertainty": "The repo does not currently define the exact status labels for configuration-only states such as auth disabled-by-config or inference imported-but-never-probed.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "There is no existing aggregation helper for `ok` vs `degraded` vs `unhealthy`; the current health payload is hard-coded to `status: \"ok\"`. The safest repo-consistent reduction rule is: `ok` only when every reported component is healthy; `degraded` when the process is up but at least one reported component is non-healthy without making the whole API unavailable; `unhealthy` when a failure affects a core serving dependency badly enough that the API should be considered not healthy. In this checkout, that distinction matters because `db` is synthetic/nonexistent and `auth` is optional by default, so those two components can plausibly create `degraded` states without implying total process failure. That rule is not frozen anywhere today, so the new test should pin it explicitly.",
+      "confidence": 0.69,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/questions.json:29",
+        "backend/server.py:333",
+        "backend/server.py:705",
+        "backend/server.py:165",
+        "backend/server.py:379"
+      ],
+      "uncertainty": "The repo does not classify any component as mandatory vs optional for top-level health, so the exact boundary between `degraded` and `unhealthy` is still a design choice.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q6",
+      "answer": "The codebase does not have a backend service-version constant or an API-version constant for this endpoint. `make_meta()` only emits a timestamp, the health payload has no version field, and the only backend version-like constant already wired into responses is the inference engine version (`ENGINE_CONFIG.version`, currently `0.1.0`) exposed on market engine stats. That means the only existing source of truth you can reuse immediately is the inference engine version, but that would semantically describe the inference subsystem, not the whole service or API contract. If `/v1/health.version` is intended to mean service or API version, a new explicit constant must be introduced.",
+      "confidence": 0.93,
+      "evidence": [
+        "backend/server.py:145",
+        "backend/server.py:520",
+        "backend/server.py:705",
+        "backend/server.py:998",
+        "backend/inference/config.py:34",
+        "frontend/src/lib/api/types.ts:273"
+      ],
+      "uncertainty": "The task brief does not say whether `version` should identify the process, the public HTTP contract, or just the inference engine already embedded in the backend.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q7",
+      "answer": "The repo evidence points to this being backend-only unless the task is explicitly widened. The current frontend health path still calls `/health`, `useHealth()` polls that legacy client, `System.tsx` only renders the old `service/status/timestamp` payload, and the existing System tests mock the same minimal shape. A frontend migration would require TypeScript client/type/hook/System/test changes in addition to the backend route. Because the task framing is about adding `/v1/health` and testing its response shape, the least-surprising scope is to implement the new backend route and leave the frontend on `/health` for now.",
+      "confidence": 0.9,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/questions.json:42",
+        "frontend/src/lib/api/client.ts:240",
+        "frontend/src/lib/query/hooks.ts:311",
+        "frontend/src/routes/System.tsx:29",
+        "frontend/src/__tests__/System.test.tsx:16",
+        "frontend/vite.config.ts:15"
+      ],
+      "uncertainty": "If the product intent is to surface component-level health immediately in the UI, the scope expands into frontend work, but there is no checked-in requirement that says this task owns that migration.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The implementation boundary is the existing Python HTTP server and its API integration test file. That is where the current health routes, router, and health assertions already live."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The new route should be added without breaking `/health` or `/healthz`. Legacy health consumers already exist in the frontend and ops docs, so changing them would widen scope materially."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "The work can stay focused on backend response-shape behavior. Frontend migration would require separate client, hook, System-page, and Vitest updates that are not implied by the current task wording."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.87,
+      "impact": "If `uptime_seconds` is added now, it will have to be process/module uptime because the repo has no host diagnostics abstraction or external runtime monitor to source it from."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "The `auth` component should be modeled from configuration/readiness rather than live credentials. Auth in this repo is an optional write-path control, not a separate auth service dependency."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,89 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Anchor health uptime to a module-scoped process-start timestamp captured when `backend/server.py` imports, and keep it outside `reset_state()` so `uptime_seconds` reflects the lifetime of the imported server module across direct router tests and direct `HTTPServer(..., BayesHandler)` usage.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Capture the start time inside `run_server()` and miss direct-module and direct-router code paths.",
+        "Reset the health clock from `reset_state()` alongside domain state.",
+        "Use first successful request time, which measures traffic rather than process startup."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Build component health through small shared helpers that always emit `status` and freeze the nested keys as `db: {status, kind}`, `inference: {status, backend, version}`, and `auth: {status, requires_agent_id}`, sourcing auth and inference values from the live in-process globals already used by the backend rather than re-reading environment variables per request.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Flatten `components` to plain status strings without per-component objects.",
+        "Use different nested field names such as `store` or `store_kind` for the DB entry.",
+        "Re-read environment or config sources on every health request instead of mirroring runtime state."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Represent the current checkout's `db` component as the in-memory state store with `kind: \"in_memory\"` and steady-state `status: \"ok\"`, rather than inventing an absent external database dependency or surfacing a placeholder degraded state.",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Report `db` as permanently `degraded` because there is no external database adapter.",
+        "Omit the `db` component from `/v1/health`.",
+        "Add a fake database probe for infrastructure that does not exist in this repo."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Add a reusable top-level health-status reducer that uses the shared `ok` / `degraded` / `unhealthy` vocabulary, but keep the current component builders returning `ok` in this all-in-memory checkout so the aggregator is future-proof without changing today's steady-state payload.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Leave top-level status hard-coded and skip a shared reduction helper.",
+        "Encode auth optional vs required as different status strings instead of sibling fields.",
+        "Constrain the helper to only emit `ok` and defer degraded or unhealthy support entirely."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Compose the new `/v1/health` response with a dedicated shared payload helper that keeps the payload flat and top-level, reuses the existing minimal health fields, and appends the parent-planned `version`, `uptime_seconds`, and `components` additions from shared helper output rather than route-local dict literals.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Wrap the new health payload in a `{..., meta}` envelope.",
+        "Build the `/v1/health` contract inline inside the router without shared helpers.",
+        "Split health assembly across several unrelated route-local literals."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add a module-level process-start timestamp near the import-time runtime constants in `backend/server.py` and implement a helper that converts it into float `uptime_seconds` at request time without touching `reset_state()`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Implement shared component-builder helpers for `db`, `inference`, and `auth`, each returning the frozen nested object shape with `status` plus the agreed identity or configuration fields from live module state.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Implement a reusable aggregate-status helper that reduces component statuses with `unhealthy > degraded > ok`, even though the current builders will all emit `ok` in this checkout.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Add a dedicated `/v1/health` payload helper that starts from the legacy health fields and appends the flat `version`, float `uptime_seconds`, and `components` contract using the new shared helpers instead of route-local literals.",
+      "depends_on": [1, 2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Sanity-check the resulting helper boundary so this step stays scoped to shared health assembly in `backend/server.py`: no router wiring yet, no `/health` or `/healthz` payload changes, and no live dependency probes or test-only reset behavior introduced.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

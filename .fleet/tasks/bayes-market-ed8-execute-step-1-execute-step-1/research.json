@@ -1,0 +1,108 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The process-start marker should store a monotonic elapsed-time baseline, not a wall-clock timestamp. This step only needs to derive `uptime_seconds` at request time, and the backend already uses monotonic clocks for elapsed-time logic while reserving `time.time()` for places that need an absolute epoch value. The most codebase-consistent implementation is a module-scoped monotonic baseline captured near the existing runtime globals, then converted to elapsed seconds when the helper is called.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:6",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:63",
+        "backend/server.py:462",
+        "backend/server.py:497",
+        "backend/server.py:498"
+      ],
+      "uncertainty": "The repo uses both `time.monotonic()` and `time.perf_counter()` for elapsed measurements, so the exact monotonic clock choice is still an implementation detail; the strong conclusion is monotonic vs wall-clock.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Expose `uptime_seconds` as a rounded float with fixed decimal precision, not an integer-like float. The parent plan only freezes the type as `float`, but the backend's public timing and diagnostics values are consistently normalized to three decimal places (`compile_time_ms`, request samples, percentiles, query runtimes). Returning a three-decimal float is the closest match to existing API timing style and gives later `/v1/health` assertions stable presentation without collapsing the value to whole seconds.",
+      "confidence": 0.78,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:16",
+        "backend/server.py:747",
+        "backend/server.py:753",
+        "backend/server.py:770",
+        "backend/server.py:948",
+        "backend/server.py:962",
+        "backend/inference/current_model.py:379",
+        "backend/inference/current_model.py:412",
+        "backend/inference/current_model.py:469"
+      ],
+      "uncertainty": "The plan freezes only 'float', not exact decimals, so a raw float would still be defensible if later tests intentionally avoid formatting-level assertions.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. The intended lifetime is the lifetime of the imported `backend/server.py` module, even when tests call `reset_state()` and hit `route_request(...)` without `run_server()`. The parent step-1 plan explicitly anchors uptime to module import and keeps it outside `reset_state()`, and the current test suite imports the module once, resets only domain state in `setUp()`, exercises `route_request()` directly, and also starts `HTTPServer(..., BayesHandler)` directly instead of routing through `run_server()`.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:6",
+        "backend/server.py:238",
+        "backend/server.py:3779",
+        "backend/server.py:4130",
+        "tests/test_bayes_market_api.py:19",
+        "tests/test_bayes_market_api.py:23",
+        "tests/test_bayes_market_api.py:333",
+        "tests/test_bayes_market_api.py:430",
+        "tests/test_bayes_market_api.py:6445",
+        "tests/test_bayes_market_inference_module.py:29",
+        "tests/test_bayes_market_inference_module.py:33",
+        "tests/test_bayes_market_inference_module.py:38"
+      ],
+      "uncertainty": "If a future harness reloads the module between cases, uptime would restart on reload; the current suite does not do that.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "This slice should add only the generic shared uptime helper now, while intentionally establishing its place in the later health-helper stack. The recorded step-1 plan separates this work into: step 1 process-start uptime, step 2 component builders, step 3 top-level status reduction, step 4 the dedicated `/v1/health` payload helper, and step 5 a scope check that explicitly forbids router wiring or legacy-health changes yet. So this subtask should stay narrow, but it should place the uptime helper near the existing health builders so later steps can compose around it instead of building route-local health logic.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:63",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:68",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:73",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:78",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:83",
+        "backend/server.py:705",
+        "backend/server.py:3792"
+      ],
+      "uncertainty": "The exact helper names are not frozen yet; the evidence is strong on boundary and sequencing, not on final symbol names.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Capture the process-start marker at module import near the existing runtime globals, not inside `run_server()`, so direct module and direct-router code paths see the same uptime baseline."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Leave `reset_state()` unchanged and do not reset the process-start marker; uptime should span the imported module lifetime across test resets."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.92,
+      "impact": "Use a monotonic elapsed-time source for `uptime_seconds` so the helper is resilient to wall-clock adjustments and matches existing elapsed-time patterns in the backend."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Keep this subtask scoped to shared uptime-helper groundwork only; defer `/v1/health` routing, legacy health changes, and test updates to the later planned steps."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Preserve the current minimal `health_payload()` contract for `/health` and `/healthz` for now, and build the new uptime helper so later health helpers can reuse it without changing legacy behavior in this slice."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

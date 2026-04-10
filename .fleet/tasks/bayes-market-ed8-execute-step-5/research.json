@@ -1,0 +1,163 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "`/v1/health` is an additive route. The overall task plan explicitly keeps `/health` and `/healthz` on the legacy `{service,status,timestamp}` contract, and the current implementation routes those legacy paths to `health_payload()` while routing only `/v1/health` to `v1_health_payload()`. The tests freeze that split by asserting the legacy routes do not call the v1 payload builder.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:6",
+        ".fleet/tasks/bayes-market-ed8/plan.json:63",
+        "backend/server.py:131",
+        "backend/server.py:784",
+        "backend/server.py:793",
+        "backend/server.py:3882",
+        "tests/test_bayes_market_api.py:585",
+        "tests/test_bayes_market_api.py:606",
+        "frontend/src/lib/api/client.ts:240",
+        "docs/t581-dns-cloudflare-tunnel-public-runbook.md:11"
+      ],
+      "uncertainty": "Only a later consumer-migration task could widen the legacy route contract; the current branch and plan do not.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The frozen `GET /v1/health` contract is the legacy top-level payload plus `version`, `uptime_seconds`, and `components`, with no `meta` object. `timestamp` remains a top-level field because `v1_health_payload()` copies `health_payload()`. The valid health-status vocabulary for both component records and the aggregate is exactly `ok`, `degraded`, or `unhealthy`. The component map is keyed as `db`, `inference`, and `auth`; the current minimal nested fields are `db: {status, kind}`, `inference: {status, backend, version}`, and `auth: {status, requires_agent_id}`.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:16",
+        ".fleet/tasks/bayes-market-ed8/plan.json:36",
+        ".fleet/tasks/bayes-market-ed8/plan.json:46",
+        "backend/server.py:714",
+        "backend/server.py:750",
+        "backend/server.py:758",
+        "backend/server.py:767",
+        "backend/server.py:793",
+        "tests/test_bayes_market_api.py:443",
+        "tests/test_bayes_market_api.py:606",
+        "tests/test_bayes_market_api.py:6729"
+      ],
+      "uncertainty": "The only semantic ambiguity is that `version` currently reuses `ENGINE_CONFIG.version`, but the implementation and tests now freeze that behavior for this endpoint.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "This endpoint should report only the three in-process backend components already implemented: `db`, `inference`, and `auth`. The plan froze those keys, `db` is intentionally modeled as the in-memory state store used by this repo, and the codebase stores market, event, account-risk, and exposure state in module-level dictionaries rather than separate services. There is no checked-in database, queue, frontend-static probe, or separate read-model health surface to report independently.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:16",
+        ".fleet/tasks/bayes-market-ed8/plan.json:26",
+        "backend/server.py:169",
+        "backend/server.py:185",
+        "backend/server.py:186",
+        "backend/server.py:750",
+        "backend/server.py:775"
+      ],
+      "uncertainty": "If the service later gains external infrastructure, the component list could expand, but nothing in this checkout requires that broader audit now.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "The route should become discoverable through `service_index_payload()`, but the task still stays backend-only with respect to existing frontend health consumers. The root plan explicitly paired `/v1/health` routing with updating the service index health-route list, and the current backend test freezes `/v1/health` in `routes.health`. At the same time, the frontend `getHealth()` client and `System` route still call and render `/health`, so this branch does not widen into a frontend migration.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:63",
+        "backend/server.py:133",
+        "backend/server.py:804",
+        "tests/test_bayes_market_api.py:570",
+        "frontend/src/lib/api/client.ts:240",
+        "frontend/src/routes/System.tsx:7",
+        "frontend/src/routes/System.tsx:29"
+      ],
+      "uncertainty": "The question wording mixes service-index discovery with consumer migration; the current branch clearly does the former and intentionally defers the latter.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "The frozen HTTP behavior is to keep returning `200` from `/v1/health` and express degradation in the JSON payload rather than by promoting the response to `503`. `route_request()` returns `v1_health_payload(), 200` for `GET /v1/health` unconditionally, while the aggregate payload status is derived from the component statuses. The backend tests assert `200` for the route, and the existing operational health checks still treat health endpoints as simple 200-based liveness probes.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:36",
+        "backend/server.py:717",
+        "backend/server.py:793",
+        "backend/server.py:3885",
+        "tests/test_bayes_market_api.py:626",
+        "tests/test_bayes_market_api.py:6732",
+        "docs/t581-dns-cloudflare-tunnel-public-runbook.md:11",
+        "docs/t539-mvp-launch-gate.md:92"
+      ],
+      "uncertainty": "The current component builders all report `ok`, so there is no live HTTP test that exercises a degraded or unhealthy payload body yet.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "Both layers are part of the intended freeze: direct `route_request(...)` unit coverage and threaded HTTP integration coverage, with backward-compatibility checks for `/health` and `/healthz` in the same step. The planned route/test work explicitly called for response-shape coverage plus compatibility assertions, and the focused execution gate records exactly six tests spanning the root service index, direct route behavior, and live HTTP responses. I also reran that gate during this research (`6 passed, 236 deselected`) and then reran the full backend API module (`242 passed`).",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:68",
+        ".fleet/tasks/bayes-market-ed8/plan.json:73",
+        ".fleet/tasks/bayes-market-ed8-execute-step-4/execution.json:8",
+        ".fleet/tasks/bayes-market-ed8-execute-step-4/execution.json:15",
+        "tests/test_bayes_market_api.py:570",
+        "tests/test_bayes_market_api.py:585",
+        "tests/test_bayes_market_api.py:606",
+        "tests/test_bayes_market_api.py:6715",
+        "tests/test_bayes_market_api.py:6729"
+      ],
+      "uncertainty": "The current committed artifact records the earlier green run; the matching rerun I performed during this research is a live workspace observation rather than a pre-existing file-backed artifact.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q7",
+      "answer": "Yes. The accepted implementation boundary for this step is `backend/server.py`, `tests/test_bayes_market_api.py`, and task artifacts, with docs/frontend follow-up out of scope. The root task plan only calls for backend helper/routing work plus backend API test coverage, and the current task implementation is confined to those two production files. The step-4 validator was right to flag extra `backend/server.py` edits as scope creep for the execution-only phase, but that does not make the same backend wiring out of scope for the overall step-5 implementation review. Fresh test replay on this branch is green, so the implementation is in the right final state to commit as a backend-only slice.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:58",
+        ".fleet/tasks/bayes-market-ed8/plan.json:63",
+        ".fleet/tasks/bayes-market-ed8/plan.json:68",
+        ".fleet/tasks/bayes-market-ed8/plan.json:78",
+        ".fleet/tasks/bayes-market-ed8-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-ed8-execute-step-4/validation.json:12",
+        "frontend/src/lib/api/client.ts:240",
+        "docs/t581-dns-cloudflare-tunnel-public-runbook.md:11",
+        "docs/t539-mvp-launch-gate.md:92"
+      ],
+      "uncertainty": "The only nuance is phase-specific scope: the same backend change was out of bounds for step 4's execution-only commit, but it is in bounds for the full step-5 implementation review because the parent plan explicitly includes routing and service-index work.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep `/health` and `/healthz` backward-compatible and treat `/v1/health` as the additive richer route."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Frontend health consumers can remain on `/health`; only backend routing, service-index discovery, and backend tests are required in this step."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The health component model should stay tied to in-process backend state and config instead of inventing probes for absent infrastructure."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Keep `/v1/health` on HTTP 200 semantics and express any degradation through the payload status fields so existing probe expectations stay stable."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.94,
+      "impact": "The production-code diff should remain limited to `backend/server.py` and `tests/test_bayes_market_api.py`; docs and frontend migration are separate follow-up work, while task artifacts can record the verification trail."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

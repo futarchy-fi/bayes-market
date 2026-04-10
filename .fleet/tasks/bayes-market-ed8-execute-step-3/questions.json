@@ -1,0 +1,57 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "At the route/API boundary, should step 3 freeze the full `/v1/health.components` object shape end-to-end (`db.kind`, `inference.backend`/`version`, `auth.requires_agent_id`) or only the component keys plus top-level fields, given that helper-level tests already pin the nested schema?",
+      "category": "requirements",
+      "why_it_matters": "The branch already has helper tests that freeze the nested component contract. This determines whether step 3 should add redundant HTTP assertions or keep the new coverage focused on the public response envelope described in the parent plan."
+    },
+    {
+      "id": "q2",
+      "question": "For legacy compatibility, should `/health` and `/healthz` now be asserted as the exact three-field payload `{service,status,timestamp}`, or is it sufficient for the new tests to keep proving only that v1-only fields like `version`, `uptime_seconds`, and `components` are absent?",
+      "category": "requirements",
+      "why_it_matters": "The current HTTP test checks absence of some additive fields, but the step description says the legacy routes are unchanged. The strictness of that compatibility contract determines whether future additive drift on the old probes is caught."
+    },
+    {
+      "id": "q3",
+      "question": "Where should the stricter response-shape assertions live in `tests/test_bayes_market_api.py`: by tightening the existing `route_request()` unit tests, the HTTP integration tests, or both?",
+      "category": "codebase",
+      "why_it_matters": "This file already splits health coverage between direct router tests and full HTTP tests. Choosing the ownership boundary avoids brittle duplication while still pinning the externally visible JSON contract."
+    },
+    {
+      "id": "q4",
+      "question": "Beyond `isinstance(..., float)`, should the `/v1/health` test freeze any additional `uptime_seconds` behavior at the public boundary, such as non-negative values or three-decimal rounding, or should precision remain a helper-level concern only?",
+      "category": "design",
+      "why_it_matters": "`uptime_seconds` is live process state, so exact-value assertions would be flaky. The test needs a clear contract boundary between stable public guarantees and implementation detail already covered by helper tests."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This step stays test-only in `tests/test_bayes_market_api.py`; the route, payload helpers, and service-index wiring already exist on this branch and do not need new backend changes for question-generation scope.",
+      "confidence": 0.99,
+      "if_wrong": "The task would have to reopen `backend/server.py` implementation work instead of only tightening coverage."
+    },
+    {
+      "id": "a2",
+      "assumption": "The exact `/v1/health` top-level field set that step 3 is meant to freeze is `service`, `status`, `timestamp`, `version`, `uptime_seconds`, and `components`, matching the current `v1_health_payload()` helper.",
+      "confidence": 0.98,
+      "if_wrong": "The new tests would need a different envelope contract and might flag the current implementation as over- or under-specified."
+    },
+    {
+      "id": "a3",
+      "assumption": "The richer nested component schema is already sufficiently frozen by the existing helper-level tests, so the remaining gap for this step is primarily end-to-end route/HTTP coverage rather than redefining component internals.",
+      "confidence": 0.9,
+      "if_wrong": "Step 3 would need broader assertions that duplicate or replace helper-level shape coverage for each component record."
+    },
+    {
+      "id": "a4",
+      "assumption": "Because `uptime_seconds` is computed from live process uptime, route-level assertions should avoid fixed-value equality and instead use stable shape/type checks unless the test patches the helper directly.",
+      "confidence": 0.97,
+      "if_wrong": "The implementation would need additional time control or mocking around the HTTP path to keep the new tests deterministic."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

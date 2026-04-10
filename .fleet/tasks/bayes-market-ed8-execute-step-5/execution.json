@@ -1,0 +1,29 @@
+{
+  "phase": "execute",
+  "status": "completed",
+  "scope_review": {
+    "baseline": "c89b2493",
+    "result": "approved",
+    "summary": "The implementation remained backend-only. Relative to the step-4 merge baseline, the final code changes are confined to `backend/server.py`, `tests/test_bayes_market_api.py`, and this step's task artifacts; no frontend or docs migrations were introduced."
+  },
+  "steps": [
+    {
+      "step": 1,
+      "description": "Focused health-route regression gate covering the six plan-required public route assertions plus one new GET-dispatch regression for shared public health routing.",
+      "command": "python3 -m pytest -v --tb=short tests/test_bayes_market_api.py::BayesMarketApiUnitTests::test_root_route_returns_service_index tests/test_bayes_market_api.py::BayesMarketApiUnitTests::test_legacy_health_routes_return_legacy_health_payload tests/test_bayes_market_api.py::BayesMarketApiUnitTests::test_v1_health_route_returns_versioned_health_payload tests/test_bayes_market_api.py::BayesMarketApiUnitTests::test_v1_health_route_is_method_not_allowed_for_non_get tests/test_bayes_market_api.py::BayesMarketApiUnitTests::test_do_get_routes_public_health_paths_before_static_fallback tests/test_bayes_market_api.py::BayesMarketApiIntegrationTests::test_legacy_health_http_routes_return_service_payload tests/test_bayes_market_api.py::BayesMarketApiIntegrationTests::test_v1_health_http_returns_versioned_service_payload",
+      "outcome": "passed",
+      "summary": "7 passed in 0.79s"
+    },
+    {
+      "step": 2,
+      "description": "Full backend API module replay after the focused health-route gate passed.",
+      "command": "python3 -m pytest tests/test_bayes_market_api.py -v --tb=short",
+      "outcome": "passed",
+      "summary": "243 passed in 5.82s"
+    }
+  ],
+  "notes": [
+    "The backend GET handler now uses `PUBLIC_HEALTH_ROUTES` so the public health surface stays aligned across the service index, direct router, and HTTP dispatch.",
+    "Legacy `/health` and `/healthz` behavior remains unchanged; `/v1/health` stays additive and HTTP-200 based."
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat step 5 as the implementation-review and commit phase for the additive backend-only `/v1/health` work. The acceptable production-code scope stays limited to `backend/server.py` and `tests/test_bayes_market_api.py`, with task artifacts recording the review and execution trail; frontend and docs follow-up remain out of scope.",
+      "based_on": ["q1", "q4", "q7"],
+      "alternatives_rejected": [
+        "Expanding the step into a frontend `/health` to `/v1/health` migration",
+        "Treating docs or runbook updates as required before the backend implementation can be committed"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use the frozen public contract as the scope-creep filter: `/health` and `/healthz` must remain on the legacy payload, `/v1/health` must stay additive and HTTP-200 based, and the service index should advertise the new route without widening health semantics elsewhere.",
+      "based_on": ["q1", "q2", "q4", "q5"],
+      "alternatives_rejected": [
+        "Allowing the review to accept broader health-route refactors that change legacy payload behavior",
+        "Promoting degraded component states into non-2xx HTTP responses as part of this step"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Require the same two-stage backend proof before committing: rerun the focused six-test health-route selector first, then rerun the full `tests/test_bayes_market_api.py` module only if the focused gate passes, and commit only after both remain green.",
+      "based_on": ["q6", "q7"],
+      "alternatives_rejected": [
+        "Skipping test replay because earlier execution artifacts were already green",
+        "Running a broader repo-wide test sweep that exceeds the step's backend API scope"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Review the implementation diff against the parent baseline to confirm the production changes stay confined to the additive `/v1/health` backend route, the matching backend API tests, and step artifacts, while rejecting unrelated refactors or consumer migrations as scope creep.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Replay the focused backend gate with the six public route-facing health tests in `tests/test_bayes_market_api.py` so the root service index, direct routing, and live HTTP health behavior are all revalidated together.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "If the focused gate passes, rerun `python3 -m pytest tests/test_bayes_market_api.py -v --tb=short` to confirm the broader backend API module is still green with the additive `/v1/health` route in place.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Record the step-5 review/verification outcome in the task artifacts as needed, then stage the approved implementation diff and create the final no-verify commit once the backend route and both test layers are green.",
+      "depends_on": [1, 2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,101 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "At the route/API boundary, freeze the exact `/v1/health` top-level field set and the exact `components` key set, but do not duplicate the full nested component-object schema end-to-end. The parent step-3 plan scopes this slice to exact top-level fields, component keys, float `uptime_seconds`, inherited `service`/`timestamp`, and legacy-route compatibility, while the existing helper-level tests already pin `db: {status, kind}`, `inference: {status, backend, version}`, and `auth: {status, requires_agent_id}` through `v1_health_components()` and `v1_health_payload()`. Keeping the HTTP assertion focused on the envelope avoids redundant brittleness while preserving the public contract the plan actually names.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:67",
+        ".fleet/tasks/bayes-market-ed8/plan.json:68",
+        "tests/test_bayes_market_api.py:412",
+        "tests/test_bayes_market_api.py:443",
+        "tests/test_bayes_market_api.py:491",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/validation.json:4"
+      ],
+      "uncertainty": "The parent plan says each component stays minimal, so an implementation that also repeats one or two nested field checks at HTTP level would still be defensible; the stronger repo signal is that exact nested-shape freeze already exists below the HTTP boundary.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "For legacy compatibility, the new coverage should freeze the exact unchanged three-field payload shape on `/health` and `/healthz`: `service`, `status`, and `timestamp`. Proving only that some v1-only fields are absent is weaker than the recorded compatibility contract. The parent plan says those legacy routes stay on their existing minimal payload, the frontend health client still types and fetches only those three fields from `/health`, and the existing direct-router unit test already treats the legacy helper payload as an exact dict. Step 3 should therefore tighten the HTTP test to the same three-field top-level set, with dynamic-value checks for `timestamp` rather than a literal string.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:6",
+        ".fleet/tasks/bayes-market-ed8/plan.json:67",
+        ".fleet/tasks/bayes-market-ed8/plan.json:68",
+        "frontend/src/lib/api/client.ts:227",
+        "frontend/src/lib/api/client.ts:240",
+        "tests/test_bayes_market_api.py:585",
+        "tests/test_bayes_market_api.py:600",
+        "tests/test_bayes_market_api.py:6715",
+        "tests/test_bayes_market_api.py:6725"
+      ],
+      "uncertainty": "The exact public assertion should be a field-set check plus value-shape checks, not literal dict equality, because the live `timestamp` changes per request.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The stricter response-shape assertions should live primarily in the HTTP integration tests, not duplicated across both layers. The current `route_request()` health tests patch `health_payload()` and `v1_health_payload()`, so they mainly prove dispatch and method handling; step 2 already added that route-level coverage. The live public JSON contract is exercised by the HTTP tests, which currently only shallow-check `/v1/health`. Step 3 is the response-shape phase after the routing phase, so the right ownership boundary is: keep direct-router tests as dispatch guards, and tighten the HTTP tests to assert the externally visible field and component-key contract.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8-execute-step-2/plan.json:43",
+        ".fleet/tasks/bayes-market-ed8-execute-step-2/plan.json:48",
+        ".fleet/tasks/bayes-market-ed8/plan.json:67",
+        ".fleet/tasks/bayes-market-ed8/plan.json:68",
+        "tests/test_bayes_market_api.py:585",
+        "tests/test_bayes_market_api.py:606",
+        "tests/test_bayes_market_api.py:620",
+        "tests/test_bayes_market_api.py:6715",
+        "tests/test_bayes_market_api.py:6727"
+      ],
+      "uncertainty": "A tiny route-level addendum such as asserting the `/v1/health` key set on a patched payload would not be harmful, but it would not materially increase confidence in the public contract beyond what the HTTP test can already prove.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Keep exact `uptime_seconds` precision as a helper-level concern, not an HTTP-boundary concern. The earlier uptime slice explicitly chose a helper that returns a three-decimal float and validated that design, but the parent step-3 plan only asks the public `/v1/health` coverage to freeze that `uptime_seconds` is a float. Because uptime is live process state, the HTTP test should avoid exact-value or formatting-level assertions; if one more semantic guard is wanted, a non-negative check is stable enough, but the main contract to freeze publicly is float presence in the response envelope.",
+      "confidence": 0.88,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-1/plan.json:16",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-1/plan.json:17",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-1/validation.json:4",
+        ".fleet/tasks/bayes-market-ed8/plan.json:68",
+        "backend/server.py:706",
+        "backend/server.py:708",
+        "tests/test_bayes_market_api.py:6727",
+        "tests/test_bayes_market_api.py:6735"
+      ],
+      "uncertainty": "The repo history does freeze three-decimal rounding in the helper design, so an HTTP rounding assertion would be consistent with that earlier choice; the evidence for leaving precision out of the public test is the narrower wording of the step-3 plan rather than an explicit prohibition.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep this step test-only in `tests/test_bayes_market_api.py`; the `/v1/health` helper, router branch, and service-index wiring are already present, so the remaining gap is response-shape coverage rather than backend implementation."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Freeze the `/v1/health` top-level field set as `service`, `status`, `timestamp`, `version`, `uptime_seconds`, and `components`, matching both the parent plan and the current `v1_health_payload()` helper."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Treat nested component-field schema as already covered by helper-level tests and focus the new step-3 assertions on end-to-end HTTP envelope coverage plus legacy-route compatibility."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Avoid fixed-value equality for live `uptime_seconds` in the HTTP path. Use stable shape assertions there, and rely on patched helper tests for exact-value coverage when needed."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

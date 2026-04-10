@@ -1,0 +1,59 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Define the targeted backend health-route gate as the six route-facing tests in `tests/test_bayes_market_api.py`: the root service-index health-route assertion, the three direct health route tests, and the two live HTTP health tests, while excluding helper-only payload-builder tests.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Restricting the focused run to only the live HTTP health tests",
+        "Including helper-only health payload builder tests that do not exercise the public routing surface"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use `pytest` as the canonical runner for this step and keep the broader follow-up run limited to `tests/test_bayes_market_api.py`, matching the singular backend API module named in the parent plan while staying aligned with the CI test runner.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Expanding the second run to the entire `tests/` backend suite",
+        "Treating `unittest discover` as the primary proof for this step"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Make the execution fail fast: run the full backend API module only if the focused health-route selector passes first, and preserve both commands plus their outcomes in the committed task artifacts so the step closes the previously noted procedural evidence gap.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Running the full module even after a focused gate failure",
+        "Relying on an unrecorded local shell session without storing the exact commands and results in task artifacts"
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Run the focused `pytest` selector in `tests/test_bayes_market_api.py` over the six route-facing health tests identified in research, using a single `-k` expression that exercises the root index, direct route, and live HTTP health assertions together.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "If the focused selector passes, run `python3 -m pytest tests/test_bayes_market_api.py -v --tb=short` to verify the broader backend API module still passes with the additive `/v1/health` route in place.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Record the exact focused and full-module pytest commands plus their pass/fail summaries in the step-4 task artifacts so later validation can confirm both the gated sequencing and the execution evidence.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Review the artifact diff for scope discipline, then commit the recorded step-4 plan/execution evidence once the task files accurately capture the intended gated test workflow.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

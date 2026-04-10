@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Now that this checkout already contains the shared health helpers in `backend/server.py`, should step 5 be treated as a review-only scope check, or is it also expected to prune support work that landed outside that helper boundary, especially the helper-level additions in `tests/test_bayes_market_api.py`?",
+      "category": "codebase",
+      "why_it_matters": "The current branch already goes beyond a single file by adding unit-style helper coverage. Clarifying whether those tests are acceptable support or premature scope creep determines whether step 5 is only a sanity-check or also a cleanup pass."
+    },
+    {
+      "id": "q2",
+      "question": "Does 'no router wiring yet' also forbid touching `service_index_payload()`, frontend health clients, and any checked-in docs that advertise health routes, or is the boundary only about leaving `route_request()` unchanged while other public references may mention `/v1/health` early?",
+      "category": "requirements",
+      "why_it_matters": "The repo already has legacy health consumers in the root index, frontend, tests, and docs. Advertising the new endpoint before the router serves it would widen scope and create a temporarily inconsistent public surface."
+    },
+    {
+      "id": "q3",
+      "question": "When this step says `/health` and `/healthz` must stay unchanged, is an internal refactor of `health_payload()` still acceptable if the returned JSON stays identical, or should the legacy helper itself be treated as frozen and only used as an additive base for `v1_health_payload()`?",
+      "category": "design",
+      "why_it_matters": "There is a difference between preserving the external legacy contract and freezing the internal helper structure. That choice determines how much shared-base extraction is still allowed inside `backend/server.py` during the boundary cleanup."
+    },
+    {
+      "id": "q4",
+      "question": "Should this sanity-check step add an explicit regression assertion that `reset_state()` does not reset the process-start clock or otherwise special-case the new health helpers, or is 'no test-only reset behavior' intended to remain a code constraint without new assertions until the later test phase?",
+      "category": "design",
+      "why_it_matters": "The test suite calls `reset_state()` heavily, so negative coverage would protect the uptime boundary but would also expand this helper-only step into earlier verification work."
+    },
+    {
+      "id": "q5",
+      "question": "Is configuration- and readiness-derived assembly the intended final scope for this step, meaning `db`, `inference`, and `auth` must remain probe-free even though the shared status vocabulary already supports `degraded` and `unhealthy`?",
+      "category": "requirements",
+      "why_it_matters": "The current helpers only read in-process runtime state and always emit `ok`. If live dependency probes are expected sooner, the helper interface, runtime cost, and failure behavior of the health path all change immediately."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This step should stay scoped to shared health assembly and boundary review; it should not wire `/v1/health`, change the root health-route list, or touch frontend or docs yet.",
+      "confidence": 0.98,
+      "if_wrong": "The task expands from a helper-boundary sanity-check into a broader public-surface rollout that belongs to the later routing and compatibility steps."
+    },
+    {
+      "id": "a2",
+      "assumption": "The legacy `/health` and `/healthz` payload contract remains exactly the minimal `service` / `status` / `timestamp` shape during this step.",
+      "confidence": 0.99,
+      "if_wrong": "Any helper cleanup would need to coordinate with existing frontend, test, and operational consumers before this step could be considered safe."
+    },
+    {
+      "id": "a3",
+      "assumption": "Keeping a private `v1_health_payload()` helper in `backend/server.py` before `route_request()` exposes `/v1/health` is acceptable, as long as no public route or advertised route list points to it yet.",
+      "confidence": 0.94,
+      "if_wrong": "The boundary would need to be tightened further by removing or renaming the pre-routing helper until the later router step lands."
+    },
+    {
+      "id": "a4",
+      "assumption": "Process uptime should continue to come from the import-scoped `PROCESS_START_MONOTONIC` value, and `reset_state()` should not grow any health-specific reset behavior.",
+      "confidence": 0.97,
+      "if_wrong": "The helper boundary would need a different lifecycle model for uptime, likely adding new reset or injection seams that widen both code and test scope."
+    },
+    {
+      "id": "a5",
+      "assumption": "The current component builders should remain pure shared-assembly helpers over live in-process state such as `ENGINE_CONFIG` and `AUTH_REQUIRE_AGENT_ID`, without adding live DB, inference, or auth probes in this step.",
+      "confidence": 0.98,
+      "if_wrong": "This step would move beyond payload assembly into runtime dependency checking, which changes latency, failure modes, and likely the required test surface."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

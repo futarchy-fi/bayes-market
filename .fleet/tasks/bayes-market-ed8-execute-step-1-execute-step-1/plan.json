@@ -1,0 +1,57 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Capture process start as a module-scoped monotonic baseline near the import-time runtime constants in `backend/server.py`, rather than using a wall-clock timestamp or a `run_server()`-local value, so request-time uptime stays stable across system clock changes and works for direct module-import and direct-router test paths.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Store a wall-clock `time.time()` timestamp and compute uptime from absolute time.",
+        "Capture startup time inside `run_server()` and miss direct `route_request(...)` and direct `HTTPServer(..., BayesHandler)` usage.",
+        "Reset the process-start marker from `reset_state()` alongside in-memory market state."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Implement uptime as a small shared helper that derives elapsed seconds from the module-level monotonic baseline at request time and returns a float rounded to three decimals, matching the backend's existing public timing style closely enough for later `/v1/health` assertions without collapsing the value to whole seconds.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Expose the raw unrounded float directly from the monotonic delta.",
+        "Round uptime to an integer-like seconds count represented as a float.",
+        "Inline the elapsed-time calculation inside future route or payload builders."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Place the new helper with the shared health payload builders, so later component and `/v1/health` helpers can compose it cleanly, while keeping this slice strictly scoped to module-start uptime groundwork and leaving `reset_state()`, legacy health payloads, router wiring, and tests untouched.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Treat this step as route-local `/v1/health` work instead of shared helper groundwork.",
+        "Hide the helper in an unrelated utility area away from the health helpers that will consume it next.",
+        "Expand this slice to modify `/health`, `/healthz`, or test reset behavior now."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add a module-level monotonic process-start constant near the existing import-time runtime globals in `backend/server.py`, preserving a module-lifetime uptime baseline that is independent of `reset_state()`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Implement a shared helper near the existing health payload builders that converts the stored monotonic baseline into a three-decimal float `uptime_seconds` value when called.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Review the change boundary to confirm this slice remains preparatory helper work only: no edits to `reset_state()`, no legacy health payload changes, no `/v1/health` router wiring, and no test updates in this child task.",
+      "depends_on": [1, 2]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

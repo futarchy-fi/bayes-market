@@ -1,0 +1,88 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Implement the shared `db`, `inference`, and `auth` builders as ordinary JSON-style dict helpers colocated with the other health payload helpers in `backend/server.py`, keeping the nested contract fixed to `status` plus the agreed identity or configuration fields instead of introducing `MappingProxyType` or route-local literals.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Return Python-level immutable mappings such as `MappingProxyType` from the route-layer helpers.",
+        "Assemble each component inline later inside `/v1/health` instead of freezing one shared helper seam now.",
+        "Expand the component objects beyond the already agreed minimal fields."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Treat the `db` component as a constant descriptor of this checkout's in-memory store and have its builder return `{\"status\": \"ok\", \"kind\": \"in_memory\"}` without probing dictionary emptiness or reset-time fixture state.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Inspect `MARKETS`, `EVENTS`, or other collections to infer readiness from whether they are populated.",
+        "Report `db` as degraded or not configured because there is no external database adapter.",
+        "Leave the DB component undefined until a real persistence layer exists."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Make the `inference` builder read `ENGINE_CONFIG.backend` and `ENGINE_CONFIG.version` from the live `ENGINE_CONFIG` binding each time it is called, while keeping `status` as `\"ok\"`, so the helper stays aligned with existing engine diagnostics and with tests that rebind `ENGINE_CONFIG` at runtime.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Read the import-time `ENGINE_BACKEND` and `ENGINE_VERSION` aliases that can drift from live module state.",
+        "Reconstruct inference identity from a separate diagnostics payload instead of the runtime config binding.",
+        "Add market-specific inference probing to determine component status in this helper."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Make the `auth` builder read the live `AUTH_REQUIRE_AGENT_ID` runtime flag and always emit `{\"status\": \"ok\", \"requires_agent_id\": ...}` so optional versus required mode remains informational configuration state rather than a degraded-health classification.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Map auth-optional mode to `degraded` or another non-`ok` component status.",
+        "Re-read `BAYES_REQUIRE_AGENT_ID` from the environment on every call instead of mirroring runtime module state.",
+        "Encode auth mode only in top-level health state and omit `requires_agent_id` from the component payload."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Freeze the helper contract with focused backend tests that call the new builders directly and verify both exact nested shapes and live-state behavior, leaving aggregate-status reduction, `/v1/health` payload composition, and route wiring to later child tasks.",
+      "based_on": ["q1", "q2", "q4"],
+      "alternatives_rejected": [
+        "Rely only on later route-level `/v1/health` tests to catch helper-shape regressions indirectly.",
+        "Expand this child task to include the aggregate reducer or `/v1/health` endpoint wiring now."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add three shared component-builder helpers in `backend/server.py` beside `uptime_seconds()` and the existing health payload helpers, keeping them plain dict-returning route-layer helpers with the exact nested key contract for `db`, `inference`, and `auth`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Implement the `db` component builder as the fixed in-memory-store descriptor `status + kind`, explicitly avoiding any readiness heuristics based on mutable collection contents.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Implement the `inference` and `auth` component builders so they read live module globals at call time: `ENGINE_CONFIG.backend` and `ENGINE_CONFIG.version` for inference, and `AUTH_REQUIRE_AGENT_ID` for auth, with `status` remaining `ok` in both helpers.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Add focused backend tests in the existing server-focused test modules to assert the exact helper output shapes, prove inference follows runtime `ENGINE_CONFIG` rebinding rather than import-time aliases, and prove auth follows `AUTH_REQUIRE_AGENT_ID` toggles without changing status classification.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Review the slice boundary before handing off implementation: this child should end with reusable component builders and helper-level tests only, with no aggregate-status helper, no `/v1/health` payload assembly, no route wiring, and no `/health` or `/healthz` changes.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

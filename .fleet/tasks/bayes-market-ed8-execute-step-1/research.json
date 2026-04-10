@@ -1,0 +1,124 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Freeze each `components` entry as a small object that always includes `status`. The strongest codebase-consistent field names are: `db: {\"status\": ..., \"kind\": \"in_memory\"}`, `inference: {\"status\": ..., \"backend\": ..., \"version\": ...}`, and `auth: {\"status\": ..., \"requires_agent_id\": ...}`. `backend` and `version` already exist as the inference identity keys in the engine diagnostics payload, and `requires_agent_id` already exists as the write-policy boolean name. The only inferred key is `db.kind`: there is no existing DB payload, but the plan asks for the store kind and this repo already uses `kind` as its generic discriminator field.",
+      "confidence": 0.79,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:16",
+        "backend/server.py:165",
+        "backend/server.py:191",
+        "backend/server.py:379",
+        "backend/server.py:999",
+        "backend/server.py:1000",
+        "backend/server.py:1001"
+      ],
+      "uncertainty": "`db.kind` is not frozen anywhere yet; `store` or `store_kind` would also be defensible, but `backend`/`version` and `requires_agent_id` reuse existing names directly.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Anchor `uptime_seconds` to module import time. In this repo, the server module owns process-wide state at import, tests import `backend/server.py` directly, many tests call `route_request()` without `run_server()`, and the HTTP integration tests instantiate `HTTPServer(..., BayesHandler)` directly instead of going through `run_server()`. Module import time is the only shared lifecycle event that covers direct module use, direct router tests, and standalone HTTP serving. A first-successful-request anchor would measure traffic, not process start.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:165",
+        "backend/server.py:238",
+        "backend/server.py:4130",
+        "tests/test_bayes_market_inference_module.py:29",
+        "tests/test_bayes_market_inference_module.py:118",
+        "tests/test_bayes_market_api.py:5932",
+        "tests/test_bayes_market_api.py:6444"
+      ],
+      "uncertainty": "If a future embedding imports the module long before opening a socket, import-scoped uptime will include that idle time too.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "`reset_state()` should leave the health start timestamp untouched. The function resets domain collections, counters, and in-memory limiter buckets, but it does not reset runtime configuration or other import-scoped identity. The tests already treat that split as intentional: they call `reset_state()` between cases while saving and restoring `AUTH_REQUIRE_AGENT_ID` separately. A module-scoped health start clock fits that same boundary and preserves monotonic process uptime for the lifetime of the imported server module.",
+      "confidence": 0.92,
+      "evidence": [
+        "backend/server.py:238",
+        "backend/server.py:260",
+        "backend/server.py:333",
+        "tests/test_bayes_market_api.py:5945",
+        "tests/test_bayes_market_api.py:5950"
+      ],
+      "uncertainty": "If a later test suite wants deterministic uptime assertions, it will need to patch the clock rather than rely on `reset_state()`.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "The helpers should read live in-process runtime state, not re-read environment/config sources on each request. Auth behavior already depends on the mutable `AUTH_REQUIRE_AGENT_ID` global, and the test suite mutates that global directly to change request behavior. Inference identity is likewise already loaded into module state at import, and the existing diagnostics payload reports `backend` and `version` from the loaded engine config rather than from the environment. So the health helpers should mirror current runtime behavior by using already-loaded globals/config, not fresh env reads.",
+      "confidence": 0.91,
+      "evidence": [
+        "backend/server.py:145",
+        "backend/server.py:147",
+        "backend/server.py:148",
+        "backend/server.py:333",
+        "backend/server.py:367",
+        "backend/server.py:381",
+        "backend/server.py:998",
+        "backend/server.py:1001",
+        "tests/test_bayes_market_api.py:5947",
+        "tests/test_bayes_market_api.py:6162"
+      ],
+      "uncertainty": "`ENGINE_BACKEND` and `ENGINE_VERSION` are import-time aliases while `ENGINE_CONFIG` is the object used by engine diagnostics today; if those ever diverge, the repo will need one explicit inference-health source of truth.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "In the current all-in-memory checkout, no component is meaningfully expected to report `degraded` or `unhealthy`; those are future-proof aggregation states. The parent plan explicitly says to model `db` as the in-memory store and report it healthy while the process is serving, and it derives `inference` and `auth` from configuration/readiness rather than failure-prone probes. Since auth optional vs required is informational rather than a fault, and there is no external database or separate inference service that can fail independently here, the steady-state payload today should keep all three component statuses at `ok`.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:26",
+        ".fleet/tasks/bayes-market-ed8/plan.json:36",
+        "backend/server.py:165",
+        "backend/server.py:333",
+        "backend/server.py:705"
+      ],
+      "uncertainty": "Future tasks could make `degraded` or `unhealthy` reachable by adding real dependency probes or external infrastructure.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Keep `/v1/health` flat and top-level. The current health payload is already flat, and the parent plan describes the new route as the current payload plus additive fields rather than a conversion to the `{..., meta}` envelope."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Implement a module-scoped process-start timestamp and do not reset it from `reset_state()`. That preserves process uptime semantics across the direct-import and direct-router test paths already used in this repo."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Treat `db` as the backend's in-memory Python state store and report it `ok` while requests are being served. There is no real persistence dependency in this checkout to probe instead."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Derive auth from the live `AUTH_REQUIRE_AGENT_ID` runtime flag and expose the requirement in a separate field such as `requires_agent_id`, rather than overloading `status`."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Reuse the already-loaded engine identity for inference health and avoid live compile/query probes in the health path. That matches the repo's current import-time engine binding and existing diagnostics payload."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Use `ok` / `degraded` / `unhealthy` for component and aggregate statuses, while carrying informational distinctions like auth optional vs required in sibling fields."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

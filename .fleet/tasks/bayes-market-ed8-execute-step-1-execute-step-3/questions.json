@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This checkout still does not contain the planned step-2 shared `db`/`inference`/`auth` health-component builders beyond `uptime_seconds()` and the legacy `health_payload()`. Should step 3 assume that prerequisite lands first, or should the aggregate-status work backfill the missing component-helper seam in the same branch?",
+      "category": "codebase",
+      "why_it_matters": "The reducer is supposed to aggregate component statuses, but there is no checked-in shared component-builder seam to call yet. That changes both implementation scope and what concrete input shape the reducer can reasonably target."
+    },
+    {
+      "id": "q2",
+      "question": "What input contract should the reusable aggregate helper own: an iterable of raw status strings, a `components` mapping whose values contain `status`, or both?",
+      "category": "design",
+      "why_it_matters": "Step 4 later composes `/v1/health` from shared component helpers. The reducer's call shape determines whether that payload helper stays a thin composition layer or has to peel statuses out of nested objects route-locally."
+    },
+    {
+      "id": "q3",
+      "question": "Should the reducer be strict to the new service-health vocabulary `ok | degraded | unhealthy`, or should it normalize other status words that already exist in `backend/server.py` such as account-capacity `healthy`?",
+      "category": "requirements",
+      "why_it_matters": "The module already uses multiple status vocabularies. Step 3 needs to know whether non-service statuses should be rejected, mapped, or silently ignored so future callers do not produce misleading top-level health."
+    },
+    {
+      "id": "q4",
+      "question": "How should the helper behave for edge cases such as an empty input set or an unexpected status string: default to `ok`, raise, or fall back to a stronger failure state?",
+      "category": "design",
+      "why_it_matters": "The precedence order is frozen, but the repo does not define empty-set or bad-input behavior. That policy affects whether future `/v1/health` callers surface bugs early or silently report misleading service health."
+    },
+    {
+      "id": "q5",
+      "question": "Given that the current planned component builders all emit `status: \"ok\"` in this checkout, should step 3 add direct helper tests that inject synthetic `degraded` and `unhealthy` inputs, or is precedence coverage intentionally deferred until later `/v1/health` tests?",
+      "category": "design",
+      "why_it_matters": "Route-level tests against live builders will only exercise the all-`ok` case. Without a deliberate verification seam, the new reducer could ship with the wrong precedence order and still pass steady-state health tests."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The top-level service-health vocabulary and precedence are already frozen by the parent plan as `unhealthy > degraded > ok`, so step 3 should not reopen the status names or their order.",
+      "confidence": 0.99,
+      "if_wrong": "The child task would need to revisit the parent contract instead of implementing a narrow reducer."
+    },
+    {
+      "id": "a2",
+      "assumption": "The aggregate helper is intended for the `/v1/health` service-health contract only, not as a generic reducer for unrelated payloads such as account-capacity `healthy/constrained/critical/breached` statuses.",
+      "confidence": 0.9,
+      "if_wrong": "The helper would need a broader normalization table or a different naming boundary to avoid clashing status vocabularies already present in `backend/server.py`."
+    },
+    {
+      "id": "a3",
+      "assumption": "Once the missing component-builder prerequisite lands, this checkout's `db`, `inference`, and `auth` helpers are still expected to emit `status: \"ok\"`, so non-`ok` precedence has to be exercised with synthetic inputs rather than live component builders.",
+      "confidence": 0.98,
+      "if_wrong": "The reducer or later payload tests would need to account for real degraded or unhealthy component states in this branch rather than only future-proofing them."
+    },
+    {
+      "id": "a4",
+      "assumption": "This child remains helper-scope work in `backend/server.py`: no `/v1/health` payload assembly, no router wiring, and no changes to `/health` or `/healthz` belong here.",
+      "confidence": 0.97,
+      "if_wrong": "Implementation would expand into later planned steps and risk duplicating or conflicting with the route-wiring work."
+    },
+    {
+      "id": "a5",
+      "assumption": "If step 3 adds tests, the existing direct-server-helper seam in `tests/test_bayes_market_api.py` is the most likely home, because that module already exercises many `backend.server` helpers and route primitives directly.",
+      "confidence": 0.84,
+      "if_wrong": "The reducer may need a new dedicated server-helper test module or may intentionally rely only on later higher-level route coverage."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

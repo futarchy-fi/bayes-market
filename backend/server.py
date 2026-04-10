@@ -128,6 +128,9 @@ ACCOUNT_SERVICE_INDEX_ROUTES = (
     "/v1/accounts/{id}/risk",
     "/v1/accounts/{id}/exposure",
 )
+LEGACY_HEALTH_ROUTES = ("/health", "/healthz")
+VERSIONED_HEALTH_ROUTE = "/v1/health"
+PUBLIC_HEALTH_ROUTES = (*LEGACY_HEALTH_ROUTES, VERSIONED_HEALTH_ROUTE)
 ACCOUNT_LMSR_LEDGER_VERSION = "lmsr-ledger-v1"
 ACCOUNT_LMSR_RISK_READ_MODEL = "scalar-min-asset-v1"
 MAX_EVENT_FORMULA_CLAUSES = 16
@@ -161,6 +164,7 @@ OG_TITLE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:title[\"'][^>
 OG_DESCRIPTION_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:description[\"'][^>]*>", re.IGNORECASE)
 OG_TYPE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:type[\"'][^>]*>", re.IGNORECASE)
 OG_URL_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:url[\"'][^>]*>", re.IGNORECASE)
+PROCESS_START_MONOTONIC = time.monotonic()
 
 MARKETS: dict[str, dict[str, Any]] = deepcopy(INITIAL_MARKETS)
 CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {}
@@ -702,6 +706,81 @@ def error_payload(code: str, message: str, **details: object) -> dict[str, Any]:
     }
 
 
+def uptime_seconds() -> float:
+    """Return process uptime in seconds for the imported server module."""
+    return round(time.monotonic() - PROCESS_START_MONOTONIC, 3)
+
+
+SERVICE_HEALTH_STATUSES = frozenset({"ok", "degraded", "unhealthy"})
+
+
+def _reduce_service_health_statuses(statuses: list[str]) -> str:
+    """Reduce validated component statuses down to one service status."""
+    if not statuses:
+        raise ValueError("components must not be empty")
+
+    aggregate = "ok"
+    for status in statuses:
+        if status == "unhealthy":
+            return "unhealthy"
+        if status == "degraded":
+            aggregate = "degraded"
+            continue
+        if status != "ok":
+            raise ValueError(f"unexpected service health status: {status!r}")
+    return aggregate
+
+
+def aggregate_component_status(components: dict[str, dict[str, Any]]) -> str:
+    """Aggregate component health records into one service status."""
+    component_statuses: list[str] = []
+
+    for component_name, component in components.items():
+        try:
+            status = component["status"]
+        except (KeyError, TypeError):
+            raise ValueError(f"component {component_name!r} is missing status") from None
+        if not isinstance(status, str) or status not in SERVICE_HEALTH_STATUSES:
+            raise ValueError(f"component {component_name!r} has unexpected status: {status!r}")
+        component_statuses.append(status)
+
+    return _reduce_service_health_statuses(component_statuses)
+
+
+def db_health_component() -> dict[str, Any]:
+    """Build the database component record for the v1 health contract."""
+    return {
+        "status": "ok",
+        "kind": "in_memory",
+    }
+
+
+def inference_health_component() -> dict[str, Any]:
+    """Build the inference component record for the v1 health contract."""
+    return {
+        "status": "ok",
+        "backend": ENGINE_CONFIG.backend,
+        "version": ENGINE_CONFIG.version,
+    }
+
+
+def auth_health_component() -> dict[str, Any]:
+    """Build the auth component record for the v1 health contract."""
+    return {
+        "status": "ok",
+        "requires_agent_id": AUTH_REQUIRE_AGENT_ID,
+    }
+
+
+def v1_health_components() -> dict[str, dict[str, Any]]:
+    """Build v1 health component records from in-process configuration only."""
+    return {
+        "db": db_health_component(),
+        "inference": inference_health_component(),
+        "auth": auth_health_component(),
+    }
+
+
 def health_payload() -> dict[str, Any]:
     """Build the service health response payload."""
     return {
@@ -711,13 +790,24 @@ def health_payload() -> dict[str, Any]:
     }
 
 
+def v1_health_payload() -> dict[str, Any]:
+    """Build the versioned service health response payload."""
+    payload = health_payload().copy()
+    components = v1_health_components()
+    payload["status"] = aggregate_component_status(components)
+    payload["version"] = ENGINE_CONFIG.version
+    payload["uptime_seconds"] = uptime_seconds()
+    payload["components"] = components
+    return payload
+
+
 def service_index_payload() -> dict[str, Any]:
     """Build the root index payload describing the public HTTP surface."""
     return {
         "service": "bayes-market",
         "status": "ok",
         "routes": {
-            "health": ["/health", "/healthz"],
+            "health": list(PUBLIC_HEALTH_ROUTES),
             "markets": [
                 "GET /v1/markets",
                 "POST /v1/markets",
@@ -3789,8 +3879,18 @@ def route_request(
     if method == "GET" and path == "/":
         return service_index_payload(), 200
 
-    if method == "GET" and path in {"/health", "/healthz"}:
+    if method == "GET" and path in LEGACY_HEALTH_ROUTES:
         return health_payload(), 200
+
+    if path == VERSIONED_HEALTH_ROUTE:
+        if method == "GET":
+            return v1_health_payload(), 200
+        raise ApiError(
+            405,
+            "method_not_allowed",
+            f"{method} is not allowed for this resource",
+            {"method": method, "path": path},
+        )
 
     if path == "/v1/markets":
         if method == "GET":
@@ -4097,7 +4197,7 @@ class BayesHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         """Serve API routes first, fall back to static frontend files."""
         path = normalize_path(urlparse(self.path).path)
-        if path.startswith("/v1/") or path in {"/health", "/healthz"}:
+        if path.startswith("/v1/") or path in PUBLIC_HEALTH_ROUTES:
             self.handle_api("GET")
             return
         if path == "/" and "application/json" in (self.headers.get("Accept") or ""):

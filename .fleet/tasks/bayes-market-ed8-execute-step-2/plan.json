@@ -1,0 +1,59 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep the step backend-only and route-level: wire `/v1/health` inside `backend/server.py` to the existing `v1_health_payload()` helper, while leaving `/health` and `/healthz` on the legacy `health_payload()` contract.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Rebuilding the versioned health payload inline inside `route_request()`",
+        "Changing the frontend health client or the HTTP handler dispatch for this step"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Treat `/v1/health` like the other explicit `/v1/*` resources: `GET` returns the versioned health payload and any other method on the same path returns `405 method_not_allowed`, while legacy probe paths keep their existing GET-only special case.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Letting non-`GET` `/v1/health` requests fall through to the generic router `404 not_found`",
+        "Upgrading `/health` and `/healthz` to the versioned error and payload contract"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Advertise the new endpoint from the root service index as the bare path `/v1/health`, appended after the existing legacy probes so `routes.health` becomes [`/health`, `/healthz`, `/v1/health`].",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Formatting the new entry as `GET /v1/health`",
+        "Replacing or reordering the legacy probe entries"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Update `backend/server.py` so `service_index_payload()` advertises `/v1/health` alongside `/health` and `/healthz`, preserving the existing bare-path style and legacy ordering for the health route list.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Extend `route_request()` in `backend/server.py` with an explicit `/v1/health` resource branch that returns `v1_health_payload()` for `GET` and raises the standard `405 method_not_allowed` error for other methods, without changing the legacy `/health` and `/healthz` handlers.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add targeted assertions in `tests/test_bayes_market_api.py` covering the updated root service index health list, successful `GET /v1/health` routing, `405` behavior for non-`GET` `/v1/health` requests, and continued legacy payload compatibility for `/health` and `/healthz`.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Run the focused backend API tests for the root index and health routes, then review the diff and commit the implementation once the targeted coverage passes.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

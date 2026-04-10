@@ -13,7 +13,7 @@ from copy import deepcopy
 from email.message import Message
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.parse import urlencode
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "backend" / "server.py"
@@ -370,6 +370,147 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         self.assertEqual(server.ACCOUNT_EXPOSURE, {})
 
+    def test_aggregate_component_status_returns_ok_when_all_components_are_ok(self):
+        components = {
+            "db": {"status": "ok"},
+            "inference": {"status": "ok"},
+            "auth": {"status": "ok"},
+        }
+
+        self.assertEqual(server.aggregate_component_status(components), "ok")
+
+    def test_aggregate_component_status_returns_degraded_when_any_component_is_degraded(self):
+        components = {
+            "db": {"status": "ok"},
+            "inference": {"status": "degraded"},
+            "auth": {"status": "ok"},
+        }
+
+        self.assertEqual(server.aggregate_component_status(components), "degraded")
+
+    def test_aggregate_component_status_returns_unhealthy_when_any_component_is_unhealthy(self):
+        components = {
+            "db": {"status": "degraded"},
+            "inference": {"status": "ok"},
+            "auth": {"status": "unhealthy"},
+        }
+
+        self.assertEqual(server.aggregate_component_status(components), "unhealthy")
+
+    def test_aggregate_component_status_rejects_empty_components(self):
+        with self.assertRaisesRegex(ValueError, "components must not be empty"):
+            server.aggregate_component_status({})
+
+    def test_aggregate_component_status_rejects_missing_component_status(self):
+        with self.assertRaisesRegex(ValueError, "component 'db' is missing status"):
+            server.aggregate_component_status({"db": {}})
+
+    def test_aggregate_component_status_rejects_unexpected_component_status(self):
+        with self.assertRaisesRegex(ValueError, "component 'db' has unexpected status: 'healthy'"):
+            server.aggregate_component_status({"db": {"status": "healthy"}})
+
+    def test_v1_health_components_are_assembled_from_shared_builders(self):
+        with (
+            patch.object(server, "db_health_component", return_value={"status": "ok", "kind": "in_memory"}) as db_health_component,
+            patch.object(
+                server,
+                "inference_health_component",
+                return_value={"status": "degraded", "backend": "approximate", "version": "1.2.3"},
+            ) as inference_health_component,
+            patch.object(server, "auth_health_component", return_value={"status": "ok", "requires_agent_id": False}) as auth_health_component,
+        ):
+            components = server.v1_health_components()
+
+        db_health_component.assert_called_once_with()
+        inference_health_component.assert_called_once_with()
+        auth_health_component.assert_called_once_with()
+        self.assertEqual(
+            components,
+            {
+                "db": {"status": "ok", "kind": "in_memory"},
+                "inference": {
+                    "status": "degraded",
+                    "backend": "approximate",
+                    "version": "1.2.3",
+                },
+                "auth": {
+                    "status": "ok",
+                    "requires_agent_id": False,
+                },
+            },
+        )
+
+    def test_v1_health_payload_extends_a_copy_of_legacy_health_payload(self):
+        original_engine_config = server.ENGINE_CONFIG
+        original_auth_require_agent_id = server.AUTH_REQUIRE_AGENT_ID
+        self.addCleanup(setattr, server, "ENGINE_CONFIG", original_engine_config)
+        self.addCleanup(setattr, server, "AUTH_REQUIRE_AGENT_ID", original_auth_require_agent_id)
+
+        server.ENGINE_CONFIG = server.EngineConfig(
+            mode="EXACT",
+            backend="variable_elimination",
+            version="9.9.9",
+            precision="float64",
+            compile_type="junction_tree",
+            inference_sample_limit=100,
+        )
+        server.AUTH_REQUIRE_AGENT_ID = True
+
+        legacy_payload = {
+            "service": "legacy-bayes-market",
+            "status": "legacy-status",
+            "timestamp": "2026-04-10T00:00:00Z",
+        }
+
+        with (
+            patch.object(server, "health_payload", return_value=legacy_payload) as health_payload,
+            patch.object(
+                server,
+                "db_health_component",
+                return_value={"status": "degraded", "kind": "in_memory"},
+            ) as db_health_component,
+            patch.object(server, "inference_health_component", wraps=server.inference_health_component) as inference_health_component,
+            patch.object(server, "auth_health_component", wraps=server.auth_health_component) as auth_health_component,
+            patch.object(server, "uptime_seconds", return_value=12.345) as uptime_seconds,
+        ):
+            payload = server.v1_health_payload()
+
+        health_payload.assert_called_once_with()
+        db_health_component.assert_called_once_with()
+        inference_health_component.assert_called_once_with()
+        auth_health_component.assert_called_once_with()
+        uptime_seconds.assert_called_once_with()
+        self.assertEqual(
+            legacy_payload,
+            {
+                "service": "legacy-bayes-market",
+                "status": "legacy-status",
+                "timestamp": "2026-04-10T00:00:00Z",
+            },
+        )
+        self.assertEqual(
+            payload,
+            {
+                "service": "legacy-bayes-market",
+                "status": "degraded",
+                "timestamp": "2026-04-10T00:00:00Z",
+                "version": "9.9.9",
+                "uptime_seconds": 12.345,
+                "components": {
+                    "db": {"status": "degraded", "kind": "in_memory"},
+                    "inference": {
+                        "status": "ok",
+                        "backend": "variable_elimination",
+                        "version": "9.9.9",
+                    },
+                    "auth": {
+                        "status": "ok",
+                        "requires_agent_id": True,
+                    },
+                },
+            },
+        )
+
     def test_get_market_events_serializes_cross_market_appends_while_snapshotting_events(self):
         server.emit_terminal_event({"commandId": "cmd_m1_1", "marketId": "m1"}, "CommandAccepted", {"effects": {}})
         server.emit_terminal_event({"commandId": "cmd_m1_2", "marketId": "m1"}, "CommandAccepted", {"effects": {}})
@@ -433,12 +574,84 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["service"], "bayes-market")
         self.assertEqual(payload["status"], "ok")
         self.assertIn("routes", payload)
+        self.assertEqual(payload["routes"]["health"], ["/health", "/healthz", "/v1/health"])
         self.assertEqual(payload["routes"]["accounts"], ["/v1/accounts/{id}/risk", "/v1/accounts/{id}/exposure"])
         self.assertIn("/v1/markets/{id}/meta", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/events", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/engine-stats", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/resolve", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/orders/event-trade", payload["routes"]["orders"])
+
+    def test_legacy_health_routes_return_legacy_health_payload(self):
+        legacy_payload = {
+            "service": "bayes-market",
+            "status": "ok",
+            "timestamp": "2026-04-10T00:00:00Z",
+        }
+
+        with (
+            patch.object(server, "health_payload", return_value=legacy_payload) as health_payload,
+            patch.object(server, "v1_health_payload", return_value={"status": "wrong"}) as v1_health_payload,
+        ):
+            for path in ("/health", "/healthz"):
+                with self.subTest(path=path):
+                    payload, status = server.route_request("GET", path)
+
+                    self.assertEqual(status, 200)
+                    self.assertEqual(payload, legacy_payload)
+
+        self.assertEqual(health_payload.call_count, 2)
+        v1_health_payload.assert_not_called()
+
+    def test_v1_health_route_returns_versioned_health_payload(self):
+        versioned_payload = {
+            "service": "bayes-market",
+            "status": "ok",
+            "timestamp": "2026-04-10T00:00:00Z",
+            "version": "9.9.9",
+            "uptime_seconds": 12.345,
+            "components": {
+                "db": {"status": "ok"},
+                "inference": {"status": "ok"},
+                "auth": {"status": "ok"},
+            },
+        }
+
+        with (
+            patch.object(server, "v1_health_payload", return_value=versioned_payload) as v1_health_payload,
+            patch.object(server, "health_payload", return_value={"status": "legacy"}) as health_payload,
+        ):
+            payload, status = server.route_request("GET", "/v1/health")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, versioned_payload)
+        v1_health_payload.assert_called_once_with()
+        health_payload.assert_not_called()
+
+    def test_v1_health_route_is_method_not_allowed_for_non_get(self):
+        for method in ("POST", "PUT", "DELETE"):
+            with self.subTest(method=method):
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(method, "/v1/health", {})
+
+                error = ctx.exception
+                self.assertEqual(error.status, 405)
+                self.assertEqual(error.code, "method_not_allowed")
+                self.assertEqual(error.details["method"], method)
+                self.assertEqual(error.details["path"], "/v1/health")
+
+    def test_do_get_routes_public_health_paths_before_static_fallback(self):
+        handler = object.__new__(server.BayesHandler)
+        handler.headers = Message()
+        handler.handle_api = Mock()
+        handler._serve_static = Mock(return_value=False)
+
+        with patch.object(server, "PUBLIC_HEALTH_ROUTES", ("/health", "/healthz", "/ready")):
+            handler.path = "/ready"
+            server.BayesHandler.do_GET(handler)
+
+        handler.handle_api.assert_called_once_with("GET")
+        handler._serve_static.assert_not_called()
 
     def test_list_markets_returns_summary_shape(self):
         payload, status = server.route_request("GET", "/v1/markets")
@@ -6512,13 +6725,36 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         status, payload, _ = self.request_with_headers(method, path, body, headers=headers)
         return status, payload
 
-    def test_healthz_returns_service_payload(self):
-        status, payload = self.request("GET", "/healthz")
+    def test_legacy_health_http_routes_return_service_payload(self):
+        timestamp_pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$"
+
+        for path in ("/health", "/healthz"):
+            with self.subTest(path=path):
+                status, payload = self.request("GET", path)
+
+                self.assertEqual(status, 200)
+                self.assertEqual(set(payload), {"service", "status", "timestamp"})
+                self.assertEqual(payload["service"], "bayes-market")
+                self.assertEqual(payload["status"], "ok")
+                self.assertIsInstance(payload["timestamp"], str)
+                self.assertRegex(payload["timestamp"], timestamp_pattern)
+
+    def test_v1_health_http_returns_versioned_service_payload(self):
+        status, payload = self.request("GET", "/v1/health")
 
         self.assertEqual(status, 200)
+        self.assertEqual(
+            set(payload),
+            {"service", "status", "timestamp", "version", "uptime_seconds", "components"},
+        )
         self.assertEqual(payload["service"], "bayes-market")
         self.assertEqual(payload["status"], "ok")
-        self.assertTrue(payload["timestamp"].endswith("Z"))
+        self.assertIsInstance(payload["timestamp"], str)
+        self.assertRegex(payload["timestamp"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$")
+        self.assertEqual(payload["version"], server.ENGINE_CONFIG.version)
+        self.assertIsInstance(payload["uptime_seconds"], float)
+        self.assertIsInstance(payload["components"], dict)
+        self.assertEqual(set(payload["components"]), {"db", "inference", "auth"})
 
     def test_create_market_http_returns_created_market_and_collection_entry(self):
         body = build_create_market_body(
