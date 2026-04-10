@@ -6947,6 +6947,14 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
             timeout=timeout,
         )
 
+    def market_close(self, market_id: str, body: dict, *, timeout: float = 5):
+        return self.request(
+            "POST",
+            f"/v1/markets/{market_id}/close",
+            body,
+            timeout=timeout,
+        )
+
     def market_events(self, market_id: str, *, timeout: float = 5):
         return self.request("GET", f"/v1/markets/{market_id}/events", timeout=timeout)
 
@@ -7520,6 +7528,22 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
             f"/v1/markets/{market_id}/resolve",
             build_market_resolution_body(account_id, outcome_id, final_probabilities=final_probabilities),
             headers=self._headers_with_agent_id(agent_id),
+        )
+
+    def market_close_with_headers(
+        self,
+        *,
+        market_id: str = "m1",
+        account_id: str = "ops_http_auth",
+        idempotency_key: str | None = None,
+        agent_id: str | None = None,
+    ):
+        headers = {} if agent_id is None else {server.AGENT_ID_HEADER: agent_id}
+        return self.request_with_headers(
+            "POST",
+            f"/v1/markets/{market_id}/close",
+            build_market_close_body(account_id, idempotency_key=idempotency_key),
+            headers=headers,
         )
 
     def assert_rate_limit_headers(self, headers: dict[str, str], *, limit: int, remaining: int) -> None:
