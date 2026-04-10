@@ -1685,6 +1685,30 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.code, "account_not_found")
         self.assertEqual(error.details["accountId"], "acct_missing")
 
+    def test_account_exposure_route_returns_404_for_risk_only_account(self):
+        account_id = "acct_risk_only"
+        write_payload, write_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
+        )
+        risk_payload, risk_status = server.route_request("GET", f"/v1/accounts/{account_id}/risk")
+
+        self.assertEqual(write_status, 201)
+        self.assertEqual(write_payload["result"]["status"], "accepted")
+        self.assertEqual(risk_status, 200)
+        self.assertEqual(risk_payload["account"]["id"], account_id)
+        self.assertIn(account_id, server.ACCOUNT_RISK)
+        self.assertNotIn(account_id, server.ACCOUNT_EXPOSURE)
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", f"/v1/accounts/{account_id}/exposure")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 404)
+        self.assertEqual(error.code, "account_not_found")
+        self.assertEqual(error.details["accountId"], account_id)
+
     def test_account_exposure_route_is_method_not_allowed_for_post(self):
         with self.assertRaises(server.ApiError) as ctx:
             server.route_request("POST", "/v1/accounts/acct_test/exposure", {})
