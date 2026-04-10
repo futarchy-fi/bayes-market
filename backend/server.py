@@ -192,6 +192,15 @@ WRITE_ROUTE_POLICIES: dict[str, dict[str, bool]] = {
     MARKET_ADMIN_WRITE_CATEGORY: {"requires_agent_id": True},
     TRADE_WRITE_CATEGORY: {"requires_agent_id": True},
 }
+# Keep the protected write surface closed so unsupported POST routes stay outside auth/rate-limit handling.
+MARKET_ADMIN_WRITE_ROUTE_SUFFIXES = frozenset({
+    ("resolve",),
+})
+TRADE_WRITE_ROUTE_SUFFIXES = frozenset({
+    ("comments",),
+    ("orders", "probability-edit"),
+    ("orders", "event-trade"),
+})
 
 
 class WriteRequestAgentContext(NamedTuple):
@@ -395,11 +404,10 @@ def resolve_write_route_category(method: str, raw_path: str) -> str | None:
     if len(parts) < 4 or parts[:2] != ["v1", "markets"]:
         return None
 
-    if len(parts) == 4 and parts[3] == "resolve":
+    route_suffix = tuple(parts[3:])
+    if route_suffix in MARKET_ADMIN_WRITE_ROUTE_SUFFIXES:
         return MARKET_ADMIN_WRITE_CATEGORY
-    if len(parts) == 4 and parts[3] == "comments":
-        return TRADE_WRITE_CATEGORY
-    if len(parts) == 5 and parts[3:] in (["orders", "probability-edit"], ["orders", "event-trade"]):
+    if route_suffix in TRADE_WRITE_ROUTE_SUFFIXES:
         return TRADE_WRITE_CATEGORY
     return None
 
@@ -415,23 +423,30 @@ def _raise_invalid_agent_id(category: str, *, reason: str | None = None) -> None
     raise ApiError(401, "invalid_agent_id", "Invalid Bayes agent id header", details)
 
 
-def resolve_write_request_agent(method: str, raw_path: str, headers: Any) -> WriteRequestAgentContext | None:
-    """Resolve and validate the agent identity for the frozen protected write surface."""
-    category = resolve_write_route_category(method, raw_path)
-    if category is None:
-        return None
+def _invalid_agent_id_reason(raw_agent_id: str, agent_id: str) -> str | None:
+    """Return the stable validation reason for one protected-write agent id value."""
+    if "," in raw_agent_id:
+        return "multiple_values"
+    if not AGENT_ID_TOKEN_RE.fullmatch(agent_id):
+        return "invalid_format"
+    return None
 
-    policy = WRITE_ROUTE_POLICIES[category]
-    require_agent_id = write_policy_requires_agent_id(policy)
-    raw_values = request_agent_id_values(headers)
+
+def _normalize_write_request_agent_id(
+    raw_values: list[str],
+    *,
+    category: str,
+    require_agent_id: bool,
+) -> str:
+    """Normalize one protected-write agent id and preserve legacy error contracts."""
     if not raw_values:
         enforce_agent_id("", category=category)
-        return WriteRequestAgentContext(category=category, policy=policy, agent_id="")
+        return ""
 
     if len(raw_values) > 1:
         if require_agent_id:
             _raise_invalid_agent_id(category, reason="multiple_values")
-        return WriteRequestAgentContext(category=category, policy=policy, agent_id="")
+        return ""
 
     raw_agent_id = raw_values[0]
     agent_id = raw_agent_id.strip()
@@ -443,14 +458,30 @@ def resolve_write_request_agent(method: str, raw_path: str, headers: Any) -> Wri
                 "Blank Bayes agent id header",
                 {"header": AGENT_ID_HEADER, "category": category},
             )
-        return WriteRequestAgentContext(category=category, policy=policy, agent_id="")
+        return ""
 
-    if "," in raw_agent_id or not AGENT_ID_TOKEN_RE.fullmatch(agent_id):
+    invalid_reason = _invalid_agent_id_reason(raw_agent_id, agent_id)
+    if invalid_reason is not None:
         if require_agent_id:
-            reason = "multiple_values" if "," in raw_agent_id else "invalid_format"
-            _raise_invalid_agent_id(category, reason=reason)
-        return WriteRequestAgentContext(category=category, policy=policy, agent_id="")
+            _raise_invalid_agent_id(category, reason=invalid_reason)
+        return ""
 
+    return agent_id
+
+
+def resolve_write_request_agent(method: str, raw_path: str, headers: Any) -> WriteRequestAgentContext | None:
+    """Resolve and validate the agent identity for the frozen protected write surface."""
+    category = resolve_write_route_category(method, raw_path)
+    if category is None:
+        return None
+
+    policy = WRITE_ROUTE_POLICIES[category]
+    require_agent_id = write_policy_requires_agent_id(policy)
+    agent_id = _normalize_write_request_agent_id(
+        request_agent_id_values(headers),
+        category=category,
+        require_agent_id=require_agent_id,
+    )
     return WriteRequestAgentContext(category=category, policy=policy, agent_id=agent_id)
 
 

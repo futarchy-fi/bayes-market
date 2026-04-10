@@ -1,0 +1,59 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat execute-step-2 as an audit-confirmed preservation pass: because the current checkout does not show any weakened or widened preserved sentinel, the default outcome is no test edit unless the local audit reproduces real drift in the frozen absence-path inventory.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Force a test rewrite in this step even though the preserved absence-path contract is still intact.",
+        "Use this step to reinterpret the step-3 breadth additions as evidence that comment-post or event-trade now need new negative-route coverage."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep the preserved absence-path contract limited to the existing ProbabilityEdit auth and no-header sentinels, market-resolve negatives and disabled-limiter sentinel, the create-market missing-agent check, the unsupported POST router `404` control, and the direct duplicate-header classifier seam; leave comment-post and event-trade as success-path-only routes for this phase.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Add new comment-post missing-agent, invalid-agent, or disabled-limiter tests in this preservation step.",
+        "Clone the same route-local absence-path matrix onto event-trade before a later phase asks for it."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Escalate into `backend/server.py` only if a preserved sentinel actually fails for a shared-seam reason; if the audit shows only test drift, restore the affected tests instead of changing the backend, and keep ProbabilityEdit as the sole shared limiter regression seam for decrement, `429`, `Retry-After`, and per-agent isolation.",
+      "based_on": ["q1", "q4", "q5"],
+      "alternatives_rejected": [
+        "Patch the backend preemptively even though no preserved sentinel is currently failing.",
+        "Duplicate the full limiter matrix across comment-post, create-market, market-resolve, or event-trade to compensate for hypothetical shared-seam risk."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit `tests/test_bayes_market_api.py` against the preserved step-4 sentinel inventory and confirm the existing ProbabilityEdit, market-resolve, create-market, unsupported-route, and duplicate-header checks still match the current absence-path contract after the earlier breadth work.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "If the audit finds any preserved sentinel that was weakened or accidentally widened, patch only the affected tests to restore the prior absence-path assertions while leaving `test_comment_post_http_returns_accepted_comment_contract_with_rate_limit_headers` and `test_protected_post_routes_emit_rate_limit_headers_on_first_success` untouched as success-path-only coverage.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Only if the restored or re-run sentinel slice exposes a real shared-seam defect, patch the central protected-write path in `backend/server.py` without introducing route-local negative expansions for comment-post or event-trade.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Run the focused Bayes market auth and rate-limit tests covering the preserved sentinel inventory, verify the branch remains a no-op apart from necessary restorative edits and this task artifact when the audit stays clean, then stage and commit with the requested task message.",
+      "depends_on": [2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
