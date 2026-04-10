@@ -1,0 +1,116 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The targeted backend health-route subset should include the route-facing health coverage in `tests/test_bayes_market_api.py`, not only the live HTTP methods. The exact focused set is: `BayesMarketApiUnitTests.test_root_route_returns_service_index`, `test_legacy_health_routes_return_legacy_health_payload`, `test_v1_health_route_returns_versioned_health_payload`, `test_v1_health_route_is_method_not_allowed_for_non_get`, plus `BayesMarketApiIntegrationTests.test_legacy_health_http_routes_return_service_payload` and `test_v1_health_http_returns_versioned_service_payload`. I would exclude helper-only health tests such as `test_v1_health_components_are_assembled_from_shared_builders` and `test_v1_health_payload_extends_a_copy_of_legacy_health_payload`, because step 4 is about validating the additive route and surrounding HTTP surface after step 3, while those helper contracts were already frozen below the routing boundary.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:63",
+        ".fleet/tasks/bayes-market-ed8/plan.json:68",
+        ".fleet/tasks/bayes-market-ed8/plan.json:73",
+        ".fleet/tasks/bayes-market-ed8-execute-step-2/validation.json:4",
+        ".fleet/tasks/bayes-market-ed8-execute-step-3/validation.json:4",
+        "tests/test_bayes_market_api.py:570",
+        "tests/test_bayes_market_api.py:585",
+        "tests/test_bayes_market_api.py:606",
+        "tests/test_bayes_market_api.py:631",
+        "tests/test_bayes_market_api.py:6715",
+        "tests/test_bayes_market_api.py:6729",
+        "tests/test_bayes_market_api.py:412",
+        "tests/test_bayes_market_api.py:443"
+      ],
+      "uncertainty": "The only debatable inclusion is the root service-index assertion, since it is discovery metadata rather than a probe response, but step 2 explicitly changed that health-route list and step-2 validation treated it as part of the route coverage.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The broader second command should stay limited to `tests/test_bayes_market_api.py`, not expand to the whole backend suite under `tests/`. The parent step says to run the broader backend API test module, singular, after the focused subset passes, and the nearby ed8 execution/validation artifacts consistently use this file as the backend API module for the feature. The full `tests/` pytest command is the CI backend bar, but that is broader than this step's recorded boundary.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:72",
+        ".fleet/tasks/bayes-market-ed8/plan.json:73",
+        ".fleet/tasks/bayes-market-ed8-execute-step-2/validation.json:9",
+        ".fleet/tasks/bayes-market-ed8-execute-step-3/validation.json:9",
+        ".github/workflows/ci.yml:26",
+        ".github/workflows/ci.yml:27"
+      ],
+      "uncertainty": "CI does run `python3 -m pytest tests/ -v --tb=short`, so someone could choose to over-verify locally, but that would be extra signal beyond the narrower module-level step requirement.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Treat `pytest` as the canonical proof for this step. CI explicitly installs and runs `pytest`, step-2 validation already used `python3 -m pytest -q tests/test_bayes_market_api.py` as the green module proof, and pytest provides the cleanest selector for the focused health-route gate. `python3 -m unittest discover` remains a reasonable fallback or validator-side cross-check, but it should not be the primary recorded command for step 4.",
+      "confidence": 0.94,
+      "evidence": [
+        ".github/workflows/ci.yml:23",
+        ".github/workflows/ci.yml:24",
+        ".github/workflows/ci.yml:26",
+        ".github/workflows/ci.yml:27",
+        ".fleet/tasks/bayes-market-ed8-execute-step-2/validation.json:9",
+        ".fleet/tasks/bayes-market-ed8-execute-step-3/validation.json:9"
+      ],
+      "uncertainty": "Some nearby validators used `unittest discover` because it was sufficient for replaying the module, so the repo still tolerates both runners operationally; the stronger canonical signal for this specific step is pytest.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Step 4 should fail fast. The broader module run is gated on the focused health-route subset passing first, not something to run after a focused failure just to collect extra signal. Both the parent plan and the step-3 execution plan use that ordered sequencing explicitly.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:72",
+        ".fleet/tasks/bayes-market-ed8/plan.json:73",
+        ".fleet/tasks/bayes-market-ed8-execute-step-3/plan.json:62",
+        ".fleet/tasks/bayes-market-ed8-execute-step-3/plan.json:63"
+      ],
+      "uncertainty": "A human operator could still choose to run the broader module after a failure for debugging, but that would be extra diagnostic work outside the step's intended success criterion and sequencing.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. This step should preserve explicit evidence of both executed test commands and their results, because the step-2 and step-3 validations both called the missing proof of the author's focused run the remaining procedural gap. The smallest clean way to close that gap is to record the commands and outcomes in this committed task artifact. Recorded execution for this step: `python3 -m pytest tests/test_bayes_market_api.py -v --tb=short -k 'test_root_route_returns_service_index or test_legacy_health_routes_return_legacy_health_payload or test_v1_health_route_returns_versioned_health_payload or test_v1_health_route_is_method_not_allowed_for_non_get or test_legacy_health_http_routes_return_service_payload or test_v1_health_http_returns_versioned_service_payload'` -> `6 passed, 236 deselected in 0.80s`; then `python3 -m pytest tests/test_bayes_market_api.py -v --tb=short` -> `242 passed in 5.74s`.",
+      "confidence": 0.91,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8-execute-step-2/validation.json:4",
+        ".fleet/tasks/bayes-market-ed8-execute-step-3/validation.json:4",
+        ".fleet/tasks/bayes-market-ed8-execute-step-3/validation.json:9"
+      ],
+      "uncertainty": "The repo does not define a separate mandatory log-file format for this proof, so preserving the commands and outcomes in `research.json` is an interpretation of how to close the documented process gap with the least extra machinery.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "This worktree already contains the step-3 health-route assertions, so step 4 can stay execution-and-evidence focused rather than reopening backend or test-authoring work."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The broader second run should be `tests/test_bayes_market_api.py`, which keeps the step aligned to the singular backend API module named in the plan instead of widening to all backend tests."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.88,
+      "impact": "Using a focused `pytest` selector over the six route-facing health tests is a defensible gate for this step, and it passed before the full module run."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Execution should stay gated: do not claim completion unless the focused subset passes first, then the full backend API module passes second."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.86,
+      "impact": "Recording the exact commands and results in this artifact directly addresses the procedural gap called out by prior validation instead of relying on an unrecorded local shell session."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
