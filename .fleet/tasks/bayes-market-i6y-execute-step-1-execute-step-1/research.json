@@ -1,0 +1,117 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The root service index should advertise `/v1/accounts/{id}/positions` in the same bare-path style as the existing account routes, and it should be appended after `/v1/accounts/{id}/exposure` so `routes.accounts` becomes `[\"/v1/accounts/{id}/risk\", \"/v1/accounts/{id}/exposure\", \"/v1/accounts/{id}/positions\"]`. `ACCOUNT_SERVICE_INDEX_ROUTES` is already a bare-path tuple, `service_index_payload()` emits it verbatim, the root-route test asserts the exact ordered list, and the step-1 plan explicitly says to add the new route immediately after exposure.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:127",
+        "backend/server.py:849",
+        "tests/test_bayes_market_api.py:578",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:53"
+      ],
+      "uncertainty": "None material.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. `/v1/accounts/{id}/positions` should be recognized inside the existing matched-account branch in `route_request(...)` so it inherits the same GET-only handling and `405 method_not_allowed` behavior as `/risk` and `/exposure`. The current dispatcher centralizes that rule for matched account paths before choosing the getter, and both direct and threaded HTTP tests already freeze that contract for the existing account reads.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:3931",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:16",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:63",
+        "tests/test_bayes_market_api.py:1116",
+        "tests/test_bayes_market_api.py:1159",
+        "tests/test_bayes_market_api.py:8320",
+        "tests/test_bayes_market_api.py:8341"
+      ],
+      "uncertainty": "None material. A different match path would make `/positions` the odd contract exception inside the account-read surface.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "`get_account_positions(account_id)` should already return the standard account envelope in this seam-plumbing step: `{ \"account\": { \"id\": ..., \"positions\": ... }, \"meta\": ... }`. What is deferred is the detailed serializer for the value placed at `account.positions`, not the outer wrapper or the location of the payload. That matches both existing account getters, which return `{account, meta}` with the route-specific payload nested under `account.<resource>`, and the step plans that split route registration from the later serializer phase.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:1667",
+        "backend/server.py:1699",
+        ".fleet/tasks/bayes-market-i6y/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y/plan.json:50",
+        ".fleet/tasks/bayes-market-i6y/plan.json:55",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:26",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:58"
+      ],
+      "uncertainty": "The plan does not pin the temporary internal representation at `account.positions` beyond saying the detailed positions-row serializer belongs to the later phase.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "For `get_account_positions(account_id)`, an existing account should mean an account present in the live `ACCOUNT_EXPOSURE` projection with at least one surviving live row, not any account that merely exists in another read model such as `ACCOUNT_RISK`. The backend has `ACCOUNT_RISK` and `ACCOUNT_EXPOSURE` but no standalone account registry, `get_account_exposure(...)` is explicitly projection-local and returns `404 account_not_found` when the account is missing or serializes to no live positions, and the tests already prove that a risk-only account still 404s on the exposure surface. The step-1 plan says `/positions` should mirror that behavior.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:185",
+        "backend/server.py:186",
+        "backend/server.py:1630",
+        "backend/server.py:1657",
+        "tests/test_bayes_market_api.py:1135",
+        ".fleet/tasks/bayes-market-i6y/plan.json:16",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:36",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:58"
+      ],
+      "uncertainty": "This would only change if product deliberately wanted `/positions` to diverge from `/exposure` and treat risk-only accounts as known despite having no live holdings.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. This child step is intentionally limited to `backend/server.py` seam wiring only, with the detailed positions-row serializer and the broader HTTP regression expansion deferred to later phases. The step-1 plan explicitly says to keep the diff scoped to route-surface plumbing in `backend/server.py` and to leave deeper serializer work and HTTP regression expansion for later; the parent task plan also puts serializer work in step 2 and the new backend regressions in step 4, after the route surface is in place.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:48",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:58",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:68",
+        ".fleet/tasks/bayes-market-i6y/plan.json:50",
+        ".fleet/tasks/bayes-market-i6y/plan.json:55",
+        ".fleet/tasks/bayes-market-i6y/plan.json:65"
+      ],
+      "uncertainty": "Nothing in the plan forbids adding extra regressions early, but the intended minimum scope is clearly the seam wiring in `backend/server.py`.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Treat `/v1/accounts/{id}/positions` as an additive route beside `/risk` and `/exposure`; there is no same-step replacement or migration pressure on the existing exposure read."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Build the new entrypoint on top of `ACCOUNT_EXPOSURE`. The codebase exposes no separate `ACCOUNT_POSITIONS` store or alternate live holdings projection to target instead."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep the account discovery contract consistent: add `/v1/accounts/{id}/positions` as a bare path immediately after `/v1/accounts/{id}/exposure` in `ACCOUNT_SERVICE_INDEX_ROUTES`."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Extend the existing matched-account dispatcher instead of special-casing `/positions`, so non-GET methods continue to return the shared structured `405 method_not_allowed` payload after the account path matches."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep this child step narrow: wire the route surface in `backend/server.py` now, and leave the richer positions serializer plus broader regression expansion to the later planned phases."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
