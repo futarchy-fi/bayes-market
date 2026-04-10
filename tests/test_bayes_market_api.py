@@ -4843,7 +4843,30 @@ class BayesMarketExposureProjectionTests(unittest.TestCase):
             self.assertEqual(error.code, "account_not_found")
             self.assertEqual(error.details, {"accountId": "acct_missing_positions"})
 
+        with self.subTest("probability-edit-only account has no positions projection"):
+            server.reset_state()
+            account_id = "acct_positions_risk_only"
+            write_payload, write_status = server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/probability-edit",
+                build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
+            )
+
+            self.assertEqual(write_status, 201)
+            self.assertEqual(write_payload["result"]["status"], "accepted")
+            self.assertIn(account_id, server.ACCOUNT_RISK)
+            self.assertNotIn(account_id, server.ACCOUNT_EXPOSURE)
+
+            with self.assertRaises(server.ApiError) as ctx:
+                server.get_account_positions(account_id)
+
+            error = ctx.exception
+            self.assertEqual(error.status, 404)
+            self.assertEqual(error.code, "account_not_found")
+            self.assertEqual(error.details, {"accountId": account_id})
+
         with self.subTest("only zero or malformed rows"):
+            server.reset_state()
             server.ACCOUNT_EXPOSURE["acct_positions_zero_only"] = {
                 "accountId": "acct_positions_zero_only",
                 "updatedAt": "2026-04-09T12:30:00Z",
