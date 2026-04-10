@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The requested selector `python3 -m pytest -v --tb=short tests/test_bayes_market_api.py::BayesMarketApiUnitTests::test_root_route_returns_service_index tests/test_bayes_market_api.py::BayesMarketExposureProjectionTests` already passes in this checkout with 15 tests, even though `backend/server.py` still emits the legacy four-field `/positions` row and there is no `unrealizedPnl` seam. Should this leaf therefore treat step 3 as a no-op validation rerun, or is it expected to first backfill the missing replay/P&L production and test work inside the same branch so that the selector becomes a meaningful gate for the intended contract?",
+      "category": "requirements",
+      "why_it_matters": "Without resolving that mismatch, 'iterate until the targeted slice passes' is underspecified: the slice is already green on the old contract, so the branch could incorrectly stop without landing the missing replay-backed `/positions` behavior."
+    },
+    {
+      "id": "q2",
+      "question": "When this branch does add the missing replay-backed `/positions` work, should the canonical row contract freeze as the additive five-field shape `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` while preserving the existing `{account, meta}` envelope, lexical `(marketId, outcomeId)` ordering, malformed-row skipping, and projection-local `404 account_not_found` semantics?",
+      "category": "design",
+      "why_it_matters": "The current serializer and tests still freeze the older four-field row. Step 3 needs one exact success payload to know whether it is only validating existing behavior or also expected to widen the route contract before rerunning the selector."
+    },
+    {
+      "id": "q3",
+      "question": "What exact rounding contract should the replay-backed `unrealizedPnl` path use: should average-cost replay state and the final `unrealizedPnl` scalar be normalized through `round_risk_value(...)` after each fill transition, or should replay math stay at full precision and round only the final wire field?",
+      "category": "design",
+      "why_it_matters": "The backend already normalizes exposure and risk values aggressively, and deterministic P&L assertions will depend on whether rounding happens incrementally during replay or only once at serialization time."
+    },
+    {
+      "id": "q4",
+      "question": "If `query_market_atomic_probability_for_inference(marketId, outcomeId)` cannot produce a mark for an otherwise live row with replayable history, should `/v1/accounts/{id}/positions` fail the request, omit that row, fall back to `unrealizedPnl: 0.0`, or use some other fallback such as `lastTradePrice`?",
+      "category": "requirements",
+      "why_it_matters": "The planned replay/P&L seam introduces a new runtime dependency that the current `/positions` route does not have. The fallback policy determines whether the endpoint remains projection-local and resilient, and it changes both implementation and regression expectations."
+    },
+    {
+      "id": "q5",
+      "question": "When replayed filled `EventTrade` history disagrees with the surviving `ACCOUNT_EXPOSURE` row on net size or sign, which source should `/positions` treat as authoritative: should the live row remain the source of liveness and `netSize` while replay contributes only average-cost/P&L, or should replayed history override the stored row and potentially hide a projection mismatch?",
+      "category": "codebase",
+      "why_it_matters": "Current tests and helpers already allow directly seeded live exposure rows, and the planned replay helper is read-time only. The implementation needs one clear authority rule so it does not silently rewrite the public position payload from historical data in cases where the projection and history diverge."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This checkout still serves the legacy four-field `/positions` payload from `serialize_account_position(...)` and has no replay-backed `unrealizedPnl` production seam in `backend/server.py`.",
+      "confidence": 0.99,
+      "if_wrong": "The question set would misidentify the branch state and overstate how much missing product work remains before the targeted selector is meaningful."
+    },
+    {
+      "id": "a2",
+      "assumption": "The requested pytest selector is green today because `BayesMarketExposureProjectionTests` still cover only the existing exposure/positions baseline and do not yet include the representative exact-P&L regressions planned for this line of work.",
+      "confidence": 0.99,
+      "if_wrong": "A failing or already-expanded regression slice would change the main blocker from contract ambiguity to straightforward bug fixing."
+    },
+    {
+      "id": "a3",
+      "assumption": "The intended completed `/positions` contract for this line remains additive rather than a redesign: same `{account, meta}` envelope, same lexical ordering and 404 lifecycle, plus `unrealizedPnl` on each surviving live row.",
+      "confidence": 0.97,
+      "if_wrong": "Step 3 would need to reopen earlier route-shape decisions instead of focusing on replay/P&L behavior."
+    },
+    {
+      "id": "a4",
+      "assumption": "The relevant implementation and regression scope is still backend-only in `backend/server.py` and `tests/test_bayes_market_api.py`; there is no evidence in this checkout that frontend or docs changes are prerequisites for the targeted backend gate.",
+      "confidence": 0.96,
+      "if_wrong": "The later implementation or validation phases would need to widen scope and the current questions would miss additional contract owners."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the current selector behavior, the `/positions` serializer state, and the missing replay/P&L seam are all visible locally in this worktree and prior `bayes-market-i6y` task artifacts.",
+      "confidence": 0.99,
+      "if_wrong": "A child investigation would be needed before coding to discover another hidden owner or prerequisite branch."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

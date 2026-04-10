@@ -1,0 +1,90 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat this execution leaf as prerequisite backfill, not a no-op rerun, because the current branch still exposes the legacy four-field `/positions` row and therefore must land the replay-backed `unrealizedPnl` seam before the targeted pytest selector is a meaningful gate.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Stop after rerunning the already-green selector without product or test changes.",
+        "Assume another unseen branch will land the missing `/positions` replay seam first."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Freeze the completed `/positions` contract as the additive five-field row `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` while preserving the current `{account, meta}` envelope, lexical `(marketId, outcomeId)` ordering, malformed-row skipping, and projection-local `404 account_not_found` semantics.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Keep the existing four-field row and leave P&L out of scope.",
+        "Redesign the route envelope or ordering rules while adding replay-backed P&L."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Implement replay-backed pricing from matching filled `EventTrade` history in deterministic `(filledAt, id)` order and normalize replay state through the existing six-decimal rounding helpers after each fill transition, then round the final `unrealizedPnl` wire value canonically as well.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Rely on raw `ORDERS` iteration order or timestamp-only ordering.",
+        "Delay all rounding until final serialization.",
+        "Infer basis from `lastTradePrice` instead of replaying fills."
+      ],
+      "reversibility": "hard"
+    },
+    {
+      "id": "d4",
+      "decision": "Degrade replay or mark failures per row by preserving the live position row and emitting `unrealizedPnl: 0.0` whenever usable history is absent, replay inputs are invalid, replay disagrees with the live survivor after canonical rounding, or the inference mark lookup cannot produce a price.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Fail the entire `/positions` response on replay or mark lookup errors.",
+        "Drop live rows whose P&L inputs cannot be reconstructed."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Keep `ACCOUNT_EXPOSURE` authoritative for liveness, public `netSize`, rounded-zero pruning, and lexical wire ordering; replay contributes only average-cost and mark-to-market computation and must not silently rewrite the public row when historical fills diverge from the live projection.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Rebuild the public `/positions` payload directly from replay history.",
+        "Prefer replayed survivor size or sign over the stored live exposure row."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add ordered replay helpers in `backend/server.py` to select one live `(accountId, marketId, outcomeId)` slice from `ORDERS`, admit only matching filled `EventTrade` rows, and return them in stable `(filledAt, id)` order for deterministic basis reconstruction.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Implement the signed average-cost replay accumulator in `backend/server.py`, applying the agreed per-fill validation and canonical rounding rules across weighted-average adds, partial closes, full closes, and sign flips so each live row can recover a deterministic survivor basis when usable history exists.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Thread the replay result into `/positions` serialization so surviving live rows still come from `ACCOUNT_EXPOSURE`, now emit the additive five-field row with `unrealizedPnl`, and downgrade only the P&L scalar to `0.0` when replay or inference inputs are unavailable or incompatible with the live row.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Extend `tests/test_bayes_market_api.py` within `BayesMarketExposureProjectionTests` to lock the five-field `/positions` payload plus representative replay/P&L regressions for weighted-average adds, partial-close survivors, sign-flip survivors, missing-history fallback, mark-failure fallback, replay/live mismatch fallback, and existing getter-versus-route parity.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Run `python3 -m pytest -v --tb=short tests/test_bayes_market_api.py::BayesMarketApiUnitTests::test_root_route_returns_service_index tests/test_bayes_market_api.py::BayesMarketExposureProjectionTests` and iterate on `backend/server.py` plus the targeted tests until the `/positions` and exposure/P&L slice passes cleanly.",
+      "depends_on": [4]
+    },
+    {
+      "step": 6,
+      "task": "Review the final diff to confirm the contract change stays isolated to `backend/server.py`, `tests/test_bayes_market_api.py`, and this task's `.fleet` artifacts before staging and creating the implementation commit in the execution phase.",
+      "depends_on": [5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
