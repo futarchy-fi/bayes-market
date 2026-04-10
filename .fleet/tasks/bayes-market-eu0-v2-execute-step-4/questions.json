@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The task explicitly calls out the EventTrade `size` field, but the backend still accepts legacy `amount` input and successful EventTrade responses already carry a richer `order` object with `size`, `side`, `price`, and `notional` than the current frontend `OrderResponse` type models. Should step 4 stay request-scoped and add only canonical `EventTradePayload.size`, or should it also freeze the richer EventTrade success typing now?",
+      "category": "design",
+      "why_it_matters": "This decides whether step 4 is a narrow additive payload/hook patch or also the place where the frontend commits to the full size-aware EventTrade response surface that step 5 may want to render."
+    },
+    {
+      "id": "q2",
+      "question": "After a successful `resolveMarket(...)`, should exposure invalidation target every cached account-exposure query, or only the single `payload.accountId` key from the resolve request the way an ordinary account-scoped mutation would?",
+      "category": "requirements",
+      "why_it_matters": "Backend resolution prunes live exposure for every trader in the resolved market, not just the resolving admin account. Invalidating only one account can leave stale exposure caches behind after session switches or previously viewed accounts."
+    },
+    {
+      "id": "q3",
+      "question": "This worktree's React Query layer has no shared `queryKeys.account(id)` namespace and the current mutation hooks no longer invalidate `useAccountRisk(...)` at all. Should step 4 preserve that branch-local shape and add only a new `accountExposure(id)` key plus targeted invalidation, or is this step expected to reintroduce grouped account-query invalidation while touching the same hooks?",
+      "category": "codebase",
+      "why_it_matters": "The answer determines whether the implementation is an isolated exposure addition or a broader cache-coherence refactor that also reopens existing account-risk freshness behavior."
+    },
+    {
+      "id": "q4",
+      "question": "The backend exposure route deliberately returns `404 account_not_found` for never-traded, risk-only, and fully pruned accounts. Should `getAccountExposure(...)` and `useAccountExposure(...)` preserve that raw error contract exactly like `useAccountRisk(...)`, or should the hook normalize `404` into an empty exposure result ahead of the later portfolio-UI step?",
+      "category": "design",
+      "why_it_matters": "This freezes whether future UI code consumes exposure through ordinary error-state handling or through a synthetic empty-data branch, and it changes the public behavior of the new hook even if the backend contract stays unchanged."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The backend prerequisite is already present in this checkout: `/v1/accounts/{id}/exposure` exists, `resolve_market_command(...)` already calls `settle_market_account_exposure(...)`, and step 4 can stay frontend-scoped.",
+      "confidence": 0.99,
+      "if_wrong": "The branch would still need missing backend work before frontend types and hooks could be trusted or exercised against the intended contract."
+    },
+    {
+      "id": "a2",
+      "assumption": "The new frontend surface should be additive: introduce `AccountExposureResponse`, `getAccountExposure(accountId)`, `queryKeys.accountExposure(accountId)`, and `useAccountExposure(accountId)` without reshaping existing market or `/risk` query signatures.",
+      "confidence": 0.98,
+      "if_wrong": "Step 4 would need a wider frontend API cleanup rather than a focused exposure addition."
+    },
+    {
+      "id": "a3",
+      "assumption": "Frontend TypeScript should treat `size` as the canonical EventTrade input field even if the backend temporarily keeps `amount` as a compatibility alias.",
+      "confidence": 0.95,
+      "if_wrong": "The public frontend API types would need to expose a deprecated dual-field write contract instead of one canonical request shape."
+    },
+    {
+      "id": "a4",
+      "assumption": "Step 4 should not yet switch `Portfolio`, `MarketDetail`, or `EventTradePanel` to the new exposure data or size input flow; component adoption belongs to the later UI step.",
+      "confidence": 0.98,
+      "if_wrong": "The patch would need to include user-facing component changes now rather than landing only types, client methods, and query hooks."
+    },
+    {
+      "id": "a5",
+      "assumption": "Exposure freshness is driven by write-path invalidation, not by the existing market-price WebSocket subscription helpers, so step 4 can leave `useMarketPriceSubscription(...)` untouched.",
+      "confidence": 0.92,
+      "if_wrong": "The exposure hook or mutation wiring would need additional subscription-aware cache synchronization beyond ordinary post-mutation invalidation."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
