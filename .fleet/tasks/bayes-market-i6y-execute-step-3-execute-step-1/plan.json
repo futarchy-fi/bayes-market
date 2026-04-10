@@ -1,0 +1,67 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Freeze the helper boundary as a read-time utility that takes `account_id` plus one stored `ACCOUNT_EXPOSURE` row and resolves the slice only from the row's own `marketId` and `outcomeId`, returning no slice for malformed rows instead of attempting recovery from the composite storage key or pre-serialized position payloads.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Reconstruct missing identifiers from the enclosing `marketId|outcomeId` storage key.",
+        "Infer the slice from already-serialized `/positions` or `/exposure` payload shapes.",
+        "Raise on malformed rows instead of keeping the read path's skip-malformed behavior."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Match replay candidates only from `ORDERS` rows where `type == \"EventTrade\"`, `status == \"filled\"`, and `accountId` matches the requested account, resolving each order's slice with `targetMarketId` and `targetOutcomeId` first and falling back to `marketId` plus `payload.formula[0][0].outcomeId` when the target fields are absent.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Scan every stored order type regardless of whether it affects `ACCOUNT_EXPOSURE`.",
+        "Match on `marketId` alone and ignore the outcome dimension.",
+        "Use only legacy payload fields and ignore the explicit `target*` identifiers already written by accepted EventTrade orders."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Return matching fills in ascending `(filledAt, id)` replay order, skipping otherwise matching rows that are missing either field as unreplayable and returning an empty list when a live row has no replayable history.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Rely on raw `ORDERS` dict iteration order.",
+        "Sort only by `filledAt` and leave ties unstable.",
+        "Raise when replayable history is empty or when one matching row is missing `filledAt` or `id`."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add a small slice-resolution helper in `backend/server.py` near the existing exposure read helpers so one stored exposure row can be normalized into a `(marketId, outcomeId)` tuple or rejected as malformed without changing the current skip-malformed read contract.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add an EventTrade order-slice resolver in `backend/server.py` that mirrors `sync_account_exposure_state(...)` precedence by reading `targetMarketId` and `targetOutcomeId` first and falling back to `marketId` plus the atomic payload literal outcome for legacy or manually seeded orders.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Implement the replay-collection helper in `backend/server.py` that iterates `ORDERS`, filters to filled EventTrade rows for the target account and slice, drops unreplayable matches missing `filledAt` or `id`, and returns the surviving orders sorted by `(filledAt, id)`.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Extend `tests/test_bayes_market_api.py` with focused helper-level regressions covering malformed exposure rows, target-field versus payload fallback precedence, exclusion of non-EventTrade or non-filled orders, deterministic tie ordering, and the empty-history case.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Run the targeted backend tests that exercise the new helper utilities and adjacent `/positions` or exposure read behavior, then commit the task plan artifacts once the plan file is in place.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
