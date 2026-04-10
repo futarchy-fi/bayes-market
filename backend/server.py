@@ -4397,7 +4397,7 @@ def handle_comment_post(market_id: str, payload: dict[str, Any] | None) -> tuple
         idempotency_key = idempotency_key.strip()
 
     account_id = account_id.strip()
-    _scope_key = (
+    scope_key = (
         idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
     )
 
