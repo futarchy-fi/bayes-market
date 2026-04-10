@@ -6087,6 +6087,7 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
 
     def test_market_resolve_http_requires_valid_agent_id_when_enabled(self):
         server.AUTH_REQUIRE_AGENT_ID = True
+        server.RATE_LIMIT_PER_MIN = 1
 
         missing_status, missing_payload, missing_headers = self.market_resolution_with_headers(
             account_id="ops_http_auth_missing",
@@ -6098,12 +6099,6 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         invalid_status, invalid_payload, invalid_headers = self.market_resolution_with_headers(
             account_id="ops_http_auth_invalid",
             agent_id="ops admin",
-        )
-        valid_status, valid_payload, valid_headers = self.market_resolution_with_headers(
-            market_id="m2",
-            account_id="ops_http_auth_valid",
-            outcome_id="delayed",
-            agent_id="agent-admin-valid",
         )
 
         self.assert_agent_id_error(
@@ -6128,12 +6123,25 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
             reason="invalid_format",
         )
         self.assert_rate_limit_headers_absent(invalid_headers)
-        self.assertEqual(valid_status, 201)
-        self.assertEqual(valid_payload["market"]["id"], "m2")
-        self.assertEqual(valid_payload["market"]["resolution"], "delayed")
-        self.assertEqual(valid_payload["result"]["status"], "accepted")
-        self.assert_rate_limit_headers_absent(valid_headers)
-        self.assertEqual(server.MARKETS["m1"]["status"], "active")
+        self.assertEqual(server.MARKETS["m2"]["status"], "active")
+
+    def test_market_resolve_http_omits_rate_limit_headers_when_limiter_disabled(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+
+        status, payload, response_headers = self.market_resolution_with_headers(
+            market_id="m2",
+            account_id="ops_http_auth_valid",
+            outcome_id="delayed",
+            agent_id="agent-admin-valid",
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["id"], "m2")
+        self.assertEqual(payload["market"]["status"], "resolved")
+        self.assertEqual(payload["market"]["resolution"], "delayed")
+        self.assertEqual(payload["result"]["status"], "accepted")
+        self.assert_rate_limit_headers_absent(response_headers)
+        self.assertEqual(server.MARKETS["m2"]["status"], "resolved")
 
     def test_probability_edit_http_emits_retry_after_and_quota_headers_on_429(self):
         server.AUTH_REQUIRE_AGENT_ID = True
