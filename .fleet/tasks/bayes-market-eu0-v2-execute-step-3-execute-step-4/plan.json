@@ -1,0 +1,62 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Extend `BayesMarketApiConcurrencyTests` with a small `account_exposure(...)` helper and place the new exposure assertions there so the step reuses the existing `ThreadingHTTPServer` + `BayesHandler` scaffold instead of adding another threaded class or moving the plain `HTTPServer` coverage.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Treat the existing single-threaded `BayesMarketApiIntegrationTests` exposure `404`/`405` assertions as the only required HTTP coverage for this step",
+        "Create a second threaded HTTP test class just for exposure reads",
+        "Relocate the existing plain HTTP tests instead of supplementing them with the requested threaded slice"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Make the threaded happy-path regression a minimal accepted-buy read-after-write test that compares the stable HTTP `GET /v1/accounts/{id}/exposure` read result to the direct `server.route_request(\"GET\", ...)` response for the same path, asserting status parity and matching `account` payload while avoiding brittle full-envelope equality on per-response `meta.timestamp`.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Re-spell the exposure contract field-by-field from the write response instead of using direct read parity as the oracle",
+        "Reproduce the larger buy-then-sell netting flow already frozen in the direct exposure route suite",
+        "Assert full JSON equality including `meta.timestamp` across separate read calls"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep the threaded error coverage intentionally narrow: add unknown-account `404 account_not_found` and POST-to-exposure `405 method_not_allowed` assertions in the threaded class, using the plain missing-account variant and structured error details to prove transport parity without duplicating the broader projection-local `404` matrix from the direct tests.",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Skip the threaded `404`/`405` checks because equivalent assertions already exist in the plain HTTP suite",
+        "Use a risk-only account to restate projection-local exposure semantics in the threaded layer",
+        "Expand the threaded suite into the full direct exposure behavior matrix"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Update `tests/test_bayes_market_api.py` inside `BayesMarketApiConcurrencyTests` to add an `account_exposure(account_id, *, timeout=5)` helper beside the existing `account_risk(...)` helper so the threaded tests can read `/v1/accounts/{id}/exposure` through the shared request path.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add a threaded happy-path exposure regression in `BayesMarketApiConcurrencyTests` that submits one accepted EventTrade buy through `event_trade(...)`, reads `/v1/accounts/{id}/exposure` over HTTP, and compares the stable read result to `server.route_request(\"GET\", f\"/v1/accounts/{id}/exposure\")`, asserting `200` parity and equal `account` payloads while ignoring response-local timestamp churn in `meta`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add two more threaded HTTP tests in the same class: one for `GET /v1/accounts/{id}/exposure` on an unknown account returning structured `404 account_not_found` with the expected `accountId`, and one for POST on the same resource returning structured `405 method_not_allowed` with the expected `method` and `path` details.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Run the focused `tests/test_bayes_market_api.py` exposure HTTP slices covering the new threaded class and the existing plain integration assertions, then tighten the assertions only if response-shape details differ from the current `BayesHandler` contract.",
+      "depends_on": [2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
