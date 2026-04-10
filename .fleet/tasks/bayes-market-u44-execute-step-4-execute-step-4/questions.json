@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact step-3 outcome is sufficient to prove that the current ProbabilityEdit limiter matrix is no longer representative of the shared protected-write seam: a reproduced limiter/header mismatch on another protected POST route while the ProbabilityEdit matrix stays green, or some narrower implementation-level signal inside `BayesHandler.handle_api()`/`rate_limit_headers(...)`?",
+      "category": "requirements",
+      "why_it_matters": "Step 4 is explicitly conditional on step 3 disproving the shared seam, so the implementation boundary depends on what evidence actually authorizes broadening beyond the current ProbabilityEdit regression slice."
+    },
+    {
+      "id": "q2",
+      "question": "If step 3 produced no such contrary evidence and `BayesMarketApiAuthRateLimitTests` still passes unchanged, is the intended step-4 outcome allowed to be an explicit no-op that preserves the current ProbabilityEdit-only limiter matrix with no backend or test edits?",
+      "category": "requirements",
+      "why_it_matters": "The current checkout already has ProbabilityEdit as the only route asserting remaining-quota decrement, `429`, `Retry-After`, and per-agent isolation, so clarifying whether 'do nothing' is acceptable avoids inventing duplicate coverage just to satisfy the phase."
+    },
+    {
+      "id": "q3",
+      "question": "For the other protected POST routes (`POST /v1/markets`, `POST /v1/markets/{id}/resolve`, `POST /v1/markets/{id}/comments`, and `POST /v1/markets/{id}/orders/event-trade`), should step 4 treat them strictly as auth/unsupported-route sentinels and avoid adding any new assertions about remaining quota, `429`, `Retry-After`, or per-agent isolation?",
+      "category": "design",
+      "why_it_matters": "Repo inspection shows the current auth/rate-limit class uses quota-header and limiter assertions only on ProbabilityEdit, so the phase boundary needs to say whether the other protected routes are intentionally outside that matrix."
+    },
+    {
+      "id": "q4",
+      "question": "If some non-ProbabilityEdit protected-route coverage is still expected after step 3, where is the duplication line: are simple success-path header-presence checks on other routes still acceptable, or should any new `X-RateLimit-*` assertion outside the ProbabilityEdit matrix be treated as out of scope for this step?",
+      "category": "design",
+      "why_it_matters": "The task title forbids duplicate cross-route assertions, but the current suite still has adjacent create-market and market-resolve success tests that could either remain header-agnostic sentinels or be widened into accidental matrix duplicates."
+    },
+    {
+      "id": "q5",
+      "question": "Should `test_unsupported_post_route_stays_router_not_found_when_auth_enabled` remain the only unsupported-route sentinel needed to justify keeping ProbabilityEdit as the sole limiter seam, or is step 4 expected to preserve or add more unclassified POST regressions before we can rely on that single legacy path?",
+      "category": "requirements",
+      "why_it_matters": "The current backend applies write controls only when `resolve_write_route_category(...)` recognizes the route, so the unsupported-path sentinel is the main proof that auth/rate-limit logic is not leaking onto out-of-scope POSTs."
+    },
+    {
+      "id": "q6",
+      "question": "If earlier or parallel work has already introduced non-ProbabilityEdit limiter assertions on the target branch, should step 4 actively remove or consolidate those duplicates back into the ProbabilityEdit matrix, or is the scope only to avoid adding more duplication in this checkout?",
+      "category": "codebase",
+      "why_it_matters": "The local branch does not currently contain cross-route limiter duplicates, but the integration target might, and the implementation strategy differs depending on whether step 4 is restorative cleanup or just a no-expansion guard."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "In the current checkout, the shared protected-write seam still runs through `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `rate_limit_headers(...)`, and `BayesHandler.handle_api()`, so ProbabilityEdit remains representative unless step 3 found contradictory runtime evidence.",
+      "confidence": 0.99,
+      "if_wrong": "A route-specific bypass or special case exists, and keeping ProbabilityEdit as the only limiter regression seam would leave a real cross-route behavior gap unguarded."
+    },
+    {
+      "id": "a2",
+      "assumption": "The only current regression matrix for remaining-quota decrement, `429`, `Retry-After`, and per-agent isolation is the ProbabilityEdit slice in `BayesMarketApiAuthRateLimitTests`; non-ProbabilityEdit routes do not presently duplicate those assertions.",
+      "confidence": 0.99,
+      "if_wrong": "Step 4 would need to audit and possibly collapse already-duplicated limiter assertions instead of merely preserving the current seam."
+    },
+    {
+      "id": "a3",
+      "assumption": "This branch does not presently reproduce a protected-write seam regression: `python3 -m unittest discover -s tests -p 'test_bayes_market_api.py' -k BayesMarketApiAuthRateLimitTests` passes locally with 18 tests.",
+      "confidence": 0.97,
+      "if_wrong": "A failing preserved selector would become the real step-4 driver, and the phase would shift from boundary clarification to concrete bug repair."
+    },
+    {
+      "id": "a4",
+      "assumption": "Create-market and market-resolve currently act only as adjacent auth-success sentinels in this class, while comment-post and event-trade have no auth/rate-limit matrix here and the unsupported legacy ProbabilityEdit POST remains the canonical header-free out-of-scope route.",
+      "confidence": 0.96,
+      "if_wrong": "The current codebase already carries more cross-route limiter intent than the local inspection suggests, so the question set would be understating the scope that step 4 must reconcile."
+    },
+    {
+      "id": "a5",
+      "assumption": "Unless step 3 or integration state proves otherwise, step 4 is likely allowed to complete as a verified no-op that preserves the current ProbabilityEdit-only limiter seam.",
+      "confidence": 0.91,
+      "if_wrong": "The execute phase would need to make active test reshaping or backend changes even though the local checkout already matches the stated desired boundary."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
