@@ -1,0 +1,14 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.05,
+  "plan_adherence_notes": "The diff against `ff/Tbayes-market-eu0-v2-execute-step-6` contains only the task artifacts for this branch (`questions.json`, `research.json`, `plan.json`). None of the planned landing changes were executed: `frontend/src/__tests__/api-client.test.ts` still lacks `getAccountExposure(accountId)` coverage, there is still no hook-level invalidation proof for `useAccountExposure(...)` / `useEventTrade(...)` / `useResolveMarket(...)`, `frontend/src/routes/Portfolio.tsx` still falls through when one account query 404s before the other settles, and the listed freeze/launch docs still inventory only `/v1/accounts/{id}/risk`. Validation did independently run the recorded verification commands, but that does not change the fact that the execution branch has not implemented plan steps 1-4.",
+  "research_quality": 0.97,
+  "question_completeness": 0.9,
+  "missed_questions": [
+    "Should this validation environment be expected to have frontend dependencies installed already, or is dependency bootstrap part of the allowed verification flow? The plan/research named full frontend test/build as the bar, but the branch cannot satisfy that bar in the current checkout because `frontend/node_modules` is absent."
+  ],
+  "verdict": "changes_requested",
+  "reason": "The recorded research is accurate and the plan follows from it, but the branch has not executed the landing scope yet. Relative to `ff/Tbayes-market-eu0-v2-execute-step-6`, there are no frontend, backend, or docs changes beyond task metadata, so the known gaps remain open. Backend verification passed (`python3 -m pytest tests/ -v --tb=short`: 271 passed), while frontend verification could not be completed in this checkout because `pnpm --dir frontend test` failed with `vitest: Permission denied` / missing `node_modules`, and `pnpm --dir frontend build` failed with missing frontend module/type errors for the same reason.",
+  "spawn_children": false,
+  "children": []
+}
