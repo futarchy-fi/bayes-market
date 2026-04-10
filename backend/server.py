@@ -127,6 +127,7 @@ max_position_size = 100.0
 ACCOUNT_SERVICE_INDEX_ROUTES = (
     "/v1/accounts/{id}/risk",
     "/v1/accounts/{id}/exposure",
+    "/v1/accounts/{id}/positions",
 )
 LEGACY_HEALTH_ROUTES = ("/health", "/healthz")
 VERSIONED_HEALTH_ROUTE = "/v1/health"
