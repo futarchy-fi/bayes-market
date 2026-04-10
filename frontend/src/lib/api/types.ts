@@ -192,6 +192,29 @@ export interface AccountRiskResponse {
   meta: Meta;
 }
 
+export interface AccountExposurePosition {
+  marketId: string;
+  outcomeId: string;
+  netSize: number;
+  absSize: number;
+  lastTradePrice: number;
+  updatedAt: string;
+  lastOrderId: string | null;
+  lastCommandId: string | null;
+}
+
+export interface AccountExposureResponse {
+  account: {
+    id: string;
+    exposure: {
+      maxPositionSize: number;
+      updatedAt: string;
+      positions: AccountExposurePosition[];
+    };
+  };
+  meta: Meta;
+}
+
 export interface AssetDelta {
   beforeMinAsset: number;
   afterMinAsset: number;
@@ -224,6 +247,20 @@ export interface OrderResponse {
   meta: Meta;
 }
 
+export interface AcceptedTerminalResult {
+  terminal: true;
+  status: "accepted";
+  eventType: "CommandAccepted";
+  eventId: string;
+  commandId: string;
+  emittedAt: string;
+}
+
+export interface CommandResponseMeta extends Meta {
+  idempotencyKeyEcho?: string;
+  replayed?: boolean;
+}
+
 export interface ApiError {
   error: {
     code: string;
@@ -253,8 +290,41 @@ export interface ProbabilityEditPayload {
 export interface EventTradePayload {
   accountId: string;
   formula: Array<Array<{ variableId: string; outcomeId: string; negated: boolean }>>;
+  size: number;
   side: "buy" | "sell";
   idempotencyKey?: string;
+}
+
+export interface EventTradeOrderPayload {
+  formula: EventTradePayload["formula"];
+  size: EventTradePayload["size"];
+  side: EventTradePayload["side"];
+}
+
+export interface EventTradeOrder {
+  id: string;
+  type: "EventTrade";
+  marketId: string;
+  accountId: string;
+  commandId: string;
+  submittedAt: string;
+  status: "filled";
+  payload: EventTradeOrderPayload;
+  targetMarketId: string;
+  targetOutcomeId: string;
+  side: EventTradePayload["side"];
+  size: EventTradePayload["size"];
+  price: number;
+  notional: number;
+  createdAt: string;
+  filledAt: string;
+  idempotencyKey?: string;
+}
+
+export interface EventTradeResponse {
+  order: EventTradeOrder;
+  result: AcceptedTerminalResult;
+  meta: CommandResponseMeta;
 }
 
 export interface CommentPayload {
@@ -265,10 +335,7 @@ export interface CommentPayload {
 
 export interface CommentResponse {
   comment: MarketComment;
-  meta: Meta & {
-    idempotencyKeyEcho?: string;
-    replayed?: boolean;
-  };
+  meta: CommandResponseMeta;
 }
 
 export interface Session {
