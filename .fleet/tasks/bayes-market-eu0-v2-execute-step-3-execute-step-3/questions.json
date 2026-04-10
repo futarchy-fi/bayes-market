@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact public schema is frozen for `GET /v1/accounts/{id}/exposure`: the top-level envelope plus the per-position fields and field names (for example `marketId`, `outcomeId`, `currentNetSize`, `lastOrderId`, `updatedAt`, and any market metadata)?",
+      "category": "requirements",
+      "why_it_matters": "`backend/server.py` currently exposes `/v1/accounts/{id}/risk` and `/v1/accounts/{id}/pnl`, but there is no exposure route or payload contract yet, so the new regression assertions cannot be written precisely without a canonical response shape."
+    },
+    {
+      "id": "q2",
+      "question": "When should `/v1/accounts/{id}/exposure` return `404` instead of `200`: only when the account has never had live EventTrade exposure, whenever the account has no non-zero live exposure rows, or only after all related account projections are gone as well?",
+      "category": "requirements",
+      "why_it_matters": "The task says market resolution should prune the final live exposure so the route flips to `404`, but the repo already keeps separate account state in `ACCOUNT_RISK` and replayed P&L, so the empty-account semantics need to be explicit."
+    },
+    {
+      "id": "q3",
+      "question": "What is the canonical netting bucket for one exposure row and for the position-limit preview: per atomic `(accountId, marketId, outcomeId)` EventTrade leg, or some broader market-level/formula-level aggregation?",
+      "category": "design",
+      "why_it_matters": "Current EventTrades are normalized to one atomic literal and `compute_account_pnl(...)` uses signed size by outcome, but the repository still has no frozen definition for the `currentNetSize` bucket that the new route and limit-breach regressions would assert."
+    },
+    {
+      "id": "q4",
+      "question": "What state should back the new read-after-write exposure route and the untouched-state regressions: a dedicated persisted exposure projection, on-read reconstruction from accepted `ORDERS`, or both?",
+      "category": "codebase",
+      "why_it_matters": "This checkout has no exposure store, no exposure helper in `backend/server.py`, and `snapshot_domain_state()` in `tests/test_bayes_market_api.py` does not capture any exposure-specific state, so the implementation seam is still open."
+    },
+    {
+      "id": "q5",
+      "question": "Should `position_limit_exceeded` remain a plain pre-command error like unconditional `min_asset_violation`, meaning repeated submissions with the same idempotency key recompute the preview and leave `COMMANDS`, `EVENTS`, `TERMINAL_OUTCOMES`, and `IDEMPOTENCY_KEYS` untouched?",
+      "category": "requirements",
+      "why_it_matters": "The requested regressions explicitly need to prove that limit-breach attempts do not mutate command/event/idempotency state, but the current EventTrade flow has no limit path and normally materializes commands before terminal handling."
+    },
+    {
+      "id": "q6",
+      "question": "After resolving one market, should `/v1/accounts/{id}/exposure` keep returning any unrelated live positions from other markets and only flip to `404` when the resolved market was the account's last live exposure?",
+      "category": "requirements",
+      "why_it_matters": "`settle_market_account_risk(...)` already removes one market's risk/LMSR state at resolution time, but the exposure route's multi-market cleanup behavior is not defined anywhere in the current codebase."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new route is intended to expose only live EventTrade positions, not probability-edit LMSR exposure or the existing `/risk` read model, because the task scope is framed around accepted buys/sells, netting, limit breaches, idempotent replay, and resolution cleanup.",
+      "confidence": 0.93,
+      "if_wrong": "Implementation scope expands into combining probability-edit risk/LMSR state with EventTrade state, and the new tests would need a broader cross-product of trading behaviors."
+    },
+    {
+      "id": "a2",
+      "assumption": "Signed netting should match the existing EventTrade convention in `compute_account_pnl(...)`: buys contribute positive size and sells contribute negative size within the same atomic market/outcome bucket.",
+      "confidence": 0.9,
+      "if_wrong": "The exposure route could disagree with the repo's current valuation math, and the read-after-write netting assertions would lock in the wrong direction or aggregation rule."
+    },
+    {
+      "id": "a3",
+      "assumption": "Fresh `position_limit_exceeded` failures should stay pre-command and non-terminal, mirroring unconditional `min_asset_violation`, so they do not append events, persist terminal outcomes, or bind idempotency keys.",
+      "confidence": 0.88,
+      "if_wrong": "The implementation would need a new persisted rejection/replay path for EventTrade limit breaches, and the planned untouched-state regressions would need different expectations."
+    },
+    {
+      "id": "a4",
+      "assumption": "The exposure route should return `404` when an account has no live exposure rows, even if other account projections still exist, and resolving the final open position should therefore make the route disappear.",
+      "confidence": 0.76,
+      "if_wrong": "The endpoint may need to return `200` with an empty list or retain tombstoned/realized rows, which changes both the route contract and the market-resolution regression design."
+    },
+    {
+      "id": "a5",
+      "assumption": "Step 3 will need either a new exposure projection or an explicit reconstruction path plus reset/snapshot coverage, because the current repo has neither persisted exposure state nor exposure-aware test helpers.",
+      "confidence": 0.95,
+      "if_wrong": "There is a hidden or external source of truth for exposure that this exploration missed, and the implementation should reuse that instead of introducing new state."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
