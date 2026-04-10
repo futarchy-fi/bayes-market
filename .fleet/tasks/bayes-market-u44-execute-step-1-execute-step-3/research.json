@@ -1,0 +1,172 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "No concrete backend gap is evidenced in this checkout. The shared POST adapter reads the body, enforces write controls before `route_request(...)`, and then applies one shared success-header branch. `resolve_write_route_category(...)` and `route_request(...)` cover the same five protected POST routes, so the current likely issue is missing or stale breadth coverage rather than a server defect. One nuance: missing agent ids are rejected before routing, but not before JSON parsing.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:384",
+        "backend/server.py:398",
+        "backend/server.py:400",
+        "backend/server.py:402",
+        "backend/server.py:403",
+        "backend/server.py:3795",
+        "backend/server.py:3863",
+        "backend/server.py:3875",
+        "backend/server.py:3902",
+        "backend/server.py:3929",
+        "backend/server.py:4039",
+        "backend/server.py:4040",
+        "backend/server.py:4041",
+        "backend/server.py:4043",
+        "tests/test_bayes_market_api.py:6235",
+        "tests/test_bayes_market_api.py:6244",
+        "tests/test_bayes_market_api.py:6426",
+        "tests/test_bayes_market_api.py:6438"
+      ],
+      "uncertainty": "I did not find a committed breadth test that enumerates all five protected POSTs with the limiter enabled, so this conclusion relies on the shared-path code structure plus the existing targeted tests.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. The protected POST surface is still frozen to exactly five market-scoped routes: `POST /v1/markets`, `POST /v1/markets/{id}/resolve`, `POST /v1/markets/{id}/comments`, `POST /v1/markets/{id}/orders/probability-edit`, and `POST /v1/markets/{id}/orders/event-trade`. Unsupported POSTs such as `/v1/orders/probability-edit` remain outside auth, rate limiting, and quota-header emission and still fall through to router `404 not_found`.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:384",
+        "backend/server.py:391",
+        "backend/server.py:398",
+        "backend/server.py:400",
+        "backend/server.py:402",
+        "backend/server.py:3795",
+        "backend/server.py:3863",
+        "backend/server.py:3875",
+        "backend/server.py:3902",
+        "backend/server.py:3929",
+        "backend/server.py:3954",
+        "tests/test_bayes_market_api.py:6426",
+        "tests/test_bayes_market_api.py:6435",
+        "tests/test_bayes_market_api.py:6438"
+      ],
+      "uncertainty": "No uncertainty in the route set itself; the only missing piece is breadth-style tests that assert this frozen boundary exhaustively.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. If a backend fix is needed, it should stay in the shared classifier or adapter path. Route-local handlers return `(payload, status)` only; auth enforcement, rate limiting, and quota-header emission are centralized in `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `BayesHandler.handle_api()`, and `rate_limit_headers(...)`. Adding route-local header logic would fight the current contract.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:418",
+        "backend/server.py:492",
+        "backend/server.py:3990",
+        "backend/server.py:4008",
+        "backend/server.py:4013",
+        "backend/server.py:4035",
+        "backend/server.py:4041",
+        "backend/server.py:4043",
+        "backend/server.py:4046",
+        "backend/server.py:4049"
+      ],
+      "uncertainty": "This is a design conclusion from the current adapter shape, not an explicit comment in the file.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. Successful protected POST responses should continue to emit the full shared header set from `rate_limit_headers(...)`, including `X-RateLimit-Policy`. That helper is the single quota-header builder, and the success branch applies it wholesale rather than selecting a route-specific subset.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:492",
+        "backend/server.py:512",
+        "backend/server.py:513",
+        "backend/server.py:514",
+        "backend/server.py:515",
+        "backend/server.py:516",
+        "backend/server.py:4042",
+        "backend/server.py:4043",
+        "tests/test_bayes_market_api.py:6059",
+        "tests/test_bayes_market_api.py:6062",
+        "tests/test_bayes_market_api.py:6106",
+        "tests/test_bayes_market_api.py:6117"
+      ],
+      "uncertainty": "Existing committed tests prove this for probability-edit; other protected POSTs rely on the same shared branch rather than route-specific assertions.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. Protected POST application errors other than `429 rate_limit_exceeded` should remain free of `X-RateLimit-*` headers even if quota was already consumed. `handle_api()` only attaches quota headers on successful responses or on the dedicated `rate_limit_exceeded` branch; all other `ApiError` responses are sent without extra quota headers.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:4042",
+        "backend/server.py:4043",
+        "backend/server.py:4044",
+        "backend/server.py:4046",
+        "backend/server.py:4049",
+        "tests/test_bayes_market_api.py:6185",
+        "tests/test_bayes_market_api.py:6197",
+        "tests/test_bayes_market_api.py:6209",
+        "tests/test_bayes_market_api.py:6210",
+        "tests/test_bayes_market_api.py:6223",
+        "tests/test_bayes_market_api.py:6230",
+        "tests/test_bayes_market_api.py:6273",
+        "tests/test_bayes_market_api.py:6294"
+      ],
+      "uncertainty": "I did not find a committed test that specifically exercises a later `400` or `409` after quota was consumed, but the control flow in `handle_api()` is direct and does not expose another header-emission branch.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "The older expectation is stale if it is interpreted under enabled rate limiting. The current resolve test that sees no quota headers runs with `RATE_LIMIT_PER_MIN` left at its default `0`, so header absence there is not evidence of a resolve exception. In code, market resolve is classified as a protected `market_admin` write, enforced through `_enforce_write_controls()`, and then sent through the same shared success-header branch as other protected POSTs. There is no admin-write carveout that suppresses `X-RateLimit-Policy` or the rest of the quota-header set when the limiter is on.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:333",
+        "backend/server.py:334",
+        "backend/server.py:384",
+        "backend/server.py:398",
+        "backend/server.py:4008",
+        "backend/server.py:4013",
+        "backend/server.py:4042",
+        "backend/server.py:4043",
+        "tests/test_bayes_market_api.py:6138",
+        "tests/test_bayes_market_api.py:6147",
+        "tests/test_bayes_market_api.py:6252",
+        "tests/test_bayes_market_api.py:6299"
+      ],
+      "uncertainty": "There is no committed positive test for resolve-success headers with `RATE_LIMIT_PER_MIN > 0`, so the conclusion comes from the shared code path rather than an existing assertion dedicated to resolve.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "All HTTP POSTs still enter through `BayesHandler.do_POST()` into `handle_api(\"POST\")`, and `send_json()` remains the shared API response writer. That keeps any backend fix centralized in `backend/server.py`."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "`rate_limit_headers(...)` is only wired into the success branch and the `rate_limit_exceeded` branch inside `handle_api()`, so emitting quota headers on other application errors would broaden the current contract."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The classifier and router still agree on the same five protected POST routes, and unsupported POSTs remain outside write-control enforcement. A real step-3 backend fix would therefore need a newly demonstrated shared-path failure, not a speculative surface expansion."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.87,
+      "impact": "I did not find committed all-routes breadth coverage for the five protected POSTs, and the current test file passes as-is. Step 3 should not guess at a backend patch without a concrete failing case."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.92,
+      "impact": "The most plausible discrepancy is stale or incomplete resolve-header test coverage, not a server-side resolve exception. If new breadth tests enable the limiter for resolve, they should align with the shared header path rather than remove `X-RateLimit-Policy`."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
