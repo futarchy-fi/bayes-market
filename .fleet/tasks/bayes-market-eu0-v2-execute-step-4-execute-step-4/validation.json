@@ -1,0 +1,12 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.95,
+  "plan_adherence_notes": "The execute diff in `frontend/src/lib/query/hooks.ts` follows the planned implementation closely: it adds private exposure-only invalidation helpers, wires `useEventTrade(...)` to invalidate the submitting account's exact exposure key via mutation variables, and wires `useResolveMarket(...)` to invalidate only the `[\"accounts\", <id>, \"exposure\"]` family while leaving grouped account/risk invalidation unchanged. The only small gap is that the execute diff itself does not show evidence of the planned verification step, although validation confirmed the frontend test suite passes.",
+  "research_quality": 0.99,
+  "question_completeness": 0.97,
+  "missed_questions": [],
+  "verdict": "approve",
+  "reason": "The plan is well-supported by the research, the implementation stayed within the researched scope, and `pnpm test` passed in `frontend/` with 45/45 tests green. There is still no dedicated hook-level invalidation coverage for the new exposure helpers, but the recorded plan explicitly deferred that coverage to the follow-up testing step, so it is not a blocker here.",
+  "spawn_children": false,
+  "children": []
+}

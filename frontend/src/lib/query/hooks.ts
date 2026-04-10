@@ -41,6 +41,23 @@ function invalidateMarketDependentQueries(qc: QueryClient, marketId: string) {
   void invalidateMarketCollectionQueries(qc);
 }
 
+function invalidateAccountExposureQuery(qc: QueryClient, accountId: string) {
+  return qc.invalidateQueries({
+    queryKey: queryKeys.accountExposure(accountId),
+    exact: true,
+  });
+}
+
+function invalidateAccountExposureQueries(qc: QueryClient) {
+  return qc.invalidateQueries({
+    predicate: ({ queryKey }) => Array.isArray(queryKey)
+      && queryKey.length === 3
+      && queryKey[0] === "accounts"
+      && typeof queryKey[1] === "string"
+      && queryKey[2] === "exposure",
+  });
+}
+
 function refetchMarketRouteQueries(qc: QueryClient, marketId: string) {
   void qc.invalidateQueries({ queryKey: queryKeys.market(marketId) });
   invalidateMarketDependentQueries(qc, marketId);
@@ -357,6 +374,7 @@ export function useResolveMarket(marketId: string) {
       void qc.invalidateQueries({ queryKey: queryKeys.marketEvents(marketId) });
       void qc.invalidateQueries({ queryKey: queryKeys.engineStats(marketId) });
       void qc.invalidateQueries({ queryKey: queryKeys.markets() });
+      void invalidateAccountExposureQueries(qc);
     },
   });
 }
@@ -366,10 +384,11 @@ export function useEventTrade(marketId: string) {
   return useMutation({
     mutationFn: ({ payload, session }: { payload: EventTradePayload; session: Session }) =>
       api.submitEventTrade(marketId, payload, session),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void qc.invalidateQueries({ queryKey: queryKeys.market(marketId) });
       void qc.invalidateQueries({ queryKey: queryKeys.marketEvents(marketId) });
       void qc.invalidateQueries({ queryKey: queryKeys.engineStats(marketId) });
+      void invalidateAccountExposureQuery(qc, variables.payload.accountId);
     },
   });
 }
