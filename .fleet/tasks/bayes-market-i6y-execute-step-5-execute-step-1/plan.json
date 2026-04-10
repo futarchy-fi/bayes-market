@@ -1,0 +1,87 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Implement the missing replay-backed `/positions` seam locally in `backend/server.py` on this branch, including both the ordered `EventTrade` replay helper and the route-facing integration, rather than waiting for a separate prerequisite branch.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Only edit the existing serializer and assume the replay helper will arrive from another branch later.",
+        "Block this leaf on an external prerequisite instead of backfilling the missing seam here."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep `ACCOUNT_EXPOSURE` authoritative for live-row existence, rounded-zero pruning, and lexical `(marketId, outcomeId)` wire ordering, while replay augments only row pricing; if replayed survivor size or sign disagrees with the live row after canonical six-decimal rounding, preserve the live row and downgrade only `unrealizedPnl` to `0.0`.",
+      "based_on": ["q3", "q5"],
+      "alternatives_rejected": [
+        "Rebuild `/positions` directly from replay history instead of live exposure rows.",
+        "Trust replayed survivor state over the live exposure projection.",
+        "Fail the entire account read when replay and live exposure disagree."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Replay history should come only from matching filled `EventTrade` rows in `ORDERS`, ordered deterministically by `(filledAt, id)`, and a slice should be treated as having no usable history when no replayable fills remain or when any admitted fill has invalid accumulator inputs such as unsupported `side`, non-finite or non-parsable `size` or `price`, `size <= 0`, or `price` outside `[0.0, 1.0]`.",
+      "based_on": ["q1", "q2", "q5"],
+      "alternatives_rejected": [
+        "Mix other order types into replay history.",
+        "Replay in insertion order or by timestamp alone without the `id` tie-break.",
+        "Skip malformed admitted fills and continue replay from the remainder."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Reconstruct basis with a signed-position replay accumulator that rounds every fill transition with the existing six-decimal helpers, keeps `averageCost` positive while `netSize` carries direction, and computes row-level mark-to-market as `(mark - averageCost) * netSize` using `query_market_atomic_probability_for_inference(marketId, outcomeId)` for the mark.",
+      "based_on": ["q1", "q4", "q5"],
+      "alternatives_rejected": [
+        "Delay rounding until the final serialized scalar.",
+        "Encode direction in the sign of `averageCost` instead of signed `netSize`.",
+        "Use `lastTradePrice` as the mark instead of inference."
+      ],
+      "reversibility": "hard"
+    },
+    {
+      "id": "d5",
+      "decision": "All replay or mark failures should degrade per row, not per request: preserve the live `{marketId, outcomeId, netSize, lastTradePrice}` row shape, add `unrealizedPnl`, and emit `unrealizedPnl: 0.0` whenever usable history is absent, replay is incompatible with the live row, or the mark lookup fails.",
+      "based_on": ["q2", "q3", "q4"],
+      "alternatives_rejected": [
+        "Fail the whole `/positions` response on the first replay or inference problem.",
+        "Drop rows whose pricing inputs cannot be reconstructed."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add ordered replay helpers in `backend/server.py` to collect one `(accountId, marketId, outcomeId)` slice of filled `EventTrade` history from `ORDERS`, matching by `targetMarketId` and `targetOutcomeId` when present, falling back to the stored payload literal when needed, and sorting admitted fills by `(filledAt, id)`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Implement a replay accumulator in `backend/server.py` that consumes the ordered fills and returns deterministic replay outputs such as `historyFound`, replayed `netSize`, and signed-average-cost state, applying the agreed per-fill validation, six-decimal rounding, partial-close preservation, exact-close reset, and sign-flip basis reset rules.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Update the `/positions` serialization path so it still derives liveness and lexical wire order from `ACCOUNT_EXPOSURE`, but augments each surviving live row with `unrealizedPnl` by reconciling the replayed survivor against the live row after canonical rounding and marking compatible rows through `query_market_atomic_probability_for_inference(...)`.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Extend `tests/test_bayes_market_api.py` in the existing exposure-projection coverage to pin deterministic `(filledAt, id)` replay order, same-timestamp tie handling, malformed-history downgrade behavior, replay/live mismatch fallback, mark-failure fallback, successful P&L computation, lexical wire ordering, and the existing projection-local `404` behavior when all rows are pruned.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Run the focused `/positions` backend tests that cover the new replay seam and review the resulting diff for contract alignment before moving on to implementation landing work.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
