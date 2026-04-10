@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This worktree already has `/v1/accounts/{id}/positions`, `serialize_account_positions(...)`, and route tests, but it still lacks the step-2 replay-helper seam and accumulator outputs like `averageCost` or `historyFound`. Should this leaf step backfill those missing helpers in `backend/server.py`, or can it assume a prerequisite branch lands first and only wire the serializer?",
+      "category": "codebase",
+      "why_it_matters": "The requested step is framed as 'thread the replay helper' into the positions read model, but the current checkout has nothing to thread yet. Clarifying whether this task absorbs that prerequisite determines whether the implementation is a small serializer edit or a combined helper-plus-integration patch."
+    },
+    {
+      "id": "q2",
+      "question": "What exact conditions should make matched EventTrade history unusable for row-level pricing: only missing or non-parsable `side`/`size`/`price`, or also zero or negative `size`, non-finite numbers, and out-of-range probability prices when replaying one live slice?",
+      "category": "requirements",
+      "why_it_matters": "The current positions read path tolerates directly seeded `ACCOUNT_EXPOSURE` rows, and tests/manual fixtures can also seed `ORDERS`. Step 3 needs one precise definition of 'no replayable history' so it knows when to fall back to `unrealizedPnl: 0.0` instead of silently computing bogus basis math or throwing."
+    },
+    {
+      "id": "q3",
+      "question": "If replay reconstructs a surviving `netSize` that does not equal the rounded live `ACCOUNT_EXPOSURE` row for the same `(accountId, marketId, outcomeId)` slice, should the wire row keep the live `netSize` and downgrade only `unrealizedPnl` to `0.0`, trust the replayed survivor instead, or fail the whole request?",
+      "category": "design",
+      "why_it_matters": "The current `/positions` contract takes liveness from `ACCOUNT_EXPOSURE`, while replay history can be incomplete or manually seeded. This mismatch rule decides whether step 3 preserves the existing live-row semantics or lets historical reconstruction override them."
+    },
+    {
+      "id": "q4",
+      "question": "If `query_market_atomic_probability_for_inference(marketId, outcomeId)` raises for one live row because the market is missing or inference fails, should `/v1/accounts/{id}/positions` fail, or should it preserve the row and degrade that row's `unrealizedPnl` to `0.0`?",
+      "category": "requirements",
+      "why_it_matters": "Today the positions read model is projection-local on `ACCOUNT_EXPOSURE`. Step 3 adds a new per-row inference dependency, so one failed mark lookup could either become a hard read failure or a local pricing fallback depending on the intended contract."
+    },
+    {
+      "id": "q5",
+      "question": "For missing-history, malformed-history, or replay/live-mismatch cases, should the public row stay minimal and expose only `unrealizedPnl: 0.0`, or is step 3 expected to widen the contract with a diagnostic field such as a history-status flag or basis metadata?",
+      "category": "design",
+      "why_it_matters": "Current route tests assert exact minimal row dictionaries, while the new replay behavior introduces ambiguous fallback reasons. Freezing whether the wire shape stays minimal or gains diagnostics determines both serializer scope and how the regressions should be updated."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The existing `/v1/accounts/{id}/positions` route and its current tests are the integration target; this step augments that read model in place rather than redesigning the route surface.",
+      "confidence": 0.99,
+      "if_wrong": "The work would need to reopen route-level contract questions that are already partially implemented on this branch."
+    },
+    {
+      "id": "a2",
+      "assumption": "Live-row existence and lexical `(marketId, outcomeId)` ordering should remain sourced from `ACCOUNT_EXPOSURE`, preserving the current `404 account_not_found` behavior when every row is pruned or rounds to zero.",
+      "confidence": 0.98,
+      "if_wrong": "The serializer would need broader route-contract changes instead of only adding replay-driven pricing."
+    },
+    {
+      "id": "a3",
+      "assumption": "Read-time EventTrade pricing is still supposed to use account-perspective `unrealizedPnl = (mark - averageCost) * netSize`, with positive `averageCost` and signed `netSize` carrying long versus short direction.",
+      "confidence": 0.96,
+      "if_wrong": "The replay accumulator and the row-level P&L assertions would need a different sign convention or a different pricing formula."
+    },
+    {
+      "id": "a4",
+      "assumption": "Replay history should come only from filled `EventTrade` rows in `ORDERS` that match the live slice, not from ProbabilityEdit orders or any new persisted basis fields.",
+      "confidence": 0.97,
+      "if_wrong": "Step 3 would need a wider replay source and likely a larger schema or projection change than the current code implies."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child subtasks are needed because the relevant owners and integration seams are local to `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `bayes-market-i6y` task artifacts already present in this worktree.",
+      "confidence": 0.95,
+      "if_wrong": "A follow-on child investigation would be needed before the serializer integration could be scoped safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
