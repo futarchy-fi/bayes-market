@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Because `ff/Tbayes-market-u44-execute-step-5-execute-step-1` is already merged into `HEAD` and recorded a green `execution.json`, should the parent step-5 execute artifact reuse that checkout-authoritative run result, or rerun `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` again before writing the top-level record?",
+      "category": "requirements",
+      "why_it_matters": "This decides whether step 4 is a synthesis-only artifact step or whether it still needs fresh runtime evidence before the parent execute record can be considered complete."
+    },
+    {
+      "id": "q2",
+      "question": "What exact execute artifact should be written under `.fleet/tasks/bayes-market-u44-execute-step-5/`: a top-level `execution.json` matching the sibling execute-phase schema, or another file that simply contains the canonical command, observed result, both diff summaries, and the final scope verdict?",
+      "category": "codebase",
+      "why_it_matters": "The task requires an execute artifact but does not name the file or schema. The branch already has one local execute-phase precedent, so the parent step should either follow it or explicitly diverge from it."
+    },
+    {
+      "id": "q3",
+      "question": "For the primary `ff/Tbayes-market-u44-execute-step-2...HEAD` audit, should the parent record include only a diff stat plus the conclusion that the product boundary is `backend/server.py` and `tests/test_bayes_market_api.py`, or an explicit path-level inventory showing that all remaining files stay within the `bayes-market-u44` task-artifact lineage?",
+      "category": "design",
+      "why_it_matters": "The execute artifact has to be durable enough for later validation. This question defines how much evidence the primary scope summary must surface instead of leaving implicit."
+    },
+    {
+      "id": "q4",
+      "question": "For the secondary `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` summary, does the parent step-5 record need to restate the specific surviving `backend/server.py` helper-extraction delta around `_invalid_agent_id_reason(...)`, `_normalize_write_request_agent_id(...)`, and `resolve_write_request_agent(...)`, or is it enough to note that `backend/server.py` is the lone inherited product-file delta and cite the execute-step-3 child work?",
+      "category": "codebase",
+      "why_it_matters": "This determines whether the parent execute artifact must duplicate detailed backend attribution or can reference the child evidence while still making the inherited scope issue clear."
+    },
+    {
+      "id": "q5",
+      "question": "When the canonical auth/rate-limit rerun is green and the primary diff still stays within backend/tests plus task artifacts, should the parent execute artifact nevertheless record an explicit `does not clear the step-5 backend-and-tests-only scope gate` verdict because step-4 validation already held the inherited `backend/server.py` change unjustified, or is a softer partial-pass outcome acceptable?",
+      "category": "requirements",
+      "why_it_matters": "The main output of this step is not just test evidence but the final gate verdict. The artifact needs to know whether the inherited backend objection forces a hard `no` even though the file boundary and focused rerun both look clean."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This branch already contains the merged step-5 child history and starts clean, so execute-step-5-execute-step-4 should remain artifact-only under `.fleet/tasks/...` rather than reopening product changes.",
+      "confidence": 0.99,
+      "if_wrong": "The parent step might still need new execution or corrective code work before its final artifact can be written accurately."
+    },
+    {
+      "id": "a2",
+      "assumption": "The canonical focused gate remains `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests`, because the parent plan names that class-level rerun and the merged sibling `execution.json` already records a passing 21-test result for it.",
+      "confidence": 0.98,
+      "if_wrong": "The parent execute record could cite the wrong verification command or need a different fresh run before it is valid."
+    },
+    {
+      "id": "a3",
+      "assumption": "The authoritative full-task and attribution baselines are `ff/Tbayes-market-u44-execute-step-2...HEAD` and `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4`, respectively.",
+      "confidence": 0.99,
+      "if_wrong": "The later execute artifact would summarize the wrong branch history and could misstate either the full-task scope or the origin of the inherited backend delta."
+    },
+    {
+      "id": "a4",
+      "assumption": "In the primary baseline, the only product files are `backend/server.py` and `tests/test_bayes_market_api.py`; the rest of the diff lives under `.fleet/tasks/bayes-market-u44...`.",
+      "confidence": 0.99,
+      "if_wrong": "The branch may already fail the scope gate for broader spillover, not just because of the inherited backend plan-adherence objection."
+    },
+    {
+      "id": "a5",
+      "assumption": "The unresolved problem is inherited plan adherence rather than runtime health: step-4 validation already marked `backend/server.py` unjustified while the focused auth/rate-limit class stayed green.",
+      "confidence": 0.98,
+      "if_wrong": "The parent execute artifact would need to address a fresh runtime or test failure instead of mainly recording the scope verdict."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
