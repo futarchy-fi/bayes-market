@@ -1,0 +1,86 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat this leaf as production-plus-validation on the current branch: because the checkout still serves the legacy four-field `/v1/accounts/{id}/positions` rows and lacks the replay-backed `unrealizedPnl` seam, land the missing step-3 prerequisite here before expecting the new exact-P&L assertions to pass.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Treat step 5 as a rerun-only leaf with no product changes.",
+        "Pause this branch and chase another supposedly authoritative prerequisite branch."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Use `python3 -m pytest -v --tb=short tests/test_bayes_market_api.py::BayesMarketApiUnitTests::test_root_route_returns_service_index tests/test_bayes_market_api.py::BayesMarketExposureProjectionTests` as the targeted gate so `/positions` discoverability and the replay/P&L regressions stay coupled in one repeatable command.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Run only `BayesMarketExposureProjectionTests` and leave the service-index contract outside the gate.",
+        "Use a broader backend suite run as the required validation step for this leaf."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Consider the missing prerequisite complete only when `/positions` serializes the additive five-field row `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` from deterministic `(filledAt, id)` replay that preserves weighted-average adds, partial-close survivors, sign-flip survivors, lexical wire ordering, and `unrealizedPnl: 0.0` fallback for live rows with no replayable history.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Keep the current four-field row and treat `unrealizedPnl` as optional.",
+        "Reuse the richer `/exposure` contract instead of the dedicated `/positions` shape.",
+        "Rely on nondeterministic order-history iteration for replay."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep the representative exact-P&L checks inside `BayesMarketExposureProjectionTests` and reuse the existing getter-versus-route parity baseline, rather than adding direct HTTP `/positions` reads after every weighted-average, partial-close, and sign-flip scenario.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Drive every replay-math case through a dedicated route-level assertion.",
+        "Drop the existing route-parity baseline and test only helper-level behavior."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Audit the completed implementation against `ff/Tbayes-market-i6y-execute-step-4` and keep the expected product diff limited to `backend/server.py` and `tests/test_bayes_market_api.py` plus this task's `.fleet` artifact.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Use an older ancestor branch as the formal audit baseline.",
+        "Broaden the expected product scope beyond the backend files already identified.",
+        "Skip the parent-branch diff review and rely only on the focused pytest run."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Land the missing step-3 replay/P&L prerequisite in `backend/server.py` on this branch: add deterministic filled-`EventTrade` replay for each live `(marketId, outcomeId)` slice, reconstruct signed average cost through adds, partial closes, and sign flips, and serialize `/v1/accounts/{id}/positions` with the additive `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` rows while preserving current liveness and lexical ordering semantics.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Extend `tests/test_bayes_market_api.py` so `BayesMarketExposureProjectionTests` freeze the five-field `/positions` contract and exact-P&L replay behavior for deterministic ordering, missing-history fallback, weighted-average accumulation, partial-close survivors, sign-flip survivors, and the existing getter-versus-route parity expectations.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Run `python3 -m pytest -v --tb=short tests/test_bayes_market_api.py::BayesMarketApiUnitTests::test_root_route_returns_service_index tests/test_bayes_market_api.py::BayesMarketExposureProjectionTests` and iterate on the backend/test changes until the focused `/positions` regression slice passes cleanly.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Diff the result against `ff/Tbayes-market-i6y-execute-step-4` to confirm the `/positions` contract change is isolated to `backend/server.py` and `tests/test_bayes_market_api.py`, with only this task's `.fleet` artifact added alongside them.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Stage the validated implementation and task artifacts, then create the execution commit once the focused pytest gate and parent-branch audit both succeed.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
