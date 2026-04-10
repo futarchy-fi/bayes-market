@@ -1,0 +1,136 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The step-6 landing pass should close the remaining frontend gap with lower-level coverage, not treat the current component tests as sufficient. The branch already has `EventTradePanel` and `Portfolio` component tests, but the explicit missing items called out in validation still remain: there is no `getAccountExposure(accountId)` API-client assertion in `frontend/src/__tests__/api-client.test.ts`, and there is no hook-level invalidation proof for the new exposure cache behavior after `useEventTrade(...)` or `useResolveMarket(...)` succeeds.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/validation.json:4",
+        "frontend/src/lib/api/client.ts:169",
+        "frontend/src/__tests__/api-client.test.ts:50",
+        "frontend/src/__tests__/EventTradePanel.test.tsx:46",
+        "frontend/src/__tests__/Portfolio.test.tsx:43"
+      ],
+      "uncertainty": "There is no real uncertainty about the gap itself; only the exact test-file shape was still open before this audit.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "It is acceptable, and the better fit, to add a new hook-level React Query test harness with an isolated `QueryClient` under `frontend/src/__tests__`. The repo already uses fresh test `QueryClient` instances in `renderWithProviders(...)`, and the earlier coverage plan explicitly preferred public-hook tests over exporting private invalidation helpers or burying cache assertions inside component routes.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/plan.json:25",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/plan.json:63",
+        "frontend/src/__tests__/helpers.tsx:1",
+        "frontend/src/__tests__/helpers.tsx:7",
+        "frontend/package.json:22"
+      ],
+      "uncertainty": "The current suite has no existing hook-test file, so the exact harness helper is still an implementation choice as long as it exercises the public hooks with an isolated cache.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Step 6 should freeze the invalidation contract exactly as the current hook code implements it: after a successful `useEventTrade(...)`, invalidate only `queryKeys.accountExposure(accountId)` with `exact: true`; after a successful `useResolveMarket(...)`, invalidate the whole account-exposure family by predicate so every `['accounts', <id>, 'exposure']` query refreshes. The current resolve path does not broaden into `queryKeys.accountRisk(...)`, and the planned coverage artifact already named that distinction as the contract to pin.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:20",
+        "frontend/src/lib/query/hooks.ts:21",
+        "frontend/src/lib/query/hooks.ts:44",
+        "frontend/src/lib/query/hooks.ts:51",
+        "frontend/src/lib/query/hooks.ts:367",
+        "frontend/src/lib/query/hooks.ts:382",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/plan.json:35"
+      ],
+      "uncertainty": "No substantive uncertainty remains here because the implementation and the earlier planned test contract agree.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "The route should stay in a loading state until both account reads settle when one of `/v1/accounts/{id}/exposure` or `/v1/accounts/{id}/risk` has already returned `404 account_not_found`. The current `Portfolio` logic only shows the full-page loader while both queries are loading, and it only shows the missing-account state once both sides have resolved to `404`. That leaves a transient fall-through path where an early exposure `404` can render `No live EventTrade positions.` from incomplete data. Step-5 validation already identified that timing edge as unresolved, so the landing fix should keep the route loading until both account queries have finished.",
+      "confidence": 0.88,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-5/validation.json:4",
+        "frontend/src/routes/Portfolio.tsx:50",
+        "frontend/src/routes/Portfolio.tsx:54",
+        "frontend/src/routes/Portfolio.tsx:99"
+      ],
+      "uncertainty": "The current code and validation note make the UX flaw clear, but the exact loading presentation choice is still a route-level policy rather than a backend contract.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. `/v1/accounts/{id}/exposure` should be published in the docs as an additive account read surface, distinct from `/risk`, with projection-local `404 account_not_found` semantics when the live exposure projection is missing or fully pruned. The stale freeze docs that should be updated in this landing pass are the ones that currently inventory the live public account surface as risk-only: `docs/t553-current-architecture-cache-boundary-freeze.md`, `docs/t563-journal-read-surface-freeze.md`, `docs/t571-per-market-engine-stats-contract-freeze.md`, `docs/t539-mvp-launch-gate.md`, and `docs/t556-scope-and-compatibility-boundary-freeze.md`. I would not treat `docs/t586-full-chain-http-contract-freeze.md` as mandatory for this pass because its `/risk` reference is specifically about the ProbabilityEdit full-chain example, not a general route inventory.",
+      "confidence": 0.86,
+      "evidence": [
+        "backend/server.py:127",
+        "backend/server.py:1542",
+        "tests/test_bayes_market_api.py:436",
+        "tests/test_bayes_market_api.py:922",
+        "tests/test_bayes_market_api.py:2799",
+        "docs/t553-current-architecture-cache-boundary-freeze.md:24",
+        "docs/t563-journal-read-surface-freeze.md:36",
+        "docs/t571-per-market-engine-stats-contract-freeze.md:25",
+        "docs/t539-mvp-launch-gate.md:69",
+        "docs/t556-scope-and-compatibility-boundary-freeze.md:159"
+      ],
+      "uncertainty": "The exact docs list is a scope judgment. The five files above clearly describe the public route inventory or compatibility boundary in a now-stale risk-only way; narrower docs that mention `/risk` as one example may not all need edits in the same pass.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "The verification boundary for the landing patch should be the full CI-aligned commands, not only targeted subsets: `python3 -m pytest tests/ -v --tb=short`, `pnpm --dir frontend test`, and `pnpm --dir frontend build` after frontend dependencies are installed. Earlier intermediate steps used narrower slices, but the parent step-6 plan and the checked-in CI workflow both treat the landing bar as backend tests plus the full frontend test and build gates.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:85",
+        ".github/workflows/ci.yml:23",
+        ".github/workflows/ci.yml:26",
+        ".github/workflows/ci.yml:38",
+        ".github/workflows/ci.yml:41",
+        ".github/workflows/ci.yml:45"
+      ],
+      "uncertainty": "If frontend dependencies are absent, `pnpm --dir frontend install` is a prerequisite setup step rather than part of the verification signal itself.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 6 can stay as a landing/test/docs pass. The backend `/exposure` route, frontend exposure types/hooks, EventTrade size UI, and portfolio exposure surface are already implemented in this worktree."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The remaining frontend work is lower-level coverage. `api-client.test.ts` still lacks a `getAccountExposure(...)` assertion, and the suite still lacks explicit exposure invalidation proof for the public mutation hooks."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "The `Portfolio` mixed-404 timing edge is still unresolved in the current route logic, so step 6 should expect a small route/test change rather than only new hook/client tests."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "A docs pass is still needed. The backend service index and tests expose both `/risk` and `/exposure`, while multiple freeze and launch docs still describe the current account read surface as risk-only."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The landing verification bar should match the checked-in CI workflow: full backend pytest, full frontend Vitest, and a frontend production build."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child research task is needed. The current worktree, prior validation artifacts, tests, workflow config, and docs are enough to answer the open questions confidently."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
