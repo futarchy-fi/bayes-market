@@ -1,0 +1,16 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.95,
+  "plan_adherence_notes": "The execute commit tracks the recorded plan closely. `frontend/src/routes/MarketList.tsx` moved to the object-based filter shape while preserving the default hidden-resolved behavior for the empty selection and forwarding explicit status selections, `frontend/src/routes/System.tsx` and `frontend/src/features/graph/BayesNetGraph.tsx` now opt into `{ includeResolved: true }`, and the remaining audited callers in `frontend/src/routes/Portfolio.tsx`, `frontend/src/features/assumptions/AssumptionPanel.tsx`, and `frontend/src/features/trading/ConditionalEditor.tsx` remain on the default `useMarkets()` path. The diff is tightly scoped to those call sites plus focused route-test updates in `frontend/src/__tests__/MarketList.test.tsx` and `frontend/src/__tests__/System.test.tsx`. The only minor gap versus the plan is that there is still no dedicated resolved-market graph regression test, so the `BayesNetGraph` behavior change is validated by review and broader backend/frontend coverage rather than a graph-specific assertion.",
+  "research_quality": 0.97,
+  "question_completeness": 0.34,
+  "missed_questions": [
+    "Which exact `useMarkets(...)` consumers must opt into `includeResolved: true` versus stay on the new default to preserve product behavior across routes and graph/detail flows?",
+    "Should this step add dedicated regression coverage for resolved-market rendering in `BayesNetGraph`, or are `MarketList` and `System` route tests sufficient for the call-site migration?",
+    "What is the minimum validation matrix for this filter-model rollout: focused route tests only, or route tests plus API-client normalization checks and backend `/v1/markets` contract coverage?"
+  ],
+  "verdict": "approve",
+  "reason": "The implementation matches the researched intent and the recorded plan: only `System` and `BayesNetGraph` opt into resolved markets, `MarketList` keeps the new default hidden-resolved behavior while still supporting status selection, and the other audited call sites remain on the default path. Validation passed on the current branch state with `npm test -- --run src/__tests__/MarketList.test.tsx src/__tests__/System.test.tsx src/__tests__/api-client.test.ts` in `frontend/` and `python3 -m unittest discover -s tests -p 'test_bayes_market_api.py'` from the repo root. The main remaining issue is process quality rather than branch correctness: `.fleet/tasks/bayes-market-0zg-execute-step-4/questions.json` is missing, so the step has no recorded question phase.",
+  "spawn_children": false,
+  "children": []
+}
