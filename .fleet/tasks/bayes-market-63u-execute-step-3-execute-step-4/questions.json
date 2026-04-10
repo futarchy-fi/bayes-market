@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Does this step assume the earlier `/v1/markets/{id}/reopen` production and direct-route work has already landed, or must this branch backfill those seams first because the current checkout still has no reopen entry in `MARKET_SERVICE_INDEX_ROUTES`, `resolve_write_route_category(...)`, `route_request(...)`, or any `handle_market_reopen(...)`/request-builder coverage?",
+      "category": "codebase",
+      "why_it_matters": "The requested work is explicitly threaded HTTP parity, but the repo as checked out only implements and tests `/close` and `/resolve`. Without the underlying route and direct contract, the transport-layer assertions have nothing concrete to mirror."
+    },
+    {
+      "id": "q2",
+      "question": "Which test fixture is supposed to own the new threaded HTTP `/reopen` coverage: extend `BayesMarketApiConcurrencyTests`, where the existing `ThreadingHTTPServer` helpers and `/close` replay tests already live, or add a new threaded helper surface under `BayesMarketApiIntegrationTests`, which currently runs against a plain `HTTPServer`?",
+      "category": "codebase",
+      "why_it_matters": "The task title names `BayesMarketApiIntegrationTests`, but the actual threaded HTTP request helpers for market-admin routes are currently in a different class. Picking the wrong fixture would duplicate helpers or place the tests beside the wrong transport harness."
+    },
+    {
+      "id": "q3",
+      "question": "What exact accepted `/reopen` contract should the threaded HTTP tests freeze from the direct-route layer: request body shape, canonical `AdminOp` payload kind, response status and market snapshot, accepted event payload fields, and which unchanged-state invariants beyond `market.status` must be asserted on a successful reopen from `closed`?",
+      "category": "requirements",
+      "why_it_matters": "The close path in `tests/test_bayes_market_api.py` locks in specific response, command, event, and unchanged-state details. Reopen needs the same precision before the HTTP suite can prove parity rather than only a loose status flip."
+    },
+    {
+      "id": "q4",
+      "question": "What is the full body-validation matrix that `/reopen` should expose over threaded HTTP: just missing/non-string/blank `accountId` and malformed `idempotencyKey`, or also trimming-before-scope behavior and other payload normalization rules, and should the HTTP layer return the exact close-style `invalid_market_reopen` code/message/details contract?",
+      "category": "requirements",
+      "why_it_matters": "The task says to cover 'the same body-validation errors', but the current checkout has no reopen-specific helper or tests to define what 'same' means. The close and resolve routes each freeze exact error codes, messages, and `details.field` values."
+    },
+    {
+      "id": "q5",
+      "question": "What exact replayable terminal-rejection matrix should the HTTP tests prove for `/reopen`: should `active`, `draft`, and `resolved` all return one `409 market_not_reopenable` contract with `allowedStatuses: [\"closed\"]`, or is there a status-specific split in `error.code`, message, `retryHint`, and `error.details` that the transport layer must mirror exactly?",
+      "category": "design",
+      "why_it_matters": "The original task questions already identified ambiguity around the symbolic rejection contract for reopen. The threaded HTTP suite is supposed to match the direct-route contract, so it needs the precise rejection mapping rather than inferring it from close symmetry."
+    },
+    {
+      "id": "q6",
+      "question": "Which direct-route `/reopen` assertions are the source of truth for this parity step, given that `tests/test_bayes_market_api.py` currently has close and resolve direct-route coverage but no reopen section: should this step depend on an earlier committed reopen contract, or does it need to establish that direct contract first before adding HTTP replay and `405` assertions?",
+      "category": "design",
+      "why_it_matters": "The task wording says the transport surface must match the direct-route contract, but that contract is not present in the current tree. That sequencing decision determines whether this is a small test-only change or a broader backfill."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This step is intended to add threaded HTTP parity tests on top of a previously implemented `/v1/markets/{id}/reopen` backend surface, even though the current checkout does not contain that surface yet.",
+      "confidence": 0.97,
+      "if_wrong": "The task expands from targeted HTTP test work into implementing the reopen route, service-index entry, write-policy classification, and direct-route contract before the parity assertions can be added."
+    },
+    {
+      "id": "a2",
+      "assumption": "The most likely home for the new tests is the existing threaded `BayesMarketApiConcurrencyTests` fixture, because it already provides `ThreadingHTTPServer` helpers and market-admin replay coverage, despite the task title mentioning `BayesMarketApiIntegrationTests`.",
+      "confidence": 0.88,
+      "if_wrong": "The work would need new duplicate helpers or a fixture refactor before the reopen assertions could be placed where the plan expects them."
+    },
+    {
+      "id": "a3",
+      "assumption": "At the HTTP layer, `/reopen` is meant to mirror `/close`: POST-only routing, required `accountId`, optional `idempotencyKey`, `GET` returning the standard `405 method_not_allowed` payload, and same-key replay of both accepted and terminal rejected outcomes.",
+      "confidence": 0.93,
+      "if_wrong": "Copying the close transport pattern would freeze the wrong request, method, or replay contract for reopen."
+    },
+    {
+      "id": "a4",
+      "assumption": "A successful reopen is economically inert and should only transition the market from `closed` back to `active`, leaving marginals, conditional marginals, orders, account risk, and account exposure/read models unchanged.",
+      "confidence": 0.84,
+      "if_wrong": "The HTTP tests would need broader state assertions and the production implementation would require more than a simple status transition."
+    },
+    {
+      "id": "a5",
+      "assumption": "Fresh reopen attempts against non-closed markets are intended to be replayable `409` terminal rejections rather than plain pre-command validation errors, most likely under one `market_not_reopenable` family keyed by `allowedStatuses: [\"closed\"]`.",
+      "confidence": 0.74,
+      "if_wrong": "The parity tests would need a different rejection taxonomy or a different command-materialization boundary than the close and resolve admin-op flows."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
