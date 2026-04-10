@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This checkout already has the `/v1/accounts/{id}/positions` route, service-index entry, and baseline lexical-order/404 tests, but it still lacks the step-3 replay helpers and `unrealizedPnl` production seam in `backend/server.py`. Should this deterministic-order leaf assume that prerequisite arrives first, or is it expected to stage tests that stay green against the current pre-P&L serializer?",
+      "category": "codebase",
+      "why_it_matters": "The answer decides whether this step can update the existing exact `/positions` payload assertions now or must wait for a rebase/backfill before the new ordering regressions can become authoritative."
+    },
+    {
+      "id": "q2",
+      "question": "Which existing test seam should own the new deterministic-order coverage: should step 3 extend the current `/positions` baseline and nearby additive tests inside `BayesMarketExposureProjectionTests`, or is a separate helper-only cluster preferred for replay-order assertions?",
+      "category": "codebase",
+      "why_it_matters": "The file already freezes `/positions` success, 404, and 405 behavior in one projection-oriented class. Clarifying ownership avoids duplicating the route contract across competing test clusters."
+    },
+    {
+      "id": "q3",
+      "question": "To prove stable replay order by `(filledAt, id)`, should the regression explicitly seed `ORDERS` out of insertion order with same-`filledAt` ties, or should it still prefer accepted EventTrade POSTs except for one narrowly seeded edge case?",
+      "category": "design",
+      "why_it_matters": "Normal EventTrade writes create orders in acceptance order and usually stamp `createdAt` and `filledAt` together, so they may never exercise the unstable chronology seam that this step is meant to pin."
+    },
+    {
+      "id": "q4",
+      "question": "When a deterministic-order fixture seeds both `ACCOUNT_EXPOSURE` and matching filled EventTrade history directly, what exact replay-versus-live compatibility rule should apply before the row is treated as missing-history fallback instead of a valid replayed position: exact rounded equality, a small numeric tolerance, or some other rule?",
+      "category": "design",
+      "why_it_matters": "The current task wants direct seeding where needed, and earlier validation already flagged this gap. Without one explicit compatibility rule, a seeded ordering regression can accidentally test fallback behavior instead of replay ordering."
+    },
+    {
+      "id": "q5",
+      "question": "Should stable wire order by lexical `(marketId, outcomeId)` keep living in the existing exact `account.positions` success assertion once `unrealizedPnl` is present, or does this step need a separate multi-row regression that independently proves wire order even when replay chronology differs underneath?",
+      "category": "requirements",
+      "why_it_matters": "Replay chronology and wire ordering are distinct contracts. Knowing whether one baseline test should own both or whether they deserve separate regressions determines how to keep the ordering coverage readable without weakening it."
+    },
+    {
+      "id": "q6",
+      "question": "For these ordering regressions, is route-level `route_request(\"GET\", \"/v1/accounts/{id}/positions\")` parity required in every seeded case, or is one representative route smoke enough while most deterministic-order proofs stay at the getter or projection seam?",
+      "category": "codebase",
+      "why_it_matters": "The suite already mixes direct helper/getter tests with route-parity assertions. This decides how much duplication is expected before the focused deterministic-order leaf becomes too coupled to unrelated HTTP-envelope behavior."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The `/v1/accounts/{id}/positions` route, service-index entry, and baseline 404/405 coverage already present in this checkout are the starting point, so this leaf should stay focused on deterministic-order regressions rather than reopening router wiring.",
+      "confidence": 0.99,
+      "if_wrong": "The task would need to absorb missing production or baseline contract work before the new ordering tests could be trusted."
+    },
+    {
+      "id": "a2",
+      "assumption": "The natural home for this work is still `tests/test_bayes_market_api.py`, centered on `BayesMarketExposureProjectionTests`, because that class already owns `/positions` projection helpers, exact success payloads, and route parity.",
+      "confidence": 0.98,
+      "if_wrong": "The new regressions would need to move into another class or module, which changes how much setup and contract ownership can be reused."
+    },
+    {
+      "id": "a3",
+      "assumption": "At least one regression will need direct `ORDERS` and `ACCOUNT_EXPOSURE` seeding, because accepted EventTrade writes alone do not reliably create arbitrary insertion order or same-timestamp ties for the `(filledAt, id)` replay seam.",
+      "confidence": 0.97,
+      "if_wrong": "The deterministic-order proof could stay entirely on black-box writes, and direct state seeding would be unnecessary or out of scope."
+    },
+    {
+      "id": "a4",
+      "assumption": "Stable wire order for `/positions` remains lexical `(marketId, outcomeId)`, while response `meta` stays dynamic because the route still uses `make_meta()`.",
+      "confidence": 0.99,
+      "if_wrong": "The ordering regressions would need a different public sort contract or exact metadata freezing instead of the current invariant-only pattern."
+    },
+    {
+      "id": "a5",
+      "assumption": "Directly seeded replay-order fixtures should keep canonical EventTrade order shape fields such as `type`, `status`, `accountId`, `targetMarketId`, `targetOutcomeId`, `side`, `size`, `price`, `filledAt`, and `payload.formula` so failures isolate ordering rather than malformed-order filtering.",
+      "confidence": 0.95,
+      "if_wrong": "The tests could accidentally pin validation behavior or malformed-row fallback instead of the deterministic replay order that this step is supposed to cover."
+    },
+    {
+      "id": "a6",
+      "assumption": "No child task is needed because the unresolved seams are local to `backend/server.py`, the existing `/positions` tests in `tests/test_bayes_market_api.py`, and the checked-in `bayes-market-i6y` planning artifacts already available in this worktree.",
+      "confidence": 0.98,
+      "if_wrong": "A follow-up child investigation would be needed before implementation could safely choose fixture style and assertion ownership."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
