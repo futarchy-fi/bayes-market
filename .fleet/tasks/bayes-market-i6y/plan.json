@@ -1,0 +1,76 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Implement `/v1/accounts/{id}/positions` as a new additive account read model beside `/exposure`, using the standard `{account, meta}` envelope and returning the rows directly at `account.positions`.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Replace `/v1/accounts/{id}/exposure` and force a client migration in the same task.",
+        "Introduce a different wrapper such as a top-level `positions` object or nested `account.positions.positions`."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Define 'open positions' from the existing live `ACCOUNT_EXPOSURE` projection, preserve the current lexical `(marketId, outcomeId)` ordering, and keep the same `404 account_not_found` behavior when the account is missing or its live rows have been fully pruned.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Return `200` with an empty list for missing or fully pruned exposure accounts.",
+        "Use recency ordering or another client-facing sort order on the wire.",
+        "Invent a separate historical position store for resolved or closed rows."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep the wire row shape narrowly aligned to the task by serializing each open position with `marketId`, `outcomeId`, `netSize`, `lastTradePrice`, and computed `unrealizedPnl`, instead of reusing the richer `/exposure` row contract.",
+      "based_on": ["q1", "q4", "q5"],
+      "alternatives_rejected": [
+        "Reuse the full exposure row shape including `absSize`, `updatedAt`, `lastOrderId`, and `lastCommandId`.",
+        "Add account-level position metadata that is not required by the task."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Compute `unrealizedPnl` at read time by replaying accepted EventTrade orders per `(accountId, marketId, outcomeId)` slice with signed average-cost basis handling for multi-fill builds, partial close-outs, and sign flips, then mark the surviving net position to the current atomic inference probability.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Derive P&L directly from `netSize` and `lastTradePrice` alone.",
+        "Switch to FIFO or LIFO lot accounting for this task.",
+        "Persist extra cost-basis fields into `ACCOUNT_EXPOSURE` as part of the route rollout."
+      ],
+      "reversibility": "hard"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Extend the public account-read surface in `backend/server.py` by adding `/v1/accounts/{id}/positions` to the service index, route dispatcher, and a dedicated `get_account_positions(account_id)` entrypoint that mirrors the existing account `{account, meta}` response pattern.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add positions serializers on top of `ACCOUNT_EXPOSURE` that filter out rounded-zero rows, sort surviving rows lexically by `(marketId, outcomeId)`, and emit only the requested position fields while preserving the existing 404-on-empty lifecycle.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Implement read-time EventTrade replay helpers that scan filled `ORDERS` for each live position, maintain signed average-cost basis across buys, sells, partial offsets, and sign flips, and compute `unrealizedPnl` against `query_market_atomic_probability_for_inference(...)` for the current mark.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Add backend regressions in `tests/test_bayes_market_api.py` for the new service-index route, successful `GET /v1/accounts/{id}/positions` responses, deterministic ordering, missing-or-pruned account 404s, and representative P&L cases including multi-fill accumulation, partial close, and sign-flip survivors.",
+      "depends_on": [1, 2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Run the targeted backend tests for the new route and exposure/P&L scenarios, review the resulting diff for contract consistency, and commit the completed implementation once the regressions pass.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
