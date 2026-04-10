@@ -4045,6 +4045,16 @@ def transition_market_to_resolved(
     }
 
 
+def build_closed_market_snapshot(market: dict[str, Any]) -> dict[str, Any]:
+    """Canonicalize the market snapshot exposed by an accepted close."""
+    closed_market = deepcopy(market)
+    closed_market["status"] = "closed"
+    closed_market.pop("closedAt", None)
+    closed_market.pop("resolution", None)
+    closed_market.pop("resolutionProbabilities", None)
+    return closed_market
+
+
 def transition_market_to_closed(
     market_id: str,
     *,
@@ -4079,10 +4089,8 @@ def transition_market_to_closed(
         )
 
     transition_timestamp = utc_timestamp() if closed_at is None else str(closed_at)
-    closed_market = deepcopy(market)
-    closed_market["status"] = "closed"
     return {
-        "market": closed_market,
+        "market": build_closed_market_snapshot(market),
         "closedAt": transition_timestamp,
     }
 

@@ -3661,7 +3661,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertNotIn(account_id, server.ACCOUNT_EXPOSURE)
 
     def test_market_resolution_accepts_closed_market(self):
-        server.MARKETS["m1"]["status"] = "closed"
+        close_payload, close_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/close",
+            build_market_close_body("ops_admin", idempotency_key="idem-close-before-resolve"),
+        )
 
         payload, status = server.route_request(
             "POST",
@@ -3669,6 +3673,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             build_market_resolution_body("ops_admin", "yes", idempotency_key="idem-closed-resolve"),
         )
 
+        self.assertEqual(close_status, 201)
+        self.assertEqual(close_payload["market"]["status"], "closed")
         self.assertEqual(status, 201)
         self.assertEqual(payload["market"]["id"], "m1")
         self.assertEqual(payload["market"]["status"], "resolved")
@@ -3720,6 +3726,13 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         assert_domain_state_unchanged(self, before_state)
 
     def test_transition_market_to_closed_returns_closed_snapshot_without_mutating_state(self):
+        server.MARKETS["m1"].update(
+            {
+                "closedAt": "2026-03-01T00:00:00Z",
+                "resolution": "yes",
+                "resolutionProbabilities": {"yes": 1.0, "no": 0.0},
+            }
+        )
         before_state = snapshot_domain_state()
         baseline_market = deepcopy(server.MARKETS["m1"])
         closure = server.transition_market_to_closed("m1", closed_at="2026-04-10T00:00:00Z")
@@ -3727,6 +3740,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(closure["closedAt"], "2026-04-10T00:00:00Z")
         self.assertEqual(closure["market"]["status"], "closed")
         self.assertNotIn("closedAt", closure["market"])
+        self.assertNotIn("resolution", closure["market"])
+        self.assertNotIn("resolutionProbabilities", closure["market"])
         self.assertEqual(closure["market"]["marginals"], baseline_market["marginals"])
         self.assertEqual(closure["market"]["outcomes"], baseline_market["outcomes"])
         self.assertEqual(server.MARKETS["m1"], baseline_market)
@@ -3818,7 +3833,19 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "no": 0.1,
             }
         }
-        baseline_marginals = deepcopy(server.MARKETS["m1"]["marginals"])
+        server.MARKETS["m1"].update(
+            {
+                "closedAt": "2026-03-01T00:00:00Z",
+                "resolution": "yes",
+                "resolutionProbabilities": {"yes": 1.0, "no": 0.0},
+            }
+        )
+        expected_market = deepcopy(server.MARKETS["m1"])
+        baseline_marginals = deepcopy(expected_market["marginals"])
+        expected_market["status"] = "closed"
+        expected_market.pop("closedAt", None)
+        expected_market.pop("resolution", None)
+        expected_market.pop("resolutionProbabilities", None)
         baseline_risk = deepcopy(server.ACCOUNT_RISK)
         baseline_exposure = deepcopy(server.ACCOUNT_EXPOSURE)
         baseline_conditionals = deepcopy(server.CONDITIONAL_MARGINALS)
@@ -3840,13 +3867,27 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         self.assertEqual(trade_status, 201)
         self.assertEqual(status, 201)
-        self.assertEqual(payload["market"]["id"], "m1")
-        self.assertEqual(payload["market"]["status"], "closed")
-        self.assertEqual(payload["market"]["marginals"], baseline_marginals)
+        self.assertEqual(payload["market"], expected_market)
         self.assertNotIn("closedAt", payload["market"])
+        self.assertNotIn("resolution", payload["market"])
+        self.assertNotIn("resolutionProbabilities", payload["market"])
+        self.assertTrue(payload["result"]["commandId"].startswith("cmd_"))
+        self.assertTrue(payload["result"]["eventId"].startswith("evt_"))
+        self.assertTrue(payload["result"]["emittedAt"].endswith("Z"))
+        self.assertEqual(
+            payload["result"],
+            {
+                "terminal": True,
+                "status": "accepted",
+                "eventType": "CommandAccepted",
+                "eventId": payload["result"]["eventId"],
+                "commandId": payload["result"]["commandId"],
+                "emittedAt": payload["result"]["emittedAt"],
+            },
+        )
         self.assertEqual(payload["result"]["status"], "accepted")
-        self.assertEqual(payload["result"]["eventType"], "CommandAccepted")
         self.assertEqual(server.MARKETS["m1"]["status"], "closed")
+        self.assertEqual(server.MARKETS["m1"], expected_market)
         self.assertEqual(server.MARKETS["m1"]["marginals"], baseline_marginals)
         self.assertEqual(server.CONDITIONAL_MARGINALS, baseline_conditionals)
         self.assertEqual(server.ACCOUNT_RISK, baseline_risk)
@@ -3858,13 +3899,22 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(command["commandType"], "AdminOp")
         self.assertEqual(command["payload"], expected_market_close_payload())
         self.assertEqual(command["accountId"], "ops_admin")
+        self.assertEqual(command["commandId"], payload["result"]["commandId"])
         event = server.EVENTS[payload["result"]["eventId"]]
+        self.assertEqual(event["commandId"], payload["result"]["commandId"])
+        self.assertEqual(event["eventId"], payload["result"]["eventId"])
+        self.assertEqual(event["emittedAt"], payload["result"]["emittedAt"])
         self.assertEqual(event["eventType"], "CommandAccepted")
-        self.assertEqual(event["payload"]["closure"], {"closedAt": event["payload"]["closure"]["closedAt"]})
+        self.assertEqual(
+            event["payload"],
+            {
+                "closure": {"closedAt": event["payload"]["closure"]["closedAt"]},
+                "effects": {"marginalDelta": [], "assetDelta": []},
+                "pricing": {"cost": 0.0, "fee": 0.0},
+                "replayStateHash": server.market_replay_state_hash("m1"),
+            },
+        )
         self.assertTrue(event["payload"]["closure"]["closedAt"].endswith("Z"))
-        self.assertEqual(event["payload"]["effects"], {"marginalDelta": [], "assetDelta": []})
-        self.assertEqual(event["payload"]["pricing"], {"cost": 0.0, "fee": 0.0})
-        self.assertEqual(event["payload"]["replayStateHash"], server.market_replay_state_hash("m1"))
         self.assertEqual(trade_payload["order"]["marketId"], "m1")
 
     def test_market_close_route_rejects_invalid_account_id_with_close_specific_error(self):
@@ -3967,17 +4017,51 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         )
 
         self.assertEqual(status, 409)
-        self.assertEqual(payload["error"]["code"], "market_already_closed")
-        self.assertEqual(payload["error"]["message"], "Market is already closed")
-        self.assertEqual(payload["error"]["details"]["marketId"], "m1")
-        self.assertEqual(payload["error"]["details"]["status"], "closed")
-        self.assertEqual(payload["result"]["status"], "rejected")
-        self.assertEqual(payload["result"]["eventType"], "CommandRejected")
+        self.assertTrue(payload["result"]["commandId"].startswith("cmd_"))
+        self.assertTrue(payload["result"]["eventId"].startswith("evt_"))
+        self.assertTrue(payload["result"]["emittedAt"].endswith("Z"))
+        self.assertEqual(
+            payload["error"],
+            {
+                "code": "market_already_closed",
+                "message": "Market is already closed",
+                "details": {
+                    "marketId": "m1",
+                    "status": "closed",
+                    "commandId": payload["result"]["commandId"],
+                },
+            },
+        )
+        self.assertEqual(
+            payload["result"],
+            {
+                "terminal": True,
+                "status": "rejected",
+                "eventType": "CommandRejected",
+                "eventId": payload["result"]["eventId"],
+                "commandId": payload["result"]["commandId"],
+                "emittedAt": payload["result"]["emittedAt"],
+                "reasonCode": "market_already_closed",
+                "reason": "Market is already closed",
+                "retryHint": "reuse the original idempotency key to replay the prior outcome",
+            },
+        )
         assert_market_close_rejection_state_unchanged(self, "m1", before_state)
         command = server.COMMANDS[payload["result"]["commandId"]]
+        self.assertEqual(command["commandId"], payload["result"]["commandId"])
         self.assertEqual(command["payload"], expected_market_close_payload())
         event = server.EVENTS[payload["result"]["eventId"]]
-        self.assertEqual(event["payload"]["reasonCode"], "market_already_closed")
+        self.assertEqual(event["commandId"], payload["result"]["commandId"])
+        self.assertEqual(event["eventId"], payload["result"]["eventId"])
+        self.assertEqual(event["emittedAt"], payload["result"]["emittedAt"])
+        self.assertEqual(
+            event["payload"],
+            {
+                "reasonCode": "market_already_closed",
+                "reason": "Market is already closed",
+                "retryHint": "reuse the original idempotency key to replay the prior outcome",
+            },
+        )
 
     def test_market_close_rejects_non_active_market_with_terminal_response(self):
         cases = (
@@ -3986,6 +4070,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "idem-close-draft",
                 {
                     "status": "draft",
+                },
+                {
+                    "marketId": "m1",
+                    "status": "draft",
+                    "allowedStatuses": ["active"],
                 },
             ),
             (
@@ -3996,10 +4085,15 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     "resolution": "yes",
                     "resolutionProbabilities": {"yes": 1.0, "no": 0.0},
                 },
+                {
+                    "marketId": "m1",
+                    "status": "resolved",
+                    "allowedStatuses": ["active"],
+                },
             ),
         )
 
-        for status_label, idempotency_key, market_updates in cases:
+        for status_label, idempotency_key, market_updates, expected_details in cases:
             with self.subTest(status=status_label):
                 server.reset_state()
                 account_id = "acct_close_reject_invariants"
@@ -4031,18 +4125,47 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 )
 
                 self.assertEqual(status, 409)
-                self.assertEqual(payload["error"]["code"], "market_not_closable")
-                self.assertEqual(payload["error"]["message"], "Market can only be closed from active status")
-                self.assertEqual(payload["error"]["details"]["marketId"], "m1")
-                self.assertEqual(payload["error"]["details"]["status"], status_label)
-                self.assertEqual(payload["error"]["details"]["allowedStatuses"], ["active"])
-                self.assertEqual(payload["result"]["status"], "rejected")
-                self.assertEqual(payload["result"]["eventType"], "CommandRejected")
+                self.assertTrue(payload["result"]["commandId"].startswith("cmd_"))
+                self.assertTrue(payload["result"]["eventId"].startswith("evt_"))
+                self.assertTrue(payload["result"]["emittedAt"].endswith("Z"))
+                self.assertEqual(
+                    payload["error"],
+                    {
+                        "code": "market_not_closable",
+                        "message": "Market can only be closed from active status",
+                        "details": expected_details | {"commandId": payload["result"]["commandId"]},
+                    },
+                )
+                self.assertEqual(
+                    payload["result"],
+                    {
+                        "terminal": True,
+                        "status": "rejected",
+                        "eventType": "CommandRejected",
+                        "eventId": payload["result"]["eventId"],
+                        "commandId": payload["result"]["commandId"],
+                        "emittedAt": payload["result"]["emittedAt"],
+                        "reasonCode": "market_not_closable",
+                        "reason": "Market can only be closed from active status",
+                        "retryHint": "close an active market",
+                    },
+                )
                 assert_market_close_rejection_state_unchanged(self, "m1", before_state)
                 command = server.COMMANDS[payload["result"]["commandId"]]
+                self.assertEqual(command["commandId"], payload["result"]["commandId"])
                 self.assertEqual(command["payload"], expected_market_close_payload())
                 event = server.EVENTS[payload["result"]["eventId"]]
-                self.assertEqual(event["payload"]["reasonCode"], "market_not_closable")
+                self.assertEqual(event["commandId"], payload["result"]["commandId"])
+                self.assertEqual(event["eventId"], payload["result"]["eventId"])
+                self.assertEqual(event["emittedAt"], payload["result"]["emittedAt"])
+                self.assertEqual(
+                    event["payload"],
+                    {
+                        "reasonCode": "market_not_closable",
+                        "reason": "Market can only be closed from active status",
+                        "retryHint": "close an active market",
+                    },
+                )
 
     def test_market_close_rejected_terminal_outcomes_replay_for_status_conflicts(self):
         cases = (
@@ -4053,6 +4176,12 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     "status": "closed",
                 },
                 "market_already_closed",
+                "Market is already closed",
+                {
+                    "marketId": "m1",
+                    "status": "closed",
+                },
+                "reuse the original idempotency key to replay the prior outcome",
             ),
             (
                 "draft_not_closable",
@@ -4061,10 +4190,34 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     "status": "draft",
                 },
                 "market_not_closable",
+                "Market can only be closed from active status",
+                {
+                    "marketId": "m1",
+                    "status": "draft",
+                    "allowedStatuses": ["active"],
+                },
+                "close an active market",
+            ),
+            (
+                "resolved_not_closable",
+                "idem-close-replay-resolved",
+                {
+                    "status": "resolved",
+                    "resolution": "yes",
+                    "resolutionProbabilities": {"yes": 1.0, "no": 0.0},
+                },
+                "market_not_closable",
+                "Market can only be closed from active status",
+                {
+                    "marketId": "m1",
+                    "status": "resolved",
+                    "allowedStatuses": ["active"],
+                },
+                "close an active market",
             ),
         )
 
-        for label, idempotency_key, market_updates, expected_code in cases:
+        for label, idempotency_key, market_updates, expected_code, expected_message, expected_details, retry_hint in cases:
             with self.subTest(case=label):
                 server.reset_state()
                 server.MARKETS["m1"].update(deepcopy(market_updates))
@@ -4082,10 +4235,33 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
                 self.assertEqual(first_status, 409)
                 self.assertEqual(second_status, 409)
-                self.assertEqual(first_payload["error"]["code"], expected_code)
-                self.assertEqual(second_payload["error"]["code"], expected_code)
-                self.assertEqual(first_payload["result"]["commandId"], second_payload["result"]["commandId"])
-                self.assertEqual(first_payload["result"]["eventId"], second_payload["result"]["eventId"])
+                self.assertTrue(first_payload["result"]["commandId"].startswith("cmd_"))
+                self.assertTrue(first_payload["result"]["eventId"].startswith("evt_"))
+                self.assertTrue(first_payload["result"]["emittedAt"].endswith("Z"))
+                self.assertEqual(
+                    first_payload["error"],
+                    {
+                        "code": expected_code,
+                        "message": expected_message,
+                        "details": expected_details | {"commandId": first_payload["result"]["commandId"]},
+                    },
+                )
+                self.assertEqual(second_payload["error"], first_payload["error"])
+                self.assertEqual(
+                    first_payload["result"],
+                    {
+                        "terminal": True,
+                        "status": "rejected",
+                        "eventType": "CommandRejected",
+                        "eventId": first_payload["result"]["eventId"],
+                        "commandId": first_payload["result"]["commandId"],
+                        "emittedAt": first_payload["result"]["emittedAt"],
+                        "reasonCode": expected_code,
+                        "reason": expected_message,
+                        "retryHint": retry_hint,
+                    },
+                )
+                self.assertEqual(second_payload["result"], first_payload["result"])
                 self.assertTrue(second_payload["meta"]["replayed"])
                 self.assertEqual(len(server.COMMANDS), 1)
                 self.assertEqual(len(server.EVENTS), 1)
