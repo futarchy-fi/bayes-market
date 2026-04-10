@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep the implementation at the existing `frontend/src/__tests__/MarketDetail.test.tsx` seam and freeze both halves of the graph contract there: the route-level test should assert `listMarkets({ includeResolved: true })` and prove the graph still renders when the collection includes the focus market plus resolved rows.",
+      "based_on": ["q1", "q2", "q4"],
+      "alternatives_rejected": [
+        "Only extend the current route smoke test with non-graph assertions that do not prove the resolved-inclusive request path.",
+        "Create a new standalone `BayesNetGraph` suite even though the requested seam is the MarketDetail route integration test."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Model the refreshed `listMarkets` response as a mixed collection whose metadata matches the opt-in contract (`include_resolved: true`) and whose rows include `m1` alongside at least one resolved market so the graph summary can prove the returned collection was consumed.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Keep the existing single-market fixture with `include_resolved: false`, which would not match the graph's opt-in behavior.",
+        "Assert brittle SVG node labels instead of a stable graph-level summary that reflects the mixed collection size."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep `api.getMarket` mocking simple unless execution proves otherwise: the refreshed test should rely on stable route/graph rendering signals such as the `Bayesian Network` panel and mixed variable count, not on per-node detail assertions that would require request-aware market-detail fixtures.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Add per-market `getMarket` fixture branching before there is evidence the broader route-level assertions need it.",
+        "Treat extra node-detail fetches as a reason to widen the test into detailed graph-node behavior checks."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Leave `frontend/src/__tests__/Portfolio.test.tsx` untouched unless a small shared fixture cleanup is clearly worthwhile and can preserve Portfolio's default hidden-resolved `useMarkets()` contract unchanged.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Proactively edit Portfolio because it also mocks `listMarkets`, even though this leaf is scoped to the MarketDetail graph regression.",
+        "Extract shared fixtures if doing so would blur the difference between the default market list path and the resolved-inclusive graph path."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Re-audit `frontend/src/__tests__/MarketDetail.test.tsx` around the existing graph/junction-tree assertions and identify the smallest seam change that can add the resolved-inclusive request proof without disturbing unrelated route coverage.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Update the MarketDetail test fixtures so `api.listMarkets` returns the focus market plus resolved market rows with `meta.filters.include_resolved: true`, while keeping the rest of the route mocks stable enough for the graph to mount inside the route.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Extend the route test to assert `api.listMarkets` was called with `{ includeResolved: true }` and to verify stable graph output such as the `Bayesian Network` panel plus a mixed-count summary (for example `2 variables`) so the returned collection is proven to render correctly.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Only if shared test data extraction becomes necessary while editing step 2 or 3, apply the smallest cleanup to `frontend/src/__tests__/Portfolio.test.tsx` that preserves its default `include_resolved: false` fixture contract.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Run the focused frontend test target for `frontend/src/__tests__/MarketDetail.test.tsx` (and Portfolio only if touched) to confirm the refreshed route seam still passes with the resolved-inclusive graph fixture, then review and commit the implementation diff.",
+      "depends_on": [3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
