@@ -409,6 +409,37 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "component 'db' has unexpected status: 'healthy'"):
             server.aggregate_component_status({"db": {"status": "healthy"}})
 
+    def test_v1_health_components_are_assembled_from_shared_builders(self):
+        with (
+            patch.object(server, "db_health_component", return_value={"status": "ok", "kind": "in_memory"}) as db_health_component,
+            patch.object(
+                server,
+                "inference_health_component",
+                return_value={"status": "degraded", "backend": "approximate", "version": "1.2.3"},
+            ) as inference_health_component,
+            patch.object(server, "auth_health_component", return_value={"status": "ok", "requires_agent_id": False}) as auth_health_component,
+        ):
+            components = server.v1_health_components()
+
+        db_health_component.assert_called_once_with()
+        inference_health_component.assert_called_once_with()
+        auth_health_component.assert_called_once_with()
+        self.assertEqual(
+            components,
+            {
+                "db": {"status": "ok", "kind": "in_memory"},
+                "inference": {
+                    "status": "degraded",
+                    "backend": "approximate",
+                    "version": "1.2.3",
+                },
+                "auth": {
+                    "status": "ok",
+                    "requires_agent_id": False,
+                },
+            },
+        )
+
     def test_v1_health_payload_extends_a_copy_of_legacy_health_payload(self):
         original_engine_config = server.ENGINE_CONFIG
         original_auth_require_agent_id = server.AUTH_REQUIRE_AGENT_ID
