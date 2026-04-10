@@ -652,6 +652,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertIn("/v1/markets/{id}/meta", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/events", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/engine-stats", payload["routes"]["markets"])
+        self.assertIn("POST /v1/markets/{id}/close", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/resolve", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/orders/event-trade", payload["routes"]["orders"])
 
