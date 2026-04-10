@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Which routes are in scope for \"rate-limited write endpoints\": every POST route currently matched by `resolve_write_route_category(...)` (`POST /v1/markets`, `POST /v1/markets/{id}/comments`, `POST /v1/markets/{id}/resolve`, `POST /v1/markets/{id}/orders/probability-edit`, and `POST /v1/markets/{id}/orders/event-trade`), or only a subset such as the order routes?",
+      "category": "requirements",
+      "why_it_matters": "The limiter and protected-write classification already cover all five POST routes, but the current tests only assert header presence for ProbabilityEdit and explicitly assert header absence for a successful resolve request. The route scope determines both the backend patch and which tests need to change."
+    },
+    {
+      "id": "q2",
+      "question": "On an in-scope endpoint, when should `X-RateLimit-*` headers be emitted: only on successful 2xx responses and 429 rate-limit failures, or on any response after the request has passed agent-id validation and rate-limit enforcement, including 400/409 application errors?",
+      "category": "requirements",
+      "why_it_matters": "The central HTTP adapter in `BayesHandler.handle_api()` currently adds quota headers only for `status < 400` and for `rate_limit_exceeded`. Expanding that contract would require changing the shared response path, not just updating individual handlers."
+    },
+    {
+      "id": "q3",
+      "question": "Should idempotent replays and terminal rejections on protected POST routes consume quota and return the current quota snapshot, or should only newly accepted writes count toward the per-agent rate limit?",
+      "category": "design",
+      "why_it_matters": "The current architecture calls `enforce_rate_limit(...)` before the route-specific idempotency and rejection logic, so repeated POSTs naturally spend quota today. Once more endpoints expose headers, that behavior becomes a visible API contract."
+    },
+    {
+      "id": "q4",
+      "question": "Does the existing `X-RateLimit-Policy` header remain part of the frozen contract for these endpoints, or should this task standardize on only `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, plus `Retry-After` on 429s?",
+      "category": "requirements",
+      "why_it_matters": "The current helper and test assertions already treat `X-RateLimit-Policy` as part of the response surface, but the task description names only the three quota headers. Clarifying this avoids either silently widening or accidentally narrowing the contract."
+    },
+    {
+      "id": "q5",
+      "question": "Should protected write routes continue omitting rate-limit headers when `RATE_LIMIT_PER_MIN <= 0` or when no normalized `X-Bayes-Agent-Id` is available, even after header support is expanded to the rest of the write surface?",
+      "category": "requirements",
+      "why_it_matters": "That behavior is already frozen for ProbabilityEdit by existing tests, and `rate_limit_headers(...)` currently returns an empty map in both cases. Confirming it should stay consistent across create, comment, resolve, and event-trade prevents accidental contract drift."
+    },
+    {
+      "id": "q6",
+      "question": "What is the minimum expected test matrix for this task: success-path header presence on each in-scope write route, or also per-route 429 coverage and remaining-quota decrement assertions beyond the existing ProbabilityEdit tests?",
+      "category": "codebase",
+      "why_it_matters": "The current HTTP test harness has dedicated helpers only for ProbabilityEdit and Resolve. Broader coverage would require adding new request helpers and updating existing assertions that currently expect header absence on some protected routes."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The intended protected write surface is exactly the five POST routes recognized by `resolve_write_route_category(...)`, and unsupported POST paths should remain outside the rate-limit/header contract.",
+      "confidence": 0.98,
+      "if_wrong": "The implementation could either miss an intended endpoint or start emitting quota headers on routes that are supposed to stay unprotected."
+    },
+    {
+      "id": "a2",
+      "assumption": "The right implementation boundary is the shared HTTP response path in `BayesHandler.handle_api()` plus `rate_limit_headers(...)`, not route-specific header plumbing inside each write handler.",
+      "confidence": 0.97,
+      "if_wrong": "The work would be more invasive and error-prone because each endpoint would need separate header handling and separate tests."
+    },
+    {
+      "id": "a3",
+      "assumption": "Anonymous requests and requests made while the limiter is disabled should continue omitting quota headers, matching the current ProbabilityEdit behavior.",
+      "confidence": 0.95,
+      "if_wrong": "The task would require a deliberate contract change for anonymous/default-mode writes and updates to the existing absence assertions."
+    },
+    {
+      "id": "a4",
+      "assumption": "This task is backend-and-tests only; the frontend API client does not currently read response headers, so no frontend code should need to change unless the requirements explicitly expose quota state in the UI.",
+      "confidence": 0.93,
+      "if_wrong": "The implementation scope expands into frontend API plumbing and UI behavior rather than staying at the HTTP boundary."
+    },
+    {
+      "id": "a5",
+      "assumption": "The existing `X-RateLimit-Policy` header is likely meant to remain unless the task owner explicitly narrows the contract to the three named headers.",
+      "confidence": 0.81,
+      "if_wrong": "Tests and helper code that currently assert `X-RateLimit-Policy` would need to be removed or revised as part of the same change."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
