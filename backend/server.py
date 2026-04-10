@@ -402,7 +402,7 @@ def resolve_write_route_category(method: str, raw_path: str) -> str | None:
     if len(parts) < 4 or parts[:2] != ["v1", "markets"]:
         return None
 
-    if len(parts) == 4 and parts[3] == "resolve":
+    if len(parts) == 4 and parts[3] in {"resolve", "close"}:
         return MARKET_ADMIN_WRITE_CATEGORY
     if len(parts) == 4 and parts[3] == "comments":
         return TRADE_WRITE_CATEGORY
@@ -844,6 +844,7 @@ def service_index_payload() -> dict[str, Any]:
                 "GET /v1/markets/{id}/comments",
                 "POST /v1/markets/{id}/comments",
                 "/v1/markets/{id}/engine-stats",
+                "POST /v1/markets/{id}/close",
                 "POST /v1/markets/{id}/resolve",
             ],
             "orders": [
@@ -4551,6 +4552,18 @@ def handle_market_resolution(market_id: str, payload: dict[str, Any] | None) -> 
     return build_market_resolution_acceptance_response(command, resolution, scope_key)
 
 
+def handle_market_close(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
+    """Temporary seam for the forthcoming AdminOp-backed market-close lifecycle."""
+    if market_id not in MARKETS:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    body = payload if payload is not None else {}
+    if not isinstance(body, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
+
+    raise ApiError(501, "market_close_not_implemented", "Market close is not implemented yet")
+
+
 def route_request(
     method: str,
     raw_path: str,
@@ -4680,6 +4693,33 @@ def route_request(
             started_at = time.perf_counter()
             try:
                 payload, status = handle_market_resolution(market_id, body)
+            except ApiError:
+                if market_id in MARKETS:
+                    record_market_engine_request(
+                        market_id,
+                        (time.perf_counter() - started_at) * 1000.0,
+                        error=True,
+                    )
+                raise
+
+            if market_id in MARKETS:
+                duration_ms = (time.perf_counter() - started_at) * 1000.0
+                record_market_engine_request(market_id, duration_ms, error=status >= 400)
+                if status == 201:
+                    refresh_market_compile_snapshot(market_id, compile_time_ms=duration_ms)
+            return payload, status
+
+        if len(parts) == 4 and parts[3] == "close":
+            if method != "POST":
+                raise ApiError(
+                    405,
+                    "method_not_allowed",
+                    f"{method} is not allowed for this resource",
+                    {"method": method, "path": path},
+                )
+            started_at = time.perf_counter()
+            try:
+                payload, status = handle_market_close(market_id, body)
             except ApiError:
                 if market_id in MARKETS:
                     record_market_engine_request(
