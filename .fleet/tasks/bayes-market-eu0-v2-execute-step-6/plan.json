@@ -1,0 +1,89 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Close the remaining frontend test gap with explicit `getAccountExposure(accountId)` API-client coverage and public-hook cache invalidation tests for exposure refresh after successful EventTrade submissions and market resolution, because the existing component tests do not prove the new client/query contract.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Treat the existing `EventTradePanel` and `Portfolio` component tests as sufficient final coverage.",
+        "Rely only on backend API tests to cover the frontend exposure contract."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Add the new invalidation checks as hook-level React Query tests in `frontend/src/__tests__` using the public hooks with an isolated `QueryClient` wrapper, instead of exporting private helpers or hiding cache assertions inside broader component tests.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Keep all exposure-refresh assertions inside route/component tests built only on `renderWithProviders(...)`.",
+        "Expose internal query-key or invalidation helpers solely for test access."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Treat mixed account-read timing conservatively in `Portfolio`: if `/exposure` or `/risk` returns `404 account_not_found` while the other account query is still pending, keep the route in a loading state until both queries settle, and only then render the final empty or missing-account state.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Allow the current brief `No live EventTrade positions.` fallback while the second account query is still loading.",
+        "Normalize one-query `404` results inside shared hooks and hide the timing distinction from the route."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Use the full CI-aligned verification boundary for the landing pass: `python3 -m pytest tests/ -v --tb=short`, `pnpm --dir frontend test`, and `pnpm --dir frontend build` after ensuring frontend dependencies are installed.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Stop after targeted EventTrade/exposure subsets and touched Vitest files.",
+        "Skip the frontend build because the step is mostly test-oriented."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Include a docs/contract-freeze pass in the landing work so the additive `/v1/accounts/{id}/exposure` route is reflected in the repository's frozen API documentation, and update any stale EventTrade `size` payload/response notes discovered during the final diff review.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Treat code and tests as the only required contract publication layer for step 6.",
+        "Document only the new tests and leave existing contract-freeze docs stale."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit the current frontend, backend, and docs diff for the step-6 landing scope so the implementation starts from the known remaining gaps: missing `getAccountExposure(...)` client coverage, missing exposure invalidation proof, the unresolved `Portfolio` mixed-404 timing edge, and any stale contract-freeze references to account read surfaces.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Extend `frontend/src/__tests__/api-client.test.ts` with explicit `getAccountExposure(accountId)` coverage that asserts the request path and the frozen exposure response shape used by the frontend client/types.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add dedicated React Query hook tests in `frontend/src/__tests__` that exercise `useAccountExposure(...)` plus the public EventTrade and market-resolution mutation hooks against an isolated `QueryClient`, proving that successful mutations invalidate or refresh the account-scoped exposure cache as intended.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Tighten `frontend/src/routes/Portfolio.tsx` and its tests so a single early `404 account_not_found` does not briefly render an empty holdings state while the companion account query is still pending, while preserving the final exposure-only, risk-backed, and truly missing-account behaviors already covered in the route.",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Update the relevant contract-freeze/docs files to describe `/v1/accounts/{id}/exposure` as an additive account read surface and reconcile any stale EventTrade `size` payload or response-shape notes uncovered during the code/test review.",
+      "depends_on": [2, 3, 4]
+    },
+    {
+      "step": 6,
+      "task": "Run the full landing verification commands (`python3 -m pytest tests/ -v --tb=short`, `pnpm --dir frontend test`, and `pnpm --dir frontend build`), inspect the resulting diff including tracked frontend build artifacts for API-contract consistency across backend routes/tests, frontend types/hooks/tests, and docs, then land the implementation patch.",
+      "depends_on": [2, 3, 4, 5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

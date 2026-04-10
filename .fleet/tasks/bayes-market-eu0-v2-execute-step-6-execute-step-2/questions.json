@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should this step stay a narrow `frontend/src/__tests__/api-client.test.ts` change that adds only a happy-path `getAccountExposure(accountId)` regression beside `getAccountRisk(...)`, or is it also expected to add exposure-specific `BayesApiError` coverage in the same file?",
+      "category": "requirements",
+      "why_it_matters": "The task text calls out the request path and frozen success payload shape explicitly, while the file already has one generic non-OK client test. The answer determines whether a single additive success case closes the gap or whether the step should widen into new exposure error assertions."
+    },
+    {
+      "id": "q2",
+      "question": "When the task says to assert the frozen exposure response shape used by the frontend client/types, should the new test pin the full `AccountExposureResponse` envelope (`account.id`, `exposure.maxPositionSize`, `exposure.updatedAt`, every `positions[]` field, and `meta`) or only assert a representative subset after verifying the request path?",
+      "category": "design",
+      "why_it_matters": "This decides how strict the new regression should be. A full-envelope assertion better freezes the contract carried by `frontend/src/lib/api/types.ts`, while a subset assertion keeps the diff smaller but leaves more room for accidental payload drift."
+    },
+    {
+      "id": "q3",
+      "question": "Should the mocked exposure payload in `api-client.test.ts` be copied from the existing backend `/v1/accounts/{id}/exposure` contract examples in `backend/server.py` and `tests/test_bayes_market_api.py`, or is a frontend-only fixture acceptable as long as it satisfies the TypeScript interface?",
+      "category": "codebase",
+      "why_it_matters": "This determines whether the frontend regression is meant to double as an API-contract consistency check across layers or only as a local type-valid client test."
+    },
+    {
+      "id": "q4",
+      "question": "For the request-path assertion, should this step explicitly freeze `encodeURIComponent(accountId)` behavior by using an account ID that needs escaping, or should it follow the current simple-wrapper test style and assert `/v1/accounts/a1/exposure` with a plain ID?",
+      "category": "design",
+      "why_it_matters": "The production client encodes path parameters, but the existing tests mostly use simple IDs. The answer determines whether the new regression is only proving endpoint selection or also locking in path-encoding behavior."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The production exposure client surface is already present in this worktree: `frontend/src/lib/api/client.ts` exports `getAccountExposure(accountId)` and `frontend/src/lib/api/types.ts` exports `AccountExposureResponse`, so this step is coverage-only rather than feature work.",
+      "confidence": 0.99,
+      "if_wrong": "The test task would be blocked by missing runtime/type plumbing and would need to absorb unfinished implementation first."
+    },
+    {
+      "id": "a2",
+      "assumption": "The intended home for this regression is `frontend/src/__tests__/api-client.test.ts`, because that file already holds the thin mocked-fetch assertions for peer client wrappers such as `getAccountRisk(...)`, `getMarket(...)`, and `getMarketPreview(...)`.",
+      "confidence": 0.99,
+      "if_wrong": "The step would need a broader client-test reorganization or a new test file instead of one additive case in the existing suite."
+    },
+    {
+      "id": "a3",
+      "assumption": "The canonical public exposure shape the frontend should mirror comes from the backend serializer and route tests: `account.exposure` includes `maxPositionSize`, `updatedAt`, and `positions[]` rows with `marketId`, `outcomeId`, `netSize`, `absSize`, `lastTradePrice`, `updatedAt`, `lastOrderId`, and `lastCommandId`.",
+      "confidence": 0.96,
+      "if_wrong": "The frontend test could freeze a payload that is type-valid locally but out of sync with the backend route contract the branch is supposed to preserve."
+    },
+    {
+      "id": "a4",
+      "assumption": "Because `frontend/src/__tests__/api-client.test.ts` already has a generic non-OK assertion for `BayesApiError`, this step most likely only needs a success-path `getAccountExposure(...)` regression unless the task is interpreted more broadly than its title.",
+      "confidence": 0.84,
+      "if_wrong": "The implementation would need to add at least one new exposure-specific failure-path case to pin raw `404 account_not_found` behavior as part of this same step."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the remaining unknowns are answerable from the checked-in frontend client/tests, backend exposure serializer/tests, and the existing `.fleet` step artifacts in this worktree.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up research task would be needed before the test change could be scoped confidently."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

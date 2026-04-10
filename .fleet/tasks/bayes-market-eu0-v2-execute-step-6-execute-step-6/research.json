@@ -1,0 +1,115 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. The checked-in CI workflow defines the landing bar as the full backend/frontend suite and explicitly includes `pnpm --dir frontend install` before the frontend test/build steps, so dependency installation is a normal local prerequisite rather than an external blocker. I ran `pnpm --dir frontend install`, `python3 -m pytest tests/ -v --tb=short` (271 passed), `pnpm --dir frontend test` (52 passed), and `pnpm --dir frontend build` (success).",
+      "confidence": 0.99,
+      "evidence": [
+        ".github/workflows/ci.yml:26",
+        ".github/workflows/ci.yml:38",
+        ".github/workflows/ci.yml:41",
+        ".github/workflows/ci.yml:45",
+        ".gitignore:2"
+      ],
+      "uncertainty": "The repo does not contain separate prose about ad-hoc local setup policy, but the CI workflow itself already treats install as a standard prerequisite step.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "If the final diff review exposes a mismatch, the authoritative layer is the checked-in backend route behavior plus backend assertions, not stale docs. The executable contract already includes `/v1/accounts/{id}/exposure` and EventTrade `size`/`price`/`notional`, and the frontend client/types/hooks/Portfolio route already consume that surface. The lagging layer is documentation, so step 6 should reconcile docs and any stale frontend declaration to the backend/test contract rather than rewriting the server during a landing pass.",
+      "confidence": 0.94,
+      "evidence": [
+        "backend/server.py:127",
+        "tests/test_bayes_market_api.py:2626",
+        "tests/test_bayes_market_api.py:3469",
+        "tests/test_bayes_market_api.py:4479",
+        "frontend/src/lib/api/client.ts:169",
+        "frontend/src/lib/api/types.ts:195",
+        "frontend/src/lib/query/hooks.ts:335",
+        "frontend/src/routes/Portfolio.tsx:25",
+        "docs/t539-mvp-launch-gate.md:69",
+        "docs/t563-journal-read-surface-freeze.md:36"
+      ],
+      "uncertainty": "If product intent had changed and the backend/tests were no longer supposed to define the live contract, that would require an explicit rewrite task; nothing in this checkout indicates that.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The final sync pass should review both groups, but the expected edit surface is narrower than a blanket doc rewrite. The read-surface docs that still omit `/v1/accounts/{id}/exposure` are clearly in scope for update, and the older freeze docs that still define live ProbabilityEdit/EventTrade wording (`t586`, `t1737`, `t544`) are also in scope for consistency review because they still function as contract references. In practice, the obvious stale issue is the omitted exposure route, while the older freeze docs should only be edited where their wording diverges from the live backend/test contract.",
+      "confidence": 0.78,
+      "evidence": [
+        "docs/t539-mvp-launch-gate.md:69",
+        "docs/t556-scope-and-compatibility-boundary-freeze.md:51",
+        "docs/t563-journal-read-surface-freeze.md:36",
+        "docs/t586-full-chain-http-contract-freeze.md:17",
+        "docs/t1737-probability-edit-http-contract-freeze.md:12",
+        "docs/t544-event-sourcing-contract.md:73"
+      ],
+      "uncertainty": "There is no single in-tree memo that explicitly says \"step 6 doc scope\"; this is inferred from which docs still present themselves as live contract freezes.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. Step 6 still needs direct hook/query-client invalidation coverage if the landing bar is supposed to prove the exposure refresh contract itself. `useEventTrade(...)` invalidates only the submitting account's exposure query, and `useResolveMarket(...)` invalidates all exposure queries after resolution, but the existing frontend tests cover API client payloads, Portfolio rendering states, and EventTradePanel form wiring rather than React Query invalidation behavior. Passing the current suites proves endpoint shape and component behavior, not the hook-layer cache invalidation contract.",
+      "confidence": 0.84,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:367",
+        "frontend/src/lib/query/hooks.ts:382",
+        "frontend/src/__tests__/api-client.test.ts:59",
+        "frontend/src/__tests__/api-client.test.ts:111",
+        "frontend/src/__tests__/Portfolio.test.tsx:60",
+        "frontend/src/__tests__/EventTradePanel.test.tsx:47"
+      ],
+      "uncertainty": "A higher-level integration or end-to-end test could theoretically substitute for dedicated hook tests, but there is no such proof in this checkout.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Commit the generated frontend build deltas when they are the intentional checked-in outputs of the current source tree; discard only churn that is clearly unrelated to the branch's actual source/UI/contract state. This repo explicitly tracks `frontend/dist/`, CI runs `pnpm --dir frontend build`, and this run produced a tracked dist delta (`frontend/dist/index.html` updated the hashed JS reference and the old/new bundle files rotated) while `frontend/tsconfig.tsbuildinfo` stayed unchanged. For this landing pass, the rebuilt dist assets should stay in the commit.",
+      "confidence": 0.96,
+      "evidence": [
+        ".gitignore:3",
+        ".gitignore:4",
+        ".github/workflows/ci.yml:45",
+        "frontend/dist/index.html:12"
+      ],
+      "uncertainty": "Generated artifacts should still be dropped if they can be shown to come from accidental tool-version drift rather than the checked-in source tree, but this repo's tracked-dist policy means the default is to keep them.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Confirmed: the branch already contains the step-6 implementation surfaces relative to `main`, including backend exposure/event-trade behavior, frontend exposure client/hooks/UI, and tracked frontend build outputs."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "Confirmed: `frontend/node_modules` was absent, so local frontend verification required `pnpm --dir frontend install` before the requested test/build commands."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.93,
+      "impact": "Confirmed: API-client and component coverage exist for exposure-related behavior, but there is still no dedicated React Query invalidation proof for `useEventTrade(...)` or `useResolveMarket(...)`."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Confirmed: `.gitignore` intentionally keeps `frontend/dist/` checked in, so build-artifact deltas are part of landing review rather than disposable noise."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.91,
+      "impact": "Confirmed: live backend/tests/frontend already agree on the additive `/v1/accounts/{id}/exposure` surface and EventTrade `size`/`price`/`notional`; the main remaining consistency risk is stale documentation."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,12 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.0,
+  "plan_adherence_notes": "The branch does not execute the plan. Relative to `ff/Tbayes-market-eu0-v2-execute-step-6`, the diff contains only `.fleet/tasks/bayes-market-eu0-v2-execute-step-6-execute-step-3/{questions,research,plan}.json`. None of the planned deliverables landed: there is no dedicated hook test file under `frontend/src/__tests__`, no isolated `QueryClient` harness, no direct `useAccountExposure(...)` regression, no EventTrade/ResolveMarket mutation invalidation coverage, and no targeted verification update.",
+  "research_quality": 0.96,
+  "question_completeness": 0.97,
+  "missed_questions": [],
+  "verdict": "reject",
+  "reason": "The plan follows the research well, and the research is grounded in the current hook contracts, but this branch never implements the requested work. The requested React Query hook tests are absent. Test execution was attempted with `pnpm --dir frontend test`, but the worktree has no frontend `node_modules`, so `vitest` could not run (`Permission denied` / missing dependencies).",
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Step-4 validation explicitly called out missing `getAccountExposure(...)` client coverage and exposure-cache invalidation tests, while step 5 already added component tests for `EventTradePanel` and `Portfolio`. For step 6, should the targeted frontend work close that lower-level gap with client/query-hook tests, or is the current component-level coverage considered sufficient?",
+      "category": "requirements",
+      "why_it_matters": "The branch currently proves UI rendering but not the new exposure client surface or the account-scoped invalidation behavior that keeps portfolio data fresh after EventTrade and market resolution."
+    },
+    {
+      "id": "q2",
+      "question": "If step 6 does need invalidation coverage, is it acceptable to introduce a new hook-level React Query test pattern in `frontend/src/__tests__` (there is no existing `renderHook` or mutation-cache test in this checkout), or should the feature be verified only through component-level tests built on `renderWithProviders(...)`?",
+      "category": "design",
+      "why_it_matters": "Testing `useEventTrade(...)` and `useResolveMarket(...)` exposure invalidation directly is easier with hook/query-client tests, but that would introduce a new frontend testing pattern rather than extending the current route/component suite."
+    },
+    {
+      "id": "q3",
+      "question": "For the portfolio dual-read flow, what behavior should be considered correct when `/v1/accounts/{id}/exposure` returns `404 account_not_found` before `/v1/accounts/{id}/risk` has finished loading: keep the route in a loading state until the risk query settles, or allow the current brief `No live EventTrade positions.` fallback while risk is still pending?",
+      "category": "requirements",
+      "why_it_matters": "Step-5 validation approved the branch but called out this timing edge as the main unresolved UX ambiguity, and any new targeted frontend test would either lock in or reject the current behavior."
+    },
+    {
+      "id": "q4",
+      "question": "What is the minimum suite boundary for `run the relevant backend and frontend suites` in this landing step: the full CI commands (`python3 -m pytest tests/ -v --tb=short`, `pnpm --dir frontend test`, and `pnpm --dir frontend build`), or only targeted EventTrade/exposure subsets plus the touched Vitest files?",
+      "category": "requirements",
+      "why_it_matters": "The branch now spans backend contracts, frontend cache plumbing, UI changes, and tracked build output, so step 6 needs a clear bar for what must pass before the final patch can be considered landed."
+    },
+    {
+      "id": "q5",
+      "question": "During the final API-contract consistency review, is code-and-test alignment enough, or should this step also update contract-freeze docs for the additive `/v1/accounts/{id}/exposure` surface and the canonical EventTrade `size` payload/response shape if the current docs are silent or stale?",
+      "category": "design",
+      "why_it_matters": "The live contract now spans `backend/server.py`, `tests/test_bayes_market_api.py`, `frontend/src/lib/api/types.ts`, and tracked frontend callers, but the repository also carries contract-freeze docs; the answer decides whether step 6 is a code/test landing only or a broader contract-publication pass."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This worktree already contains the merged step-1 through step-5 implementation for max-position enforcement, `/v1/accounts/{id}/exposure`, frontend exposure hooks, the EventTrade size UI, and the portfolio exposure surface, so step 6 is a verification-and-coverage pass rather than a backend feature build.",
+      "confidence": 0.99,
+      "if_wrong": "Question generation would be premature because step 6 would still be blocked on missing feature work rather than tests, validation, and final review."
+    },
+    {
+      "id": "a2",
+      "assumption": "Current frontend coverage is still skewed toward component behavior: `EventTradePanel.test.tsx` and `Portfolio.test.tsx` exist, but there is no `getAccountExposure(...)` API-client test and no explicit React Query invalidation test for exposure refresh after EventTrade or market resolution.",
+      "confidence": 0.98,
+      "if_wrong": "The remaining test gap would be smaller than it appears, and step 6 could focus only on suite execution and diff review instead of adding lower-level frontend coverage."
+    },
+    {
+      "id": "a3",
+      "assumption": "The repository's canonical final-check commands are the CI commands in `.github/workflows/ci.yml`: `python3 -m pytest tests/ -v --tb=short`, `pnpm --dir frontend install`, `pnpm --dir frontend test`, and `pnpm --dir frontend build`.",
+      "confidence": 0.9,
+      "if_wrong": "The landing step might either under-test the branch or spend time on broader suite/build work than the task actually requires."
+    },
+    {
+      "id": "a4",
+      "assumption": "Tracked frontend build artifacts are intentional in this repo: `.gitignore` explicitly allows `frontend/dist/`, and both `frontend/dist/*` and `frontend/tsconfig.tsbuildinfo` are versioned, so a final build may produce committed artifact updates rather than disposable local noise.",
+      "confidence": 0.96,
+      "if_wrong": "A final build could create misleading diff churn that should be excluded from the landed patch instead of committed."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child tasks are needed for question generation because the remaining unknowns are all answerable from the local plan/validation artifacts, current frontend tests, CI config, and contract-bearing source files.",
+      "confidence": 0.97,
+      "if_wrong": "A follow-on subtask would be needed to investigate an external dependency or a separate repo slice before step-6 planning could proceed."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

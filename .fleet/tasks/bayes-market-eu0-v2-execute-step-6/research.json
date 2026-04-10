@@ -1,0 +1,116 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Step 6 should close the lower-level gap with explicit `getAccountExposure(...)` client coverage and exposure-cache invalidation tests. The component tests added in step 5 are useful UI coverage, but they do not satisfy the step-4 validation feedback, which specifically called out the missing client assertion and missing query-hook/invalidation proof. The follow-up step-4 coverage plan already narrowed the intended fix to an `api-client` assertion plus dedicated hook-level invalidation coverage.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4/validation.json:12",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/plan.json:16",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/plan.json:25",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-5/validation.json:4"
+      ],
+      "uncertainty": "The remaining choice is only the exact test harness shape; the repo evidence is clear that component-level coverage alone did not close the intended gap.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. If step 6 adds invalidation coverage, introducing a new hook-level React Query test in `frontend/src/__tests__` is acceptable and is the repo-backed direction. The recorded follow-up plan explicitly preferred a dedicated hook test with a fresh `QueryClient` wrapper over hiding cache assertions inside component tests or exporting private helpers. That does not force `renderHook(...)` specifically; the important contract is exercising the public hooks with an isolated test `QueryClient`.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/plan.json:25",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/validation.json:4",
+        "frontend/src/__tests__/helpers.tsx:1",
+        "frontend/src/lib/query/hooks.ts:44"
+      ],
+      "uncertainty": "The existing checkout does not already contain a hook-test precedent, so the exact helper style is still up to the implementation as long as it keeps the tests on the public hook contract.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The safer correctness bar is to keep the portfolio route in a loading state until the remaining account query settles when `/exposure` has already resolved to `404 account_not_found`. The current brief `No live EventTrade positions.` fallback is produced because `Portfolio.tsx` only shows the full-page loader when both queries are loading, and it only shows the account-missing empty state when both queries have finished with `404`. Step-5 validation flagged this exact timing edge as unresolved, and the step-5 plan said the route should handle independent loading and `404` states so truly empty accounts get the right final state. That evidence leans toward waiting for `riskQuery` to settle instead of briefly rendering empty holdings from incomplete information.",
+      "confidence": 0.67,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-5/validation.json:4",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-5/validation.json:8",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-5/plan.json:52",
+        "frontend/src/routes/Portfolio.tsx:50",
+        "frontend/src/routes/Portfolio.tsx:54",
+        "frontend/src/routes/Portfolio.tsx:99"
+      ],
+      "uncertainty": "The earlier step artifacts never froze this transient state explicitly; this is a recommendation from the current route logic and validation notes, not a fully documented product rule.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q4",
+      "answer": "For the landing step, the minimum suite boundary should be the full CI-aligned backend and frontend gates, not only targeted subsets: `python3 -m pytest tests/ -v --tb=short`, `pnpm --dir frontend test`, and `pnpm --dir frontend build` after frontend dependencies are installed. Targeted EventTrade/exposure slices were appropriate for intermediate steps, but step 6 is the final landing pass for a branch that now spans backend contracts, query invalidation, UI, and tracked build output.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:85",
+        ".fleet/tasks/bayes-market-eu0-v2/plan.json:86",
+        ".github/workflows/ci.yml:23",
+        ".github/workflows/ci.yml:26",
+        ".github/workflows/ci.yml:38",
+        ".github/workflows/ci.yml:41",
+        ".github/workflows/ci.yml:45",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-5/validation.json:4"
+      ],
+      "uncertainty": "If the environment is missing frontend dependencies, `pnpm --dir frontend install` is a prerequisite rather than an additional verification signal, but the actual landing bar still comes from the full test and build commands.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Code-and-test alignment is not enough by itself here. Step 6 should also update the contract-freeze/docs layer for the additive `/v1/accounts/{id}/exposure` surface, because the live server and tests now advertise that route while multiple docs still describe `account risk` as the only current account read model. The EventTrade `size` payload is already frozen in the docs, and the formula memo already treats bad `size` as part of the public EventTrade contract, so the most urgent doc gap is `/exposure`. The richer accepted EventTrade response shape with `size`, `price`, and `notional` is still primarily pinned by code/tests rather than a dedicated HTTP freeze memo, so documenting that too would improve parity, but `/exposure` is the clearly stale contract-publication hole.",
+      "confidence": 0.82,
+      "evidence": [
+        "backend/server.py:127",
+        "tests/test_bayes_market_api.py:436",
+        "docs/t539-mvp-launch-gate.md:70",
+        "docs/t556-scope-and-compatibility-boundary-freeze.md:55",
+        "docs/t563-journal-read-surface-freeze.md:36",
+        "docs/t544-event-sourcing-contract.md:73",
+        "docs/t547-shared-event-formula-contract-freeze.md:128",
+        "tests/test_bayes_market_api.py:3470"
+      ],
+      "uncertainty": "The repo does not currently have a dedicated EventTrade HTTP response freeze memo analogous to the ProbabilityEdit one, so the exact doc scope beyond `/exposure` depends on how strict the branch wants docs parity to be for response envelopes.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 6 can stay focused on frontend test closure, suite execution, final contract review, and landing. The max-position backend flow, `/exposure` route, query hooks, EventTrade size UI, and portfolio exposure surface are already present in this worktree."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The remaining frontend gap is lower-level coverage, not missing UI coverage. The branch already has `EventTradePanel` and `Portfolio` component tests, but it still lacks the `getAccountExposure(...)` client assertion and explicit React Query invalidation proof."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The final landing bar should match the CI workflow rather than stop at targeted slices. That means backend pytest plus frontend test and build are the relevant suite boundary for step 6."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "A final frontend build can legitimately produce tracked artifact updates in this repo, so any resulting `frontend/dist/*` or `frontend/tsconfig.tsbuildinfo` churn should be reviewed as part of the landing diff rather than discarded automatically."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "No child tasks are needed for this research phase. The local task artifacts, source files, tests, workflow config, and docs were enough to answer the open questions."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,123 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The new tests should not stop at spying on `QueryClient.invalidateQueries(...)`. They should mount `useAccountExposure(accountId)` on a fresh `QueryClient` and prove a real post-mutation refresh for an actively observed exposure query, then use key-scope assertions only to pin the exact invalidation contract. The recorded follow-up plans describe the missing gap as public-hook exposure refresh/invalidation coverage that exercises `useAccountExposure(...)`, not a private-helper assertion.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6/plan.json:6",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6/plan.json:16",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6/plan.json:68",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/plan.json:26",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/plan.json:63",
+        "frontend/src/lib/query/hooks.ts:335",
+        "frontend/src/__tests__/helpers.tsx:16"
+      ],
+      "uncertainty": "The artifacts do not prescribe the exact balance between visible-refresh assertions and lower-level invalidation inspection, but they consistently point to exercising the public read hook with an isolated client.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. Freeze the narrow EventTrade contract: after a successful `useEventTrade(marketId)`, only `queryKeys.accountExposure(payload.accountId)` should be invalidated or refreshed, and it should use `exact: true` so other accounts' exposure queries stay untouched. That precision is encoded directly in `invalidateAccountExposureQuery(...)`, consumed only by `useEventTrade(...)`, and already called out in the prior plan and validation notes as the intended contract.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:44",
+        "frontend/src/lib/query/hooks.ts:46",
+        "frontend/src/lib/query/hooks.ts:47",
+        "frontend/src/lib/query/hooks.ts:382",
+        "frontend/src/lib/query/hooks.ts:391",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/plan.json:68"
+      ],
+      "uncertainty": "The only implementation choice left is how to prove the precision in tests, for example refresh/no-refresh on two observed accounts, an `invalidateQueries` spy, or both.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The test should pin the broader resolve contract, not just one visible refresh. `useResolveMarket(marketId)` is intended to invalidate the whole `['accounts', <id>, 'exposure']` family across accounts while explicitly leaving `queryKeys.accountRisk(...)` outside the invalidation scope. A single mounted-account refresh is useful evidence, but by itself it would not freeze the cross-account family matcher or the non-risk boundary that the current helper implements.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:20",
+        "frontend/src/lib/query/hooks.ts:21",
+        "frontend/src/lib/query/hooks.ts:51",
+        "frontend/src/lib/query/hooks.ts:54",
+        "frontend/src/lib/query/hooks.ts:57",
+        "frontend/src/lib/query/hooks.ts:367",
+        "frontend/src/lib/query/hooks.ts:377",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/plan.json:73"
+      ],
+      "uncertainty": "The test can still include a visible refresh assertion for one active observer, but that should complement, not replace, assertions about the family-wide exposure scope and the risk-query exclusion.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Freeze the exact `useAccountExposure(accountId)` key contract, but do not widen this step into a separate empty-account guard regression unless it comes almost for free from the same harness. The follow-up plan explicitly requires asserting the exact `queryKeys.accountExposure(accountId)` shape as part of this file, but it never names the empty-string `enabled` guard as required scope; the landing step is framed around successful non-empty reads plus mutation-driven exposure refresh.",
+      "confidence": 0.84,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:335",
+        "frontend/src/lib/query/hooks.ts:337",
+        "frontend/src/lib/query/hooks.ts:339",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/plan.json:36",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-4-execute-step-5/plan.json:68",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6/plan.json:68"
+      ],
+      "uncertainty": "The empty-account `enabled` guard is real public behavior and could be added if the file stays small, but the artifacts do not clearly require it for this step the way they require the exact query-key contract.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Keep this step happy-path only. The task and parent step both frame the missing coverage as proving exposure refresh after successful EventTrade submissions and market resolution, while the current suite already spends separate scope on an EventTrade rejection UI path. Since both hooks place their exposure invalidation only inside `onSuccess`, explicit no-invalidation assertions for rejected mutations would be additive hardening rather than required step scope.",
+      "confidence": 0.93,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6-execute-step-3/questions.json:30",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6/plan.json:6",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-6/plan.json:68",
+        "frontend/src/lib/query/hooks.ts:372",
+        "frontend/src/lib/query/hooks.ts:377",
+        "frontend/src/lib/query/hooks.ts:387",
+        "frontend/src/lib/query/hooks.ts:391",
+        "frontend/src/__tests__/EventTradePanel.test.tsx:47"
+      ],
+      "uncertainty": "Failure-path cache-safety tests would be reasonable future hardening, especially for `useResolveMarket(...)`, but nothing in the checked-in step artifacts makes them necessary to satisfy this research decision.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "This step is coverage-only work. `useAccountExposure(accountId)`, `useEventTrade(marketId)`, `useResolveMarket(marketId)`, and the exposure invalidation helpers already exist in `frontend/src/lib/query/hooks.ts`."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The additive coverage belongs in a dedicated file under `frontend/src/__tests__`. The repo already centralizes frontend tests there, and the recorded plan specifically chose a new hook-level suite over exporting private helpers or burying the assertions inside component tests."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The current cache contract is intentionally asymmetric. EventTrade should be tested as a single exact account-exposure invalidation, while ResolveMarket should be tested as exposure-family invalidation across accounts with `accountRisk(...)` left out of scope."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The shared render helper is not sufficient by itself for these tests because it creates its own `QueryClient` internally and does not expose that client for cache seeding or inspection. A dedicated wrapper with one isolated client per case is the safer fit."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed. The local hook code, current tests, helper setup, and prior `.fleet` plans and validations provide enough context to answer these questions confidently."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

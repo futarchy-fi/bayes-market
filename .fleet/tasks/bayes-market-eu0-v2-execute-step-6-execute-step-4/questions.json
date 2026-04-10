@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "When neither account query has produced data yet, and one of `/exposure` or `/risk` has already failed with `404 account_not_found` while the companion query is still unsettled, should `Portfolio` stay on the full route-level loading state instead of rendering the page shell or the holdings empty state until both account queries settle?",
+      "category": "requirements",
+      "why_it_matters": "This is the central behavior change in `frontend/src/routes/Portfolio.tsx`. It decides whether the fix is a route-wide loading gate or only a smaller holdings-section tweak."
+    },
+    {
+      "id": "q2",
+      "question": "Should that mixed `404 + pending` guard be symmetric for both account reads, even though the current visible regression is specifically the early-exposure path that falls through to `No live EventTrade positions.`?",
+      "category": "design",
+      "why_it_matters": "A symmetric rule keeps the route logic simple and avoids inconsistent intermediate states depending on which query settles first, but it is broader than a one-branch exposure-only patch."
+    },
+    {
+      "id": "q3",
+      "question": "After adding the new guard, must the route continue to preserve the already-covered settled behaviors: exposure-only holdings when risk ends in `404`, risk summary plus empty holdings when exposure ends in `404`, and the final missing-account error only when both queries settle to `404`?",
+      "category": "requirements",
+      "why_it_matters": "The fix should only close the transient timing gap. This question defines the regression boundary so the new logic does not over-block valid partial-data renders."
+    },
+    {
+      "id": "q4",
+      "question": "Should `frontend/src/__tests__/Portfolio.test.tsx` add an explicit deferred async regression that keeps one account query pending while the other rejects with `BayesApiError(404, \"account_not_found\")`, asserting that `No live EventTrade positions.` does not appear before the second query settles, and if so, is one directional case enough or should both query orderings be covered?",
+      "category": "design",
+      "why_it_matters": "The bug is about a transient render, not just a final settled state. The answer determines the needed promise-control test harness and whether the coverage freezes only the observed exposure-first path or the full symmetric contract."
+    },
+    {
+      "id": "q5",
+      "question": "Is the intended implementation boundary to leave `getAccountExposure(...)`, `useAccountExposure(...)`, and `useAccountRisk(...)` returning raw `404 account_not_found` errors, and solve the timing issue locally in `Portfolio.tsx` with a settled-vs-pending query guard rather than normalizing missing accounts in shared hooks or the API client?",
+      "category": "codebase",
+      "why_it_matters": "This keeps the step additive and UI-scoped. If the contract is instead to normalize missing accounts upstream, the patch surface would widen beyond this route and its tests."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The current `Portfolio` route already has its final settled-state contract covered in `frontend/src/__tests__/Portfolio.test.tsx`: exposure-only holdings when risk is missing, risk-backed rendering when exposure is missing, and the shared missing-account state when both account reads return `404 account_not_found`.",
+      "confidence": 0.99,
+      "if_wrong": "This step would need broader baseline test work, not just the targeted transient-state regression and route guard."
+    },
+    {
+      "id": "a2",
+      "assumption": "The raw `BayesApiError(404, \"account_not_found\")` contract for both account reads is intentional and remains a route concern today, since `Portfolio.tsx` already treats those errors specially instead of relying on hook-level fallback data.",
+      "confidence": 0.98,
+      "if_wrong": "A route-only fix could freeze behavior in the wrong layer, and the step might need to move into shared hook or client normalization instead."
+    },
+    {
+      "id": "a3",
+      "assumption": "The undesirable UI only occurs while neither query has produced usable data yet; once either `exposure` or `risk` exists, the route should continue rendering that partial information immediately rather than waiting for the other account query to settle.",
+      "confidence": 0.95,
+      "if_wrong": "The loading policy would need to be broader than this task description suggests, and existing settled-behavior tests might need to change rather than stay preserved."
+    },
+    {
+      "id": "a4",
+      "assumption": "There is no existing shared deferred-promise helper in the frontend test suite, so reproducing the mixed `404` timing bug will likely require a small local controllable-promise pattern inside `frontend/src/__tests__/Portfolio.test.tsx`.",
+      "confidence": 0.95,
+      "if_wrong": "The implementation should reuse an existing async test utility or house style instead of introducing a new local promise-control pattern."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child tasks are needed because the relevant behavior is discoverable from the checked-in route, query hooks, API error class, current frontend tests, and the parent step-6 plan artifact in this worktree.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up exploration task would be needed before the implementation could be scoped confidently."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
