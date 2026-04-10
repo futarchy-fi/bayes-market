@@ -1,0 +1,134 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Step 2 should stay close to the existing `BayesMarketApiAuthRateLimitTests` style: add thin route helpers that delegate to `request_with_headers(...)` wherever step 3 will need the same route with response headers, while keeping the patch small and local to this class. The task plan explicitly allows inline bodies, so comment-post can still use a tiny inline `{ \"accountId\": ..., \"body\": ... }` payload instead of forcing a broader helper layer. For create-market, market-resolve, and event-trade, the existing top-level body builders already make thin `*_with_headers(...)` wrappers cheap and consistent.",
+      "confidence": 0.86,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:53",
+        ".fleet/tasks/bayes-market-u44/plan.json:58",
+        "tests/test_bayes_market_api.py:5955",
+        "tests/test_bayes_market_api.py:6027",
+        "tests/test_bayes_market_api.py:6042",
+        "tests/test_bayes_market_api.py:52",
+        "tests/test_bayes_market_api.py:72",
+        "tests/test_bayes_market_api.py:97"
+      ],
+      "uncertainty": "The step-2 wording explicitly permits inline bodies, so the exact split between tiny wrappers and inline payloads is an implementation preference as long as the helper surface stays small and header-aware.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The canonical reset-state success fixtures are: create-market via `build_create_market_body(title=\"HTTP Auth Create Market\")` or another non-colliding title, using the builder defaults for outcomes, expiry, and liquidity; comment-post via an inline `{ \"accountId\": \"acct_http_comment\", \"body\": \"Auth/rate-limit scaffold comment\" }` against active `m1`; market-resolve via `market_id=\"m2\"` plus `build_market_resolution_body(\"ops_http_auth_valid\", \"delayed\")`, because `m2` starts active and `delayed` is a valid outcome already used by the auth tests; and event-trade via `build_event_trade_body(\"acct_http_trade\", \"m1\", \"yes\")` against active `m1`, since that builder already emits a single atomic literal, positive size, and `buy` side. The only caveat is create-market title reuse: `setUp()` resets state per test, so a fixed title is safe for one successful create per test, but the helper should keep `title` overridable if a future test performs multiple successful creates in one reset window.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:61",
+        "backend/server.py:78",
+        "backend/server.py:1633",
+        "backend/server.py:1660",
+        "backend/server.py:3360",
+        "backend/server.py:3437",
+        "backend/server.py:3487",
+        "backend/server.py:2279",
+        "backend/server.py:2290",
+        "backend/server.py:2298",
+        "backend/server.py:3598",
+        "backend/server.py:3637",
+        "tests/test_bayes_market_api.py:5945",
+        "tests/test_bayes_market_api.py:6372",
+        "tests/test_bayes_market_api.py:6252",
+        "tests/test_bayes_market_api.py:6523",
+        "tests/test_bayes_market_api.py:6799",
+        "tests/test_bayes_market_api.py:3461"
+      ],
+      "uncertainty": "Create-market is the only success payload with a collision risk; if a single test intentionally submits more than one successful create, it needs distinct titles.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Step 2 does not need a first-class `build_comment_post_body(...)` helper. Comment-post is the only protected write route without an existing builder, but its accepted request shape is just `{ \"accountId\": ..., \"body\": ... }`, and the task plan explicitly allows inline bodies for this scaffolding step. Adding a comment body builder would be a symmetry/readability choice, not a codebase requirement for the narrow auth/rate-limit helper work.",
+      "confidence": 0.91,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:53",
+        "tests/test_bayes_market_api.py:52",
+        "tests/test_bayes_market_api.py:72",
+        "tests/test_bayes_market_api.py:97",
+        "backend/server.py:3360",
+        "backend/server.py:3437"
+      ],
+      "uncertainty": "If later steps end up reusing comment-post bodies in many tests, a tiny builder could still be added for readability, but step 2 itself does not require it.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "The scope should stay limited to making valid HTTP submissions reachable with the same header-aware return shape; header assertions belong to step 3. New helpers should accept `agent_id` and route/body parameters, but they should not centralize a default valid agent id or mutate `RATE_LIMIT_PER_MIN` internally. The existing wrappers only translate an optional `agent_id` into request headers, while the tests themselves set `server.RATE_LIMIT_PER_MIN` before calling those helpers, which matches the explicit step-2 and step-3 split in the task plan.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:53",
+        ".fleet/tasks/bayes-market-u44/plan.json:58",
+        "tests/test_bayes_market_api.py:6027",
+        "tests/test_bayes_market_api.py:6034",
+        "tests/test_bayes_market_api.py:6042",
+        "tests/test_bayes_market_api.py:6051",
+        "tests/test_bayes_market_api.py:6106",
+        "tests/test_bayes_market_api.py:6107",
+        "tests/test_bayes_market_api.py:6109",
+        "tests/test_bayes_market_api.py:6252",
+        "tests/test_bayes_market_api.py:6266"
+      ],
+      "uncertainty": "Only helper naming and parameter defaults are still stylistic; the step boundary itself is clear from the current wrappers and the task plan.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. Any new route helper should preserve the existing `(status, payload, response_headers)` contract by delegating to `request_with_headers(...)`, not the simpler `request(...)` helper that discards headers. Step 3 is explicitly about asserting success-path `X-RateLimit-*` headers across the protected POST surface, so a helper that drops headers would immediately need to be bypassed or refactored.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:58",
+        "tests/test_bayes_market_api.py:5955",
+        "tests/test_bayes_market_api.py:5976",
+        "tests/test_bayes_market_api.py:6001",
+        "tests/test_bayes_market_api.py:6010",
+        "tests/test_bayes_market_api.py:6027",
+        "tests/test_bayes_market_api.py:6042"
+      ],
+      "uncertainty": "None unless the next step is re-scoped away from header assertions, which the current task plan contradicts.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Keep the helper additions local to `BayesMarketApiAuthRateLimitTests` and mirror the existing thin wrapper/request pattern; a broader shared test framework is unnecessary for this step."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The proposed reset-state fixtures are valid success paths. The only operational caveat is create-market title reuse if one test performs multiple successful creates; the helper should keep the title overridable."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Step 2 scaffolding does not need idempotency-key defaults, because `setUp()` resets state before each test and these helpers only need to reach one-shot valid submissions."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "An inline comment payload keeps the patch small and readable; skipping a dedicated comment builder now does not block the later header-coverage tests."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Preserving response headers in the helper return shape is necessary so step 3 can add breadth assertions without reworking the scaffolding immediately."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
