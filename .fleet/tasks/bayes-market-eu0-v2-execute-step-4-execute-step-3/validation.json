@@ -1,0 +1,12 @@
+{
+  "phase": "validate",
+  "plan_adherence": 1.0,
+  "plan_adherence_notes": "Execution matched the step-3 plan exactly: `frontend/src/lib/query/hooks.ts` is the only production file changed, `queryKeys.accountExposure(accountId)` uses `[\"accounts\", accountId, \"exposure\"]`, `useAccountExposure(accountId)` mirrors `useAccountRisk(accountId)` with only `queryKey`, `queryFn`, and `enabled: accountId.length > 0`, and there is no hook-level 404 normalization or consumer/test expansion.",
+  "research_quality": 0.99,
+  "question_completeness": 1.0,
+  "missed_questions": [],
+  "verdict": "approve",
+  "reason": "The branch stays within the planned additive scope, the plan is well-supported by the research evidence in the repo, there were no obvious missing scoping questions for this narrow hook-addition step, and `pnpm test` passed in `frontend/` (45 tests).",
+  "spawn_children": false,
+  "children": []
+}
