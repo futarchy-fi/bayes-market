@@ -1,0 +1,15 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.88,
+  "plan_adherence_notes": "Execution covers the planned seams: `backend/server.py` adds strict `include_resolved` parsing plus normalized resolved-inclusion behavior, `tests/test_bayes_market_api.py` freezes the new backend contract, the shared frontend market-list filter contract was expanded across `frontend/src/lib/api/types.ts`, `frontend/src/lib/api/client.ts`, and `frontend/src/lib/query/hooks.ts`, and the intended call sites (`MarketList`, `System`, `BayesNetGraph`) were updated. The main deviations are in verification hygiene rather than product behavior: the branch also carries an unplanned `frontend/tsconfig.tsbuildinfo` update from a different TypeScript version, and step 5 did not ensure the frontend still passes a strict no-emit typecheck.",
+  "research_quality": 0.97,
+  "question_completeness": 0.86,
+  "missed_questions": [
+    "Should step 5 include a frontend `tsc --noEmit` gate, given `frontend/tsconfig.json` enables `strict` and `noUncheckedIndexedAccess` and this task updates typed fixtures plus shared filter types?",
+    "Should `frontend/tsconfig.tsbuildinfo` be updated for this task, or is it an incidental generated artifact that should stay out of the branch?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "The research supports the plan and the implemented feature behavior largely matches it, but the branch is not clean enough to approve. Validation passed the focused backend slice with `python3 -B -m unittest -v` from `tests/` (9 tests) and the affected frontend Vitest slice with `pnpm test -- src/__tests__/api-client.test.ts src/__tests__/MarketList.test.tsx src/__tests__/MarketDetail.test.tsx src/__tests__/Portfolio.test.tsx src/__tests__/System.test.tsx` (56 tests across 9 files), but `pnpm exec tsc -p tsconfig.json --noEmit --pretty false --incremental false` fails in `frontend/src/__tests__/MarketList.test.tsx:40` because `defaultMarkets[0]` is typed as `MarketSummary | undefined` under `noUncheckedIndexedAccess`. The tracked `frontend/tsconfig.tsbuildinfo` change, which now records `errors: true` under a newer TypeScript version, reinforces that the frontend typecheck was not clean when this branch was produced.",
+  "spawn_children": false,
+  "children": []
+}
