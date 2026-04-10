@@ -6120,6 +6120,9 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
     def account_risk(self, account_id: str, *, timeout: float = 5):
         return self.request("GET", f"/v1/accounts/{account_id}/risk", timeout=timeout)
 
+    def account_exposure(self, account_id: str, *, timeout: float = 5):
+        return self.request("GET", f"/v1/accounts/{account_id}/exposure", timeout=timeout)
+
     def run_concurrent_probability_edits(
         self,
         operations: list[tuple[str, dict[str, object]]],
@@ -6196,6 +6199,39 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
             self.fail("concurrent requests completed without producing full results")
 
         return [result for result in results if result is not None]
+
+    def test_account_exposure_threaded_http_happy_path_matches_direct_route_after_event_trade(self):
+        account_id = "acct_concurrency_http_exposure"
+        path = f"/v1/accounts/{account_id}/exposure"
+        trade_status, trade_payload = self.event_trade(
+            "m1",
+            build_event_trade_body(account_id, "m1", "yes", size=12.5, side="buy"),
+            timeout=10,
+        )
+        http_status, http_payload = self.account_exposure(account_id, timeout=10)
+        direct_payload, direct_status = server.route_request("GET", path)
+
+        self.assertEqual(trade_status, 201)
+        self.assertEqual(trade_payload["result"]["status"], "accepted")
+        self.assertEqual(http_status, 200)
+        self.assertEqual(direct_status, 200)
+        self.assertEqual(http_status, direct_status)
+        self.assertEqual(http_payload["account"], direct_payload["account"])
+
+    def test_account_exposure_threaded_http_unknown_account_returns_structured_error(self):
+        status, payload = self.account_exposure("acct_missing_threaded", timeout=10)
+
+        self.assertEqual(status, 404)
+        self.assertEqual(payload["error"]["code"], "account_not_found")
+        self.assertEqual(payload["error"]["details"]["accountId"], "acct_missing_threaded")
+
+    def test_account_exposure_threaded_http_rejects_non_get_methods(self):
+        status, payload = self.request("POST", "/v1/accounts/acct_threaded/exposure", {}, timeout=10)
+
+        self.assertEqual(status, 405)
+        self.assertEqual(payload["error"]["code"], "method_not_allowed")
+        self.assertEqual(payload["error"]["details"]["method"], "POST")
+        self.assertEqual(payload["error"]["details"]["path"], "/v1/accounts/acct_threaded/exposure")
 
     def test_concurrent_duplicate_probability_edit_idempotency_key_replays_without_double_append(self):
         operations = [
