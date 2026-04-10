@@ -1,0 +1,89 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. The task-local `questions.json` was absent, and the only durable in-repo record of what this leaf still needed to answer was the previous validation's `missed_questions` list. The correct repair is to formalize that exact question set for this leaf rather than inventing broader new scope.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/validation.json:6",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/validation.json:7",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/validation.json:8",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/validation.json:9",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/validation.json:10"
+      ],
+      "uncertainty": "The file-system absence itself is observed from the checkout rather than represented in a tracked file; the validation artifact is the durable source that documents the gap.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "No. The preserved auth/rate-limit sentinel slice does not show a real regression that would justify a shared-seam backend patch. The parent step-4 plan allows `backend/server.py` changes only if preserved tests fail, the previous validation already recorded that the focused sentinel class was passing while production code had still changed, and I reran `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` in this checkout with `21` tests passing. The current backend still centralizes protected-write classification, enforcement, and quota headers in `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `rate_limit_headers(...)`, and `BayesHandler.handle_api()`.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:47",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:48",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/validation.json:13",
+        "backend/server.py:472",
+        "backend/server.py:523",
+        "backend/server.py:4039",
+        "backend/server.py:4066",
+        "tests/test_bayes_market_api.py:6370",
+        "tests/test_bayes_market_api.py:6394",
+        "tests/test_bayes_market_api.py:6461",
+        "tests/test_bayes_market_api.py:6519",
+        "tests/test_bayes_market_api.py:6589",
+        "tests/test_bayes_market_api.py:6625",
+        "tests/test_bayes_market_api.py:6641"
+      ],
+      "uncertainty": "The focused class is the preserved step-4 sentinel slice, not a proof about every unrelated API behavior in the repository.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. If the preserved sentinel audit stays clean, this phase should remain a no-op outside `.fleet/tasks/`. The parent plan says step 2 restores tests only when a preserved sentinel drifted and step 3 patches the backend only when preserved tests reveal a real regression. Because the sentinel slice is intact and passing, the scoped outcome for this leaf is task-artifact-only work and no additional production-code change.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:42",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:43",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:47",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:48",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:57",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:58",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/validation.json:12",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/validation.json:13"
+      ],
+      "uncertainty": "A separate cleanup task could still choose to review or revert the existing backend refactor, but that is outside the trigger condition for this leaf.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The parent step-4 plan still governs this leaf, so a backend patch remains conditional on an actual preserved-sentinel failure."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The focused auth/rate-limit sentinel class is enough to make the step-3 backend decision, and it currently passes cleanly."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Reconstructing the missing question set from the previous validation restores an auditable driver for this leaf without expanding scope."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed because the missing-scope questions, the preserved sentinel gate, and the shared backend seam are all answerable from this checkout."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
