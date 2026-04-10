@@ -1,0 +1,94 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat step 6 as a focused landing pass over the already-merged exposure surface: keep the backend `/v1/accounts/{id}/exposure` behavior as the source of truth and spend implementation effort on missing frontend proof, the `Portfolio` loading edge, and stale route-inventory docs rather than reopening the exposure contract itself.",
+      "based_on": ["q1", "q4", "q5"],
+      "alternatives_rejected": [
+        "Revisit backend `/v1/accounts/{id}/exposure` semantics or the `/risk` payload shape as part of this step.",
+        "Expand the pass into broader UI or API refactors unrelated to the validated remaining gaps."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Close the remaining frontend coverage gap with lower-level tests by extending `frontend/src/__tests__/api-client.test.ts` for `getAccountExposure(accountId)` and adding a dedicated public-hook React Query test harness under `frontend/src/__tests__` with an isolated `QueryClient`.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Treat the existing `EventTradePanel` and `Portfolio` component tests as sufficient proof.",
+        "Export private invalidation helpers from `frontend/src/lib/query/hooks.ts` for direct unit testing."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Freeze exposure invalidation exactly as implemented today: `useEventTrade(marketId)` must invalidate only `queryKeys.accountExposure(accountId)` with `exact: true`, while `useResolveMarket(marketId)` must invalidate the whole account-exposure family without broadening into `queryKeys.accountRisk(...)`.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Assert only that some invalidation happened without pinning the key shape or scope.",
+        "Invalidate all `accounts` queries, including risk, after both mutations."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Fix the `Portfolio` mixed-404 timing edge by holding the route in a loading state until both account reads have settled whenever one query is still pending and the other has only returned projection-local `404 account_not_found`, so the UI never falls through to the empty-holdings copy from incomplete data.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Keep the current brief `No live EventTrade positions.` fallback when one query 404s before its companion settles.",
+        "Collapse any single account-read 404 directly into the full missing-account state."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Update only the freeze and launch docs that inventory the live account read surface to publish `/v1/accounts/{id}/exposure` as an additive route with projection-local `404 account_not_found` behavior, using the backend service index and backend route tests as the source of truth.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Leave the risk-only route inventory in place and rely on code/tests to communicate the additive exposure surface.",
+        "Touch every doc that mentions `/risk`, including example-only references that are not route inventories."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Use the full CI-aligned verification bar for landing: backend pytest, full frontend Vitest, and a frontend production build, accepting tracked frontend build-artifact refreshes only if they are produced by the final verified build.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Run only targeted frontend slices and skip the full backend/frontend/build gate.",
+        "Avoid committing regenerated tracked frontend artifacts even when the verified build updates them."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Extend `frontend/src/__tests__/api-client.test.ts` with a focused `getAccountExposure(accountId)` assertion that pins the `/v1/accounts/{id}/exposure` wrapper behavior beside the existing `getAccountRisk(...)` coverage.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add a dedicated hook-level React Query test file under `frontend/src/__tests__` with a fresh `QueryClientProvider` wrapper and mocked API methods, then prove `useAccountExposure(accountId)` uses `queryKeys.accountExposure(accountId)` and that the public mutation hooks invalidate exposure queries with the audited scopes.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Patch `frontend/src/routes/Portfolio.tsx` so a projection-local `404 account_not_found` on one account read does not render the empty-holdings state while the companion query is still pending, and extend `frontend/src/__tests__/Portfolio.test.tsx` with the mixed-404 timing regression case while preserving the existing exposure-only, risk-only, and dual-404 behaviors.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Update the stale route-inventory docs in `docs/t553-current-architecture-cache-boundary-freeze.md`, `docs/t563-journal-read-surface-freeze.md`, `docs/t571-per-market-engine-stats-contract-freeze.md`, `docs/t539-mvp-launch-gate.md`, and `docs/t556-scope-and-compatibility-boundary-freeze.md` so they describe `/v1/accounts/{id}/risk` plus additive `/v1/accounts/{id}/exposure`, including the projection-local `404 account_not_found` semantics where the account read surface is frozen.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Run `python3 -m pytest tests/ -v --tb=short`, `pnpm --dir frontend test`, and `pnpm --dir frontend build`; review the resulting diff for tracked frontend build outputs (`frontend/dist/*`, `frontend/tsconfig.tsbuildinfo`) before staging the landing patch.",
+      "depends_on": [1, 2, 3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
