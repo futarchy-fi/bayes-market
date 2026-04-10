@@ -19,6 +19,9 @@ vi.mock("@/lib/api/client", async () => {
 
 describe("System", () => {
   beforeEach(() => {
+    mockClient.getHealth.mockReset();
+    mockClient.getServiceIndex.mockReset();
+    mockClient.listMarkets.mockReset();
     mockClient.getHealth.mockResolvedValue({
       service: "bayes-market",
       status: "ok",
@@ -41,7 +44,7 @@ describe("System", () => {
       meta: {
         apiVersion: "1.0.0",
         timestamp: "2026-04-08T12:00:00Z",
-        filters: { status: null, include_resolved: false },
+        filters: { status: null, include_resolved: true },
       },
     });
   });
@@ -64,6 +67,7 @@ describe("System", () => {
       expect(screen.getByText("Total")).toBeInTheDocument();
       expect(screen.getAllByText("Active").length).toBeGreaterThanOrEqual(1);
     });
+    expect(mockClient.listMarkets).toHaveBeenCalledWith({ includeResolved: true });
   });
 
   it("shows API surface routes", async () => {
@@ -83,7 +87,7 @@ describe("System", () => {
       meta: {
         apiVersion: "1.0.0",
         timestamp: "2026-04-08T12:00:00Z",
-        filters: { status: null, include_resolved: false },
+        filters: { status: null, include_resolved: true },
       },
     });
     renderWithProviders(<System />);

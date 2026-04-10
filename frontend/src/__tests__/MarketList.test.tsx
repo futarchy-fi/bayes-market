@@ -1,10 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "./helpers";
 import MarketList from "@/routes/MarketList";
 import * as api from "@/lib/api/client";
 
-vi.mock("@/lib/api/client");
+const mockClient = vi.hoisted(() => ({
+  listMarkets: vi.fn(),
+}));
+
+vi.mock("@/lib/api/client", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api/client")>("@/lib/api/client");
+  return {
+    ...actual,
+    listMarkets: mockClient.listMarkets,
+  };
+});
 
 const mockMarkets = {
   markets: [
@@ -21,6 +31,7 @@ const mockMarkets = {
 
 describe("MarketList", () => {
   beforeEach(() => {
+    vi.mocked(api.listMarkets).mockReset();
     vi.mocked(api.listMarkets).mockResolvedValue(mockMarkets);
   });
 
@@ -35,6 +46,24 @@ describe("MarketList", () => {
       expect(screen.getByText("ETH Price > $3000")).toBeInTheDocument();
     });
     expect(screen.getByText("BTC ETF Approval")).toBeInTheDocument();
+  });
+
+  it("uses default filters until a status is selected", async () => {
+    renderWithProviders(<MarketList />);
+
+    await waitFor(() => {
+      expect(api.listMarkets).toHaveBeenCalledWith(undefined);
+    });
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "active" } });
+    await waitFor(() => {
+      expect(api.listMarkets).toHaveBeenLastCalledWith({ status: "active" });
+    });
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "resolved" } });
+    await waitFor(() => {
+      expect(api.listMarkets).toHaveBeenLastCalledWith({ status: "resolved" });
+    });
   });
 
   it("shows status badges", async () => {

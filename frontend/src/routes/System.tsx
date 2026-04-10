@@ -6,7 +6,7 @@ import { formatCurrency } from "@/lib/utils/format";
 export default function System() {
   const health = useHealth();
   const index = useServiceIndex();
-  const allMarkets = useMarkets();
+  const allMarkets = useMarkets({ includeResolved: true });
 
   const statusCounts = allMarkets.data?.markets.reduce(
     (acc, m) => {
