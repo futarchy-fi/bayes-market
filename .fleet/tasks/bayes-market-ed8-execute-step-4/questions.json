@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Which exact tests should count as the targeted backend health-route subset in `tests/test_bayes_market_api.py`: only the live HTTP health methods in `BayesMarketApiIntegrationTests`, or also the direct router/unit health tests and root service-index health-route assertion in `BayesMarketApiUnitTests`?",
+      "category": "codebase",
+      "why_it_matters": "This module currently splits health coverage across direct `route_request()` tests and full HTTP tests. The exact selector determines whether step 4 is a narrow public-surface smoke run or a broader health-routing subset before the full module run."
+    },
+    {
+      "id": "q2",
+      "question": "When the step says to run the broader backend API test module after the focused health assertions pass, is the intended second command limited to `tests/test_bayes_market_api.py`, or should it expand to the whole backend test suite under `tests/` to match CI?",
+      "category": "requirements",
+      "why_it_matters": "The parent plan says 'module' in the singular, but CI runs `python3 -m pytest tests/ -v --tb=short`. Clarifying that boundary avoids either under-testing the change or broadening the step beyond its recorded scope."
+    },
+    {
+      "id": "q3",
+      "question": "What runner should be treated as the canonical proof for this step: `pytest`, which CI installs and uses, or `python3 -m unittest discover`, which some prior `.fleet` validation artifacts used for the same file?",
+      "category": "design",
+      "why_it_matters": "Both runners already appear in nearby task history. Choosing one canonical command matters for reproducibility, for expressing the focused selector cleanly, and for avoiding a mismatch between local validation and CI expectations."
+    },
+    {
+      "id": "q4",
+      "question": "Should step 4 fail fast and skip the broader module entirely if the focused health-route subset fails, or is it still expected to run the broader module to collect additional regression signal before stopping?",
+      "category": "requirements",
+      "why_it_matters": "The task wording suggests a gate, but an exploratory full-module run after failure would produce different operator behavior and different evidence in the follow-on validation artifact."
+    },
+    {
+      "id": "q5",
+      "question": "Beyond obtaining green exit codes, does this step need to preserve explicit evidence of both test commands and their results in the task artifacts or commit trail, given that the step-3 validation specifically noted the focused health subset run was not preserved?",
+      "category": "requirements",
+      "why_it_matters": "The main remaining gap called out by the previous validation was procedural rather than functional. If step 4 is supposed to close that gap, the implementation needs to capture more than just a passing local shell session."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This worktree already contains the merged step-3 health-route assertions, so step 4 is an execution-and-evidence slice rather than another code-change step.",
+      "confidence": 0.99,
+      "if_wrong": "Running tests now would be premature because the focused assertions the step is supposed to validate would still be missing or incomplete."
+    },
+    {
+      "id": "a2",
+      "assumption": "The phrase 'broader backend API test module' refers to `tests/test_bayes_market_api.py`, because that is the singular backend API module named throughout the plan and nearby validation artifacts.",
+      "confidence": 0.97,
+      "if_wrong": "Step 4 would need to widen from one module to the entire backend suite, changing both runtime cost and the definition of completion."
+    },
+    {
+      "id": "a3",
+      "assumption": "A focused `pytest` selector over the health-related tests in `tests/test_bayes_market_api.py` is the most likely intended targeted run, since the health surface is split across named unit and HTTP tests in that file and pytest matches the CI runner.",
+      "confidence": 0.82,
+      "if_wrong": "The targeted run may need a different selector strategy or a different runner, and the execution step could either miss required health assertions or include irrelevant tests."
+    },
+    {
+      "id": "a4",
+      "assumption": "The step should be gated: only run the broader module after the focused health-route subset passes.",
+      "confidence": 0.98,
+      "if_wrong": "The operator should still run the broader module after a focused failure, which changes the failure-handling logic and the evidence this step is expected to collect."
+    },
+    {
+      "id": "a5",
+      "assumption": "Closing the previously noted procedural gap likely requires preserving the exact commands used for the focused subset and the broader module somewhere in the follow-on task artifacts, not just observing that they passed locally.",
+      "confidence": 0.76,
+      "if_wrong": "A green local execution would be sufficient, and step 4 would not need any extra artifact or narrative evidence beyond the ordinary commit."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
