@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Which frontend suites are actually in scope for the step-5 test refresh: just `frontend/src/__tests__/MarketList.test.tsx`, `frontend/src/__tests__/System.test.tsx`, and the `frontend/src/__tests__/MarketDetail.test.tsx` path that renders `BayesNetGraph`, or should `frontend/src/__tests__/Portfolio.test.tsx` also be updated because it still consumes the default `useMarkets()` collection for title lookup?",
+      "category": "requirements",
+      "why_it_matters": "Those are the current route/component tests that stub `listMarkets()` or depend on default-versus-opt-in collection behavior. The answer determines the concrete frontend test slice instead of turning step 5 into a vague repo-wide refresh."
+    },
+    {
+      "id": "q2",
+      "question": "In `frontend/src/__tests__/api-client.test.ts`, should the public `listMarkets(...)` contract continue to preserve both the legacy string shorthand (`listMarkets(\"active\")`) and the new object filter shape, or is step 5 allowed to treat object filters as canonical and update the client tests accordingly?",
+      "category": "codebase",
+      "why_it_matters": "The client currently normalizes both forms, but the routes and hooks have already moved toward object filters. That boundary decides whether step 5 is only refreshing assertions or also cleaning up the client surface being frozen by tests."
+    },
+    {
+      "id": "q3",
+      "question": "For the consumer-facing frontend tests, should the new opt-in contract be frozen by asserting only the `listMarkets(...)` arguments (`undefined` or `{ status: ... }` on `MarketList`, `{ includeResolved: true }` on `System` and the graph path), or should the tests also prove the rendered behavior that depends on resolved rows being hidden or present?",
+      "category": "design",
+      "why_it_matters": "Several current mocks can return resolved markets regardless of what the component requested. Argument-only assertions can miss regressions, while render-only assertions can accidentally pass without proving the new request shape."
+    },
+    {
+      "id": "q4",
+      "question": "Does step 5 need a dedicated test seam for `frontend/src/features/graph/BayesNetGraph.tsx` now that one of the explicit opt-ins lives there, or is extending `frontend/src/__tests__/MarketDetail.test.tsx` the intended way to cover the graph's `useMarkets({ includeResolved: true })` behavior?",
+      "category": "codebase",
+      "why_it_matters": "There is no standalone graph test in this checkout, but the plan explicitly opts the graph back into resolved markets. The answer determines whether step 5 adds a new component test file or keeps coverage at the route level."
+    },
+    {
+      "id": "q5",
+      "question": "When frontend fixtures stub `MarketListResponse.meta.filters`, should they mirror the backend's normalized effective filter metadata, especially `include_resolved: true` whenever `status=resolved`, or can tests use lightweight placeholder `meta` objects when the UI does not actually inspect `filters`?",
+      "category": "design",
+      "why_it_matters": "The backend now returns normalized filter metadata, but several frontend suites only care about rendering and currently reuse generic collection fixtures. This decides how strict the refreshed mocks need to be and whether mismatched metadata is acceptable."
+    },
+    {
+      "id": "q6",
+      "question": "What exact focused verification commands should satisfy step 5 in this repo: should the backend gate rerun only the `/v1/markets` methods inside `BayesMarketApiUnitTests`, the full `BayesMarketApiUnitTests` class, or a broader module slice, and which Vitest file set under `frontend/src/__tests__` is the intended frontend test slice?",
+      "category": "requirements",
+      "why_it_matters": "The backend is run via direct `unittest` selectors while the frontend uses `vitest run`, and the plan explicitly asks for focused slices rather than broad suite reruns. Pinning the commands is necessary for a repeatable execution artifact."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The backend implementation and unit coverage for `include_resolved` are already landed in this checkout, so step 5 should only need a focused rerun of the `/v1/markets` backend slice rather than fresh backend product changes.",
+      "confidence": 0.99,
+      "if_wrong": "The task would expand back into backend implementation or contract-test work before any step-5 execution pass could be considered complete."
+    },
+    {
+      "id": "a2",
+      "assumption": "The frontend suites currently affected by the new opt-in behavior are `frontend/src/__tests__/api-client.test.ts`, `frontend/src/__tests__/MarketList.test.tsx`, `frontend/src/__tests__/System.test.tsx`, `frontend/src/__tests__/MarketDetail.test.tsx`, and possibly `frontend/src/__tests__/Portfolio.test.tsx`; there is no standalone `BayesNetGraph` test yet.",
+      "confidence": 0.96,
+      "if_wrong": "Step 5 could miss another consumer-level regression surface or duplicate coverage that already exists elsewhere in the repo."
+    },
+    {
+      "id": "a3",
+      "assumption": "The Market List route should keep the new default of hiding resolved markets and continue relying on `status=resolved` rather than an explicit `{ includeResolved: true }` opt-in when the user selects the resolved status filter.",
+      "confidence": 0.97,
+      "if_wrong": "Both the route behavior and the refreshed frontend tests would need different request expectations."
+    },
+    {
+      "id": "a4",
+      "assumption": "The only default collection consumers that should explicitly opt back into resolved rows are `frontend/src/routes/System.tsx` and the graph path rendered from `frontend/src/features/graph/BayesNetGraph.tsx`; `Portfolio`, `AssumptionPanel`, and `ConditionalEditor` can stay on the new hidden-resolved default.",
+      "confidence": 0.89,
+      "if_wrong": "More call sites and route/component tests would need to be updated before the step-5 test refresh is actually complete."
+    },
+    {
+      "id": "a5",
+      "assumption": "A focused backend selector plus targeted Vitest file selectors will be enough execution proof for this step, rather than rerunning the entire backend module and the full frontend suite.",
+      "confidence": 0.84,
+      "if_wrong": "The eventual execution phase will need broader test commands and the recorded verification expectations will have to expand."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

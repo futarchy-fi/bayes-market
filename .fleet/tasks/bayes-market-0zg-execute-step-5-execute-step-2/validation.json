@@ -1,0 +1,12 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.98,
+  "plan_adherence_notes": "Execution stayed at `frontend/src/__tests__/MarketList.test.tsx` as planned. The diff replaces the shared fixture with contract-consistent default, active, resolved, and empty responses; swaps in a request-aware `listMarkets` mock keyed by the received filters; rewrites assertions to prove `listMarkets(undefined)` for the initial view and `{ status: ... }` for explicit active and resolved selections; and keeps the empty-state override scoped to the default request. The only detail not provable from the diff alone is whether the focused Vitest command was run during execution, but the resulting test changes match the planned scope and step breakdown.",
+  "research_quality": 0.97,
+  "question_completeness": 0.96,
+  "missed_questions": [],
+  "verdict": "approve",
+  "reason": "Approved. The plan follows directly from the research, the implementation matches that plan, and regression checks passed: `pnpm test src/__tests__/MarketList.test.tsx` and full `pnpm test` in `frontend/` both succeeded.",
+  "spawn_children": false,
+  "children": []
+}

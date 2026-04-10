@@ -1,0 +1,134 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. Step 3 should freeze both halves of the System contract: assert that the route requests `listMarkets({ includeResolved: true })`, and assert visible aggregates that only make sense when resolved rows are actually present. The parent step-5 plan explicitly says the route refresh should pair request-shape assertions with rendered behavior checks, and `System.tsx` computes both market counts and platform stats from the same `allMarkets.data.markets` collection. The current `System.test.tsx` only checks headings/labels plus one call expectation, so it can stay green without proving the resolved-inclusive behavior end to end.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:25",
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:58",
+        "frontend/src/routes/System.tsx:9",
+        "frontend/src/routes/System.tsx:11",
+        "frontend/src/routes/System.tsx:19",
+        "frontend/src/routes/System.tsx:61",
+        "frontend/src/routes/System.tsx:74",
+        "frontend/src/__tests__/System.test.tsx:64",
+        "frontend/src/__tests__/System.test.tsx:80"
+      ],
+      "uncertainty": "The precise rendered assertions can vary, but the codebase evidence is strong that request-only or label-only coverage is not enough for this leaf.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The contract-bearing fixture in `System.test.tsx` should be a mixed active-plus-resolved collection with `meta.filters: { status: null, include_resolved: true }`. `System` always opts back into resolved markets, and the step-3 task text says to verify counts/stats with fixtures that include both active and resolved rows. Keeping the shared fixture active-only weakens the regression because the default path no longer reflects the route's resolved-inclusive behavior. It is still acceptable to use smaller one-off fixtures for pure smoke tests like the heading or health beacon, but the aggregate/count assertions should run against the mixed collection by default.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:59",
+        "frontend/src/routes/System.tsx:9",
+        "frontend/src/__tests__/System.test.tsx:39",
+        "frontend/src/__tests__/System.test.tsx:47",
+        "frontend/src/__tests__/System.test.tsx:81",
+        "frontend/src/__tests__/System.test.tsx:90",
+        "frontend/src/lib/api/types.ts:56",
+        "backend/server.py:1738",
+        "backend/server.py:1748"
+      ],
+      "uncertainty": "The suite does not have to use the mixed fixture in every single test. The stronger requirement is that any test claiming to freeze the System opt-in contract should not rely on an active-only default collection.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Step 3 should assert actual numeric cards, not just section labels. The stable contract is the values derived directly from the mixed fixture: market counts under `Markets` and aggregate totals under `Platform Stats`. At minimum that means `Total`, `Active`, and `Resolved` counts plus `Total Volume` and `Total Liquidity`; because the route also renders `Closed` and `Draft` from the same status-count map, zero-value checks for those cards are valid and low-cost if the fixture only includes active and resolved rows. To keep the totals visually distinct after `formatCurrency(...)`, use fixture values that sum to unique strings, for example an active market with `liquidity: 1200` and `volume: 450` plus a resolved market with `liquidity: 3000` and `volume: 1150`, which would yield `1.6K` total volume and `4.2K` total liquidity.",
+      "confidence": 0.91,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:59",
+        "frontend/src/routes/System.tsx:11",
+        "frontend/src/routes/System.tsx:19",
+        "frontend/src/routes/System.tsx:66",
+        "frontend/src/routes/System.tsx:67",
+        "frontend/src/routes/System.tsx:68",
+        "frontend/src/routes/System.tsx:69",
+        "frontend/src/routes/System.tsx:81",
+        "frontend/src/routes/System.tsx:82",
+        "frontend/src/routes/System.tsx:83",
+        "frontend/src/routes/System.tsx:84",
+        "frontend/src/routes/System.tsx:85",
+        "frontend/src/lib/utils/format.ts:5"
+      ],
+      "uncertainty": "The exact fixture numbers are not mandated by the repo; the important part is choosing values whose formatted totals are easy to distinguish in the DOM.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. The refreshed assertions should be card- or section-scoped. `System` renders `Active` and `Resolved` twice, once in `Platform Stats` and again in `Markets`, so broad `getByText` or `getAllByText` checks are ambiguous. The stable pattern is to anchor on the section container and then read the value adjacent to the label inside each `CountCard`, for example by starting from the label node and asserting against its `previousElementSibling`, or by asserting the parent card's text content. That matches the current DOM structure of `CountCard` and avoids accidental passes caused by duplicate labels.",
+      "confidence": 0.96,
+      "evidence": [
+        "frontend/src/routes/System.tsx:64",
+        "frontend/src/routes/System.tsx:68",
+        "frontend/src/routes/System.tsx:69",
+        "frontend/src/routes/System.tsx:76",
+        "frontend/src/routes/System.tsx:82",
+        "frontend/src/routes/System.tsx:83",
+        "frontend/src/routes/System.tsx:117",
+        "frontend/src/routes/System.tsx:126",
+        "frontend/src/routes/System.tsx:129",
+        "frontend/src/__tests__/System.test.tsx:68"
+      ],
+      "uncertainty": "The exact helper implementation can vary. The requirement is scoping the value assertion closely enough that duplicate labels do not blur which card is being tested.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "The intended seam for this leaf is `frontend/src/__tests__/System.test.tsx` itself. Step 1 already preserves the API-client normalization contract, and `useMarkets(...)` is only a thin pass-through that sets the normalized query key and calls `api.listMarkets(filters)`. The parent plan names `System.test.tsx` directly for step 3, so the missing coverage here is route-visible behavior: the explicit opt-in call and the rendered aggregates from a resolved-inclusive collection. Lower-level hook or client assertions would be redundant for this leaf.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:48",
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:58",
+        "frontend/src/lib/query/hooks.ts:15",
+        "frontend/src/lib/query/hooks.ts:16",
+        "frontend/src/lib/query/hooks.ts:273",
+        "frontend/src/lib/query/hooks.ts:276",
+        "frontend/src/routes/System.tsx:9",
+        "frontend/src/__tests__/api-client.test.ts:75",
+        "frontend/src/__tests__/api-client.test.ts:90"
+      ],
+      "uncertainty": "A separate hook-level test could still be added later if query-key regressions become a concern, but it is not needed to satisfy this step-3 route refresh.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 3 can stay test-only because `System.tsx` already requests the resolved-inclusive collection via `useMarkets({ includeResolved: true })`."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The current `System.test.tsx` needs stronger value assertions for counts and aggregate stats; headings and label presence alone do not freeze the behavior described in the step title."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Any step-3 fixture that returns resolved rows should report `meta.filters.include_resolved: true` so the suite does not preserve contradictory collection metadata."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.94,
+      "impact": "A single `listMarkets` fixture is enough for this leaf because the System route has one market-collection request shape, so the suite does not need the request-aware mock complexity used in `MarketList.test.tsx`."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "No deeper child investigation is needed; the route implementation, current tests, client/type contract, and parent step-5 plan already define the System test boundary clearly."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

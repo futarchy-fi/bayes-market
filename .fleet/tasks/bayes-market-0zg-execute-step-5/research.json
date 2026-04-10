@@ -1,0 +1,151 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The focused step-5 frontend refresh should cover `frontend/src/__tests__/api-client.test.ts`, `frontend/src/__tests__/MarketList.test.tsx`, `frontend/src/__tests__/System.test.tsx`, and the `frontend/src/__tests__/MarketDetail.test.tsx` path that renders `BayesNetGraph`. `Portfolio.test.tsx` is an audited default consumer, but it is not part of the core opt-in regression slice: the parent plan explicitly keeps `Portfolio` on the default `useMarkets()` path, and the current Portfolio tests only seed an active-only market list for title lookup without asserting request shape. If Portfolio needs any edit at all, it should only be a spillover fixture/type cleanup, not a required opt-in behavior test.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg/plan.json:37",
+        ".fleet/tasks/bayes-market-0zg/plan.json:64",
+        ".fleet/tasks/bayes-market-0zg-execute-step-4/plan.json:25",
+        ".fleet/tasks/bayes-market-0zg-execute-step-4/validation.json:4",
+        "frontend/src/routes/Portfolio.tsx:27",
+        "frontend/src/__tests__/Portfolio.test.tsx:24",
+        "frontend/src/__tests__/MarketList.test.tsx:51",
+        "frontend/src/__tests__/System.test.tsx:64",
+        "frontend/src/routes/MarketDetail.tsx:67"
+      ],
+      "uncertainty": "A small additive Portfolio assertion would still be reasonable if step 5 wants to document that title lookup continues to work with the default active-only collection, but the codebase does not point to it as a required opt-in refresh target.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The public `listMarkets(...)` contract should still preserve both forms in `api-client.test.ts`: the legacy string shorthand such as `listMarkets(\"active\")` and the newer object filter shape. The checked-in public type is still `MarketListFilters | string`, and `normalizeMarketListFilters(...)` still explicitly accepts strings. Step 5 is a test refresh for the shared contract and caller migration, not a deliberate narrowing of the public client surface, so object filters are the preferred caller shape but not yet the only supported one.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg/plan.json:58",
+        ".fleet/tasks/bayes-market-0zg/plan.json:63",
+        "frontend/src/lib/api/types.ts:33",
+        "frontend/src/lib/api/types.ts:38",
+        "frontend/src/lib/api/client.ts:75",
+        "frontend/src/lib/api/client.ts:84",
+        "frontend/src/__tests__/api-client.test.ts:45"
+      ],
+      "uncertainty": "The repo clearly preserves compatibility today, but it does not say how long the string shorthand should survive beyond this rollout; a later cleanup task could still remove it deliberately.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The refreshed consumer-facing tests should freeze both the `listMarkets(...)` arguments and a rendered effect that depends on resolved rows being hidden or present. Argument-only assertions are too weak here because the current `MarketList` mock already returns a resolved row while claiming `include_resolved: false`, so a route test can pass even if the new default is not really exercised. Render-only assertions are also too weak because permissive mocks can keep `System` or the graph path green without proving the new request shape. The strongest step-5 contract is: assert the call arguments, and pair them with fixtures whose visible output changes when resolved rows are excluded or included.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/__tests__/MarketList.test.tsx:19",
+        "frontend/src/__tests__/MarketList.test.tsx:28",
+        "frontend/src/__tests__/MarketList.test.tsx:43",
+        "frontend/src/__tests__/MarketList.test.tsx:51",
+        "frontend/src/routes/MarketList.tsx:14",
+        "frontend/src/__tests__/System.test.tsx:64",
+        "frontend/src/__tests__/System.test.tsx:80",
+        "frontend/src/routes/System.tsx:11",
+        "frontend/src/features/graph/BayesNetGraph.tsx:231",
+        "frontend/src/features/graph/BayesNetGraph.tsx:273"
+      ],
+      "uncertainty": "The exact visible assertion can vary by suite, especially for the graph path, but the codebase evidence strongly favors request-plus-render coverage over either style alone.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Step 5 should extend `frontend/src/__tests__/MarketDetail.test.tsx` rather than introduce a new required standalone `BayesNetGraph` test file. In this checkout, `MarketDetail` is the existing test seam that renders the graph, and the step-4 validation already described the lack of a dedicated graph regression as a minor gap rather than a blocker. The intended closure for that gap is a MarketDetail-level scenario that proves the graph path requests `useMarkets({ includeResolved: true })` and behaves correctly with a resolved-inclusive market fixture.",
+      "confidence": 0.92,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg/plan.json:68",
+        ".fleet/tasks/bayes-market-0zg-execute-step-4/validation.json:4",
+        "frontend/src/routes/MarketDetail.tsx:67",
+        "frontend/src/features/graph/BayesNetGraph.tsx:231",
+        "frontend/src/__tests__/MarketDetail.test.tsx:58",
+        "frontend/src/__tests__/MarketDetail.test.tsx:113"
+      ],
+      "uncertainty": "A future dedicated `BayesNetGraph` suite could still be worthwhile if the component grows more independent behavior, but the current repo structure does not make it the intended mandatory seam for this step.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Frontend fixtures should mirror the backend's normalized effective `meta.filters` whenever the test is asserting collection/filter contract behavior, especially in `api-client.test.ts` and any route test that is meant to prove resolved-market inclusion semantics. For pure render tests whose components never read `meta.filters`, lightweight placeholder metadata is acceptable as long as it remains type-correct and does not contradict the returned rows. In this step's affected suites, the practical rule should be to avoid inconsistent mocks such as returning resolved rows while claiming `include_resolved: false`, because those can hide exactly the regressions step 5 is meant to catch.",
+      "confidence": 0.89,
+      "evidence": [
+        "frontend/src/lib/api/types.ts:56",
+        "backend/server.py:1738",
+        "backend/server.py:1748",
+        "tests/test_bayes_market_api.py:679",
+        "tests/test_bayes_market_api.py:685",
+        "tests/test_bayes_market_api.py:687",
+        "tests/test_bayes_market_api.py:693",
+        "frontend/src/routes/MarketList.tsx:57",
+        "frontend/src/routes/System.tsx:11",
+        "frontend/src/features/graph/BayesNetGraph.tsx:234"
+      ],
+      "uncertainty": "The line between contract-sensitive and render-only tests is judgment-based, so some teams would choose to normalize every fixture for consistency even when the UI never inspects `meta.filters`.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "The backend gate should stay at the focused `/v1/markets` method slice inside `BayesMarketApiUnitTests`, not the full class and not a broader module replay. The concrete command should be equivalent to `python3 -m unittest tests.test_bayes_market_api.BayesMarketApiUnitTests.test_list_markets_excludes_resolved_by_default_and_returns_summary_shape tests.test_bayes_market_api.BayesMarketApiUnitTests.test_list_markets_include_resolved_true_returns_all_markets tests.test_bayes_market_api.BayesMarketApiUnitTests.test_list_markets_status_resolved_returns_only_resolved_markets tests.test_bayes_market_api.BayesMarketApiUnitTests.test_list_markets_status_resolved_overrides_include_resolved_false tests.test_bayes_market_api.BayesMarketApiUnitTests.test_blank_include_resolved_filter_returns_contract_error tests.test_bayes_market_api.BayesMarketApiUnitTests.test_unsupported_include_resolved_filter_returns_contract_error tests.test_bayes_market_api.BayesMarketApiUnitTests.test_duplicate_include_resolved_filter_returns_contract_error`. The frontend slice should be `vitest run` only for `src/__tests__/api-client.test.ts`, `src/__tests__/MarketList.test.tsx`, `src/__tests__/System.test.tsx`, and `src/__tests__/MarketDetail.test.tsx`; with this repo's scripts, `pnpm test -- src/__tests__/api-client.test.ts src/__tests__/MarketList.test.tsx src/__tests__/System.test.tsx src/__tests__/MarketDetail.test.tsx` is the equivalent wrapper.",
+      "confidence": 0.87,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg/plan.json:68",
+        ".fleet/tasks/bayes-market-0zg/plan.json:69",
+        ".fleet/tasks/bayes-market-0zg-execute-step-2/research.json:5",
+        ".fleet/tasks/bayes-market-0zg-execute-step-4/plan.json:52",
+        "tests/test_bayes_market_api.py:657",
+        "tests/test_bayes_market_api.py:671",
+        "tests/test_bayes_market_api.py:679",
+        "tests/test_bayes_market_api.py:687",
+        "tests/test_bayes_market_api.py:695",
+        "tests/test_bayes_market_api.py:706",
+        "tests/test_bayes_market_api.py:719",
+        "frontend/package.json:10",
+        "frontend/src/__tests__/api-client.test.ts:29",
+        "frontend/src/__tests__/MarketList.test.tsx:51",
+        "frontend/src/__tests__/System.test.tsx:64",
+        "frontend/src/__tests__/MarketDetail.test.tsx:58"
+      ],
+      "uncertainty": "The package-manager wrapper can vary between `pnpm test -- ...` and direct `pnpm vitest run ...`, but the file set and the backend named-method slice are the stable part of the contract.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 5 can stay focused on frontend test refresh plus targeted backend reruns; there is no codebase evidence that fresh backend product changes are still needed before verification."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.83,
+      "impact": "The effective working set is indeed `api-client`, `MarketList`, `System`, and `MarketDetail`, and there is still no standalone `BayesNetGraph` suite. `Portfolio` remains an audited consumer rather than a mandatory opt-in regression target."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Market List should keep expecting `undefined` for the all-status view and `{ status: ... }` for explicit selections, including `{ status: \"resolved\" }` rather than a separate `{ includeResolved: true }` opt-in."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Only `System` and the graph path need explicit resolved-market opt-in under the new default; `Portfolio`, `AssumptionPanel`, and `ConditionalEditor` can remain on the default hidden-resolved collection."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.91,
+      "impact": "The execution phase can use named backend `/v1/markets` tests plus a targeted Vitest file list instead of rerunning the full backend module or the full frontend suite."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

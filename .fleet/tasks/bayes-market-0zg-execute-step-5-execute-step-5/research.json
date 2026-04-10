@@ -1,0 +1,149 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The step-5 frontend refresh remains focused on `frontend/src/__tests__/api-client.test.ts`, `frontend/src/__tests__/MarketList.test.tsx`, `frontend/src/__tests__/System.test.tsx`, and the `frontend/src/__tests__/MarketDetail.test.tsx` seam that renders `BayesNetGraph`. `Portfolio.test.tsx` is still only optional spillover cleanup: the route stays on the default `useMarkets()` path just for market-title lookup, and its test setup seeds an active-only collection without freezing any resolved opt-in contract. One execution caveat showed up in this checkout: the literal `pnpm test -- ...` wrapper also ran `Portfolio` and other suites, but that is runner behavior, not the intended step-5 scope.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:6",
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:64",
+        "frontend/src/routes/Portfolio.tsx:27",
+        "frontend/src/routes/Portfolio.tsx:28",
+        "frontend/src/__tests__/Portfolio.test.tsx:24",
+        "frontend/src/__tests__/Portfolio.test.tsx:39",
+        "frontend/src/routes/MarketDetail.tsx:67",
+        "frontend/src/__tests__/MarketDetail.test.tsx:58"
+      ],
+      "uncertainty": "If the team wants the wrapper command itself to be the frozen interface, the execution artifact should note that `pnpm test -- ...` currently broadens beyond the conceptual four-file slice.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The public `listMarkets(...)` contract should keep both the legacy string shorthand and the object filter shape. The shared frontend type is still `MarketListFilters | string`, `normalizeMarketListFilters(...)` still branches on string input, and the refreshed client suite explicitly freezes both `listMarkets(\"active\")` and object-filter serialization. Step 5 is validating the migrated filter model, not narrowing the public API surface.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:16",
+        "frontend/src/lib/api/types.ts:33",
+        "frontend/src/lib/api/types.ts:38",
+        "frontend/src/lib/api/client.ts:75",
+        "frontend/src/lib/api/client.ts:78",
+        "frontend/src/lib/api/client.ts:84",
+        "frontend/src/__tests__/api-client.test.ts:45",
+        "frontend/src/__tests__/api-client.test.ts:60"
+      ],
+      "uncertainty": "The repo does not say whether the string shorthand will survive indefinitely; it is only clear that removing it is not part of this step.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The consumer-facing frontend tests should freeze both the request shape and a rendered consequence of that request. That is the explicit step-5 plan, and the strongest refreshed suites already follow it: `MarketList` asserts `listMarkets(undefined)` or `{ status: ... }` and checks which rows render, while `System` asserts `{ includeResolved: true }` and checks the resulting counts. That pattern should remain the contract for this rollout because argument-only assertions can miss permissive mocks, and render-only assertions can pass without proving the resolved-market opt-in request. The remaining gap is the graph path, where `MarketDetail.test.tsx` still renders successfully without asserting the `listMarkets({ includeResolved: true })` call.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:26",
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:29",
+        "frontend/src/__tests__/MarketList.test.tsx:138",
+        "frontend/src/__tests__/MarketList.test.tsx:157",
+        "frontend/src/__tests__/MarketList.test.tsx:173",
+        "frontend/src/__tests__/System.test.tsx:100",
+        "frontend/src/__tests__/System.test.tsx:104",
+        "frontend/src/__tests__/System.test.tsx:110",
+        "frontend/src/__tests__/MarketDetail.test.tsx:76"
+      ],
+      "uncertainty": "The exact rendered assertion can vary by suite, but the codebase direction is clear that request-only or render-only coverage is weaker than the paired form.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Extending `frontend/src/__tests__/MarketDetail.test.tsx` is still the intended seam for the graph opt-in, not creating a new mandatory standalone `BayesNetGraph` suite. The step-5 plan names MarketDetail explicitly for that work, the route already renders the graph there, and the earlier validation called the absence of a graph-specific regression only a minor gap. The current checkout confirms that this gap is still best closed at the MarketDetail seam: the route exercises `BayesNetGraph`, but the suite does not yet assert the graph's resolved-inclusive `listMarkets({ includeResolved: true })` behavior directly.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:64",
+        ".fleet/tasks/bayes-market-0zg-execute-step-4/validation.json:4",
+        "frontend/src/routes/MarketDetail.tsx:67",
+        "frontend/src/features/graph/BayesNetGraph.tsx:231",
+        "frontend/src/__tests__/MarketDetail.test.tsx:58",
+        "frontend/src/__tests__/MarketDetail.test.tsx:65"
+      ],
+      "uncertainty": "A dedicated `BayesNetGraph` suite could still be worthwhile later if the component grows more independent logic, but the current repo plan does not make it a required step-5 artifact.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "For the affected step-5 suites, fixtures should mirror the backend's normalized effective `meta.filters`, especially whenever the test is meant to prove collection semantics. The backend contract explicitly normalizes resolved requests to `include_resolved: true`, and the refreshed `MarketList` and `System` fixtures already keep metadata aligned with returned rows. The current `MarketDetail` mock shows why lightweight contradictory metadata is risky: the graph path requests `useMarkets({ includeResolved: true })`, but the stubbed `meta.filters` still says `include_resolved: false`, which means the suite can stay green without proving the backend-normalized contract that step 5 is supposed to freeze.",
+      "confidence": 0.97,
+      "evidence": [
+        "tests/test_bayes_market_api.py:679",
+        "tests/test_bayes_market_api.py:685",
+        "tests/test_bayes_market_api.py:687",
+        "tests/test_bayes_market_api.py:693",
+        "frontend/src/lib/api/types.ts:56",
+        "frontend/src/lib/api/types.ts:59",
+        "frontend/src/__tests__/MarketList.test.tsx:95",
+        "frontend/src/__tests__/System.test.tsx:55",
+        "frontend/src/features/graph/BayesNetGraph.tsx:231",
+        "frontend/src/__tests__/MarketDetail.test.tsx:65",
+        "frontend/src/__tests__/MarketDetail.test.tsx:71"
+      ],
+      "uncertainty": "Pure render-only tests that never inspect collection semantics can still use lightweight type-correct metadata, but the graph-path suite is no longer a good candidate for contradictory placeholders.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "The backend gate should stay at the named `/v1/markets` methods inside `BayesMarketApiUnitTests`, not the full class or module. I ran the seven relevant methods for default exclusion, explicit inclusion, resolved-status behavior, and invalid `include_resolved` inputs, and they passed `7/7`. For frontend, the intended focused slice is the four files named in the step-5 plan. I ran the literal requested command `pnpm test -- src/__tests__/api-client.test.ts src/__tests__/MarketList.test.tsx src/__tests__/System.test.tsx src/__tests__/MarketDetail.test.tsx` from `frontend/`; it passed, but because the package script expands to `vitest run -- ...`, it executed the whole discovered suite in this checkout and reported `9` passing test files and `56` passing tests. I also ran the direct focused equivalent `pnpm exec vitest run src/__tests__/api-client.test.ts src/__tests__/MarketList.test.tsx src/__tests__/System.test.tsx src/__tests__/MarketDetail.test.tsx`, which produced the true four-file slice and passed `4/4` files and `28/28` tests. So the exact focused verification matrix for this repo is the seven backend named methods plus direct `vitest run` over those four frontend files; the `pnpm test -- ...` wrapper is acceptable as an execution record, but not actually file-scoped here.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:37",
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:69",
+        "tests/test_bayes_market_api.py:657",
+        "tests/test_bayes_market_api.py:671",
+        "tests/test_bayes_market_api.py:679",
+        "tests/test_bayes_market_api.py:687",
+        "tests/test_bayes_market_api.py:695",
+        "tests/test_bayes_market_api.py:706",
+        "tests/test_bayes_market_api.py:719",
+        "frontend/package.json:8",
+        "frontend/src/__tests__/api-client.test.ts:29",
+        "frontend/src/__tests__/MarketList.test.tsx:125",
+        "frontend/src/__tests__/System.test.tsx:66",
+        "frontend/src/__tests__/MarketDetail.test.tsx:58"
+      ],
+      "uncertainty": "If downstream automation is hard-wired to `pnpm test -- ...`, the repo should record that this wrapper currently broadens the run and is not identical to a truly focused file-selector invocation.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The backend implementation and `/v1/markets` coverage are already landed in this checkout; the named backend selector passed cleanly, so step 5 does not need fresh backend product work before verification."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.93,
+      "impact": "The affected logical frontend slice is still `api-client`, `MarketList`, `System`, and `MarketDetail`, with no standalone `BayesNetGraph` test and `Portfolio` only as optional spillover. The only wrinkle is execution mechanics: the `pnpm test -- ...` wrapper also runs extra suites in this checkout."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Market List should continue to rely on the default hidden-resolved collection for the empty selection and on `{ status: \"resolved\" }` for the resolved view; both the backend contract and the refreshed route tests match that behavior."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Only `System` and the graph path explicitly opt back into resolved rows. `Portfolio`, `AssumptionPanel`, and `ConditionalEditor` remain on the new default hidden-resolved path, which matches the current call sites."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "A focused backend selector plus targeted frontend file selectors are sufficient verification for this rollout. The only adjustment is that the truly focused frontend selector is direct `vitest run`, because the `pnpm test -- ...` wrapper is broader than it looks."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

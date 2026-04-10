@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "In `frontend/src/__tests__/System.test.tsx`, should step 3 freeze both halves of the System opt-in contract by asserting `listMarkets({ includeResolved: true })` and by proving the rendered aggregate cards reflect a resolved-inclusive collection, rather than only checking headings or labels?",
+      "category": "requirements",
+      "why_it_matters": "The route explicitly opts back into resolved markets, but the current suite mostly checks headings and one call argument. The answer decides whether this leaf protects both the request shape and the visible aggregate behavior."
+    },
+    {
+      "id": "q2",
+      "question": "Should the shared `mockClient.listMarkets.mockResolvedValue(...)` seeded in `beforeEach` be upgraded to a mixed active-plus-resolved collection with `meta.filters.include_resolved: true`, or is it acceptable for `System.test.tsx` to keep an active-only default fixture and only override one aggregate-stats test?",
+      "category": "design",
+      "why_it_matters": "The System route always requests the resolved-inclusive collection. The fixture strategy determines whether the suite actually exercises that contract consistently or only in one narrow branch."
+    },
+    {
+      "id": "q3",
+      "question": "For the rendered aggregates in `frontend/src/__tests__/System.test.tsx`, should step 3 assert the actual numeric cards produced by the mixed fixture, and if so which values are the stable contract: the `Markets` counts (`Total`, `Active`, `Resolved`, plus zero-value `Closed` and `Draft`) and the `Platform Stats` totals (`Total Volume`, `Total Liquidity`, `Active`, `Resolved`)?",
+      "category": "requirements",
+      "why_it_matters": "The route derives market counts and platform totals from the same collection. Clarifying the exact value assertions avoids another refresh that only proves section headings are present."
+    },
+    {
+      "id": "q4",
+      "question": "Because the System page renders duplicate labels such as `Active` and `Resolved` in both sections, should the refreshed test use card- or section-scoped assertions for the numeric values instead of broad `getByText` or `getAllByText` presence checks?",
+      "category": "design",
+      "why_it_matters": "Unscoped text queries can pass while still missing which card actually rendered which value. The answer determines how precise the refreshed assertions need to be."
+    },
+    {
+      "id": "q5",
+      "question": "Is `frontend/src/__tests__/System.test.tsx` itself the intended seam for this leaf, or should step 3 also add lower-level assertions around `useMarkets(...)`, query keys, or API-client normalization to protect the explicit resolved-market opt-in?",
+      "category": "codebase",
+      "why_it_matters": "The step title names a route test refresh, but the route sits on top of shared query and client helpers. This answer sets the scope boundary for the leaf."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "`frontend/src/routes/System.tsx` already explicitly opts into resolved rows via `useMarkets({ includeResolved: true })`, so this leaf is a test-refresh task rather than a product-code change.",
+      "confidence": 0.99,
+      "if_wrong": "Step 3 would need route implementation work before any test refresh could honestly freeze the intended contract."
+    },
+    {
+      "id": "a2",
+      "assumption": "The current `frontend/src/__tests__/System.test.tsx` is under-specified because it mostly checks headings/labels and a call argument, not the actual numeric counts and aggregate stats derived from a resolved-inclusive fixture.",
+      "confidence": 0.98,
+      "if_wrong": "The existing file would already be sufficient, and step 3 would shrink to cosmetic cleanup."
+    },
+    {
+      "id": "a3",
+      "assumption": "Any step-3 fixture that returns resolved rows should keep `meta.filters` aligned with the backend-normalized contract, specifically `{ status: null, include_resolved: true }` for the System route's default opt-in request.",
+      "confidence": 0.99,
+      "if_wrong": "The refreshed suite could keep contradictory fixtures that weaken the resolved-inclusion regression signal."
+    },
+    {
+      "id": "a4",
+      "assumption": "A single `listMarkets` response fixture is sufficient for this leaf because `System` makes one collection request shape, unlike `MarketList` which changes filters interactively.",
+      "confidence": 0.95,
+      "if_wrong": "The suite might need a more request-aware mocking pattern than the current `mockResolvedValue(...)` setup."
+    },
+    {
+      "id": "a5",
+      "assumption": "No deeper child investigation is needed because the System route, the current test file, the API type/client contracts, and the parent step-5 plan already provide enough local evidence to resolve this leaf.",
+      "confidence": 0.97,
+      "if_wrong": "The task would need another research pass before the System suite could be refreshed confidently."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
