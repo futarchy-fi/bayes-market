@@ -1,0 +1,14 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.12,
+  "plan_adherence_notes": "Execution did not materially follow the recorded plan. Relative to `ff/Tbayes-market-eu0-v2-execute-step-6` (`11b55675`), this branch adds only the step-6 task metadata plus rebuilt `frontend/dist` artifacts; it does not add the planned hook/query invalidation tests or the planned docs reconciliation. The live frontend/backend contract is internally consistent in code: `frontend/src/lib/api/client.ts:169-174`, `frontend/src/lib/api/types.ts:206-216`, `frontend/src/lib/query/hooks.ts:367-392`, `frontend/src/routes/Portfolio.tsx:25-112`, `frontend/src/__tests__/api-client.test.ts:59-90`, and `frontend/src/__tests__/Portfolio.test.tsx:60-169` all align on `/v1/accounts/{id}/exposure`, and rerunning the full verification suite left no new diff beyond the already-committed dist outputs. But the planned direct proof for `useResolveMarket(...)` / `useEventTrade(...)` invalidation is still absent (no `frontend/src/__tests__` references to those hooks or `invalidateQueries`), and the planned docs sync still did not happen: `docs/t539-mvp-launch-gate.md:69-76`, `docs/t556-scope-and-compatibility-boundary-freeze.md:51-55`, and `docs/t563-journal-read-surface-freeze.md:36-41` still publish only the risk route, while `docs/t1737-probability-edit-http-contract-freeze.md:128-130`, `docs/t1737-probability-edit-http-contract-freeze.md:165`, `docs/t586-full-chain-http-contract-freeze.md:17-25`, and `docs/t544-event-sourcing-contract.md:139-149` still describe older response/event wording instead of the current executable contract.",
+  "research_quality": 0.96,
+  "question_completeness": 0.9,
+  "missed_questions": [
+    "Should the required landing verification commands be run sequentially rather than in parallel, since backend integration tests read `frontend/dist` while `pnpm --dir frontend build` rewrites the same tracked files and can cause transient false negatives on SPA/static-route coverage?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "The research and plan are strong, but the branch still has not landed the work they called for. Sequential verification succeeded (`python3 -m pytest tests/ -v --tb=short`: 271 passed; `pnpm --dir frontend test`: 52 passed; `pnpm --dir frontend build`: success), and rerunning the build left the worktree clean, so the committed frontend build artifacts are consistent with the current source tree. However, the diff for this branch still lacks the planned React Query invalidation tests for `useEventTrade(...)` and `useResolveMarket(...)`, and the docs remain out of sync with the live backend/frontend contract around `/v1/accounts/{id}/exposure` and the newer response/event envelopes. Approval should wait for those planned code/docs updates.",
+  "spawn_children": false,
+  "children": []
+}
