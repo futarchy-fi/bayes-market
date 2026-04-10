@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "For the `inference` component helper, which runtime source is authoritative for `backend` and `version`: the mutable `ENGINE_CONFIG` object already used by engine diagnostics, or the import-time aliases `ENGINE_BACKEND` and `ENGINE_VERSION` that can drift if tests replace `ENGINE_CONFIG`?",
+      "category": "codebase",
+      "why_it_matters": "This repo already has both representations. Step 2 explicitly says to read from live module state, and choosing the stale aliases would make the health helper diverge from the engine diagnostics path and from tests that swap `ENGINE_CONFIG` directly."
+    },
+    {
+      "id": "q2",
+      "question": "What should 'frozen nested object shape' mean in `backend/server.py`: plain JSON-serializable dicts with a fixed key set, or truly immutable mappings such as `MappingProxyType` like the inference artifact layer uses internally?",
+      "category": "design",
+      "why_it_matters": "The route layer currently builds ordinary dict payloads, but the repo also has an internal precedent for immutable frozen structures inside `backend/inference/current_model.py`. Step 2 needs to know whether 'frozen' is about API contract shape only or Python-level immutability too."
+    },
+    {
+      "id": "q3",
+      "question": "Should the `db` helper be a constant reflection of this checkout's in-memory store (`status` plus `kind: \"in_memory\"`), or is it expected to derive any part of its output from mutable store state such as the in-process dictionaries being initialized/non-empty?",
+      "category": "requirements",
+      "why_it_matters": "The parent plan decided that `db` means the in-memory store, but the step wording also says to use live module state. That distinction changes whether the helper is a simple contract builder or starts inspecting application collections that are not actually database readiness signals."
+    },
+    {
+      "id": "q4",
+      "question": "For the `auth` component, should `status` remain `ok` in both optional and required modes with `requires_agent_id` carrying the mode change, or is auth-disabled-by-config supposed to map to a different component health status?",
+      "category": "requirements",
+      "why_it_matters": "The parent plan says auth exposes whether agent-id enforcement is required, but the server also introduces a shared `ok`/`degraded`/`unhealthy` vocabulary. Step 2 needs to know whether auth mode is informational or should affect health classification."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The component field names are already effectively frozen as `db: {status, kind}`, `inference: {status, backend, version}`, and `auth: {status, requires_agent_id}` by the parent plan and the step-1 research.",
+      "confidence": 0.97,
+      "if_wrong": "Step 2 would need to reopen the nested payload contract instead of just implementing shared builders, and later `/v1/health` tests would need a different component schema."
+    },
+    {
+      "id": "a2",
+      "assumption": "The `inference` helper should probably read `ENGINE_CONFIG.backend` and `ENGINE_CONFIG.version` rather than the `ENGINE_BACKEND` and `ENGINE_VERSION` aliases, because the task asks for live module state and existing tests already mutate `ENGINE_CONFIG` directly.",
+      "confidence": 0.84,
+      "if_wrong": "The helper may intentionally mirror the older alias constants, and any future health assertions would need to treat those aliases as the authoritative exported runtime identity even when `ENGINE_CONFIG` changes."
+    },
+    {
+      "id": "a3",
+      "assumption": "The helpers should return ordinary JSON-like dicts with fixed keys, not immutable mapping proxies, because the server route layer currently serializes plain dict payloads and the health plan talks about a frozen response shape rather than an immutable Python type.",
+      "confidence": 0.79,
+      "if_wrong": "Step 2 would need to introduce an extra normalization/serialization boundary so immutable component objects can still be emitted cleanly in `/v1/health` responses."
+    },
+    {
+      "id": "a4",
+      "assumption": "The `db` helper should report the in-memory store as `{\"status\": \"ok\", \"kind\": \"in_memory\"}` without probing dictionary contents, because there is no external database dependency or readiness adapter in this checkout.",
+      "confidence": 0.96,
+      "if_wrong": "The helper would need to invent state-derived readiness logic for collections like `MARKETS` or `EVENTS`, which would expand the design beyond the current parent decision."
+    },
+    {
+      "id": "a5",
+      "assumption": "The `auth` helper should read the live `AUTH_REQUIRE_AGENT_ID` runtime flag and keep `status: \"ok\"` in both optional and required modes, using `requires_agent_id` as the only mode indicator.",
+      "confidence": 0.88,
+      "if_wrong": "The component builder would need a different mapping from config mode to health status, which would also change the later aggregate-status behavior."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
