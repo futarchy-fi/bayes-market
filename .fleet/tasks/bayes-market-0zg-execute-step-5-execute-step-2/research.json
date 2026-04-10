@@ -1,0 +1,132 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. The refreshed default-path coverage should assert both `listMarkets(undefined)` and a rendered result that proves resolved rows are hidden. The `MarketList` route derives `undefined` when no status is selected, the query hook forwards that exact value to `api.listMarkets(...)`, and the backend contract for `/v1/markets` excludes resolved markets by default. The current test file does not prove that contract because its shared fixture includes a resolved market while `meta.filters.include_resolved` is false, so render-only checks can pass even when the default behavior is wrong.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:53",
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:54",
+        "frontend/src/routes/MarketList.tsx:12",
+        "frontend/src/routes/MarketList.tsx:13",
+        "frontend/src/lib/query/hooks.ts:273",
+        "frontend/src/lib/query/hooks.ts:276",
+        "backend/server.py:1738",
+        "backend/server.py:1740",
+        "tests/test_bayes_market_api.py:657",
+        "tests/test_bayes_market_api.py:663",
+        "frontend/src/__tests__/MarketList.test.tsx:19",
+        "frontend/src/__tests__/MarketList.test.tsx:28",
+        "frontend/src/__tests__/MarketList.test.tsx:43",
+        "frontend/src/__tests__/MarketList.test.tsx:48",
+        "frontend/src/__tests__/MarketList.test.tsx:55"
+      ],
+      "uncertainty": "The exact UI assertion can vary, for example checking title absence or badge absence, but the codebase strongly supports pairing the request assertion with a visible hidden-resolved outcome.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. This suite should move to a request-aware `listMarkets` mock keyed by the received filters. `useMarkets(...)` forwards the route's filter object directly into `api.listMarkets(...)`, and the query key also varies by normalized filters, so the cleanest contract test is to make the mock return the collection that matches the actual request. Keeping one shared `mockResolvedValue(...)` is already hiding a contradiction in the current file, and relying only on `mockResolvedValueOnce(...)` would make the test more fragile because it couples behavior to call order instead of request shape.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:54",
+        "frontend/src/lib/query/hooks.ts:16",
+        "frontend/src/lib/query/hooks.ts:273",
+        "frontend/src/lib/query/hooks.ts:276",
+        "frontend/src/routes/MarketList.tsx:13",
+        "frontend/src/__tests__/MarketList.test.tsx:19",
+        "frontend/src/__tests__/MarketList.test.tsx:35",
+        "frontend/src/__tests__/MarketList.test.tsx:51",
+        "frontend/src/__tests__/MarketList.test.tsx:65"
+      ],
+      "uncertainty": "A carefully written sequence-based mock could still work, but it would be a weaker and more brittle expression of the contract than branching on the actual request input.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. The refreshed route suite should cover both explicit status branches that matter here: `{ status: \"active\" }` rendering the active-only collection and `{ status: \"resolved\" }` rendering the resolved-only collection. `MarketList` only builds `{ status: statusFilter }`; it never adds `includeResolved` itself. The resolved branch still works because the client normalizer and the backend both treat `status === \"resolved\"` as implying `include_resolved=true`, so the route-level contract to freeze here is `{ status: \"resolved\" }`, not `{ includeResolved: true }`.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:54",
+        "frontend/src/routes/MarketList.tsx:8",
+        "frontend/src/routes/MarketList.tsx:13",
+        "frontend/src/routes/MarketList.tsx:37",
+        "frontend/src/__tests__/MarketList.test.tsx:58",
+        "frontend/src/__tests__/MarketList.test.tsx:60",
+        "frontend/src/__tests__/MarketList.test.tsx:63",
+        "frontend/src/__tests__/MarketList.test.tsx:65",
+        "frontend/src/lib/api/client.ts:78",
+        "frontend/src/lib/api/client.ts:84",
+        "backend/server.py:1738",
+        "tests/test_bayes_market_api.py:679",
+        "tests/test_bayes_market_api.py:687"
+      ],
+      "uncertainty": "If the route ever adds an explicit include-resolved control later, this test boundary would need to expand. In the current checkout there is no such UI branch on `MarketList`.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. The `MarketListResponse.meta.filters` fixtures in this suite should stay normalized and consistent with the returned rows, especially `include_resolved: true` for the resolved collection and `false` for the default and active collections. The response type models `meta.filters` as part of the collection contract, and the backend emits normalized metadata after computing the effective resolved-inclusion behavior. Even though `MarketList` does not read those fields, contradictory fixtures such as the current default mock can freeze impossible request/response pairings and weaken the route test's value.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:26",
+        "frontend/src/lib/api/types.ts:56",
+        "frontend/src/lib/api/types.ts:63",
+        "backend/server.py:1738",
+        "backend/server.py:1748",
+        "tests/test_bayes_market_api.py:685",
+        "tests/test_bayes_market_api.py:693",
+        "frontend/src/__tests__/MarketList.test.tsx:19",
+        "frontend/src/__tests__/MarketList.test.tsx:28"
+      ],
+      "uncertainty": "For purely decorative render tests, lightweight placeholder metadata can still be acceptable. This leaf is different because it is explicitly about protecting the market-list filter contract.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "The intended seam for this leaf is the existing `frontend/src/__tests__/MarketList.test.tsx` route test, not a new lower-level hook or query-key test. The parent step-5 plan names this file directly, and the query hook beneath it is a straightforward pass-through: it derives a query key from the filters and calls `api.listMarkets(filters)`. The behavior this leaf needs to freeze is route-visible, namely which request shape the dropdown produces and what collection is rendered for each selection.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:53",
+        ".fleet/tasks/bayes-market-0zg-execute-step-5/plan.json:54",
+        "frontend/src/lib/query/hooks.ts:16",
+        "frontend/src/lib/query/hooks.ts:273",
+        "frontend/src/lib/query/hooks.ts:276",
+        "frontend/src/routes/MarketList.tsx:11",
+        "frontend/src/routes/MarketList.tsx:13",
+        "frontend/src/__tests__/MarketList.test.tsx:32"
+      ],
+      "uncertainty": "A dedicated lower-level normalization test could still be added later if query-key churn becomes a problem, but it is not necessary to satisfy this route-focused leaf.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The current shared fixture is contradictory, so step 2 needs a substantive test-contract rewrite instead of superficial assertion cleanup."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The refreshed suite should keep expecting `undefined` for the blank dropdown state and `{ status: ... }` for explicit selections."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The resolved branch on `MarketList` should keep asserting `{ status: \"resolved\" }`; an explicit `{ includeResolved: true }` expectation belongs to other consumers such as `System` and the graph path, not this route."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "No child task is needed because the route, query hook, API client, backend handler, and current test fixture all provide enough local evidence to resolve this leaf cleanly."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
