@@ -1,0 +1,14 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.12,
+  "plan_adherence_notes": "Compared with `1b0e9cab`, this branch only adds `.fleet/tasks/bayes-market-0zg-execute-step-5-execute-step-5/plan.json` and `.fleet/tasks/bayes-market-0zg-execute-step-5-execute-step-5/research.json`; there is no execution artifact or other diff showing that step 5 was actually carried out on-branch. During validation, the prescribed checks did succeed in the current checkout: `pytest` on the seven named `/v1/markets` methods passed 7/7, `pnpm test -- src/__tests__/api-client.test.ts src/__tests__/MarketList.test.tsx src/__tests__/System.test.tsx src/__tests__/MarketDetail.test.tsx` passed but broadened to 9 files / 56 tests, and the direct scoped replay `pnpm exec vitest run ...` passed the intended 4 files / 28 tests. The current code also still matches the research-noted gap in `frontend/src/__tests__/MarketDetail.test.tsx`, which does not assert `listMarkets({ includeResolved: true })` and still returns contradictory `meta.filters.include_resolved: false`.",
+  "research_quality": 0.96,
+  "question_completeness": 0.88,
+  "missed_questions": [
+    "How should this verification-only leaf record execution results in the diff so validation can confirm the commands were actually run when no production files change?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "The plan and research are coherent and the targeted checks pass in the current checkout, but this branch itself never records the step-5 execution it planned. It only adds planning artifacts, and the unresolved MarketDetail opt-in coverage gap noted by the research still exists.",
+  "spawn_children": false,
+  "children": []
+}
