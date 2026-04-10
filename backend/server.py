@@ -3634,7 +3634,7 @@ def materialize_probability_edit_command(
     return command
 
 
-def materialize_market_resolution_command(
+def materialize_admin_op_command(
     market_id: str,
     normalized_payload: dict[str, Any],
     account_id: str,
@@ -3642,7 +3642,7 @@ def materialize_market_resolution_command(
     submitted_at: str,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
-    """Build and persist an AdminOp command envelope for market resolution."""
+    """Build and persist an AdminOp command envelope."""
     command = {
         "schemaVersion": "bayes-command/v1",
         "commandId": command_id,
@@ -3660,6 +3660,44 @@ def materialize_market_resolution_command(
 
     COMMANDS[command_id] = deepcopy(command)
     return command
+
+
+def materialize_market_resolution_command(
+    market_id: str,
+    normalized_payload: dict[str, Any],
+    account_id: str,
+    command_id: str,
+    submitted_at: str,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Build and persist an AdminOp command envelope for market resolution."""
+    return materialize_admin_op_command(
+        market_id=market_id,
+        normalized_payload=normalized_payload,
+        account_id=account_id,
+        command_id=command_id,
+        submitted_at=submitted_at,
+        idempotency_key=idempotency_key,
+    )
+
+
+def materialize_market_close_command(
+    market_id: str,
+    normalized_payload: dict[str, Any],
+    account_id: str,
+    command_id: str,
+    submitted_at: str,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Build and persist an AdminOp command envelope for market close."""
+    return materialize_admin_op_command(
+        market_id=market_id,
+        normalized_payload=normalized_payload,
+        account_id=account_id,
+        command_id=command_id,
+        submitted_at=submitted_at,
+        idempotency_key=idempotency_key,
+    )
 
 
 def materialize_comment_post_command(
@@ -4007,6 +4045,25 @@ def transition_market_to_resolved(
     }
 
 
+def transition_market_to_closed(
+    market_id: str,
+    *,
+    closed_at: str | None = None,
+) -> dict[str, Any]:
+    """Return a closed market snapshot without mutating stored state."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    transition_timestamp = utc_timestamp() if closed_at is None else str(closed_at)
+    closed_market = deepcopy(market)
+    closed_market["status"] = "closed"
+    return {
+        "market": closed_market,
+        "closedAt": transition_timestamp,
+    }
+
+
 def resolve_market_command(command: dict[str, Any]) -> dict[str, Any]:
     """Apply a market-resolution AdminOp and return the accepted event inputs."""
     market_id = str(command["marketId"])
@@ -4020,6 +4077,14 @@ def resolve_market_command(command: dict[str, Any]) -> dict[str, Any]:
     resolution["assetDelta"] = settle_market_account_risk(market_id, resolved_at)
     resolution["exposureCleanup"] = settle_market_account_exposure(market_id, resolved_at)
     return resolution
+
+
+def close_market_command(command: dict[str, Any]) -> dict[str, Any]:
+    """Apply a market-close AdminOp and return the accepted event inputs."""
+    market_id = str(command["marketId"])
+    closure = transition_market_to_closed(market_id)
+    MARKETS[market_id] = deepcopy(closure["market"])
+    return closure
 
 
 def build_market_resolution_acceptance_response(
@@ -4062,6 +4127,37 @@ def build_market_resolution_acceptance_response(
         status=201,
         response_fields={
             "market": deepcopy(resolution["market"]),
+        },
+        scope_key=scope_key,
+    )
+
+
+def build_market_close_acceptance_response(
+    command: dict[str, Any],
+    closure: dict[str, Any],
+    scope_key: tuple[str, str, str] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Emit and persist a terminal acceptance response for a market close."""
+    return build_terminal_response(
+        command,
+        event_type="CommandAccepted",
+        event_payload={
+            "closure": {
+                "closedAt": str(closure["closedAt"]),
+            },
+            "effects": {
+                "marginalDelta": [],
+                "assetDelta": [],
+            },
+            "pricing": {
+                "cost": 0.0,
+                "fee": 0.0,
+            },
+            "replayStateHash": market_replay_state_hash(str(command["marketId"])),
+        },
+        status=201,
+        response_fields={
+            "market": deepcopy(closure["market"]),
         },
         scope_key=scope_key,
     )
@@ -4569,9 +4665,10 @@ def handle_market_resolution(market_id: str, payload: dict[str, Any] | None) -> 
 
 
 def handle_market_close(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
-    """Temporary seam for the forthcoming AdminOp-backed market-close lifecycle."""
+    """Handle the full AdminOp-backed market-close lifecycle for one market."""
     body = payload if payload is not None else {}
-    normalize_market_close_payload(market_id, body)
+    if not isinstance(body, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
 
     account_id = body.get("accountId")
     if not isinstance(account_id, str) or not account_id.strip():
@@ -4591,7 +4688,64 @@ def handle_market_close(market_id: str, payload: dict[str, Any] | None) -> tuple
     account_id = account_id.strip()
     scope_key = idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
 
-    raise ApiError(501, "market_close_not_implemented", "Market close is not implemented yet")
+    with get_market_write_lock(market_id):
+        normalized_payload = normalize_market_close_payload(market_id, body)
+        if scope_key is not None:
+            existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
+            if existing_command_id is not None:
+                existing_command = COMMANDS[existing_command_id]
+                if existing_command["payload"] != normalized_payload:
+                    return build_idempotency_conflict_response(
+                        existing_command_id,
+                        idempotency_key,
+                        market_id,
+                        account_id,
+                        "AdminOp",
+                    )
+                return replay_terminal_outcome(existing_command_id)
+
+        submitted_at = utc_timestamp()
+        command = materialize_market_close_command(
+            market_id=market_id,
+            normalized_payload=normalized_payload,
+            account_id=account_id,
+            command_id=generate_command_id(),
+            submitted_at=submitted_at,
+            idempotency_key=idempotency_key,
+        )
+        market = MARKETS[market_id]
+        if market["status"] == "closed":
+            return build_terminal_rejection_response(
+                command,
+                code="market_already_closed",
+                message="Market is already closed",
+                details={
+                    "marketId": market_id,
+                    "status": market["status"],
+                    "commandId": command["commandId"],
+                },
+                retry_hint="reuse the original idempotency key to replay the prior outcome",
+                status=409,
+                scope_key=scope_key,
+            )
+        if market["status"] != "active":
+            return build_terminal_rejection_response(
+                command,
+                code="market_not_closable",
+                message="Market can only be closed from active status",
+                details={
+                    "marketId": market_id,
+                    "status": market["status"],
+                    "allowedStatuses": ["active"],
+                    "commandId": command["commandId"],
+                },
+                retry_hint="close an active market",
+                status=409,
+                scope_key=scope_key,
+            )
+
+        closure = close_market_command(command)
+        return build_market_close_acceptance_response(command, closure, scope_key)
 
 
 def route_request(
