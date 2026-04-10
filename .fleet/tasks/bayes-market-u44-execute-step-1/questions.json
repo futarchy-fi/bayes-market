@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact route breadth is in scope for step 1: should the new tests cover the full protected POST surface returned by `resolve_write_route_category(...)` (`POST /v1/markets`, `POST /v1/markets/{id}/resolve`, `POST /v1/markets/{id}/comments`, `POST /v1/markets/{id}/orders/probability-edit`, and `POST /v1/markets/{id}/orders/event-trade`) and no additional routes?",
+      "category": "requirements",
+      "why_it_matters": "The protected write surface is currently frozen by `resolve_write_route_category(...)`, so route-breadth coverage can only be correct if the task scope matches that selector exactly."
+    },
+    {
+      "id": "q2",
+      "question": "Should the route-breadth tests intentionally reuse the same `X-Bayes-Agent-Id` across different protected POST route types so they prove quota accounting and header emission are shared cross-route, or is independent per-route coverage enough?",
+      "category": "design",
+      "why_it_matters": "The limiter state is keyed only by agent id, so cross-route reuse is the strongest way to verify that all protected POSTs really converge on the same `handle_api()` and `rate_limit_headers(...)` path instead of behaving like isolated route-specific implementations."
+    },
+    {
+      "id": "q3",
+      "question": "For protected POSTs, which response classes are supposed to emit quota headers in this step: only successful responses (`status < 400`) plus `429 rate_limit_exceeded`, or should validation/business errors like `400`, `401`, `404`, `409`, and `422` also carry the current quota state?",
+      "category": "requirements",
+      "why_it_matters": "`BayesHandler.handle_api()` currently attaches rate-limit headers only on success and on the explicit `rate_limit_exceeded` path, so the broader tests need a fixed contract before they can assert header presence or absence outside probability-edit."
+    },
+    {
+      "id": "q4",
+      "question": "Are comment posts intentionally part of the T582 protected write surface for rate-limit header coverage, even though T583 separately calls out abuse controls for inference-heavy routes?",
+      "category": "design",
+      "why_it_matters": "`resolve_write_route_category(...)` currently classifies `POST /v1/markets/{id}/comments` as `TRADE_WRITE_CATEGORY`, so this step either needs to include comments in the shared-path audit or explicitly treat them as out of scope."
+    },
+    {
+      "id": "q5",
+      "question": "Is the expected coding-phase outcome allowed to be 'tests only' if the audit confirms every protected POST already reaches `BayesHandler.handle_api()` and only `rate_limit_headers(...)` constructs quota headers, or is a backend refactor still expected to make that seam more explicit?",
+      "category": "requirements",
+      "why_it_matters": "The current server audit shows route handlers returning `(payload, status)` tuples while `handle_api()` owns `extra_headers`, so clarifying this avoids unnecessary churn if there is no actual seam leak to fix."
+    },
+    {
+      "id": "q6",
+      "question": "Should step 1 add direct unit coverage around `resolve_write_route_category(...)` and `resolve_write_request_agent(...)`, or is HTTP-level coverage in `BayesMarketApiAuthRateLimitTests` the intended proof surface for this audit?",
+      "category": "codebase",
+      "why_it_matters": "The repo already has HTTP header assertions for probability-edit, but it has little direct coverage of the route selector that defines the protected POST breadth, so the intended verification layer is still ambiguous."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The protected POST surface for this step is the exact set returned by `resolve_write_route_category(...)`: create market, market resolve, comment post, probability edit, and event trade.",
+      "confidence": 0.96,
+      "if_wrong": "The route-breadth tests will either miss a protected route that should carry headers or over-constrain a route that is not actually in scope."
+    },
+    {
+      "id": "a2",
+      "assumption": "The current backend already centralizes rate-limit header emission in `BayesHandler.handle_api()` via `extra_headers`, with `rate_limit_headers(...)` as the only builder of the `X-RateLimit-*` header set.",
+      "confidence": 0.98,
+      "if_wrong": "The backend will need a code patch to remove alternate header emission paths before the new breadth tests can freeze the shared seam."
+    },
+    {
+      "id": "a3",
+      "assumption": "Non-429 error responses on protected POSTs should remain header-free, matching the existing probability-edit tests for missing/invalid agent ids and unsupported routes.",
+      "confidence": 0.88,
+      "if_wrong": "The implementation would need to widen `handle_api()` so ordinary protected-route failures also emit quota headers, and the new tests would need a different presence/absence contract."
+    },
+    {
+      "id": "a4",
+      "assumption": "The limiter bucket is global per agent id across all protected POST categories, because `_RATE_LIMIT_WINDOWS` is keyed only by agent id and `_enforce_write_controls()` runs before route dispatch.",
+      "confidence": 0.93,
+      "if_wrong": "Cross-route quota-decrement tests would encode the wrong behavior and would need to isolate categories or route types instead of sharing one agent id."
+    },
+    {
+      "id": "a5",
+      "assumption": "If route-breadth tests expose no bypass around `handle_api()` or `rate_limit_headers(...)`, step 1 can legitimately complete with no backend code change.",
+      "confidence": 0.91,
+      "if_wrong": "The follow-up implementation would need to include a refactor despite no observed behavioral gap, which expands the task beyond a seam audit plus test lock-in."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
