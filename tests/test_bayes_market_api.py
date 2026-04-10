@@ -3896,6 +3896,10 @@ class BayesMarketEventTradeTests(unittest.TestCase):
             "/v1/markets/m1/orders/event-trade",
             build_event_trade_body(account_id, "m1", "yes", size=99.0, side="buy"),
         )
+        baseline_exposure_payload, baseline_exposure_status = server.route_request(
+            "GET",
+            f"/v1/accounts/{account_id}/exposure",
+        )
         baseline_snapshot = snapshot_domain_state()
 
         with self.assertRaises(server.ApiError) as ctx:
@@ -3915,6 +3919,7 @@ class BayesMarketEventTradeTests(unittest.TestCase):
         error = ctx.exception
         self.assertEqual(setup_status, 201)
         self.assertEqual(setup_payload["result"]["status"], "accepted")
+        self.assertEqual(baseline_exposure_status, 200)
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "position_limit_exceeded")
         self.assertEqual(error.message, "Trade would exceed max position size")
@@ -3931,6 +3936,12 @@ class BayesMarketEventTradeTests(unittest.TestCase):
                 "maxPositionSize": 100.0,
             },
         )
+        post_rejection_exposure_payload, post_rejection_exposure_status = server.route_request(
+            "GET",
+            f"/v1/accounts/{account_id}/exposure",
+        )
+        self.assertEqual(post_rejection_exposure_status, 200)
+        self.assertEqual(post_rejection_exposure_payload["account"], baseline_exposure_payload["account"])
         self.assertNotIn(scope_key, server.IDEMPOTENCY_KEYS)
         self.assertEqual(server.COMMANDS, baseline_snapshot["commands"])
         self.assertEqual(server.EVENTS, baseline_snapshot["events"])
@@ -5705,16 +5716,30 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
         status, payload = self.account_exposure("acct_missing_threaded", timeout=10)
 
         self.assertEqual(status, 404)
-        self.assertEqual(payload["error"]["code"], "account_not_found")
-        self.assertEqual(payload["error"]["details"]["accountId"], "acct_missing_threaded")
+        self.assertEqual(
+            payload["error"],
+            {
+                "code": "account_not_found",
+                "message": "Account not found",
+                "details": {"accountId": "acct_missing_threaded"},
+            },
+        )
 
     def test_account_exposure_threaded_http_rejects_non_get_methods(self):
         status, payload = self.request("POST", "/v1/accounts/acct_threaded/exposure", {}, timeout=10)
 
         self.assertEqual(status, 405)
-        self.assertEqual(payload["error"]["code"], "method_not_allowed")
-        self.assertEqual(payload["error"]["details"]["method"], "POST")
-        self.assertEqual(payload["error"]["details"]["path"], "/v1/accounts/acct_threaded/exposure")
+        self.assertEqual(
+            payload["error"],
+            {
+                "code": "method_not_allowed",
+                "message": "POST is not allowed for this resource",
+                "details": {
+                    "method": "POST",
+                    "path": "/v1/accounts/acct_threaded/exposure",
+                },
+            },
+        )
 
     def test_concurrent_duplicate_probability_edit_idempotency_key_replays_without_double_append(self):
         operations = [
@@ -7853,16 +7878,30 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         status, payload = self.request("GET", "/v1/accounts/acct_missing/exposure")
 
         self.assertEqual(status, 404)
-        self.assertEqual(payload["error"]["code"], "account_not_found")
-        self.assertEqual(payload["error"]["details"]["accountId"], "acct_missing")
+        self.assertEqual(
+            payload["error"],
+            {
+                "code": "account_not_found",
+                "message": "Account not found",
+                "details": {"accountId": "acct_missing"},
+            },
+        )
 
     def test_account_exposure_http_rejects_non_get_methods(self):
         status, payload = self.request("POST", "/v1/accounts/acct_http/exposure", {})
 
         self.assertEqual(status, 405)
-        self.assertEqual(payload["error"]["code"], "method_not_allowed")
-        self.assertEqual(payload["error"]["details"]["method"], "POST")
-        self.assertEqual(payload["error"]["details"]["path"], "/v1/accounts/acct_http/exposure")
+        self.assertEqual(
+            payload["error"],
+            {
+                "code": "method_not_allowed",
+                "message": "POST is not allowed for this resource",
+                "details": {
+                    "method": "POST",
+                    "path": "/v1/accounts/acct_http/exposure",
+                },
+            },
+        )
 
 
 if __name__ == "__main__":

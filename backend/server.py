@@ -124,6 +124,10 @@ MARKET_SUMMARY_FIELDS = (
 
 ACCOUNT_RISK_LIMIT = 100.0
 max_position_size = 100.0
+ACCOUNT_SERVICE_INDEX_ROUTES = (
+    "/v1/accounts/{id}/risk",
+    "/v1/accounts/{id}/exposure",
+)
 ACCOUNT_LMSR_LEDGER_VERSION = "lmsr-ledger-v1"
 ACCOUNT_LMSR_RISK_READ_MODEL = "scalar-min-asset-v1"
 MAX_EVENT_FORMULA_CLAUSES = 16
@@ -729,10 +733,7 @@ def service_index_payload() -> dict[str, Any]:
                 "POST /v1/markets/{id}/orders/probability-edit",
                 "POST /v1/markets/{id}/orders/event-trade",
             ],
-            "accounts": [
-                "/v1/accounts/{id}/risk",
-                "/v1/accounts/{id}/exposure",
-            ],
+            "accounts": list(ACCOUNT_SERVICE_INDEX_ROUTES),
         },
         "meta": make_meta(),
     }
@@ -1546,6 +1547,8 @@ def get_account_exposure(account_id: str) -> tuple[dict[str, Any], int]:
 
     exposure = serialize_account_exposure(account)
     if not exposure["positions"]:
+        # Exposure existence is projection-local: once all live rows are pruned,
+        # the account disappears from this read model and resolves as 404 again.
         raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
 
     return {

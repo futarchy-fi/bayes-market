@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The current checkout already spreads the new exposure contract across `BayesMarketApiUnitTests`, `BayesMarketEventTradeTests`, `BayesMarketExposureProjectionTests`, `BayesMarketApiConcurrencyTests`, and `BayesMarketApiIntegrationTests`. What is the exact focused backend validation slice for step 5: all of those classes, or a narrower subset that still proves route registration, buy/sell netting, idempotent replay, limit-breach side effects, and resolution cleanup end to end?",
+      "category": "requirements",
+      "why_it_matters": "Step 5 is explicitly a targeted validation pass, so the branch needs a clear test gate instead of either rerunning the whole file or accidentally omitting one public-contract seam."
+    },
+    {
+      "id": "q2",
+      "question": "The root-route regression currently freezes `routes.accounts` as the exact ordered list `[\"/v1/accounts/{id}/risk\", \"/v1/accounts/{id}/exposure\"]`. Should step 5 treat that order as part of the public service-index contract, or only require membership while keeping the existing bare-path style?",
+      "category": "design",
+      "why_it_matters": "This is the main route-shape question still exposed by the new endpoint. Whether order matters determines how strict the final service-index assertion should be."
+    },
+    {
+      "id": "q3",
+      "question": "Which `GET /v1/accounts/{id}/exposure` response fields are intentionally dynamic and should remain loosely asserted during step 5 tightening: only `meta.timestamp`, or anything else in `meta` as well? Conversely, should the `account.exposure` payload and structured `404`/`405` `error.details` remain exact-equality contracts?",
+      "category": "design",
+      "why_it_matters": "Step 5 is about tightening expectations without making the suite brittle. The exact boundary between stable contract fields and per-response metadata has to be explicit before assertions are narrowed."
+    },
+    {
+      "id": "q4",
+      "question": "Should step 5 continue to freeze projection-local existence semantics for `/v1/accounts/{id}/exposure`, meaning a risk-only account and an account fully pruned by offsetting sells or market resolution both return `404 account_not_found` instead of `200` with `positions: []`?",
+      "category": "requirements",
+      "why_it_matters": "The branch already exercises multiple empty-account paths. If the public contract for 'no live exposure' is still `404`, the final regression pass should keep those cases exact across direct route and HTTP coverage."
+    },
+    {
+      "id": "q5",
+      "question": "The current over-limit EventTrade regression proves side-effect freedom through internal snapshots of `COMMANDS`, `EVENTS`, `IDEMPOTENCY_KEYS`, and `ACCOUNT_EXPOSURE`, but it does not re-read `/v1/accounts/{id}/exposure` before and after the rejected trade. Is that internal-state proof sufficient for step 5, or should the public exposure route also be asserted unchanged to fully freeze the external contract?",
+      "category": "design",
+      "why_it_matters": "This decides whether step 5 keeps the limit-breach invariant primarily as an internal no-write guarantee or also promotes it into an explicit read-route stability guarantee."
+    },
+    {
+      "id": "q6",
+      "question": "For transport-layer validation, should the step-5 gate include both the threaded `BayesMarketApiConcurrencyTests` exposure parity tests and the plain `BayesMarketApiIntegrationTests` exposure `404`/`405` plus resolve-cleanup reads, or is the threaded class the only intended HTTP-level slice?",
+      "category": "codebase",
+      "why_it_matters": "The branch now has exposure assertions in two HTTP layers. Clarifying whether both are part of the focused gate prevents either redundant test work or missing transport coverage."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This branch already contains the production exposure route, service-index entry, resolution cleanup wiring, direct route regressions, and threaded HTTP parity helper, so step 5 is a validate-and-tighten task rather than a missing-feature backfill.",
+      "confidence": 0.98,
+      "if_wrong": "The follow-up plan would need to absorb unfinished production or test implementation work instead of focusing on targeted validation."
+    },
+    {
+      "id": "a2",
+      "assumption": "The additive account-route contract remains a GET-only bare-path entry, keeping `/v1/accounts/{id}/risk` unchanged and advertising `/v1/accounts/{id}/exposure` alongside it rather than switching the whole service index to method-qualified account routes.",
+      "confidence": 0.97,
+      "if_wrong": "Step 5 would need a broader service-index rewrite and several current route-shape assertions would be intentionally too strict."
+    },
+    {
+      "id": "a3",
+      "assumption": "Account existence for `/v1/accounts/{id}/exposure` is defined solely by the live exposure projection, so risk-only accounts and fully pruned exposure accounts should continue to return `404 account_not_found`.",
+      "confidence": 0.96,
+      "if_wrong": "The getter, direct route tests, and HTTP tests would all need to move toward a `200` empty-document contract instead of projection-local `404` behavior."
+    },
+    {
+      "id": "a4",
+      "assumption": "Per-response metadata such as `meta.timestamp` should remain flexible, while `routes.accounts`, `account.exposure`, and structured `error.details` for `404` and `405` are the stable public-contract surfaces worth freezing tightly.",
+      "confidence": 0.87,
+      "if_wrong": "The tightened tests would either become unnecessarily brittle on dynamic metadata or fail to lock down response fields that are actually supposed to be exact."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child research task is needed because the relevant route, serializer, EventTrade, resolution, and HTTP test seams are all visible in the current checkout and prior `.fleet` artifacts.",
+      "confidence": 0.95,
+      "if_wrong": "A follow-up child task would be needed to inspect an additional hidden prerequisite or validation contract before planning step 5."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
