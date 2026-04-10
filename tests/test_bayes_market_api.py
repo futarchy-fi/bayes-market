@@ -6243,6 +6243,36 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         self.assertEqual(payload["result"]["status"], "accepted")
         self.assert_rate_limit_headers(response_headers, limit=2, remaining=1)
 
+    def test_comment_post_http_returns_accepted_comment_contract_with_rate_limit_headers(self):
+        server.RATE_LIMIT_PER_MIN = 2
+
+        status, payload, response_headers = self.comment_post_with_headers(
+            market_id="m1",
+            account_id="acct_http_headers_comment_contract",
+            comment_body="HTTP auth comment contract",
+            agent_id="agent-header-comment-contract",
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(set(payload), {"comment", "meta"})
+        self.assertEqual(
+            set(payload["comment"]),
+            {"commentId", "marketId", "seq", "accountId", "body", "createdAt"},
+        )
+        self.assertEqual(payload["comment"]["marketId"], "m1")
+        self.assertEqual(payload["comment"]["seq"], 1)
+        self.assertEqual(payload["comment"]["accountId"], "acct_http_headers_comment_contract")
+        self.assertEqual(payload["comment"]["body"], "HTTP auth comment contract")
+        self.assertTrue(payload["comment"]["commentId"])
+        self.assertTrue(payload["comment"]["createdAt"].endswith("Z"))
+        self.assertEqual(payload["meta"].keys(), {"timestamp"})
+        self.assertTrue(payload["meta"]["timestamp"].endswith("Z"))
+        self.assert_rate_limit_headers(response_headers, limit=2, remaining=1)
+
+        self.assertEqual(server.MARKET_COMMENT_SEQUENCES["m1"], 1)
+        self.assertEqual(len(server.COMMENTS), 1)
+        self.assertEqual(server.COMMENTS[payload["comment"]["commentId"]], payload["comment"])
+
     def test_protected_post_routes_emit_rate_limit_headers_on_first_success(self):
         server.RATE_LIMIT_PER_MIN = 2
 
