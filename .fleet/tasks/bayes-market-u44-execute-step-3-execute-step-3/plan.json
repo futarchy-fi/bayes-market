@@ -1,0 +1,69 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Add one dedicated success-path test in `BayesMarketApiAuthRateLimitTests` that freezes the full accepted comment-post HTTP envelope: `201`, the `comment` object, and the `meta` object. Assert stable comment fields exactly and generated fields semantically or by tie-out rather than hard-coded literal values.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Assert only `201` plus a minimal subset of stable comment fields.",
+        "Duplicate the shared breadth-loop header check without route-specific payload assertions."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep the test centered on the immediate POST response plus `assert_rate_limit_headers(...)`, but add a light direct-state tie-out to `server.COMMENTS` and `server.MARKET_COMMENT_SEQUENCES` so generated values like `commentId`, `createdAt`, and `seq` are anchored without expanding into a follow-up comments-list read.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Expand the test into a `GET /v1/markets/{id}/comments` end-to-end flow.",
+        "Skip any persistence tie-out and only assert that generated fields are present."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Reuse the existing limiter-enabled, one-shot setup and `comment_post_with_headers(...)` helper for a fresh first accepted comment on `m1`, so the standalone test adds route-local contract coverage instead of inventing a second-comment, normalization-specific, or alternate quota scenario.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Post a second comment to pin `seq == 2`.",
+        "Change the helper surface to cover a different scenario in this step."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep this subtask success-path only: do not fold idempotency replay/conflict or missing-agent and no-header negative cases into the new test, because those belong to later route-specific coverage rather than this first-class accepted-response seam.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Expand the dedicated test to cover `idempotencyKey` replay and conflict behavior.",
+        "Start the route-specific negative auth and disabled-limiter matrix for comment-post in the same patch."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Inspect the existing comment-post helper methods, the shared `assert_rate_limit_headers(...)` helper, and the current breadth success test in `tests/test_bayes_market_api.py` so the new standalone test lands in `BayesMarketApiAuthRateLimitTests` without duplicating unrelated limiter coverage.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add a dedicated comment-post success test that sets `RATE_LIMIT_PER_MIN` to a positive value, submits one valid `POST /v1/markets/m1/comments` with an explicit `X-Bayes-Agent-Id`, asserts `201`, verifies the accepted `comment` and `meta` response contract, and checks the shared rate-limit headers for the first successful write.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Tie the generated response fields back to in-memory persisted state with lightweight assertions against `server.COMMENTS` and `server.MARKET_COMMENT_SEQUENCES`, confirming the returned `commentId`, `createdAt`, and `seq` match the stored accepted comment without adding a separate read-path test.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Run the focused `BayesMarketApiAuthRateLimitTests` coverage for the new comment-post success case, review the diff to confirm the change stays tests-only, and commit the worktree with the requested message.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

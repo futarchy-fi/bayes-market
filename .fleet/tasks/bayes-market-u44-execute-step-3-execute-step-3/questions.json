@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Which pieces of the accepted comment-post HTTP contract should the dedicated auth/rate-limit test freeze: just the stable `comment` fields (`marketId`, `seq`, `accountId`, `body`) plus `201`, or also generated fields like `commentId`, `createdAt`, and the `meta.timestamp` envelope returned by `build_comment_post_acceptance_response(...)`?",
+      "category": "requirements",
+      "why_it_matters": "Unlike the other protected POST routes, comment-post returns a `comment` object and `meta`, not a terminal `result` block. The step is specifically about first-class route-local coverage, so the exact assertion boundary determines whether the new test only checks a minimal happy-path shape or fully locks the route's accepted response contract."
+    },
+    {
+      "id": "q2",
+      "question": "Should the dedicated comment-post test stop at the immediate HTTP response plus `assert_rate_limit_headers(...)`, or should it also verify persisted comment side effects such as `server.COMMENTS`, `MARKET_COMMENT_SEQUENCES`, or a follow-up `GET /v1/markets/{id}/comments` read?",
+      "category": "design",
+      "why_it_matters": "There are currently no route-specific comment-post HTTP tests elsewhere in `tests/test_bayes_market_api.py`. This choice decides whether step 3 is only an auth/rate-limit response sentinel or also the first end-to-end proof that the accepted comment payload matches stored discussion-thread state."
+    },
+    {
+      "id": "q3",
+      "question": "Since `test_protected_post_routes_emit_rate_limit_headers_on_first_success` already exercises comment-post in the shared breadth loop, is the new standalone test expected to reuse the same one-shot limiter setup and add route-local payload assertions only, or should it pin a different scenario such as trimmed-body normalization or a second posted comment with `seq == 2`?",
+      "category": "design",
+      "why_it_matters": "The branch already has broad first-success header coverage for comment-post. The dedicated test needs to add unique value rather than duplicate the loop verbatim, and the chosen scenario determines what route-specific behavior becomes frozen."
+    },
+    {
+      "id": "q4",
+      "question": "Is idempotency intentionally out of scope for this dedicated success test even though `handle_comment_post(...)` supports `idempotencyKey`, replay, conflict responses, and `meta.idempotencyKeyEcho`?",
+      "category": "requirements",
+      "why_it_matters": "The current `comment_post_with_headers(...)` helper does not accept an idempotency key, and step 3 is framed as first-success auth/rate-limit coverage. Clarifying whether replay belongs here decides if the helper can stay simple and whether the test should assert only the fresh accepted path."
+    },
+    {
+      "id": "q5",
+      "question": "Should this step remain success-path only for comment-post, leaving missing-agent, blank-agent, malformed-agent, and disabled-limiter no-header cases to the later absence-path work even though comment-post still lacks those route-specific negatives in `BayesMarketApiAuthRateLimitTests`?",
+      "category": "requirements",
+      "why_it_matters": "The parent plan already separates success-path header work from absence-path preservation, but comment-post is still missing route-local auth failures. This answer keeps the patch scoped to one dedicated success test instead of starting the next phase inside the same class."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This step should stay tests-only in `tests/test_bayes_market_api.py`; the shared HTTP adapter in `backend/server.py` already emits quota headers for successful protected writes, and comment-post is already included in the new breadth loop.",
+      "confidence": 0.98,
+      "if_wrong": "A failing dedicated comment-post test would expose a real backend contract gap, and the work would need to expand beyond test coverage."
+    },
+    {
+      "id": "a2",
+      "assumption": "The reset-safe happy-path fixture for the dedicated test is a fresh `POST /v1/markets/m1/comments` using the existing `comment_post_with_headers(...)` helper, an explicit agent id, and `RATE_LIMIT_PER_MIN > 0`, because `setUp()` resets comments and `m1` starts active.",
+      "confidence": 0.99,
+      "if_wrong": "The new test would need custom setup or a helper change before it could exercise the intended first-success contract reliably."
+    },
+    {
+      "id": "a3",
+      "assumption": "The dedicated test should freeze that comment-post's accepted success shape is `{\"comment\": ..., \"meta\": ...}` without a terminal `result` block, because `build_comment_post_acceptance_response(...)` returns that distinct envelope.",
+      "confidence": 0.96,
+      "if_wrong": "The implementation might overfit to current internals or miss a route-specific compatibility expectation elsewhere in the suite."
+    },
+    {
+      "id": "a4",
+      "assumption": "The shared breadth test already serves as the exact first-success quota proof for comment-post, so the standalone test can focus on route-local accepted-comment behavior while still asserting the shared headers once.",
+      "confidence": 0.93,
+      "if_wrong": "The dedicated test would need to duplicate more of the breadth loop's quota-only assertions to provide sufficient value."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the relevant plan context, test class, helper methods, and server-side comment contract are all already present in this checkout.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up exploration task would be needed before implementation could be scoped confidently."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

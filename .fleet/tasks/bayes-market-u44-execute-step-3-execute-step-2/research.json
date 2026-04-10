@@ -1,0 +1,143 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The shared breadth test should be added directly inside `BayesMarketApiAuthRateLimitTests` and should reuse the existing header-aware helpers rather than adding new HTTP plumbing. `request_with_headers(...)` already returns `(status, payload, response_headers)`, and the class already exposes `create_market_with_headers(...)`, `probability_edit_with_headers(...)`, `comment_post_with_headers(...)`, `event_trade_with_headers(...)`, and `market_resolution_with_headers(...)` on top of that shared transport seam.",
+      "confidence": 0.99,
+      "evidence": [
+        "tests/test_bayes_market_api.py:5965",
+        "tests/test_bayes_market_api.py:5977",
+        "tests/test_bayes_market_api.py:6041",
+        "tests/test_bayes_market_api.py:6078",
+        "tests/test_bayes_market_api.py:6108",
+        "tests/test_bayes_market_api.py:6145",
+        "tests/test_bayes_market_api.py:6170"
+      ],
+      "uncertainty": "The prompt names `.fleet/tasks/bayes-market-u44-execute-step-3-execute-step-2/questions.json`, but that child questions file is absent in this checkout. This answer is scoped from the step title plus the checked-in parent plan and test code.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The cleanest setup for the shared breadth test is a positive limiter such as `RATE_LIMIT_PER_MIN = 2` plus a distinct explicit `agent_id` per `subTest(...)`. `rate_limit_headers(...)` emits headers whenever the limit is positive and an agent id is present, and limiter state is keyed by agent id. Using separate agent ids lets every route assert the same post-success header contract `limit=2, remaining=1` after its first accepted request without resetting limiter state between cases. `AUTH_REQUIRE_AGENT_ID` does not need to be enabled for this success-path test.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:457",
+        "backend/server.py:459",
+        "backend/server.py:492",
+        "backend/server.py:494",
+        "backend/server.py:505",
+        "tests/test_bayes_market_api.py:6233",
+        "tests/test_bayes_market_api.py:6244",
+        "tests/test_bayes_market_api.py:6477",
+        "tests/test_bayes_market_api.py:6495"
+      ],
+      "uncertainty": "A single shared agent id with descending `remaining` assertions would also be correct, but it is noisier and provides no extra coverage for this breadth-only step.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The existing helper defaults are reset-safe valid fixtures for one accepted request on each route. `setUp()` resets server state before every test, `create_market_with_headers()` generates a fresh title, `probability_edit_with_headers()` targets active market `m1` outcome `yes`, `comment_post_with_headers()` targets active market `m1`, `event_trade_with_headers()` targets active market `m1` outcome `yes`, and `market_resolution_with_headers()` targets active market `m2` outcome `delayed`. In `INITIAL_MARKETS`, both `m1` and `m2` start in `active` status.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:61",
+        "backend/server.py:67",
+        "backend/server.py:78",
+        "backend/server.py:83",
+        "tests/test_bayes_market_api.py:6017",
+        "tests/test_bayes_market_api.py:6055",
+        "tests/test_bayes_market_api.py:6087",
+        "tests/test_bayes_market_api.py:6118",
+        "tests/test_bayes_market_api.py:6158",
+        "tests/test_bayes_market_api.py:6173",
+        "tests/test_bayes_market_api.py:6175"
+      ],
+      "uncertainty": "If a later step mutates shared defaults inside the class, the breadth test should keep explicit per-case overrides minimal and continue relying on `setUp()` resets.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "For the shared breadth sentinel, the stable common assertion floor is `status == 201` plus `assert_rate_limit_headers(...)`; the loop does not need to restate every route-local payload contract. The parent plan splits step 2's all-routes header sweep from step 3's dedicated comment-post payload test, and existing tests already cover create-market, probability-edit, market-resolve, and event-trade success payloads elsewhere. Comment-post is the one accepted response with a different top-level shape (`comment` plus `meta`, no `result`), which is why the plan reserves a separate route-specific assertion for it.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-3/plan.json:52",
+        ".fleet/tasks/bayes-market-u44-execute-step-3/plan.json:57",
+        "backend/server.py:3401",
+        "tests/test_bayes_market_api.py:6233",
+        "tests/test_bayes_market_api.py:6648",
+        "tests/test_bayes_market_api.py:6906",
+        "tests/test_bayes_market_api.py:3461"
+      ],
+      "uncertainty": "A reviewer could still prefer tiny per-case payload sentinels inside the loop for readability, but the checked-in plan does not require that extra duplication for step 2.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Market resolve should participate in the breadth loop with header-present expectations when the limiter is enabled. It is classified as a protected POST route by `resolve_write_route_category(...)`, and `BayesHandler.handle_api()` attaches `rate_limit_headers(agent_id)` to every successful protected write. The current resolve auth test's `assert_rate_limit_headers_absent(valid_headers)` is only correct because that test leaves `RATE_LIMIT_PER_MIN` disabled; it is not a resolve-specific header exception.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:384",
+        "backend/server.py:398",
+        "backend/server.py:4035",
+        "backend/server.py:4040",
+        "backend/server.py:4042",
+        "backend/server.py:4043",
+        "tests/test_bayes_market_api.py:6379",
+        "tests/test_bayes_market_api.py:6426"
+      ],
+      "uncertainty": "The existing resolve auth test remains valid as disabled-limiter coverage; the stale part appears only if that no-header expectation is carried into the new positive-limiter breadth test.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "This step remains tests-only. The five-route protected POST surface, pre-routing rate-limit enforcement, and success-path quota-header emission are already centralized in `backend/server.py`, so no route-local backend patch is indicated by the current research. If the new breadth test fails, the likely fixes would still be in the shared classifier or handler seam rather than in route-specific request helpers.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:384",
+        "backend/server.py:404",
+        "backend/server.py:4008",
+        "backend/server.py:4013",
+        "backend/server.py:4042",
+        "backend/server.py:4049",
+        ".fleet/tasks/bayes-market-u44-execute-step-3/plan.json:47",
+        ".fleet/tasks/bayes-market-u44-execute-step-3/plan.json:53"
+      ],
+      "uncertainty": "A failure in the later implementation step could still expose a real shared-path regression, but nothing in the current checkout suggests a missing route-local auth/header branch.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The breadth test can reuse the existing `BayesMarketApiAuthRateLimitTests` helper surface and stay inside `tests/test_bayes_market_api.py` without adding new HTTP scaffolding."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Using distinct explicit agent ids with `RATE_LIMIT_PER_MIN = 2` lets every subtest assert the same `assert_rate_limit_headers(..., limit=2, remaining=1)` contract after one accepted request."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The helper defaults are valid success fixtures after `setUp()` resets state, so the new breadth test does not need custom route setup beyond explicit agent ids."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "The shared breadth loop only needs the common `201` plus header contract; comment-post's route-specific accepted payload should be handled in the separate dedicated test planned for the next step."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Market resolve is part of the same protected-write success header contract as create-market, probability-edit, comment-post, and event-trade whenever the limiter is enabled."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

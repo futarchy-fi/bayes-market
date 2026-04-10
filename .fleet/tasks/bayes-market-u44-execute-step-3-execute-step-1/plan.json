@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Build the success-path breadth coverage on the existing `BayesMarketApiAuthRateLimitTests` helper surface instead of adding new HTTP scaffolding, reusing `create_market_with_headers(...)`, `probability_edit_with_headers(...)`, `comment_post_with_headers(...)`, `event_trade_with_headers(...)`, `market_resolution_with_headers(...)`, and the shared `assert_rate_limit_headers(...)` helper that already anchors the quota-header contract.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Add route-specific request plumbing for each protected POST path instead of using the helper methods already present in the class.",
+        "Assert only ad hoc header presence on the new routes and bypass the shared quota-header helper."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep ProbabilityEdit as the canonical surface for repeated quota math, `429`, `Retry-After`, and per-agent isolation, while the new create-market, comment-post, event-trade, and resolve success checks pin one accepted request per route to the full shared header contract with exact `limit` and `remaining` values.",
+      "based_on": ["q1", "q2", "q5", "q6"],
+      "alternatives_rejected": [
+        "Clone the multi-request ProbabilityEdit limiter matrix onto every protected POST route in this step.",
+        "Reduce the new non-ProbabilityEdit checks to presence-only assertions and leave quota values unspecified."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Treat `test_market_resolve_http_requires_valid_agent_id_when_enabled` as the stale resolve seam because its successful branch currently leaves rate limiting disabled and asserts `assert_rate_limit_headers_absent(valid_headers)`. Preserve the missing-agent, blank-agent, malformed-agent, and disabled-limiter no-header proofs, but move limiter-enabled resolve success coverage to a header-present assertion instead of keeping the stale expectation.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Keep the enabled-limiter resolve success path on a no-header expectation.",
+        "Replace the existing resolve auth test wholesale and lose the disabled-limiter no-header coverage."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Give comment-post first-class coverage with a dedicated success-path test that asserts both the accepted `comment` payload and the shared rate-limit headers, while create-market and event-trade participate as explicit named cases in the shared all-routes `subTest(...)` matrix because their missing seam is auth/rate-limit breadth rather than route semantics.",
+      "based_on": ["q1", "q4", "q5"],
+      "alternatives_rejected": [
+        "Cover comment-post only as a loop participant without any route-specific payload assertion.",
+        "Add standalone route-specific success tests for create-market and event-trade even though they already have ordinary success coverage elsewhere in the file."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Use the audited `BayesMarketApiAuthRateLimitTests` helper set in `tests/test_bayes_market_api.py` as the implementation seam, specifically the existing `*_with_headers(...)` helpers for create-market, probability-edit, comment-post, event-trade, and market-resolve plus `assert_rate_limit_headers(...)` and `assert_rate_limit_headers_absent(...)`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add one shared success-path breadth test in `BayesMarketApiAuthRateLimitTests` that turns on a positive `RATE_LIMIT_PER_MIN` and exercises create-market, probability-edit, market-resolve, comment-post, and event-trade through explicit `subTest(...)` labels, asserting `201` plus `assert_rate_limit_headers(...)` with exact `limit` and `remaining` values after one accepted request per route.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add a dedicated comment-post success test in the same class that asserts the accepted `comment` response payload together with the shared rate-limit headers so comment-post ends the step with first-class route-specific auth/rate-limit coverage.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Refactor the resolve coverage to remove the stale enabled-limiter no-header expectation from the successful resolve branch while preserving the current missing-agent, blank-agent, malformed-agent, and disabled-limiter no-header seams.",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Run the focused `BayesMarketApiAuthRateLimitTests` slice that covers the new success-path header assertions, inspect the resulting diff to confirm the change stays tests-only, and commit the worktree with the requested message.",
+      "depends_on": [2, 3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
