@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Does step 5 assume the earlier trade-history implementation and regressions are already present on this branch, or must this task also backfill the missing `/v1/markets/{id}/trades` read surface and its service-index entry before any targeted test slice can run?",
+      "category": "codebase",
+      "why_it_matters": "The current checkout still has no `/trades` route in `backend/server.py` and no trade-history coverage in `tests/test_bayes_market_api.py`, so an execution-only step cannot proceed as written unless those prerequisites already exist elsewhere."
+    },
+    {
+      "id": "q2",
+      "question": "What exact unittest selector should count as the required targeted verification for this step: a named `python3 -m unittest tests.test_bayes_market_api.BayesMarketApi...` class/method slice, a `-k` pattern, or the entire `tests/test_bayes_market_api.py` module?",
+      "category": "requirements",
+      "why_it_matters": "The task says to run a targeted slice covering trade-history regressions, but the repo does not yet contain any test names for that slice, so the command boundary is still undefined."
+    },
+    {
+      "id": "q3",
+      "question": "After the targeted slice passes, is any broader backend verification still required before commit, such as the full `tests/test_bayes_market_api.py` file or an additional HTTP integration subset?",
+      "category": "requirements",
+      "why_it_matters": "The title emphasizes a narrow trade-history run, but the new regressions span direct routing behavior, query validation, and non-GET handling, which are often covered across multiple parts of this suite."
+    },
+    {
+      "id": "q4",
+      "question": "How strict is the final diff boundary for this execution step: if running or fixing the trade-history slice reveals missing backend seams, should the task stop and report unmet prerequisites, or is it allowed to touch `backend/server.py` even though the title says the final patch should stay limited to the test module and task artifacts?",
+      "category": "requirements",
+      "why_it_matters": "There is a direct tension between the requested regression list, which depends on server behavior that is absent in this checkout, and the stated expectation that the final diff remain test-only."
+    },
+    {
+      "id": "q5",
+      "question": "Which existing test layer should own these trade-history regressions inside `tests/test_bayes_market_api.py`: direct `route_request(...)` unit tests, `BayesMarketApiIntegrationTests` over `BayesHandler`, or a mix of both patterned after the current `/events` and `/comments` coverage?",
+      "category": "design",
+      "why_it_matters": "The suite already splits read-route assertions across pure routing and HTTP fixtures, and the target behaviors include service discovery, pagination errors, and `405` transport responses that may belong to different layers."
+    },
+    {
+      "id": "q6",
+      "question": "For the closed/resolved-market readability and pagination-edge cases, should the tests construct history by exercising the public POST flows (`event-trade`, `close`, `resolve`) or by seeding `ORDERS`/`COMMANDS`/`EVENTS` fixtures directly to reach specific cursor states?",
+      "category": "design",
+      "why_it_matters": "Existing helpers in `tests/test_bayes_market_api.py` support public write flows, but there is no current trade-history fixture pattern, and the choice affects both realism and how precisely the tests can target `before_id` and newest-first ordering boundaries."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This branch does not yet contain the trade-history read surface or its focused regressions; step 5 therefore most likely assumes prerequisite implementation from an earlier step or another branch state.",
+      "confidence": 0.99,
+      "if_wrong": "The intended test slice may already exist under an unexpected name or location, and the execution work would be narrower than it currently appears."
+    },
+    {
+      "id": "a2",
+      "assumption": "The required verification is meant to stay backend-local and centered on `tests/test_bayes_market_api.py`, not on full-repo or frontend checks.",
+      "confidence": 0.93,
+      "if_wrong": "The execution phase would need a broader command set and a different completion bar before staging and commit."
+    },
+    {
+      "id": "a3",
+      "assumption": "The most likely implementation style for these regressions is to extend the existing market read-route patterns already used for `/events` and `/comments`, reusing `route_request(...)` assertions and only adding HTTP-layer checks where transport details matter.",
+      "confidence": 0.84,
+      "if_wrong": "A different fixture strategy, such as primarily threaded HTTP coverage, would need to drive the test additions and targeted test command."
+    },
+    {
+      "id": "a4",
+      "assumption": "If the task remains execution-only, any required code changes outside `tests/test_bayes_market_api.py` and `.fleet/tasks/...` should be treated as evidence that step 5 was scheduled before its prerequisites landed.",
+      "confidence": 0.87,
+      "if_wrong": "The accepted scope would include reopening `backend/server.py`, and the stated diff boundary would need to be relaxed."
+    },
+    {
+      "id": "a5",
+      "assumption": "For this phase, the only artifact that needs to be created and committed is `.fleet/tasks/bayes-market-6qe-execute-step-4-execute-step-5/questions.json`.",
+      "confidence": 0.97,
+      "if_wrong": "Another task-local output file is expected now, and this question-phase commit would be incomplete."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
