@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Is step 5 expected to run after the step-4 production surface is already present, or should this task also add the missing frontend symbols first (`AccountExposure`/`AccountExposureResponse` types, `getAccountExposure(...)`, `queryKeys.accountExposure(...)`, `useAccountExposure(...)`, and `EventTradePayload.size`)?",
+      "category": "codebase",
+      "why_it_matters": "The current checkout does not contain any exposure client or hook in `frontend/src/lib/api/client.ts`, `frontend/src/lib/api/types.ts`, or `frontend/src/lib/query/hooks.ts`, so the requested focused coverage cannot be written against the code as it exists today without first resolving that dependency."
+    },
+    {
+      "id": "q2",
+      "question": "What exact frontend contract should the new exposure API test freeze: the request path for `getAccountExposure(accountId)` and the canonical response envelope plus per-position field names/types returned from `/v1/accounts/{id}/exposure`?",
+      "category": "requirements",
+      "why_it_matters": "The API-client test needs a typed fixture and concrete fetch expectation, but `frontend/src/lib/api/types.ts` currently has no exposure response schema to anchor those assertions."
+    },
+    {
+      "id": "q3",
+      "question": "What exact query-key and invalidation contract should the hook test assert for exposure: a new `queryKeys.accountExposure(accountId)` under `['accounts', accountId, 'exposure']`, and should both `useEventTrade(...)` and `useResolveMarket(...)` invalidate that key using `variables.payload.accountId`?",
+      "category": "design",
+      "why_it_matters": "Current hooks only expose `accountRisk` and `accountPnl` keys and only invalidate `queryKeys.account(...)` after trades/resolution, so the new exposure behavior needs a precise key shape and mutation scope before the test can lock it in."
+    },
+    {
+      "id": "q4",
+      "question": "For the new `EventTradePayload.size` field, is compile/build coverage sufficient for this step, or should frontend coverage explicitly assert that `submitEventTrade(...)` serializes `size` into the POST body?",
+      "category": "requirements",
+      "why_it_matters": "The step description emphasizes `getAccountExposure(...)` and exposure invalidation, but the parent plan also widens the EventTrade payload contract; current `api-client.test.ts` exercises GET routing only and does not prove the POST body shape."
+    },
+    {
+      "id": "q5",
+      "question": "What test style should step 5 follow for mutation invalidation coverage: extend `frontend/src/__tests__/query-hooks.test.ts` into a rendered-hook `QueryClient` test, or keep that file limited to key construction and place invalidation assertions in a new hook-focused test file?",
+      "category": "design",
+      "why_it_matters": "The existing `query-hooks.test.ts` only checks `queryKeys.markets(...)` normalization and there is no current pattern in the frontend suite for `useMutation` invalidation tests, so the implementation approach is still open."
+    },
+    {
+      "id": "q6",
+      "question": "Which frontend verification commands count as complete for this step: targeted Vitest for `api-client.test.ts` and the hook test only, or those tests plus `pnpm --dir frontend build` and/or `pnpm --dir frontend lint`?",
+      "category": "requirements",
+      "why_it_matters": "The task explicitly requires running relevant frontend verification so the new types and hooks compile cleanly, and the repo is a standalone pnpm app with separate `test`, `build`, and `lint` scripts in `frontend/package.json`."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This step is intended to add coverage on top of a step-4 implementation that already introduces the exposure frontend surface and the `EventTradePayload.size` field; otherwise step 5 expands into missing production code, not just tests.",
+      "confidence": 0.97,
+      "if_wrong": "The implementation must first add the new frontend types/client/hooks before any focused coverage or verification can happen."
+    },
+    {
+      "id": "a2",
+      "assumption": "The exposure query key should mirror the existing account namespace and be shaped as `['accounts', accountId, 'exposure']` via a dedicated `queryKeys.accountExposure(accountId)` helper.",
+      "confidence": 0.83,
+      "if_wrong": "The hook test would lock in the wrong cache contract and the invalidation assertions would not match the intended query topology."
+    },
+    {
+      "id": "a3",
+      "assumption": "Successful `useEventTrade(...)` and `useResolveMarket(...)` mutations are the two places that must invalidate exposure queries, because the task calls out successful trades and market resolution specifically.",
+      "confidence": 0.9,
+      "if_wrong": "Coverage would miss another required invalidation path or over-assert on mutations that are not supposed to touch exposure state."
+    },
+    {
+      "id": "a4",
+      "assumption": "Relevant verification for this step is frontend-local pnpm execution, most likely targeted Vitest plus `pnpm --dir frontend build`, since `frontend/package.json` and `frontend/pnpm-lock.yaml` define a standalone app and the task mentions compile cleanliness.",
+      "confidence": 0.88,
+      "if_wrong": "The execution phase could report the wrong command set or miss an expected repo-level verification entrypoint."
+    },
+    {
+      "id": "a5",
+      "assumption": "Mutation invalidation coverage will need a small rendered-hook or `QueryClient` spy pattern added to the suite, because the current `frontend/src/__tests__/query-hooks.test.ts` only asserts deterministic key generation.",
+      "confidence": 0.86,
+      "if_wrong": "There is an existing preferred helper or a different test location/pattern that should be reused instead of extending the current file."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
