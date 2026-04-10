@@ -1,0 +1,119 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Treat step 5 as a review-only scope check, not a cleanup pass. The helper-level additions in `tests/test_bayes_market_api.py` are acceptable support work because the earlier step-2 plan explicitly called for focused helper tests, and later validation already approved those helper-level tests as staying within the additive boundary. Pruning would only be warranted if the tests had widened into route wiring, legacy payload rewrites, or reset-specific behavior, which the current test additions do not do.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-2/plan.json:50",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-2/plan.json:77",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-2/plan.json:82",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-3/validation.json:4",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-4/validation.json:4",
+        "tests/test_bayes_market_api.py:412"
+      ],
+      "uncertainty": "I am inferring acceptability from the recorded plan and validation artifacts rather than from a branch-to-branch diff that isolates exactly when each test landed.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. In this step, 'no router wiring yet' should also forbid touching `service_index_payload()`, frontend health clients, and checked-in docs. The parent plan puts `/v1/health` route wiring and root service-index advertisement together in the later routing step, while the current codebase and docs still expose only legacy `/health` or `/healthz` surfaces. Advertising `/v1/health` anywhere before `route_request()` serves it would create a public-surface mismatch.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8/plan.json:63",
+        "backend/server.py:802",
+        "backend/server.py:3874",
+        "frontend/src/lib/api/client.ts:241",
+        "frontend/src/__tests__/System.test.tsx:25",
+        "docs/t581-dns-cloudflare-tunnel-public-runbook.md:11",
+        "docs/t539-mvp-launch-gate.md:92"
+      ],
+      "uncertainty": "The plan speaks directly to router wiring and service-index advertisement; the docs/frontend restriction is inferred from the current legacy-only public references and the mismatch that early `/v1/health` mentions would create.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Treat `health_payload()` as frozen for this step and use it only as an additive base for `v1_health_payload()`. The recorded plan explicitly chose `health_payload().copy()` over refactoring both legacy and v1 responses onto a smaller shared base, the implementation follows that approach, and the helper test freezes the copy-and-extend behavior by asserting the original legacy payload object remains unchanged. An internal `health_payload()` refactor would therefore cut across the step's boundary even if the emitted JSON stayed identical.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-4/plan.json:16",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-4/plan.json:36",
+        "backend/server.py:772",
+        "backend/server.py:781",
+        "tests/test_bayes_market_api.py:412",
+        "tests/test_bayes_market_api.py:452",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-4/validation.json:4"
+      ],
+      "uncertainty": "A purely mechanical refactor could preserve behavior, but it would no longer match the explicitly recorded additive strategy for this slice.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "No new regression assertion is needed in this sanity-check step. 'No test-only reset behavior' reads as a code-boundary constraint to preserve, not as a prompt to add special reset coverage early. The uptime baseline is still the module-scoped `PROCESS_START_MONOTONIC`, `reset_state()` still does not touch it, and the earlier uptime-step plan and validation both explicitly froze 'no reset_state edits' and 'no test changes'. Step 5 should verify those invariants remain true rather than widen into new reset assertions before the later route/test phases.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:164",
+        "backend/server.py:239",
+        "backend/server.py:706",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-1/plan.json:28",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-1/plan.json:51",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-1/validation.json:4",
+        ".fleet/tasks/bayes-market-ed8/plan.json:68"
+      ],
+      "uncertainty": "A future hardening step could still choose to add an explicit negative regression test for reset/uptime interaction, but nothing in the current step history makes that part of this boundary check.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. The intended final scope for this step is still configuration- and in-process-state assembly only, so `db`, `inference`, and `auth` must remain probe-free here. The current component builders all emit `status: \"ok\"` from fixed or live module state (`kind`, `ENGINE_CONFIG`, `AUTH_REQUIRE_AGENT_ID`) rather than by calling external systems, the earlier helper plan defined them that way, and this step's own plan explicitly forbids live dependency probes. The shared `ok`/`degraded`/`unhealthy` vocabulary is future-proofing for later work, not a requirement to introduce runtime checks now.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:711",
+        "backend/server.py:747",
+        "backend/server.py:755",
+        "backend/server.py:764",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:68",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:83",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-2/plan.json:67",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1-execute-step-2/plan.json:72"
+      ],
+      "uncertainty": "Later steps may choose to make use of the broader status vocabulary, but the current repository evidence does not require live readiness probes in this helper-only slice.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep this step limited to `backend/server.py` helper-boundary review; leave `/v1/health` routing, root route advertisement, frontend migration, and docs updates for the later routing/public-surface step."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Preserve the legacy `/health` and `/healthz` payload contract as the minimal `service` / `status` / `timestamp` shape in this step."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Keeping `v1_health_payload()` private inside `backend/server.py` is acceptable before router wiring, as long as no route or advertised route list points to it yet."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Continue deriving uptime from the import-scoped monotonic baseline and keep `reset_state()` free of health-specific reset hooks."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep the component helpers as pure assembly over in-process configuration/runtime state for now, with no DB, inference, or auth probing added in this step."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

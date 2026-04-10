@@ -1,0 +1,114 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use the live `ENGINE_CONFIG` binding as the authoritative runtime source for `inference.backend` and `inference.version`, not the import-time `ENGINE_BACKEND` and `ENGINE_VERSION` aliases. In `backend/server.py`, those aliases are copied once from `ENGINE_CONFIG` at import, while the existing engine diagnostics response already reads `ENGINE_CONFIG.backend` and `ENGINE_CONFIG.version` directly on each request. The test suite also rebinds `server.ENGINE_CONFIG` during runtime, which means alias-based health helpers could drift from the diagnostics path and from the live module state the task asked to mirror.",
+      "confidence": 0.96,
+      "evidence": [
+        "backend/server.py:145",
+        "backend/server.py:147",
+        "backend/server.py:148",
+        "backend/server.py:1005",
+        "backend/server.py:1006",
+        "backend/server.py:1007",
+        "tests/test_bayes_market_inference_module.py:118",
+        "tests/test_bayes_market_inference_module.py:127",
+        "tests/test_bayes_market_inference_module.py:146",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:17"
+      ],
+      "uncertainty": "There is not yet a checked-in test that rebinds `ENGINE_CONFIG` with a different backend or version specifically, so the alias-drift risk is inferred from the runtime structure rather than from an already failing assertion.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "In `backend/server.py`, \"frozen nested object shape\" should mean plain JSON-serializable dicts with a fixed key contract, not `MappingProxyType` or other Python-level immutable mappings. The route layer already builds ordinary dict payloads for health, service index, and engine stats. `MappingProxyType` appears only inside `backend/inference/current_model.py` to freeze internal compile artifacts, and that layer also exposes thawed mutable payloads when data needs to leave the artifact boundary. The health helpers belong to the route/payload layer, so they should return ordinary dicts whose immutability is contractual, not enforced by Python proxy objects.",
+      "confidence": 0.94,
+      "evidence": [
+        "backend/server.py:711",
+        "backend/server.py:720",
+        "backend/server.py:1002",
+        "backend/inference/current_model.py:32",
+        "backend/inference/current_model.py:39",
+        "backend/inference/current_model.py:292",
+        "tests/test_bayes_market_inference_module.py:230",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:50"
+      ],
+      "uncertainty": "The repo does not define a general-purpose phrase for \"frozen shape,\" so this conclusion comes from the existing route-layer payload style and the clear separation between internal artifact immutability and external JSON payloads.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The `db` helper should be a constant reflection of this checkout's in-memory store, reporting `{\"status\": \"ok\", \"kind\": \"in_memory\"}` without inspecting collection contents. The module's \"database\" state is just a set of process-local dictionaries, and several of those stores are empty by default or cleared by `reset_state()` as part of normal operation. That makes initialized/non-empty checks a poor readiness signal. The live module-state fact that matters here is the storage mode itself: this backend is serving from in-memory dictionaries, not from an external database adapter.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:166",
+        "backend/server.py:170",
+        "backend/server.py:182",
+        "backend/server.py:183",
+        "backend/server.py:239",
+        "backend/server.py:248",
+        "backend/server.py:258",
+        "backend/server.py:259",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:28"
+      ],
+      "uncertainty": "If a future task introduces a real persistence dependency, the helper may need a real readiness signal then. In this checkout there is no such dependency or probe seam.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "For `auth`, keep `status` as `\"ok\"` in both optional and required modes and use `requires_agent_id` as the configuration indicator. `AUTH_REQUIRE_AGENT_ID` is a live runtime flag that changes write-path enforcement, not a failure condition. The server computes write-policy requirements from that flag, and the tests toggle it directly to exercise missing-agent-id behavior. The step-1 plan also explicitly rejected encoding auth optional vs required as different status strings, which makes the intended contract `auth: {status, requires_agent_id}` rather than a status change when auth is disabled by config.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:192",
+        "backend/server.py:193",
+        "backend/server.py:194",
+        "backend/server.py:334",
+        "backend/server.py:368",
+        "backend/server.py:380",
+        "backend/server.py:382",
+        "tests/test_bayes_market_api.py:5947",
+        "tests/test_bayes_market_api.py:6162",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:17",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:39",
+        ".fleet/tasks/bayes-market-ed8-execute-step-1/plan.json:43"
+      ],
+      "uncertainty": "There is no existing public health contract for auth modes yet, so the last bit of certainty comes from the task-plan decision rather than from an older checked-in `/v1/health` test.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 2 can implement the helpers with the exact nested keys `db: {status, kind}`, `inference: {status, backend, version}`, and `auth: {status, requires_agent_id}` instead of reopening the component schema."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "The inference helper should read `ENGINE_CONFIG.backend` and `ENGINE_CONFIG.version` so it stays aligned with the existing engine-diagnostics path and with runtime test rebinding of `ENGINE_CONFIG`."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.94,
+      "impact": "The shared builders should return ordinary JSON-like dicts with fixed keys. Introducing `MappingProxyType` into the route layer would add unnecessary serialization and test friction without matching existing server payload patterns."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The `db` helper can stay a simple in-memory-store descriptor and should not invent readiness logic from `MARKETS`, `EVENTS`, or other mutable dictionaries."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The auth helper should mirror the live `AUTH_REQUIRE_AGENT_ID` flag and keep `status: \"ok\"`; mode changes belong in `requires_agent_id`, not in a degraded-health classification."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the module-level process-start marker for `backend/server.py` store a monotonic elapsed-time baseline or a wall-clock timestamp, given that this step only needs to derive float `uptime_seconds` at request time?",
+      "category": "design",
+      "why_it_matters": "The backend already uses monotonic clocks for elapsed-time logic, but the task description says 'timestamp'. That choice determines whether uptime stays stable across system clock changes and what exact constant should be introduced near the import-time runtime globals."
+    },
+    {
+      "id": "q2",
+      "question": "What precision should the shared `uptime_seconds` helper expose: the raw elapsed float, a rounded float with fixed decimals, or an integer-like seconds count represented as a float?",
+      "category": "requirements",
+      "why_it_matters": "The parent plan freezes `uptime_seconds` as a float, but not its formatting or precision. That detail affects future `/v1/health` response assertions and whether the helper is purely computational or also responsible for presentation stability."
+    },
+    {
+      "id": "q3",
+      "question": "Is the intended lifetime of the process-start marker the lifetime of the imported `backend/server.py` module, even when tests repeatedly call `reset_state()` and invoke `route_request(...)` without going through `run_server()`?",
+      "category": "codebase",
+      "why_it_matters": "This repo imports `backend/server.py` directly in tests and uses `reset_state()` heavily. The task explicitly says not to touch `reset_state()`, so the implementation needs to know whether non-resetting uptime across one imported module is the expected observable behavior."
+    },
+    {
+      "id": "q4",
+      "question": "Should this slice introduce only a generic shared uptime helper near the existing health builders, or is it also supposed to establish the naming boundary for the later `/v1/health` helper stack now?",
+      "category": "design",
+      "why_it_matters": "Step 1 feeds later steps that add component builders, top-level status aggregation, and the final `/v1/health` payload helper. Choosing the helper boundary now affects whether later health assembly stays shared and composable instead of becoming route-local."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new process-start marker should be module-scoped and captured during `backend/server.py` import near the existing runtime constants, not inside `run_server()`.",
+      "confidence": 0.98,
+      "if_wrong": "The helper would need a different lifecycle hook, and direct module-import/router test paths could observe missing or misleading uptime values."
+    },
+    {
+      "id": "a2",
+      "assumption": "This subtask must leave `reset_state()` unchanged and must not reset the process-start marker, because the request explicitly says 'without touching `reset_state()`' and the parent plan defines uptime as process/module lifetime rather than domain-state lifetime.",
+      "confidence": 0.99,
+      "if_wrong": "The implementation scope would expand into reset semantics, and future health tests would need a different model for how uptime behaves between cases."
+    },
+    {
+      "id": "a3",
+      "assumption": "The most codebase-consistent implementation will compute `uptime_seconds` from a monotonic elapsed-time source rather than `time.time()`, because existing duration and rate-limit logic already prefers monotonic clocks.",
+      "confidence": 0.79,
+      "if_wrong": "The helper may need to preserve a wall-clock start time for reporting semantics, and using a monotonic baseline alone would not match the intended contract."
+    },
+    {
+      "id": "a4",
+      "assumption": "This step is preparatory shared-helper work only: no `/v1/health` route wiring, no `/health` or `/healthz` payload changes, and no test updates belong in this subtask yet.",
+      "confidence": 0.95,
+      "if_wrong": "The implementation would need to expand beyond the helper boundary laid out in the parent plan and could duplicate work assigned to later steps."
+    },
+    {
+      "id": "a5",
+      "assumption": "The existing minimal `health_payload()` contract for `/health` and `/healthz` stays intact for now, so the new uptime helper should be reusable without changing current legacy health behavior.",
+      "confidence": 0.9,
+      "if_wrong": "This subtask would need to start modifying the legacy health surface earlier than the parent task breakdown expects."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

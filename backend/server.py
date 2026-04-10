@@ -161,6 +161,7 @@ OG_TITLE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:title[\"'][^>
 OG_DESCRIPTION_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:description[\"'][^>]*>", re.IGNORECASE)
 OG_TYPE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:type[\"'][^>]*>", re.IGNORECASE)
 OG_URL_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:url[\"'][^>]*>", re.IGNORECASE)
+PROCESS_START_MONOTONIC = time.monotonic()
 
 MARKETS: dict[str, dict[str, Any]] = deepcopy(INITIAL_MARKETS)
 CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {}
@@ -702,6 +703,81 @@ def error_payload(code: str, message: str, **details: object) -> dict[str, Any]:
     }
 
 
+def uptime_seconds() -> float:
+    """Return process uptime in seconds for the imported server module."""
+    return round(time.monotonic() - PROCESS_START_MONOTONIC, 3)
+
+
+SERVICE_HEALTH_STATUSES = frozenset({"ok", "degraded", "unhealthy"})
+
+
+def _reduce_service_health_statuses(statuses: list[str]) -> str:
+    """Reduce validated component statuses down to one service status."""
+    if not statuses:
+        raise ValueError("components must not be empty")
+
+    aggregate = "ok"
+    for status in statuses:
+        if status == "unhealthy":
+            return "unhealthy"
+        if status == "degraded":
+            aggregate = "degraded"
+            continue
+        if status != "ok":
+            raise ValueError(f"unexpected service health status: {status!r}")
+    return aggregate
+
+
+def aggregate_component_status(components: dict[str, dict[str, Any]]) -> str:
+    """Aggregate component health records into one service status."""
+    component_statuses: list[str] = []
+
+    for component_name, component in components.items():
+        try:
+            status = component["status"]
+        except (KeyError, TypeError):
+            raise ValueError(f"component {component_name!r} is missing status") from None
+        if not isinstance(status, str) or status not in SERVICE_HEALTH_STATUSES:
+            raise ValueError(f"component {component_name!r} has unexpected status: {status!r}")
+        component_statuses.append(status)
+
+    return _reduce_service_health_statuses(component_statuses)
+
+
+def db_health_component() -> dict[str, Any]:
+    """Build the database component record for the v1 health contract."""
+    return {
+        "status": "ok",
+        "kind": "in_memory",
+    }
+
+
+def inference_health_component() -> dict[str, Any]:
+    """Build the inference component record for the v1 health contract."""
+    return {
+        "status": "ok",
+        "backend": ENGINE_CONFIG.backend,
+        "version": ENGINE_CONFIG.version,
+    }
+
+
+def auth_health_component() -> dict[str, Any]:
+    """Build the auth component record for the v1 health contract."""
+    return {
+        "status": "ok",
+        "requires_agent_id": AUTH_REQUIRE_AGENT_ID,
+    }
+
+
+def v1_health_components() -> dict[str, dict[str, Any]]:
+    """Build v1 health component records from in-process configuration only."""
+    return {
+        "db": db_health_component(),
+        "inference": inference_health_component(),
+        "auth": auth_health_component(),
+    }
+
+
 def health_payload() -> dict[str, Any]:
     """Build the service health response payload."""
     return {
@@ -709,6 +785,17 @@ def health_payload() -> dict[str, Any]:
         "status": "ok",
         "timestamp": utc_timestamp(),
     }
+
+
+def v1_health_payload() -> dict[str, Any]:
+    """Build the versioned service health response payload."""
+    payload = health_payload().copy()
+    components = v1_health_components()
+    payload["status"] = aggregate_component_status(components)
+    payload["version"] = ENGINE_CONFIG.version
+    payload["uptime_seconds"] = uptime_seconds()
+    payload["components"] = components
+    return payload
 
 
 def service_index_payload() -> dict[str, Any]:
