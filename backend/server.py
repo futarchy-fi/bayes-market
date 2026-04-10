@@ -129,6 +129,11 @@ LEGACY_HEALTH_ROUTES = ("/health", "/healthz")
 VERSIONED_HEALTH_ROUTE = "/v1/health"
 PUBLIC_HEALTH_ROUTES = (*LEGACY_HEALTH_ROUTES, VERSIONED_HEALTH_ROUTE)
 max_position_size = 100.0
+ACCOUNT_SERVICE_INDEX_ROUTES = (
+    "/v1/accounts/{id}/risk",
+    "/v1/accounts/{id}/pnl",
+    "/v1/accounts/{id}/exposure",
+)
 ACCOUNT_LMSR_LEDGER_VERSION = "lmsr-ledger-v1"
 ACCOUNT_LMSR_RISK_READ_MODEL = "scalar-min-asset-v1"
 MAX_EVENT_FORMULA_CLAUSES = 16
@@ -1660,6 +1665,8 @@ def get_account_exposure(account_id: str) -> tuple[dict[str, Any], int]:
 
     exposure = serialize_account_exposure(account)
     if not exposure["positions"]:
+        # Exposure existence is projection-local: once all live rows are pruned,
+        # the account disappears from this read model and resolves as 404 again.
         raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
 
     return {
