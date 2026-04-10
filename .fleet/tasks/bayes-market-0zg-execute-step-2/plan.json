@@ -1,0 +1,69 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep this step inside the existing `BayesMarketApiUnitTests` `/v1/markets` block and use direct `server.route_request(...)` assertions rather than adding mirrored HTTP/integration coverage, because the contract-freeze surface for query parsing already lives there.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Add a second copy of the same `include_resolved` contract checks in `BayesMarketApiIntegrationTests` during this step.",
+        "Move the coverage into a new helper layer instead of extending the current unit-test slice."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Freeze both rows and normalized response metadata for resolved-status requests by asserting `meta.filters` includes `{\"status\": \"resolved\", \"include_resolved\": true}` for `status=resolved` and `status=resolved&include_resolved=false`.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Assert only the returned market IDs and leave the normalized `meta.filters` contract unpinned.",
+        "Echo the raw contradictory `include_resolved=false` input in response metadata."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Model invalid `include_resolved` coverage the same way as the adjacent invalid-query tests: raise `server.ApiError` from `route_request(...)` and assert the structured `400 invalid_query` details for blank, duplicate, and unsupported values.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Switch this step to serialized HTTP error payload assertions.",
+        "Only cover one malformed `include_resolved` case and leave blanks or duplicates untested."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Continue asserting exact ordered market ID arrays for the happy-path list responses, because the seeded fixture order is stable and the existing `/v1/markets` tests already freeze that ordering as part of the contract.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Loosen the new assertions to membership-only checks.",
+        "Assert counts without pinning the exact returned order."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Extend the existing `/v1/markets` unit-test block in `tests/test_bayes_market_api.py` so the default request freezes the resolved-excluded result set and `?include_resolved=true` freezes the all-markets result set, including explicit counts, ordered IDs, and `meta.filters`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add or preserve resolved-status coverage in the same block so `?status=resolved` still returns the resolved fixture and `?status=resolved&include_resolved=false` normalizes to the same rows plus `meta.filters.include_resolved == true`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add invalid-query tests for `include_resolved` that cover the blank form (`?include_resolved=`), unsupported literals, and duplicate parameters using `server.ApiError` assertions that pin the `invalid_query` details shape.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Run the focused `/v1/markets` API test slice, review the diff to confirm the change stays confined to `tests/test_bayes_market_api.py`, and commit the finished implementation once the contract assertions pass.",
+      "depends_on": [2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
