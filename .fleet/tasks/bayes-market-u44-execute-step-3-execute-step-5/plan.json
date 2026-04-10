@@ -1,0 +1,59 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use the explicit four-test `pytest` selector for `BayesMarketApiAuthRateLimitTests` rather than rerunning the whole class, so the execution gate stays anchored on the new comment-post success assertion, the shared protected-route success matrix, and both sides of the resolve split.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Rerun the entire `BayesMarketApiAuthRateLimitTests` class.",
+        "Run only the two new success-path header tests and omit the resolve split coverage."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Inspect the implementation diff against `ff/Tbayes-market-u44-execute-step-2` and treat the scope check as 'tests-only among product files', explicitly confirming that `tests/test_bayes_market_api.py` is the only product-file delta and that no backend runtime file such as `backend/server.py` moved.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Diff against `ff/Tbayes-market-u44-execute-step-3`, which would hide the already-merged implementation changes.",
+        "Treat `.fleet` bookkeeping files as the primary proof that the change stayed in test coverage."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Have the final execute-step commit capture only the execution/verification artifact for this gate rather than trying to recommit the already-landed test implementation history.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Recommit the existing `tests/test_bayes_market_api.py` implementation under the execute-step message.",
+        "Skip a fresh execute-step commit and rely solely on prior merged history."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Confirm the current checkout still contains the targeted `BayesMarketApiAuthRateLimitTests` methods named in research so the focused execution command and diff audit reference the correct seams.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Run the exact focused `pytest -q` slice covering `test_comment_post_http_returns_accepted_comment_contract_with_rate_limit_headers`, `test_protected_post_routes_emit_rate_limit_headers_on_first_success`, `test_market_resolve_http_requires_valid_agent_id_when_enabled`, and `test_market_resolve_http_omits_rate_limit_headers_when_limiter_disabled`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Inspect the diff versus `ff/Tbayes-market-u44-execute-step-2` and verify that the meaningful product-file change remains confined to `tests/test_bayes_market_api.py`, with no runtime drift in `backend/server.py` or other backend files.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Record the focused execution and diff-review result in this task's artifact(s), then `git add -A` and create the requested execute-step commit so the branch closes out the verification gate without duplicating prior implementation history.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
