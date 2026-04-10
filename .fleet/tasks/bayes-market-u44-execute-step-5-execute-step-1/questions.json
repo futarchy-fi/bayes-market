@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Is `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` the exact canonical focused backend HTTP auth/rate-limit gate this leaf must execute, or may it substitute a narrower preserved-sentinel selector or inherited prior run from adjacent step-5 artifacts?",
+      "category": "requirements",
+      "why_it_matters": "Step 1 is specifically about running one canonical gate for this checkout. If the selector is not fixed up front, later execution evidence becomes ambiguous and cannot be compared cleanly with the existing step-5 history."
+    },
+    {
+      "id": "q2",
+      "question": "What exact run result needs to be captured as the durable output of this step: only pass/fail plus exit status, or the literal unittest summary as well (`Ran N tests in ...` and `OK` or the failing traceback/error block)?",
+      "category": "requirements",
+      "why_it_matters": "The task asks for the exact pass/fail result, but later validation may need more than a boolean to confirm that this checkout reran the intended class and to distinguish a test failure from an invocation problem."
+    },
+    {
+      "id": "q3",
+      "question": "Should earlier green evidence already recorded under `.fleet/tasks/bayes-market-u44-execute-step-5/` be treated only as context, with this leaf required to rerun the command in the current worktree and treat the fresh local output as authoritative even if it differs?",
+      "category": "codebase",
+      "why_it_matters": "Nearby research artifacts already record successful class reruns. This leaf needs to know whether it is allowed to inherit that evidence or must produce checkout-specific execution proof."
+    },
+    {
+      "id": "q4",
+      "question": "If the canonical class rerun fails in this checkout, does step 1 stop after recording the exact failure output, or is it expected to begin root-cause triage before handing off to later execute steps?",
+      "category": "design",
+      "why_it_matters": "The plan splits execution from later diff review and artifact writing. Clarifying failure handling keeps this leaf scoped either as a pure gate-capture step or as the start of a repair path."
+    },
+    {
+      "id": "q5",
+      "question": "Is the intended invocation seam the repo-root `python3` unittest entrypoint exactly as written, with no pytest wrapper, virtualenv-specific launcher, or environment overrides, so the recorded result remains comparable to prior step-5 validations?",
+      "category": "codebase",
+      "why_it_matters": "The same test class can be run through different harnesses. To keep the recorded gate stable across this task history, the execution environment and command shape need to match the existing validation trail."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The canonical focused gate for this leaf is the full class command `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests`, because the parent step-5 plan and research already treat that class-level rerun as the stable recorded backend HTTP auth/rate-limit check.",
+      "confidence": 0.98,
+      "if_wrong": "This leaf could capture the wrong selector and produce execution evidence that later validation does not accept as the canonical gate."
+    },
+    {
+      "id": "a2",
+      "assumption": "The class is directly runnable from the repo root with `python3` and does not require extra environment bootstrapping beyond what is already present in this checkout.",
+      "confidence": 0.96,
+      "if_wrong": "Step 1 would need additional setup instructions or a different launcher before its pass/fail result could be trusted."
+    },
+    {
+      "id": "a3",
+      "assumption": "This leaf still needs a fresh local rerun even though nearby artifacts already show green results, because the task wording says to capture the canonical result for this checkout rather than to cite prior evidence.",
+      "confidence": 0.97,
+      "if_wrong": "The step could stay artifact-only and rely on inherited run evidence instead of performing another local execution."
+    },
+    {
+      "id": "a4",
+      "assumption": "If the command fails, the correct outcome for step 1 is to record the exact failure as the gate result rather than to begin code changes inside this phase.",
+      "confidence": 0.88,
+      "if_wrong": "A failing run would immediately expand this leaf from gate capture into debugging or repair work."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the canonical command, relevant test class, and adjacent step-5 execution history are all already available locally in this worktree.",
+      "confidence": 0.99,
+      "if_wrong": "A separate exploration task would be needed before this leaf could identify the correct gate or invocation seam."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
