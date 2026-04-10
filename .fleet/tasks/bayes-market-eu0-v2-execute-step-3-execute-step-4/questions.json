@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This checkout already has `test_account_exposure_http_unknown_account_returns_structured_error` and `test_account_exposure_http_rejects_non_get_methods`, but they live in `BayesMarketApiIntegrationTests`, which boots plain `HTTPServer` rather than `ThreadingHTTPServer`. Should step 4 move or mirror that coverage into a threaded class and treat the remaining gap as only the happy-path parity test, or is the existing single-threaded `404`/`405` coverage still the intended authority for those error cases?",
+      "category": "codebase",
+      "why_it_matters": "The answer decides whether step 4 is additive, relocates existing assertions, or would otherwise duplicate tests that already freeze the same public error contract."
+    },
+    {
+      "id": "q2",
+      "question": "Which existing `BayesHandler` threaded scaffold is the intended home for the new exposure tests: extend `BayesMarketApiConcurrencyTests` with a small `account_exposure(...)` helper and sequential assertions, or add a separate `ThreadingHTTPServer` test class next to the account-risk HTTP coverage?",
+      "category": "design",
+      "why_it_matters": "The fixture choice determines how much helper code is added, whether the new tests sit beside existing threaded request utilities, and how much duplication the patch introduces."
+    },
+    {
+      "id": "q3",
+      "question": "For the happy-path threaded regression, does `read-after-write parity` mean the HTTP `GET /v1/accounts/{id}/exposure` payload should be asserted equal to a direct `server.route_request(\"GET\", ...)` response after the same accepted EventTrade flow, or is it sufficient to assert selected public fields against the HTTP write response the way the existing `/risk` HTTP smoke test does?",
+      "category": "design",
+      "why_it_matters": "This sets the strength and coupling of the parity proof. Full HTTP-vs-direct equality is a stronger transport check, while field-level assertions keep the test closer to the existing HTTP style."
+    },
+    {
+      "id": "q4",
+      "question": "What is the minimal accepted-write scenario the threaded happy-path should cover: one accepted buy followed by `GET /exposure`, or the buy-then-sell netting flow already frozen in the direct exposure-route suite?",
+      "category": "requirements",
+      "why_it_matters": "The step explicitly says to avoid duplicating the full direct-suite matrix, but `happy-path parity` is ambiguous about whether simple creation is enough or whether the threaded slice should still prove one netting update end to end."
+    },
+    {
+      "id": "q5",
+      "question": "For the threaded `404 account_not_found` check, should step 4 stay with the plain unknown-account variant that already exists in the non-threaded HTTP suite, or should it instead use a projection-local empty case such as a risk-only account so the threaded layer contributes new exposure-specific coverage beyond generic transport error translation?",
+      "category": "requirements",
+      "why_it_matters": "The exposure route's main semantic wrinkle is projection-local account existence. Picking the stronger `404` scenario changes whether the threaded slice merely rechecks JSON error formatting or also freezes the exposure-specific missing-account contract."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Step 4 is regression-only work in `tests/test_bayes_market_api.py`; the exposure route, `BayesHandler` translation, and direct route/getter regressions from step 3 are already present on this branch.",
+      "confidence": 0.99,
+      "if_wrong": "The task would have to reopen backend implementation work instead of staying focused on threaded HTTP coverage."
+    },
+    {
+      "id": "a2",
+      "assumption": "Because the task explicitly says `threaded HTTP tests`, the canonical fixture for any new assertions should use `ThreadingHTTPServer` rather than the existing `HTTPServer`-backed integration class, even though that class already contains exposure `404` and `405` checks.",
+      "confidence": 0.93,
+      "if_wrong": "The step can stay inside the current non-threaded integration suite, and creating or moving threaded exposure tests would be unnecessary churn."
+    },
+    {
+      "id": "a3",
+      "assumption": "The detailed exposure behavior matrix remains frozen primarily by the direct `route_request(...)` and helper tests; the threaded slice only needs one happy-path read plus structured `404` and `405` parity checks.",
+      "confidence": 0.97,
+      "if_wrong": "Step 4 would need materially broader HTTP coverage for netting, replay, limit-breach, or resolution cleanup, which would duplicate the direct suite the plan explicitly tried to avoid."
+    },
+    {
+      "id": "a4",
+      "assumption": "Existing single-threaded exposure `404` and `405` tests are still valid and can be supplemented or relocated rather than replaced with new transport semantics.",
+      "confidence": 0.81,
+      "if_wrong": "The implementation would need a more deliberate test reorganization, not just one additional threaded parity slice."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the relevant constraints are already visible in `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `.fleet` plan and validation artifacts for step 3.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up subtask would be needed to inspect some missing contract source before the threaded test work could be scoped safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

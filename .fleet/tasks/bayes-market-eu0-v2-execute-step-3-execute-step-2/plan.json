@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat this step as additive direct-test work. Keep the existing root service-index account-route assertion, exposure-route `POST` `405` check, never-traded exposure `404` check, and successful route-vs-getter coverage instead of regrouping them into a new routing block.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Rewrite the surrounding direct-routing tests into one new exposure-routing section before adding coverage.",
+        "Treat the task as requiring broad test reorganization instead of closing the remaining regression gap."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Create the risk-only account through an accepted `POST /v1/markets/{id}/orders/probability-edit` fixture so the regression proves the public write path populates `/risk` without creating `/exposure` state.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Seed `ACCOUNT_RISK` directly for a smaller but less representative routing fixture.",
+        "Use an EventTrade-based setup that would also create exposure state and blur the target contract."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Make the new regression prove projection-local account existence by asserting the same risk-only account returns `200` from `/v1/accounts/{id}/risk` and `404 account_not_found` from `/v1/accounts/{id}/exposure`.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Assert only the exposure-side `404` and leave the account-distinction implicit.",
+        "Treat any account with risk state as globally existing for `/exposure`."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep this step limited to the two named empty-account variants, never-traded and risk-only, and leave zero-row or post-resolution-pruned exposure empties to existing getter tests and later read-after-write coverage.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Add a redundant zero-row or fully pruned route-level `404` case in this step.",
+        "Expand this routing slice to cover later exposure lifecycle cleanup scenarios."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Use the existing `test_get_account_exposure_serializes_lexically_sorted_positions_and_account_timestamp` route-vs-getter parity assertion as the GET-dispatch proof for this step instead of adding a second delegate-only routing test.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Add another small `route_request(\"GET\", ...)` delegation test that duplicates the current parity proof.",
+        "Move the parity assertion out of the exposure-projection class solely for co-location."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Use the existing direct assertions in `tests/test_bayes_market_api.py` as the baseline routing seam, preserving the current root service-index account-route list, exposure-route `405`, never-traded exposure `404`, and successful GET parity coverage unless a tiny readability cleanup is needed alongside the new regression.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add a direct backend regression in `tests/test_bayes_market_api.py` that creates a risk-only account through an accepted ProbabilityEdit, then asserts `GET /v1/accounts/{id}/risk` succeeds while `GET /v1/accounts/{id}/exposure` raises structured `404 account_not_found` for the same account.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Run the focused direct test slice covering account routing and exposure projection parity so the existing service-index, GET dispatch, `405`, and never-traded assertions stay green and the new risk-only `404` regression closes the remaining gap without broadening the step.",
+      "depends_on": [2]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

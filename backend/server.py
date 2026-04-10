@@ -124,6 +124,10 @@ MARKET_SUMMARY_FIELDS = (
 
 ACCOUNT_RISK_LIMIT = 100.0
 max_position_size = 100.0
+ACCOUNT_SERVICE_INDEX_ROUTES = (
+    "/v1/accounts/{id}/risk",
+    "/v1/accounts/{id}/exposure",
+)
 ACCOUNT_LMSR_LEDGER_VERSION = "lmsr-ledger-v1"
 ACCOUNT_LMSR_RISK_READ_MODEL = "scalar-min-asset-v1"
 MAX_EVENT_FORMULA_CLAUSES = 16
@@ -729,7 +733,7 @@ def service_index_payload() -> dict[str, Any]:
                 "POST /v1/markets/{id}/orders/probability-edit",
                 "POST /v1/markets/{id}/orders/event-trade",
             ],
-            "accounts": ["/v1/accounts/{id}/risk"],
+            "accounts": list(ACCOUNT_SERVICE_INDEX_ROUTES),
         },
         "meta": make_meta(),
     }
@@ -1283,6 +1287,58 @@ def sync_account_exposure_state(order: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def settle_market_account_exposure(market_id: str, timestamp: str) -> list[dict[str, Any]]:
+    """Remove one resolved market from the live account-exposure projection."""
+    cleanup: list[dict[str, Any]] = []
+    composite_key_prefix = f"{market_id}|"
+
+    for account_id in sorted(list(ACCOUNT_EXPOSURE)):
+        account = ACCOUNT_EXPOSURE.get(account_id)
+        if not isinstance(account, dict):
+            continue
+
+        positions = account.get("positions")
+        if not isinstance(positions, dict):
+            continue
+
+        removed_keys = [
+            composite_key
+            for composite_key, position in list(positions.items())
+            if (
+                isinstance(position, dict)
+                and str(position.get("marketId")) == market_id
+            )
+            or (
+                isinstance(composite_key, str)
+                and composite_key.startswith(composite_key_prefix)
+            )
+        ]
+        if not removed_keys:
+            continue
+
+        for composite_key in removed_keys:
+            positions.pop(composite_key, None)
+
+        remaining_live_positions = serialize_account_exposure_positions(account)
+        pruned = not remaining_live_positions
+        if pruned:
+            ACCOUNT_EXPOSURE.pop(account_id, None)
+        else:
+            account["updatedAt"] = timestamp
+
+        cleanup.append(
+            {
+                "accountId": account_id,
+                "marketId": market_id,
+                "removedPositionCount": len(removed_keys),
+                "remainingPositionCount": len(remaining_live_positions),
+                "pruned": pruned,
+            }
+        )
+
+    return cleanup
+
+
 def preview_account_min_asset(account_id: str, impact_score: float) -> dict[str, Any]:
     """Preview the account-wide min-asset effect of a proposed impact score."""
     account = ACCOUNT_RISK.get(account_id)
@@ -1491,6 +1547,8 @@ def get_account_exposure(account_id: str) -> tuple[dict[str, Any], int]:
 
     exposure = serialize_account_exposure(account)
     if not exposure["positions"]:
+        # Exposure existence is projection-local: once all live rows are pruned,
+        # the account disappears from this read model and resolves as 404 again.
         raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
 
     return {
@@ -3137,14 +3195,16 @@ def transition_market_to_resolved(
 
 def resolve_market_command(command: dict[str, Any]) -> dict[str, Any]:
     """Apply a market-resolution AdminOp and return the accepted event inputs."""
+    market_id = str(command["marketId"])
     resolved_at = utc_timestamp()
     resolution = transition_market_to_resolved(
-        str(command["marketId"]),
+        market_id,
         str(command["payload"]["outcomeId"]),
         deepcopy(command["payload"]["finalProbabilities"]),
         resolved_at=resolved_at,
     )
-    resolution["assetDelta"] = settle_market_account_risk(str(command["marketId"]), resolved_at)
+    resolution["assetDelta"] = settle_market_account_risk(market_id, resolved_at)
+    resolution["exposureCleanup"] = settle_market_account_exposure(market_id, resolved_at)
     return resolution
 
 
@@ -3745,7 +3805,7 @@ def route_request(
         )
 
     parts = [part for part in path.split("/") if part]
-    if len(parts) == 4 and parts[:2] == ["v1", "accounts"] and parts[3] == "risk":
+    if len(parts) == 4 and parts[:2] == ["v1", "accounts"] and parts[3] in {"risk", "exposure"}:
         account_id = parts[2]
         if method != "GET":
             raise ApiError(
@@ -3754,7 +3814,9 @@ def route_request(
                 f"{method} is not allowed for this resource",
                 {"method": method, "path": path},
             )
-        return get_account_risk(account_id)
+        if parts[3] == "risk":
+            return get_account_risk(account_id)
+        return get_account_exposure(account_id)
 
     if len(parts) >= 3 and parts[:2] == ["v1", "markets"]:
         market_id = parts[2]

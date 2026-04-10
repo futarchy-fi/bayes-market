@@ -1,0 +1,127 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Step 4 should mirror the exposure `404` and `405` checks into a threaded `ThreadingHTTPServer` fixture, not treat the existing single-threaded `HTTPServer` assertions as the sole authority. The current plain integration tests remain valid coverage, but the recorded step-4 scope explicitly requires a threaded HTTP slice covering happy-path parity plus structured `404 account_not_found` and `405 method_not_allowed`, so the threaded gap is not only the happy path.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:49",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:50",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:77",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:78",
+        "tests/test_bayes_market_api.py:6380",
+        "tests/test_bayes_market_api.py:6384",
+        "tests/test_bayes_market_api.py:7816",
+        "tests/test_bayes_market_api.py:7823"
+      ],
+      "uncertainty": "The branch does not include a separate note saying whether the older plain HTTP tests should later be removed for deduplication, only that the threaded slice still needs to exist for step 4.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The intended home is `BayesMarketApiConcurrencyTests`, extended with a small `account_exposure(...)` helper next to `account_risk(...)`. That class already owns the reusable `ThreadingHTTPServer` lifecycle, generic `request(...)`, and the `event_trade(...)` helper needed for a simple read-after-write flow. Adding a separate threaded class would just duplicate the same `BayesHandler` bootstrapping that step 4 explicitly says to reuse.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:77",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:78",
+        "tests/test_bayes_market_api.py:5543",
+        "tests/test_bayes_market_api.py:5547",
+        "tests/test_bayes_market_api.py:5562",
+        "tests/test_bayes_market_api.py:5592",
+        "tests/test_bayes_market_api.py:5603",
+        "tests/test_bayes_market_api.py:6380",
+        "tests/test_bayes_market_api.py:6384"
+      ],
+      "uncertainty": "The class name says `Concurrency`, so a follow-up cleanup could rename it if it accumulates more general threaded HTTP coverage, but the current fixture is still the lowest-duplication place to add the tests.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Use direct read parity as the oracle: after an accepted EventTrade, compare the threaded HTTP `GET /v1/accounts/{id}/exposure` result to the direct `server.route_request(\"GET\", ...)` read result for the same path, at least for the stable `account` body and the `200` status. That is the stronger transport check implied by `parity`, and it avoids re-spelling the exposure contract field-by-field from the write response. Literal whole-envelope equality is brittle because `make_meta()` stamps a fresh timestamp on every response, so the stable parity target is the read payload rather than the request-local `meta.timestamp`.",
+      "confidence": 0.88,
+      "evidence": [
+        "backend/server.py:516",
+        "backend/server.py:518",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:49",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:50",
+        "tests/test_bayes_market_api.py:4424",
+        "tests/test_bayes_market_api.py:4461",
+        "tests/test_bayes_market_api.py:4462",
+        "tests/test_bayes_market_api.py:4466",
+        "tests/test_bayes_market_api.py:7715"
+      ],
+      "uncertainty": "The plan says `happy-path parity` but does not spell out whether `meta` should be normalized or ignored. I am inferring that the intended parity target is the stable read model because the metadata timestamp is generated per response.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "The minimal accepted-write scenario for the threaded happy path should be one accepted EventTrade buy followed by `GET /exposure`. The buy-then-sell netting flow is already frozen in the direct exposure-route suite and explicitly called out in the step-3 validation result. Repeating that full netting path in threaded HTTP would drift back toward the larger matrix that step 4 says to avoid duplicating.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:27",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:50",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:54",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:77",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3-execute-step-3/validation.json:4",
+        "tests/test_bayes_market_api.py:3811",
+        "tests/test_bayes_market_api.py:3837",
+        "tests/test_bayes_market_api.py:3862"
+      ],
+      "uncertainty": "If the implementer wants a little extra confidence, they could choose a buy size whose expected exposure shape is trivial to read, but there is no evidence that step 4 expects a second sell just to re-prove netting.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "For the threaded `404 account_not_found` check, stay with the plain unknown-account variant. The stronger exposure-specific projection-local empty semantics are already pinned in the direct route suite through the risk-only account case, and `get_account_exposure(...)` itself returns `404` when the exposure document is missing or has no live positions. Step 4 is the transport-parity slice, so the threaded `404` should stay minimal instead of re-encoding the stronger projection-local matrix.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:1541",
+        "backend/server.py:1543",
+        "backend/server.py:1548",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:39",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3/plan.json:50",
+        "tests/test_bayes_market_api.py:922",
+        "tests/test_bayes_market_api.py:938",
+        "tests/test_bayes_market_api.py:943",
+        "tests/test_bayes_market_api.py:7816"
+      ],
+      "uncertainty": "A stronger threaded `404` could be added later if the team wants extra end-to-end proof of projection-local semantics, but nothing in the recorded step-4 scope requires it.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep step 4 scoped to regression work in `tests/test_bayes_market_api.py`; the route, handler translation path, and direct exposure regressions already exist on this branch."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Use a `ThreadingHTTPServer`-backed `BayesHandler` fixture for the new assertions instead of staying in the plain `HTTPServer` integration class."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Keep the detailed exposure behavior matrix in the direct route/helper suite and make the threaded slice only the targeted happy-path plus `404` and `405` transport checks."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.84,
+      "impact": "Treat the existing single-threaded exposure `404` and `405` tests as still-useful coverage that should be supplemented by threaded parity checks, not replaced by different transport semantics."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed; `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `.fleet` plan and validation artifacts already answer the scoping questions."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
