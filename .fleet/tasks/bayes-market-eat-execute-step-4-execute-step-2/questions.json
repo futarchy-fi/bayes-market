@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Which exact four tests are supposed to make up the focused gate for this execution step: the existing `test_root_route_returns_service_index`, two new direct `/v1/stats` route assertions, and one threaded HTTP assertion, or some other selector?",
+      "category": "requirements",
+      "why_it_matters": "The issue record for `bayes-market-eat` still says \"GET endpoint + 2 tests\", but this execution step says \"four-test focused gate\", so the selector and intended proof surface are currently ambiguous."
+    },
+    {
+      "id": "q2",
+      "question": "What exact wire contract should `GET /v1/stats` freeze: snake_case fields from the issue text (`total_markets`, `active_markets`, `resolved_markets`, `total_volume`, `total_accounts`, `total_trades`) or the repo's usual camelCase style plus a standard `meta` block?",
+      "category": "requirements",
+      "why_it_matters": "The current backend JSON surfaces in `backend/server.py` overwhelmingly use camelCase and usually include `meta`, while the issue description is written in snake_case, so the test assertions cannot be written deterministically without an explicit payload shape."
+    },
+    {
+      "id": "q3",
+      "question": "What is the intended source of truth for `total_accounts` and `total_trades`: accepted trading activity derived from `ORDERS`/accepted events, broader command/event stores, or projection tables like `ACCOUNT_RISK` and `ACCOUNT_EXPOSURE`?",
+      "category": "design",
+      "why_it_matters": "Those stores diverge in this checkout: comments and resolutions add commands/events without being trades, and accepted event trades can succeed without materializing a new `ACCOUNT_RISK` row, so each source yields different totals."
+    },
+    {
+      "id": "q4",
+      "question": "Should `total_volume` mean the current snapshot sum of `MARKETS[*][\"volume\"]` across all markets and statuses, or a live aggregate computed from accepted trading activity such as `normalize_accepted_activity_rows(...)`?",
+      "category": "requirements",
+      "why_it_matters": "The seeded fixtures already total `188000.0` volume on reset, and accepted writes do not currently mutate `MARKETS[*][\"volume\"]`, so snapshot semantics and transactional semantics would produce different baseline and post-mutation expectations."
+    },
+    {
+      "id": "q5",
+      "question": "How should the root service index advertise the new endpoint: under a new `stats` route group, with what exact string (`\"/v1/stats\"` vs `\"GET /v1/stats\"`), and in what insertion order relative to `health`, `markets`, `orders`, and `accounts`?",
+      "category": "codebase",
+      "why_it_matters": "`service_index_payload()` currently exposes only those four groups, `tests/test_bayes_market_api.py` already freezes several root-route assertions, and `frontend/src/routes/System.tsx` renders `Object.entries(index.data.routes)` in insertion order."
+    },
+    {
+      "id": "q6",
+      "question": "When `server.reset_state()` has just run, should `GET /v1/stats` return a fully populated deterministic snapshot from the seeded in-memory state, or are any of the account/trade totals allowed to be omitted or computed lazily until runtime activity exists?",
+      "category": "codebase",
+      "why_it_matters": "The reset path seeds three markets but leaves `ORDERS`, `COMMANDS`, `EVENTS`, `ACCOUNT_RISK`, and `ACCOUNT_EXPOSURE` empty, so the expected zero/default behavior has to be explicit for stable tests."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This checkout still needs production work in `backend/server.py`, because there is currently no `/v1/stats` route branch and `service_index_payload()` has no `stats` entry.",
+      "confidence": 0.99,
+      "if_wrong": "The task is running against a stale or partially advanced branch, and the focused-gate failures would come from test drift rather than a missing backend seam."
+    },
+    {
+      "id": "a2",
+      "assumption": "The focused gate is intended to stay entirely inside `tests/test_bayes_market_api.py`, with failures investigated only through `backend/server.py` and the matching stats/service-index assertions before any broader module rerun.",
+      "confidence": 0.96,
+      "if_wrong": "The step would need cross-file debugging or fixes outside the user-specified limit, which changes both the investigation plan and the acceptable edit surface."
+    },
+    {
+      "id": "a3",
+      "assumption": "`/v1/stats` is a public read-only endpoint with no auth requirements, and non-`GET` methods should reuse the existing `405 method_not_allowed` contract used by other read surfaces.",
+      "confidence": 0.98,
+      "if_wrong": "The implementation would need auth, rate-limit, or bespoke method-handling behavior that is not implied by the issue description or the current router patterns."
+    },
+    {
+      "id": "a4",
+      "assumption": "The service-index change should be additive only: keep the existing `health`, `markets`, `orders`, and `accounts` groups intact and append a new `stats` group rather than reclassifying `/v1/stats` under another section.",
+      "confidence": 0.95,
+      "if_wrong": "The work expands from a narrow endpoint addition into a public-index restructuring, and the root-route assertions would need broader rewrites than the step description suggests."
+    },
+    {
+      "id": "a5",
+      "assumption": "A deterministic reset-state baseline probably exists today as `3` total markets, `2` active markets, `1` resolved market, `188000.0` total volume, and zero account/trade totals because the mutable activity stores start empty.",
+      "confidence": 0.86,
+      "if_wrong": "The tests cannot rely on reset-state constants and will need extra setup or a different definition of the stats sources before the gate can be written reliably."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
