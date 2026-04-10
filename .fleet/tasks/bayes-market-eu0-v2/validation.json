@@ -1,0 +1,15 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.78,
+  "plan_adherence_notes": "Steps 1-5 from plan.json are substantially present: backend exposure state and max_position_size enforcement were added in backend/server.py, GET /v1/accounts/{id}/exposure exists, frontend event-trade size/exposure wiring landed, and targeted backend/frontend tests were added. Research decisions d1-d5 are reflected in the implementation contract. However, the branch also carries unrelated market-comments/live-price websocket work that is not part of the approved plan, and the resolve-market frontend mutation still does not invalidate account-risk queries even though resolution changes /v1/accounts/{id}/risk as well as /exposure. Validation execution was partial: python3 unittest for tests/test_bayes_market_api.py passed (230 tests), but pytest is unavailable here and the frontend vitest suite could not run because node_modules/vitest are not installed in this worktree.",
+  "research_quality": 0.9,
+  "question_completeness": 0.74,
+  "missed_questions": [
+    "Should successful market resolution also invalidate or refresh existing /v1/accounts/{id}/risk consumers in the frontend, since resolution mutates account risk as well as exposure?",
+    "Should this branch stay strictly scoped to position sizing/exposure work, or is unrelated market-comments/live-price plumbing explicitly allowed in the same diff?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "The core position-sizing feature is mostly implemented and the backend unittest suite passes, but the branch is not tightly aligned to the approved plan and still leaves a user-visible cache gap: resolving a market invalidates exposure queries but not account-risk queries, so Portfolio risk metrics can remain stale until manual refresh.",
+  "spawn_children": false,
+  "children": []
+}
