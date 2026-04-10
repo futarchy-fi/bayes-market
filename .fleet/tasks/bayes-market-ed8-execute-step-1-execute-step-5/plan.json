@@ -1,0 +1,69 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat this step as a review-only boundary check, not a cleanup pass: keep the existing helper-level additions in `tests/test_bayes_market_api.py` as acceptable support work unless they are found to widen into route wiring, legacy payload rewrites, or reset-specific behavior.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Prune the helper-level tests simply because this step is scoped to helper assembly",
+        "Re-open earlier implementation work and broaden this step into a general cleanup pass"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep the scope confined to shared health assembly in `backend/server.py`: do not touch `route_request()`, `service_index_payload()`, frontend health clients, or checked-in docs, so `/v1/health` remains a private helper-only surface until the later routing step.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Advertise or reference `/v1/health` before the router serves it",
+        "Interpret 'no router wiring yet' narrowly and allow other public-surface references to move ahead early"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Treat `health_payload()` as frozen legacy behavior for this step and preserve `/health` plus `/healthz` exactly as they are; `v1_health_payload()` should remain an additive copy-and-extend helper rather than refactoring the legacy payload builder.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Refactor `health_payload()` internally even if the emitted JSON stays identical",
+        "Collapse legacy and v1 health responses onto a new shared base helper in this step"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Preserve the current in-process, probe-free helper assembly: keep uptime sourced from `PROCESS_START_MONOTONIC`, leave `reset_state()` untouched, avoid new reset-specific assertions, and do not add live `db`, `inference`, or `auth` dependency probes in this boundary check.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Add test-only reset hooks or negative reset coverage as part of this step",
+        "Introduce runtime dependency probes now because the status vocabulary already supports `degraded` and `unhealthy`"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Inspect the health-helper block in `backend/server.py` and confirm the shared helpers stay additive: `v1_health_payload()` copies `health_payload()`, component records come from the existing shared builders, and top-level status plus uptime are assembled from in-process state only.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Sanity-check the surrounding boundary for scope creep by verifying that `route_request()`, `service_index_payload()`, frontend health consumers, docs, and `reset_state()` remain unchanged, and that the existing helper tests stay limited to helper composition rather than route wiring or reset behavior.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "If any out-of-scope edits are present, trim them back to the helper boundary without changing the legacy `/health` or `/healthz` payload contract; otherwise leave the implementation intact.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Review the resulting diff against the parent plan to confirm this step remains a shared-health-assembly slice only, then commit the step artifacts once the boundary check is complete.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
