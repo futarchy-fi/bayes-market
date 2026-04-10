@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This checkout still only contains the legacy `health_payload()` and none of the planned shared uptime, component, or aggregate-status helpers. Should step 4 assume those prerequisites land first, or should this branch absorb the missing helper seams so the new payload helper can compile?",
+      "category": "codebase",
+      "why_it_matters": "Step 4 is supposed to compose from shared health helpers rather than route-local literals, but those helpers are not present yet in `backend/server.py`. That changes whether this step is a narrow composition patch or a broader backfill of earlier planned work."
+    },
+    {
+      "id": "q2",
+      "question": "When the plan says the new `/v1/health` payload helper should 'start from the legacy health fields', should it literally compose from the existing `health_payload()` output, or should both the legacy and v1 payloads delegate to a new smaller shared base helper for `service`, `status`, and `timestamp`?",
+      "category": "design",
+      "why_it_matters": "The current legacy health fields live in one concrete helper. This choice determines whether step 4 can avoid duplication without accidentally changing `/health` and `/healthz` semantics or creating tight coupling between the old and new payload builders."
+    },
+    {
+      "id": "q3",
+      "question": "Should the dedicated `/v1/health` helper recompute the top-level `status` through the planned aggregate-status reducer, even though today's `db`, `inference`, and `auth` components are expected to all report `ok`, or should it preserve the legacy `health_payload()` status verbatim and treat `components` as informational only?",
+      "category": "requirements",
+      "why_it_matters": "This decides whether `/v1/health` is already wired for future `degraded` and `unhealthy` component states, or whether it remains a static legacy status plus extra fields that would need another contract change later."
+    },
+    {
+      "id": "q4",
+      "question": "What exact source of truth should freeze the new top-level `version` field: the existing inference-engine version already emitted elsewhere (`ENGINE_CONFIG.version` / `ENGINE_VERSION`), or a new dedicated service or API version constant if `version` is meant to describe the HTTP surface rather than inference?",
+      "category": "requirements",
+      "why_it_matters": "The current backend has no dedicated service-version constant. Step 4 needs a stable meaning for `version` before the helper can append it to the flat `/v1/health` contract."
+    },
+    {
+      "id": "q5",
+      "question": "Should this step remain helper-only work inside `backend/server.py`, with verification deferred to the later route and API-test steps, or is direct helper-level coverage expected now because `/v1/health` is not wired yet?",
+      "category": "design",
+      "why_it_matters": "The answer sets the implementation boundary for this subtask. A helper-only slice matches the current step plan, while early verification would expand the patch surface before the route exists."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This step should keep the new `/v1/health` payload flat and top-level, reusing the legacy `service`, `status`, and `timestamp` fields and appending only `version`, `uptime_seconds`, and `components` rather than introducing a `meta` envelope.",
+      "confidence": 0.99,
+      "if_wrong": "The helper contract would need a different shape, and later route tests or consumers would have to be rewritten around a nested response format."
+    },
+    {
+      "id": "a2",
+      "assumption": "Legacy `/health` and `/healthz` behavior stays unchanged in this subtask, so any new helper must be additive and must not alter the current `health_payload()` contract exposed by those routes.",
+      "confidence": 0.98,
+      "if_wrong": "Step 4 would widen into compatibility-sensitive route work that belongs to a later planned step and would also affect existing frontend and ops consumers."
+    },
+    {
+      "id": "a3",
+      "assumption": "The current codebase does not yet contain the shared health-helper prerequisites that step 4 wants to use, so implementation is either blocked on those earlier steps or must deliberately backfill them in the same branch.",
+      "confidence": 0.99,
+      "if_wrong": "If those helpers land first, this subtask narrows to a small composition helper and some of the scoping questions disappear."
+    },
+    {
+      "id": "a4",
+      "assumption": "Until the repo gains a dedicated service-version constant, the intended temporary `version` value for `/v1/health` is the existing backend engine version already carried in runtime config.",
+      "confidence": 0.87,
+      "if_wrong": "Step 4 would need to introduce or source a separate service/API version identifier before the payload contract can be frozen."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the open decisions are local to `backend/server.py`, the checked-in `.fleet` plan artifacts, and the existing health consumers and tests already visible in this worktree.",
+      "confidence": 0.98,
+      "if_wrong": "A follow-up exploration task would be needed before the helper boundary could be defined safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
