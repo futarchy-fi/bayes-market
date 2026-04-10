@@ -6713,26 +6713,34 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         return status, payload
 
     def test_legacy_health_http_routes_return_service_payload(self):
+        timestamp_pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$"
+
         for path in ("/health", "/healthz"):
             with self.subTest(path=path):
                 status, payload = self.request("GET", path)
 
                 self.assertEqual(status, 200)
+                self.assertEqual(set(payload), {"service", "status", "timestamp"})
                 self.assertEqual(payload["service"], "bayes-market")
                 self.assertEqual(payload["status"], "ok")
-                self.assertTrue(payload["timestamp"].endswith("Z"))
-                self.assertNotIn("version", payload)
-                self.assertNotIn("components", payload)
+                self.assertIsInstance(payload["timestamp"], str)
+                self.assertRegex(payload["timestamp"], timestamp_pattern)
 
     def test_v1_health_http_returns_versioned_service_payload(self):
         status, payload = self.request("GET", "/v1/health")
 
         self.assertEqual(status, 200)
+        self.assertEqual(
+            set(payload),
+            {"service", "status", "timestamp", "version", "uptime_seconds", "components"},
+        )
         self.assertEqual(payload["service"], "bayes-market")
         self.assertEqual(payload["status"], "ok")
-        self.assertTrue(payload["timestamp"].endswith("Z"))
+        self.assertIsInstance(payload["timestamp"], str)
+        self.assertRegex(payload["timestamp"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$")
         self.assertEqual(payload["version"], server.ENGINE_CONFIG.version)
         self.assertIsInstance(payload["uptime_seconds"], float)
+        self.assertIsInstance(payload["components"], dict)
         self.assertEqual(set(payload["components"]), {"db", "inference", "auth"})
 
     def test_create_market_http_returns_created_market_and_collection_entry(self):
