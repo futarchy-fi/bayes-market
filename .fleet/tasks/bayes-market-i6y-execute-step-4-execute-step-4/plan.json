@@ -1,0 +1,94 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat this leaf as production-plus-tests if the current branch still lacks the step-3 replay helper and `unrealizedPnl` serializer seam in `backend/server.py`; do not assume a later rebase will supply that prerequisite before the representative `/positions` P&L regressions are implemented.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Write tests only against the current four-field `/positions` payload and wait for another branch to make them pass.",
+        "Defer the representative P&L regressions entirely until some future integration sweep."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep the new weighted-average, partial-close, and sign-flip regressions in `BayesMarketExposureProjectionTests`, asserting them primarily through the getter or projection seam while relying on the existing baseline `/positions` coverage for route parity instead of adding HTTP reads for every scenario.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Drive every representative replay-math scenario through `route_request(\"GET\", \"/v1/accounts/{id}/positions\")`.",
+        "Move the new cases into a separate helper-only cluster and stop checking public serialization parity nearby."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Build the three representative survivor fixtures mostly from accepted `POST /v1/markets/{id}/orders/event-trade` writes so the tests inherit canonical fill pricing, order shape, and exposure syncing, using direct `ORDERS` or `ACCOUNT_EXPOSURE` seeding only if a setup cannot be expressed cleanly through the public write path.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Seed all representative P&L scenarios directly in storage and give up the accepted EventTrade flow.",
+        "Force the public write path even for awkward fixtures where direct seeding would be clearer and more deterministic."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Patch `query_market_atomic_probability_for_inference(...)` to fixed marks in the new regressions and keep their assertions focused on exact survivor `unrealizedPnl` plus targeted survivor invariants, rather than duplicating the full ordered `/positions` payload and row-shape assertions already frozen by the baseline contract test.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Depend on live inference outputs and assert only relative P&L behavior.",
+        "Reassert the entire ordered `/positions` payload in every representative P&L case."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Add explicit companion assertions for the surviving signed `netSize` in the partial-close and sign-flip regressions, because exact `unrealizedPnl` alone is not sufficient to prove the correct survivor identity and replay result.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Assert only exact `unrealizedPnl` and assume the survivor size is implied.",
+        "Push signed survivor-size coverage back onto the older baseline `/positions` contract tests."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Model the sign-flip survivor using the signed formula `(mark - averageCost) * netSize`, with the opposite-sign remainder resetting basis to the crossing fill price so profitable shorts remain positive when the patched mark is below that new basis.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Carry the pre-flip basis forward into the opposite-sign survivor.",
+        "Use a sign convention that makes profitable short survivors report negative `unrealizedPnl`."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit the current branch for the missing step-3 replay helper and `/positions` `unrealizedPnl` production seam in `backend/server.py`, and if it is still absent, land or rebase that prerequisite before expecting the new exact P&L regressions to pass.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Extend `tests/test_bayes_market_api.py` inside `BayesMarketExposureProjectionTests` with a representative multi-fill weighted-average survivor case built mostly from accepted EventTrade writes, patch the mark-query seam to a fixed value, and assert the exact resulting `unrealizedPnl` for the accumulated same-sign position.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add a representative partial-close survivor regression built mostly from accepted EventTrade writes, patch the mark-query seam, and assert both the surviving signed `netSize` and the exact `unrealizedPnl` implied by preserving the pre-close weighted-average basis on the same-sign remainder.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Add a representative sign-flip survivor regression built mostly from accepted EventTrade writes, patch the mark-query seam, and assert both the surviving signed `netSize` and the exact account-perspective `unrealizedPnl` produced when the opposite-sign remainder resets basis to the crossing fill price.",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Run the focused `tests/test_bayes_market_api.py::BayesMarketExposureProjectionTests` selection covering the new weighted-average, partial-close, and sign-flip survivor cases, fix any failures until the representative `/positions` P&L regressions pass cleanly, and then stage and commit the leaf.",
+      "depends_on": [2, 3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
