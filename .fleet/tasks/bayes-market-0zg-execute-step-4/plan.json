@@ -1,0 +1,59 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Update `frontend/src/routes/MarketList.tsx` to use the object-based filter model, passing no filters for the all-status view and only `{ status }` when a specific status is selected. That keeps the new default hidden-resolved behavior while preserving the existing resolved-status selector through the shared filter normalization.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Leave `MarketList` on the legacy string argument shape instead of moving the route to the new shared filter model.",
+        "Pass `includeResolved: true` for every `MarketList` request and undo the new default for the all-status view."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Explicitly opt `frontend/src/routes/System.tsx` and `frontend/src/features/graph/BayesNetGraph.tsx` into `{ includeResolved: true }` so platform-wide counts and resolved-market graph rendering continue to include resolved rows after the backend default changes.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Leave both callers on the new default and accept undercounted system metrics or missing graph nodes for resolved market detail pages.",
+        "Broaden every `useMarkets()` caller to `{ includeResolved: true }` instead of opting in only where the product behavior requires it."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep `frontend/src/routes/Portfolio.tsx`, `frontend/src/features/assumptions/AssumptionPanel.tsx`, and `frontend/src/features/trading/ConditionalEditor.tsx` on the default `useMarkets()` call and treat this step as an audit plus verification pass for those consumers rather than a widening change.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Opt these consumers into resolved markets preemptively even though they already filter to active markets or only need live exposure labels.",
+        "Skip verification entirely and rely on the parent task's research without checking the existing callers and tests in this branch."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Patch `frontend/src/routes/MarketList.tsx` so the selected status is converted into the new `useMarkets(...)` filter object shape: `undefined` for the default all-status view and `{ status }` for explicit selections, keeping resolved markets hidden by default while preserving the resolved-status path.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Update `frontend/src/routes/System.tsx` and `frontend/src/features/graph/BayesNetGraph.tsx` to call `useMarkets({ includeResolved: true })`, preserving platform aggregate stats and resolved-market graph coverage under the new backend default.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Audit the remaining step-4 callers in `frontend/src/routes/Portfolio.tsx`, `frontend/src/features/assumptions/AssumptionPanel.tsx`, and `frontend/src/features/trading/ConditionalEditor.tsx` to leave their `useMarkets()` usage unchanged and confirm their downstream logic still expects the active-only default collection.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Refresh focused frontend coverage for the caller behavior change, especially the route tests around `frontend/src/__tests__/MarketList.test.tsx` and `frontend/src/__tests__/System.test.tsx`, and run the relevant Vitest slices plus the existing API-client market-list tests to verify the call-site updates still align with the shared filter contract.",
+      "depends_on": [1, 2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

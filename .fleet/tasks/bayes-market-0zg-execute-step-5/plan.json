@@ -1,0 +1,75 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep the step-5 frontend regression slice focused on `frontend/src/__tests__/api-client.test.ts`, `frontend/src/__tests__/MarketList.test.tsx`, `frontend/src/__tests__/System.test.tsx`, and the `frontend/src/__tests__/MarketDetail.test.tsx` path that renders `BayesNetGraph`. Treat `frontend/src/__tests__/Portfolio.test.tsx` only as optional spillover cleanup if shared fixtures or types need adjustment, not as a required opt-in behavior suite.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Expand the required refresh to `Portfolio.test.tsx` even though it stays on the default `useMarkets()` path and does not freeze the opt-in contract.",
+        "Introduce a new standalone `BayesNetGraph` suite for this step instead of extending the existing MarketDetail seam."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Preserve the public `listMarkets(...)` client contract in `frontend/src/__tests__/api-client.test.ts` by covering both the legacy string shorthand and the object filter shape, including the normalized `status=resolved` plus `include_resolved=true` wire behavior.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Narrow the public client contract to object filters only as part of this test refresh.",
+        "Refresh the client tests without asserting the resolved-status normalization behavior."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Strengthen the route/component refresh by pairing request-shape assertions with rendered behavior checks, and by using fixtures whose `meta.filters` stay consistent with the returned rows so the tests cannot pass with contradictory resolved-market data.",
+      "based_on": ["q3", "q5"],
+      "alternatives_rejected": [
+        "Assert only the `listMarkets(...)` arguments and ignore whether the rendered output changes when resolved rows are hidden or included.",
+        "Rely on render-only assertions with permissive mocks that do not prove the new opt-in request shape.",
+        "Keep lightweight but contradictory fixtures that return resolved rows while claiming `include_resolved: false`."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Use a focused verification matrix: rerun only the named `/v1/markets` backend unit tests for `include_resolved` filtering and run Vitest only for `api-client`, `MarketList`, `System`, and `MarketDetail` rather than broad backend or frontend suites.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Rerun the full `BayesMarketApiUnitTests` class or the whole backend test module.",
+        "Run the entire frontend test suite instead of the four affected files."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Refresh `frontend/src/__tests__/api-client.test.ts` so the market-list client contract stays explicit: default `/v1/markets`, legacy string shorthand (`listMarkets(\"active\")`), object filters, `includeResolved` snake-case serialization, and the normalized `status: \"resolved\"` plus `include_resolved=true` request path all remain frozen by test coverage.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Rework `frontend/src/__tests__/MarketList.test.tsx` around contract-consistent fixtures and request-aware mocks so the suite proves both halves of the new default: the initial all-status view calls `listMarkets(undefined)` and hides resolved rows, while explicit status selections call `{ status: ... }` and render the matching active or resolved collection.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Refresh `frontend/src/__tests__/System.test.tsx` to assert the explicit `{ includeResolved: true }` opt-in and verify the rendered aggregate counts/stats with fixtures that include both active and resolved markets, keeping `meta.filters.include_resolved` aligned with the returned collection.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Extend `frontend/src/__tests__/MarketDetail.test.tsx` at the existing MarketDetail seam so the graph path proves it requests the resolved-inclusive collection via `listMarkets({ includeResolved: true })` and still renders correctly when the fixture includes the focus market alongside resolved nodes; only touch `Portfolio.test.tsx` if shared fixture cleanup is needed.",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Run the focused verification commands after the frontend refresh: the named `/v1/markets` methods in `tests.test_bayes_market_api.BayesMarketApiUnitTests` that cover default exclusion, explicit inclusion, resolved-status normalization, and invalid `include_resolved` inputs, plus `pnpm test -- src/__tests__/api-client.test.ts src/__tests__/MarketList.test.tsx src/__tests__/System.test.tsx src/__tests__/MarketDetail.test.tsx` from `frontend/`.",
+      "depends_on": [2, 3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

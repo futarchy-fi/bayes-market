@@ -1,0 +1,69 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep this leaf at the existing `frontend/src/__tests__/MarketList.test.tsx` seam and prove the route-visible contract there, instead of adding lower-level `useMarkets(...)` or query-key assertions.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Add a new hook-level normalization test for `useMarkets(...)` as part of this leaf.",
+        "Split the work across route tests and separate query-key assertions even though the route already exposes the request shape and rendered output."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Replace the shared `mockResolvedValue(...)` setup with a request-aware `listMarkets` mock that branches on the received filter argument and returns contract-consistent fixtures for the default, active, and resolved paths.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Keep one shared fixture for every request and rely only on `toHaveBeenCalledWith(...)` assertions.",
+        "Use `mockResolvedValueOnce(...)` call-order sequencing instead of tying returned rows to the actual request argument."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Make every `MarketListResponse` fixture internally consistent with the backend-normalized contract, including `meta.filters.include_resolved: false` for default and active collections and `true` for the resolved collection.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Preserve lightweight but contradictory fixtures that include resolved rows while claiming `include_resolved: false`.",
+        "Ignore `meta.filters` because the route does not currently read it."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Freeze the two halves of the route contract in paired request-and-render assertions: the blank dropdown state must call `listMarkets(undefined)` and hide resolved rows, while explicit `active` and `resolved` selections must call `{ status: ... }` and render the matching collection without asserting a route-level `{ includeResolved: true }` input.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Assert only request arguments and skip proving which rows are rendered for each selection.",
+        "Expect the route to pass `{ includeResolved: true }` for the resolved branch even though that normalization belongs below the route."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Refactor `frontend/src/__tests__/MarketList.test.tsx` fixture setup so the suite has distinct default, active, resolved, and empty responses whose `markets`, `count`, and `meta.filters` agree with one another and with the backend's effective filter contract.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Replace the current `beforeEach` mock configuration with a request-aware `listMarkets` mock implementation that returns the default response for `undefined`, the active response for `{ status: \"active\" }`, the resolved response for `{ status: \"resolved\" }`, and a targeted empty response only in the empty-state test.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Rewrite the status-filter assertions so the initial render proves `listMarkets(undefined)` and the absence of resolved rows in the all-status view, then verify that selecting `active` and `resolved` triggers the expected `{ status: ... }` calls and swaps the rendered collection to the matching active-only or resolved-only markets.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Run the focused Vitest coverage for `frontend/src/__tests__/MarketList.test.tsx`, adjust any remaining smoke or empty-state assertions to use the new request-aware helpers, and review the diff to confirm the leaf stayed scoped to this route test.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

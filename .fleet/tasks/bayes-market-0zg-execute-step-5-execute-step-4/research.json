@@ -1,0 +1,109 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. This leaf should freeze both halves of the graph contract in `frontend/src/__tests__/MarketDetail.test.tsx`: assert that the graph path requests `listMarkets({ includeResolved: true })`, and prove the route still renders the graph when the returned collection mixes the focus market with resolved rows. `BayesNetGraph` already opts into resolved-inclusive data, while the current test still seeds `include_resolved: false` and only checks route-level smoke output unrelated to that contract.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5-execute-step-4/questions.json:5",
+        "frontend/src/features/graph/BayesNetGraph.tsx:231",
+        "frontend/src/routes/MarketDetail.tsx:67",
+        "frontend/src/__tests__/MarketDetail.test.tsx:65",
+        "frontend/src/__tests__/MarketDetail.test.tsx:76",
+        "frontend/src/__tests__/MarketDetail.test.tsx:113"
+      ],
+      "uncertainty": "Only the parent task text defines how strong the new regression should be; the codebase itself shows the gap but cannot independently prove whether the maintainer wanted a narrower smoke-only refresh.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Keep this leaf at the existing `MarketDetail.test.tsx` seam. The route is the integration point that mounts `BayesNetGraph`, and the task file explicitly scopes the work to extending that seam. Adding a new standalone `BayesNetGraph` suite would expand the test surface beyond the requested route-level regression refresh.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5-execute-step-4/questions.json:12",
+        "frontend/src/routes/MarketDetail.tsx:67",
+        "frontend/src/__tests__/MarketDetail.test.tsx:58"
+      ],
+      "uncertainty": "Repository search shows no dedicated graph test today, but that absence is a scope signal rather than a hard architectural rule for future work.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The existing single `vi.mocked(api.getMarket).mockResolvedValue(mockMarket)` is acceptable for this leaf if the refreshed test only proves the resolved-inclusive `listMarkets` call and a stable, non-crashing graph render such as the graph panel plus mixed-count summary. `NodeWithDetail` does call `useMarket(node.id)` for each node, but the route and graph share the same `useMarket(\"m1\")` query key, so request-aware detail fixtures only become necessary if the test starts asserting per-node detail or exact `getMarket` argument behavior for additional resolved nodes.",
+      "confidence": 0.84,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:212",
+        "frontend/src/features/graph/BayesNetGraph.tsx:220",
+        "frontend/src/routes/MarketDetail.tsx:21",
+        "frontend/src/routes/MarketDetail.tsx:67",
+        "frontend/src/lib/query/hooks.ts:281",
+        "frontend/src/__tests__/helpers.tsx:7"
+      ],
+      "uncertainty": "The exact extra-call pattern is inferred from the shared React Query keys and the route's loading gate; I did not run an instrumented test to count `getMarket` calls for mixed fixtures.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Use graph-specific but low-brittleness visible output. The best stable proof here is that the `Bayesian Network` panel still renders and that its summary reflects the mixed collection size, for example a partial match on `2 variables`. That proves the graph consumed the returned collection. Route-only assertions like the page H1 or the junction-tree heading are too weak, while node-label assertions are brittle because the graph truncates titles and renders them inside SVG text.",
+      "confidence": 0.97,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:46",
+        "frontend/src/features/graph/BayesNetGraph.tsx:78",
+        "frontend/src/features/graph/BayesNetGraph.tsx:269",
+        "frontend/src/features/graph/BayesNetGraph.tsx:273",
+        "frontend/src/__tests__/MarketDetail.test.tsx:76",
+        "frontend/src/__tests__/MarketDetail.test.tsx:113"
+      ],
+      "uncertainty": "The exact summary string can include extra suffixes such as JT width, so the eventual assertion should likely use a partial text match rather than a full literal string.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. `frontend/src/__tests__/Portfolio.test.tsx` should stay untouched unless you extract a shared market-list fixture/helper as cleanup while preserving Portfolio's default `useMarkets()` behavior. The route still consumes `useMarkets()` with no filters, and its tests intentionally stub the default hidden-resolved metadata with `include_resolved: false`, so changing Portfolio behavior is outside this leaf.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-5-execute-step-4/questions.json:29",
+        "frontend/src/routes/Portfolio.tsx:27",
+        "frontend/src/__tests__/Portfolio.test.tsx:24",
+        "frontend/src/__tests__/Portfolio.test.tsx:39"
+      ],
+      "uncertainty": "A small `Portfolio.test.tsx` touch could still be reasonable if a shared fixture is extracted, but that should be cleanup only and should not change Portfolio's default collection contract.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "This remains a test-refresh leaf; the graph implementation already opts into resolved-inclusive markets."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Implementation should stay in the existing `MarketDetail` route test instead of creating a new graph test suite."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The mixed `listMarkets` fixture should include the focus market plus resolved rows and report `include_resolved: true` metadata so the response matches the opt-in contract."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Portfolio stays out of scope unless shared fixture cleanup becomes worthwhile and preserves the default `useMarkets()` behavior."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "No child task is needed; the current route test, graph component, hooks, and portfolio seam provide enough local evidence to proceed."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

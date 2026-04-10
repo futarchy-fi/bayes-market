@@ -6,7 +6,7 @@ import { formatCurrency } from "@/lib/utils/format";
 export default function System() {
   const health = useHealth();
   const index = useServiceIndex();
-  const allMarkets = useMarkets();
+  const allMarkets = useMarkets({ includeResolved: true });
 
   const statusCounts = allMarkets.data?.markets.reduce(
     (acc, m) => {
@@ -60,20 +60,20 @@ export default function System() {
 
       {/* Platform aggregate stats */}
       {!allMarkets.isLoading && allMarkets.data && (
-        <div style={cardStyle}>
-          <h2 style={sectionTitle}>Platform Stats</h2>
+        <section aria-labelledby="system-platform-stats-heading" style={cardStyle}>
+          <h2 id="system-platform-stats-heading" style={sectionTitle}>Platform Stats</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "var(--space-sm)" }}>
             <CountCard label="Total Volume" value={formatCurrency(platformStats.totalVolume)} raw />
             <CountCard label="Total Liquidity" value={formatCurrency(platformStats.totalLiquidity)} raw />
             <CountCard label="Active" value={platformStats.activeCount} color="var(--color-success)" />
             <CountCard label="Resolved" value={platformStats.resolvedCount} color="var(--color-primary)" />
           </div>
-        </div>
+        </section>
       )}
 
       {/* Market counts by status */}
-      <div style={cardStyle}>
-        <h2 style={sectionTitle}>Markets</h2>
+      <section aria-labelledby="system-markets-heading" style={cardStyle}>
+        <h2 id="system-markets-heading" style={sectionTitle}>Markets</h2>
         {allMarkets.isLoading ? (
           <LoadingPage />
         ) : (
@@ -85,12 +85,12 @@ export default function System() {
             <CountCard label="Draft" value={statusCounts["draft"] ?? 0} />
           </div>
         )}
-      </div>
+      </section>
 
       {/* API info */}
       {index.data && (
-        <div style={cardStyle}>
-          <h2 style={sectionTitle}>API Surface</h2>
+        <section aria-labelledby="system-api-surface-heading" style={cardStyle}>
+          <h2 id="system-api-surface-heading" style={sectionTitle}>API Surface</h2>
           <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: "var(--space-sm)" }}>
             Version: {index.data.meta.apiVersion}
           </div>
@@ -108,7 +108,7 @@ export default function System() {
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
     </div>
   );

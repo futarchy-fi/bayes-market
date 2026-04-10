@@ -1,0 +1,108 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "For `MarketList`, the step-4 target should be the new object filter form without opting into resolved markets globally: use the default request when no status is selected, and pass only `{ status }` when the user chooses one. That preserves the new hidden-resolved default for the all-status view while still allowing the existing `resolved` selector to work, because the shared client normalizes `status: \"resolved\"` into an effective resolved-inclusive request.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg/plan.json:64",
+        "frontend/src/routes/MarketList.tsx:8",
+        "frontend/src/routes/MarketList.tsx:12",
+        "frontend/src/lib/api/types.ts:33",
+        "frontend/src/lib/api/client.ts:75",
+        "frontend/src/lib/api/client.ts:84",
+        "frontend/src/lib/query/hooks.ts:273",
+        "frontend/src/__tests__/api-client.test.ts:75"
+      ],
+      "uncertainty": "The checkout still supports the older string argument for compatibility, so the research answer is about the intended end-state call shape rather than a hard compile requirement in this branch.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "`System` should opt into `includeResolved: true`. Its single `useMarkets()` result drives total volume, total liquidity, total market count, and resolved-market counts, so leaving it on the new default would silently undercount the route whenever resolved markets exist.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg/plan.json:64",
+        "frontend/src/routes/System.tsx:9",
+        "frontend/src/routes/System.tsx:11",
+        "frontend/src/routes/System.tsx:19",
+        "frontend/src/routes/System.tsx:25",
+        "frontend/src/routes/System.tsx:66",
+        "frontend/src/routes/System.tsx:82",
+        "frontend/src/__tests__/System.test.tsx:77"
+      ],
+      "uncertainty": "None beyond the general expectation that the route should keep reporting platform-wide stats rather than active-only stats.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "`BayesNetGraph` should also opt into `includeResolved: true`. The graph builds its node list from an unfiltered market collection and is rendered on every market detail page, including resolved ones. If the default collection hides resolved markets, a resolved detail page can fetch the focused market by id yet still omit that market from the graph node set, leaving the focus highlight with no matching node.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg/plan.json:64",
+        "frontend/src/features/graph/BayesNetGraph.tsx:231",
+        "frontend/src/features/graph/BayesNetGraph.tsx:234",
+        "frontend/src/features/graph/BayesNetGraph.tsx:248",
+        "frontend/src/features/graph/BayesNetGraph.tsx:295",
+        "frontend/src/routes/MarketDetail.tsx:21",
+        "frontend/src/routes/MarketDetail.tsx:34",
+        "frontend/src/routes/MarketDetail.tsx:67"
+      ],
+      "uncertainty": "There is no dedicated resolved-market graph test yet, so the missing-focus-node effect is inferred from how the detail route and graph component compose today.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "`Portfolio`, `AssumptionPanel`, and `ConditionalEditor` should stay on the new default `useMarkets()` behavior. `Portfolio` only uses the collection to map live exposure rows to titles, and account-exposure state is pruned when markets resolve, so resolved rows are not needed for its main table. `AssumptionPanel` and `ConditionalEditor` both immediately reduce the collection to active markets, so opting them back into resolved rows would only fetch data they discard.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg/plan.json:64",
+        "frontend/src/routes/Portfolio.tsx:27",
+        "frontend/src/routes/Portfolio.tsx:28",
+        "frontend/src/routes/Portfolio.tsx:53",
+        "frontend/src/features/assumptions/AssumptionPanel.tsx:12",
+        "frontend/src/features/assumptions/AssumptionPanel.tsx:16",
+        "frontend/src/features/trading/ConditionalEditor.tsx:19",
+        "frontend/src/features/trading/ConditionalEditor.tsx:25",
+        "tests/test_bayes_market_api.py:4812"
+      ],
+      "uncertainty": "If the product later wants historical or recently resolved positions surfaced in `Portfolio`, that route might need a different lookup strategy than the current live-exposure table.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The shared frontend contract already exposes `MarketListFilters` plus normalization for `includeResolved`, so step 4 is a caller-selection problem rather than a deeper API redesign."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The Market List route can preserve the new default hidden-resolved behavior and still support the `resolved` status choice without an explicit `includeResolved: true` at the call site."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Leaving `System` on the default list would turn a platform-wide dashboard into an active-only dashboard, changing totals and resolved counts."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Leaving `BayesNetGraph` on the default list risks dropping the focused node for resolved market detail pages because the graph's node list comes from `useMarkets()`, not from the already-fetched detail payload."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.93,
+      "impact": "`Portfolio`, `AssumptionPanel`, and `ConditionalEditor` do not need resolved rows in their default collection path, so keeping them on the new default avoids unnecessary widening of those queries."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

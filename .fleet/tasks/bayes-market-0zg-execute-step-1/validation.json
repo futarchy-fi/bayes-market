@@ -1,0 +1,16 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.95,
+  "plan_adherence_notes": "The execution diff stays within the planned scope and implements the planned backend behavior: `backend/server.py` now validates `include_resolved`, normalizes effective inclusion so `status=resolved` still works alone, filters out resolved markets by default, and returns `meta.filters` with both fields. `tests/test_bayes_market_api.py` was extended for the new default, explicit opt-in, contradiction normalization, and invalid/duplicate query handling. I could not confirm whether the author ran tests before committing, but the targeted backend unittest coverage passes during validation.",
+  "research_quality": 0.94,
+  "question_completeness": 0.25,
+  "missed_questions": [
+    "Which existing frontend callers of `useMarkets()` or `listMarkets()` need `include_resolved=true` to preserve pre-change behavior after the backend default flips?",
+    "Should the System screen continue to report aggregate totals across resolved markets, given that `frontend/src/routes/System.tsx` still calls the default `useMarkets()` path?",
+    "Should resolved market detail pages keep rendering the focused node in `BayesNetGraph`, given that `frontend/src/features/graph/BayesNetGraph.tsx` still loads the default market collection and `frontend/src/routes/MarketDetail.tsx` always renders that graph?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "The backend patch itself matches the narrow plan and the targeted backend tests pass under `python3 -m unittest discover -s tests -p 'test_bayes_market_api.py' -k list_markets`, `-k include_resolved`, and `-k filters_by_status`. However, the plan did not fully follow the research: `research.json` explicitly surfaced unresolved frontend contract questions (q3/q4), `questions.json` is missing entirely, and the branch made no frontend opt-in changes even though default `useMarkets()` callers still exist. That leaves an obvious regression risk where resolved markets disappear from the System aggregates and from the graph rendered on resolved market detail pages.",
+  "spawn_children": false,
+  "children": []
+}

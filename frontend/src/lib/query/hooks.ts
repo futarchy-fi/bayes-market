@@ -9,10 +9,11 @@ import type {
   MarketDetailResponse,
   MarketPriceMessage,
   MarketStatus,
+  MarketListFilterInput,
 } from "@/lib/api/types";
 
 export const queryKeys = {
-  markets: (status?: string) => ["markets", { status }] as const,
+  markets: (filters?: MarketListFilterInput) => ["markets", api.normalizeMarketListFilters(filters)] as const,
   market: (id: string) => ["markets", id] as const,
   marketEvents: (id: string) => ["markets", id, "events"] as const,
   marketComments: (id: string) => ["markets", id, "comments"] as const,
@@ -269,10 +270,10 @@ export function useMarketPriceSubscription(marketId: string, opts?: { enabled?: 
   }, [enabled, marketId, qc]);
 }
 
-export function useMarkets(status?: string) {
+export function useMarkets(filters?: MarketListFilterInput) {
   return useQuery({
-    queryKey: queryKeys.markets(status),
-    queryFn: () => api.listMarkets(status),
+    queryKey: queryKeys.markets(filters),
+    queryFn: () => api.listMarkets(filters),
     refetchInterval: 5000,
   });
 }
@@ -346,7 +347,7 @@ export function useCreateMarket() {
     mutationFn: ({ payload, session }: { payload: api.CreateMarketPayload; session?: Session }) =>
       api.createMarket(payload, session),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.markets() });
+      void invalidateMarketCollectionQueries(qc);
     },
   });
 }
@@ -373,7 +374,7 @@ export function useResolveMarket(marketId: string) {
       void qc.invalidateQueries({ queryKey: queryKeys.market(marketId) });
       void qc.invalidateQueries({ queryKey: queryKeys.marketEvents(marketId) });
       void qc.invalidateQueries({ queryKey: queryKeys.engineStats(marketId) });
-      void qc.invalidateQueries({ queryKey: queryKeys.markets() });
+      void invalidateMarketCollectionQueries(qc);
       void invalidateAccountExposureQueries(qc);
     },
   });

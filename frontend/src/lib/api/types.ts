@@ -30,6 +30,13 @@ export interface Market {
 
 export type MarketStatus = Market["status"];
 
+export interface MarketListFilters {
+  status?: MarketStatus;
+  includeResolved?: boolean;
+}
+
+export type MarketListFilterInput = MarketListFilters | string;
+
 export interface MarketPriceMessage {
   marketId: string;
   status: MarketStatus;
@@ -46,10 +53,17 @@ export interface MarketPriceMessage {
   };
 }
 
+export interface MarketListResponseMeta extends Meta {
+  filters: {
+    status: MarketStatus | null;
+    include_resolved: boolean;
+  };
+}
+
 export interface MarketListResponse {
   markets: MarketSummary[];
   count: number;
-  meta: Meta;
+  meta: MarketListResponseMeta;
 }
 
 export interface MarketDetailResponse {

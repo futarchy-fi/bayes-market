@@ -1,0 +1,15 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.58,
+  "plan_adherence_notes": "Against the step-5 branch range `7abac29e..HEAD`, execution landed the planned refreshes in `frontend/src/__tests__/api-client.test.ts`, `frontend/src/__tests__/MarketList.test.tsx`, and most of `frontend/src/__tests__/System.test.tsx`: the client suite now freezes the default `/v1/markets` call, legacy string shorthand, object filter serialization, and resolved normalization; `MarketList` now uses request-aware fixtures that hide resolved rows by default and assert `{ status: ... }` for explicit filters; and `System` now asserts `{ includeResolved: true }` with mixed active/resolved counts. Two planned areas remain incomplete: `frontend/src/__tests__/MarketDetail.test.tsx` was not changed at all, so the graph path still does not assert `listMarkets({ includeResolved: true })` and still seeds contradictory `meta.filters.include_resolved: false`; and the verification leaf only added planning/validation metadata rather than a durable execution artifact. The branch also drifted from the recorded test-only scope by changing `frontend/src/routes/System.tsx` to add labeled `<section>` wrappers. Validation reruns in this checkout were mixed: `python3 -m pytest tests/test_bayes_market_api.py -q -k 'test_list_markets_excludes_resolved_by_default_and_returns_summary_shape or test_list_markets_include_resolved_true_returns_all_markets or test_list_markets_status_resolved_returns_only_resolved_markets or test_list_markets_status_resolved_overrides_include_resolved_false or test_blank_include_resolved_filter_returns_contract_error or test_unsupported_include_resolved_filter_returns_contract_error or test_duplicate_include_resolved_filter_returns_contract_error'` passed 7 focused backend tests, but the requested frontend commands failed before executing because `frontend/node_modules` is missing and `vitest` is not runnable in this workspace (`Permission denied` / `spawn vitest EACCES`).",
+  "research_quality": 0.95,
+  "question_completeness": 0.84,
+  "missed_questions": [
+    "Was this step allowed to modify `frontend/src/routes/System.tsx`, or did it need to remain test-only even if better region scoping required markup changes?",
+    "How should the step-5 verification leaf record focused test execution so validation can confirm the commands were actually run when that leaf may not need any production-file diff?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "The branch materially improved the `api-client`, `MarketList`, and `System` coverage and the focused backend `/v1/markets` slice still passes, but it did not complete the planned `MarketDetail` graph-path regression, drifted into an unplanned `System` route change, and the focused frontend slice could not be reproduced in this checkout because the frontend test dependencies are missing.",
+  "spawn_children": false,
+  "children": []
+}

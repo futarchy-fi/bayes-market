@@ -1733,13 +1733,19 @@ def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
                 "status must be one of the supported market states",
                 {"parameter": "status", "received": status, "allowed": sorted(ALLOWED_MARKET_STATUSES)},
             )
+    include_resolved = parse_boolean_query_param(query, "include_resolved", default=False)
+
+    effective_include_resolved = include_resolved or status == "resolved"
+    if not effective_include_resolved:
+        markets = [market for market in markets if market["status"] != "resolved"]
+    if status is not None:
         markets = [market for market in markets if market["status"] == status]
 
     summaries = [market_summary(market) for market in markets]
     return {
         "markets": summaries,
         "count": len(summaries),
-        "meta": make_meta(filters={"status": status}),
+        "meta": make_meta(filters={"status": status, "include_resolved": effective_include_resolved}),
     }, 200
 
 
@@ -1901,6 +1907,39 @@ def get_market_preview_response(
         "preview": build_market_preview(market, headers=headers),
         "meta": make_meta(),
     }, 200
+
+
+def parse_boolean_query_param(
+    query: dict[str, list[str]],
+    name: str,
+    *,
+    default: bool | None,
+) -> bool | None:
+    """Parse a single boolean query parameter using the API's lowercase wire format."""
+    values = query.get(name, [])
+    if len(values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            f"{name} must be provided at most once",
+            {"parameter": name, "received": values},
+        )
+
+    if not values:
+        return default
+
+    raw_value = values[0]
+    if raw_value == "true":
+        return True
+    if raw_value == "false":
+        return False
+
+    raise ApiError(
+        400,
+        "invalid_query",
+        f"{name} must be true or false",
+        {"parameter": name, "received": raw_value, "allowed": ["false", "true"]},
+    )
 
 
 def parse_integer_query_param(

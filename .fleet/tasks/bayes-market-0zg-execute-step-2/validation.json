@@ -1,0 +1,14 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.68,
+  "plan_adherence_notes": "The execute commit adds the planned `/v1/markets` contract coverage in `tests/test_bayes_market_api.py`, including the default resolved-exclusion case, `include_resolved=true`, normalized `status=resolved` behavior, the contradictory `status=resolved&include_resolved=false` case, and blank/unsupported/duplicate `include_resolved` errors. It also updates two existing HTTP integration expectations in the same file so they keep matching the new default list behavior. However, the commit is not confined to `tests/test_bayes_market_api.py` as the plan required: it also refactors `backend/server.py` by introducing `parse_boolean_query_param(...)` and wiring `list_markets(...)` through it. That production-code change is outside the stated tests-only scope.",
+  "research_quality": 0.93,
+  "question_completeness": 0.82,
+  "missed_questions": [
+    "Do existing `GET /v1/markets` integration assertions elsewhere in `tests/test_bayes_market_api.py` need count updates once resolved markets are excluded by default?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "The requested contract-freeze tests are present and `python3 -m unittest discover -s tests -p 'test_bayes_market_api.py'` passed (251 tests), but the branch also modifies `backend/server.py`. Because the task and recorded plan scoped this step to test-file changes, the backend refactor should be removed before approval.",
+  "spawn_children": false,
+  "children": []
+}

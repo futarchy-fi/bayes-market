@@ -1,0 +1,12 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.05,
+  "plan_adherence_notes": "The branch did not execute the planned test refresh. Compared with `ff/Tbayes-market-0zg-execute-step-5`, the diff only adds `questions.json`, `research.json`, and `plan.json`; there are no changes to `frontend/src/__tests__/MarketDetail.test.tsx` or `frontend/src/__tests__/Portfolio.test.tsx`. The current `MarketDetail.test.tsx` still seeds `meta.filters.include_resolved: false` and does not assert `listMarkets({ includeResolved: true })`, mixed resolved fixtures, or graph rendering against that contract.",
+  "research_quality": 0.96,
+  "question_completeness": 0.93,
+  "missed_questions": [],
+  "verdict": "changes_requested",
+  "reason": "The research and plan are coherent and aligned with the task, but the requested execution never happened on this branch. Focused frontend tests could not be run in this workspace because `frontend/node_modules` is missing; `pnpm test -- src/__tests__/MarketDetail.test.tsx src/__tests__/Portfolio.test.tsx` failed immediately with `vitest: Permission denied` and a warning that local dependencies are not installed.",
+  "spawn_children": false,
+  "children": []
+}

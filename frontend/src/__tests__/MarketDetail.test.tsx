@@ -65,7 +65,11 @@ describe("MarketDetail", () => {
     vi.mocked(api.listMarkets).mockResolvedValue({
       markets: [{ id: "m1", title: "ETH Price > $3000 on March 15", status: "active" as const, liquidity: 150000, volume: 45000, expires_at: "2026-12-31T23:59:59Z" }],
       count: 1,
-      meta: { apiVersion: "1.0", timestamp: "2026-04-08T00:00:00Z" },
+      meta: {
+        apiVersion: "1.0",
+        timestamp: "2026-04-08T00:00:00Z",
+        filters: { status: null, include_resolved: false },
+      },
     });
   });
 

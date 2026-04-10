@@ -1,0 +1,99 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "`status=resolved` should remain a standalone way to request resolved markets. The current backend only models a `status` filter, `GET /v1/markets?status=resolved` is already frozen to return `m3`, and the Market List UI plus frontend client/hooks only send `status`. Requiring `include_resolved=true` as a second knob would break that existing path. For the contradictory case `status=resolved&include_resolved=false`, the codebase has no direct precedent, but normalizing the effective mode so resolved markets are still returned matches the preserved `status=resolved` contract better than returning an empty list.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:1715",
+        "tests/test_bayes_market_api.py:669",
+        "frontend/src/routes/MarketList.tsx:8",
+        "frontend/src/routes/MarketList.tsx:12",
+        "frontend/src/lib/api/client.ts:69",
+        "frontend/src/lib/query/hooks.ts:14",
+        "frontend/src/lib/query/hooks.ts:272"
+      ],
+      "uncertainty": "There is no current test or handler branch for the explicit contradictory combination `status=resolved&include_resolved=false`.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "`include_resolved` should follow the endpoint's existing strict query-parameter contract: accept at most one value, default a missing parameter to `false`, preserve blanks as invalid input because `/v1/markets` uses `parse_qs(..., keep_blank_values=True)`, and return `400 invalid_query` with `details.parameter=\"include_resolved\"` plus `details.received` echoing the raw value or duplicate list. There is no HTTP boolean-query parser today; the only permissive boolean parser is `read_bool_env(...)`, which is explicitly for environment variables. For public HTTP queries, the established style is stricter single-value validation, so `true` and `false` only is the best fit.",
+      "confidence": 0.82,
+      "evidence": [
+        "backend/server.py:3918",
+        "backend/server.py:1717",
+        "backend/server.py:1906",
+        "backend/server.py:312"
+      ],
+      "uncertainty": "The exact accepted boolean literals are inferred from the server's existing query-validation style because no HTTP boolean query param exists yet.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "If any frontend surface needs to preserve the old all-markets view after the backend default changes, `include_resolved` cannot stay backend-only. The shared collection surface currently only accepts `status`: `listMarkets(status?)`, `queryKeys.markets(status?)`, and `useMarkets(status?)`. Backend tests also freeze `meta.filters`, while the frontend list response is typed with a generic `Meta` shape that does not model list filters at all. I did not find a separate `MarketListFilters` or search-param helper abstraction in this repo, so the practical contract surface is backend `meta.filters`, the API client signature, the query-key/hook signature, and the tests that pin those shapes.",
+      "confidence": 0.92,
+      "evidence": [
+        "backend/server.py:1742",
+        "tests/test_bayes_market_api.py:661",
+        "tests/test_bayes_market_api.py:675",
+        "frontend/src/lib/api/client.ts:69",
+        "frontend/src/lib/query/hooks.ts:14",
+        "frontend/src/lib/query/hooks.ts:272",
+        "frontend/src/lib/api/types.ts:49",
+        "frontend/src/lib/api/types.ts:273",
+        "frontend/src/__tests__/api-client.test.ts:29"
+      ],
+      "uncertainty": "A backend-only patch is still technically possible if the product decision is that no caller beyond `status=resolved` ever needs to opt back into resolved markets.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q4",
+      "answer": "`System` is the clearest default opt-in candidate because it derives total/resolved counts and aggregate volume/liquidity from an unfiltered `useMarkets()` call, so hiding resolved rows would undercount that screen. The market-detail graph is the other strong opt-in candidate: `MarketDetail` always renders `BayesNetGraph`, but the graph currently loads the default market collection, so a resolved detail page can lose its focus node if resolved markets disappear from the default list. `AssumptionPanel` and `ConditionalEditor` already immediately narrow their collections to active markets, so they do not need opt-in. `Portfolio` only uses the collection for title lookup, and account exposure rows are pruned on resolution, so it can likely stay on the new default. `MarketList` itself should keep resolved markets hidden by default and rely on `status=resolved` when the user explicitly requests them.",
+      "confidence": 0.91,
+      "evidence": [
+        "frontend/src/routes/System.tsx:9",
+        "frontend/src/routes/System.tsx:19",
+        "frontend/src/routes/MarketDetail.tsx:67",
+        "frontend/src/features/graph/BayesNetGraph.tsx:231",
+        "frontend/src/features/assumptions/AssumptionPanel.tsx:12",
+        "frontend/src/features/trading/ConditionalEditor.tsx:19",
+        "frontend/src/routes/Portfolio.tsx:27",
+        "tests/test_bayes_market_api.py:2914",
+        "tests/test_bayes_market_api.py:2918",
+        "tests/test_bayes_market_api.py:3030"
+      ],
+      "uncertainty": "The remaining product choice is whether the graph should always opt in or only do so when the focused market is resolved; there is also no separate `Analytics` route in this checkout.",
+      "decision_needed": true
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The list surface only distinguishes resolved markets through `status`, and the seeded resolved fixture `m3` uses `status == \"resolved\"`, so filtering on `market[\"status\"]` is sufficient for this task."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Default `GET /v1/markets` currently includes the resolved seeded market, and backend tests freeze both the count (`3`) and the exact `meta.filters` shape. Changing the default is a real contract change."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Several frontend surfaces call `useMarkets()` with no explicit filter today, so a backend default change will alter those screens unless they either opt back in or already narrow to active markets themselves."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "WRONG",
+      "confidence": 0.84,
+      "impact": "The work is unlikely to stay purely localized to backend parsing/filtering if any screen needs to preserve the old all-markets behavior. At minimum, the client/hook/query-key contract and some route behavior would need coordinated updates."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
