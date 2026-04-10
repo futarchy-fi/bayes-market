@@ -1,0 +1,87 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact request and persisted command contract should `POST /v1/markets/{id}/close` use: is the body just `{accountId, idempotencyKey?}`, and should the stored command remain `commandType = \"AdminOp\"` with payload `{\"kind\":\"CloseMarket\"}` or some richer close payload?",
+      "category": "requirements",
+      "why_it_matters": "`backend/server.py` currently has only the `AdminOp`/`ResolveMarket` path; there is no close payload normalizer or command materializer to anchor the implementation."
+    },
+    {
+      "id": "q2",
+      "question": "What exact accepted response and terminal-event schema is frozen for a successful close: should the API return a `market` object like resolve, and which closure metadata fields (`closedAt`, `previousStatus`, etc.) belong in the accepted event payload versus the persisted market read model?",
+      "category": "requirements",
+      "why_it_matters": "The task says to emit closure metadata plus zero economic deltas, but the current codebase has no close contract, and the closest precedent (`resolve`) keeps its timestamp metadata in the event rather than on the market record."
+    },
+    {
+      "id": "q3",
+      "question": "What precise terminal rejection contracts are required for `market_already_closed` and `market_not_closable`: HTTP status, user-facing message, `retryHint`, and exact `error.details` fields, and which current statuses (`closed`, `resolved`, `draft`) map to each rejection?",
+      "category": "requirements",
+      "why_it_matters": "The task names the rejection codes, but the backend's terminal rejection helpers and tests freeze exact messages, detail fields, and retry hints."
+    },
+    {
+      "id": "q4",
+      "question": "Does this step assume earlier plan steps already add the `/v1/markets/{id}/close` route surface, service-index entry, write-policy classification, and payload-normalization hooks, or must this branch also backfill those seams because the current checkout still recognizes only `/resolve`?",
+      "category": "codebase",
+      "why_it_matters": "Today `service_index_payload(...)`, `resolve_write_route_category(...)`, and `route_request(...)` have no `/close` path, so the implementation boundary is unclear in the code as checked out."
+    },
+    {
+      "id": "q5",
+      "question": "Should close inherit resolve's route-level mechanics unchanged: market-admin auth/rate-limit handling, idempotency replay/conflict semantics, command materialization before status gating, terminal rejection journal appends, and `meta.idempotencyKeyEcho` behavior?",
+      "category": "design",
+      "why_it_matters": "If close is meant to be a peer admin operation, those mechanics determine the handler order and the persisted replay contract, but none of them are wired for `/close` yet."
+    },
+    {
+      "id": "q6",
+      "question": "What state is explicitly required to remain untouched by close beyond marginals, resolution fields, and `ACCOUNT_RISK`: should accepted close also preserve `CONDITIONAL_MARGINALS`, `ORDERS`, analytics volume/read models, and any EventTrade exposure projection even though this checkout does not yet contain one?",
+      "category": "codebase",
+      "why_it_matters": "The task explicitly says close must not mutate exposure, but the current repository only has existing market, order, event, conditional, and account-risk state to guard."
+    },
+    {
+      "id": "q7",
+      "question": "Do any downstream projections need explicit `CloseMarket` handling, or should they simply observe the market's new `closed` status and the appended accepted/rejected event without changing analytics price-series or trader-volume rules?",
+      "category": "design",
+      "why_it_matters": "Current analytics logic special-cases only `ResolveMarket`, while summary `lastUpdated` already moves on any accepted event, so a new admin-op kind could affect read models implicitly."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Close is intended to reuse `commandType = \"AdminOp\"` rather than introducing a new top-level command type, because resolve already models market-admin mutations that way.",
+      "confidence": 0.95,
+      "if_wrong": "Implementation scope expands into route dispatch, command typing, analytics/admin-op consumers, and test helpers that currently only understand `AdminOp` for market resolution."
+    },
+    {
+      "id": "a2",
+      "assumption": "Only `active` markets can close successfully; `closed` should produce `market_already_closed`, and `resolved` or `draft` should fall under `market_not_closable`.",
+      "confidence": 0.87,
+      "if_wrong": "The handler would need a different status matrix, and the rejection tests would freeze the wrong mapping between market status and terminal error code."
+    },
+    {
+      "id": "a3",
+      "assumption": "Successful close should be economically inert: `effects.marginalDelta` and `effects.assetDelta` stay empty, pricing cost/fee stay zero, no orders are created, and account risk/exposure state is unchanged.",
+      "confidence": 0.98,
+      "if_wrong": "The implementation would need additional settlement or bookkeeping mutations that are not suggested by the current task wording."
+    },
+    {
+      "id": "a4",
+      "assumption": "Closure timestamp metadata is probably event-scoped (`closedAt`) rather than persisted on the market record, matching resolve's `resolvedAt` pattern.",
+      "confidence": 0.77,
+      "if_wrong": "The close mutation would need to change the public market schema returned by `GET /v1/markets` and `GET /v1/markets/{id}`, not just the event payload."
+    },
+    {
+      "id": "a5",
+      "assumption": "Close should mirror resolve's idempotent terminal-response model, including persisted rejections and replay via the same idempotency key.",
+      "confidence": 0.9,
+      "if_wrong": "The backend would need a different pre-command error or replay contract for `/close`, which would break symmetry with the existing admin-op lifecycle."
+    },
+    {
+      "id": "a6",
+      "assumption": "This checkout does not yet contain the exposure projection mentioned in the task, so step 3 likely depends on another branch or later integration to enforce the 'no exposure mutation' guarantee.",
+      "confidence": 0.92,
+      "if_wrong": "We missed an existing exposure store and would need to include it in the untouched-state audit immediately."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
