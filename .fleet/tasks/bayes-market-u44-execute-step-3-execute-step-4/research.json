@@ -1,0 +1,123 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Step 4 should treat `test_protected_post_routes_emit_rate_limit_headers_on_first_success` as the canonical limiter-enabled resolve-success proof and remove or refactor the stale `assert_rate_limit_headers_absent(valid_headers)` expectation from `test_market_resolve_http_requires_valid_agent_id_when_enabled`. A second dedicated limiter-enabled resolve-success test is not required by the current suite shape. The shared breadth test already exercises `market-resolve` through `market_resolution_with_headers(...)` and asserts the full quota-helper contract, while the mixed resolve-auth test is the only place still coupling resolve auth/error checks to a success branch that currently assumes no headers.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-3-execute-step-4/questions.json:6",
+        ".fleet/tasks/bayes-market-u44-execute-step-3-execute-step-4/questions.json:8",
+        "tests/test_bayes_market_api.py:6276",
+        "tests/test_bayes_market_api.py:6293",
+        "tests/test_bayes_market_api.py:6326",
+        "tests/test_bayes_market_api.py:6461",
+        "tests/test_bayes_market_api.py:6508",
+        "backend/server.py:4042"
+      ],
+      "uncertainty": "The task file does not explicitly forbid adding a second dedicated resolve-success test; the recommendation is based on the existing coverage already owning that contract in the shared breadth loop.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The smallest refactor is to keep the resolve-specific disabled-limiter no-header proof as the successful request inside `test_market_resolve_http_requires_valid_agent_id_when_enabled`, with `RATE_LIMIT_PER_MIN` left disabled. That preserves the existing seam without creating another resolve-only test. If the implementation ends up splitting the success branch for readability, the disabled-limiter assertion must be relocated to a dedicated resolve test, because no other test currently proves that a successful resolve omits quota headers when the limiter is off.",
+      "confidence": 0.9,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-3-execute-step-4/questions.json:12",
+        ".fleet/tasks/bayes-market-u44-execute-step-3-execute-step-4/questions.json:14",
+        "tests/test_bayes_market_api.py:6461",
+        "tests/test_bayes_market_api.py:6475",
+        "tests/test_bayes_market_api.py:6504",
+        "tests/test_bayes_market_api.py:6508",
+        "tests/test_bayes_market_api.py:6598",
+        "backend/server.py:494"
+      ],
+      "uncertainty": "The codebase shows where the seam currently lives, but the exact preferred placement after refactor is a design choice. The 'just enough' task wording points toward keeping it in place unless the edit naturally splits it.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Step 4 should leave the older `test_market_resolve_http_requires_agent_id_when_enabled` test untouched. It still covers the simple missing-agent versus authorized-success contract, while `test_market_resolve_http_requires_valid_agent_id_when_enabled` owns the deeper blank-agent, malformed-agent, and resolve-specific no-header behavior. Consolidating or renaming them would expand the patch beyond the localized stale no-header cleanup the task is asking for.",
+      "confidence": 0.88,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-3-execute-step-4/questions.json:18",
+        ".fleet/tasks/bayes-market-u44-execute-step-3-execute-step-4/questions.json:20",
+        "tests/test_bayes_market_api.py:6461",
+        "tests/test_bayes_market_api.py:6482",
+        "tests/test_bayes_market_api.py:6508",
+        "tests/test_bayes_market_api.py:6598",
+        "tests/test_bayes_market_api.py:6613"
+      ],
+      "uncertainty": "The suite tolerates some overlap, but there is no explicit maintainers' note stating that overlap is preferred long term. This answer is based on minimal-scope refactoring rather than a stronger naming convention requirement.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. The limiter-enabled resolve-success assertion should remain the full shared `assert_rate_limit_headers(..., limit=2, remaining=1)` contract, not a weaker resolve-only header-presence check. The shared helper already defines the exact quota-header contract, and the breadth test applies that same assertion to `market-resolve`.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-3-execute-step-4/questions.json:24",
+        ".fleet/tasks/bayes-market-u44-execute-step-3-execute-step-4/questions.json:26",
+        "tests/test_bayes_market_api.py:6186",
+        "tests/test_bayes_market_api.py:6193",
+        "tests/test_bayes_market_api.py:6276",
+        "tests/test_bayes_market_api.py:6293",
+        "tests/test_bayes_market_api.py:6326",
+        "backend/server.py:4043"
+      ],
+      "uncertainty": "The question wording says 'header presence via the shared helper', so there is a small ambiguity in phrasing, but the helper itself enforces the stronger full-header contract.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. Step 4 is intentionally scoped to resolve-only test refactoring. The branch already has shared success-path coverage across protected POST routes and a detailed ProbabilityEdit no-header and `429` matrix. The only stale seam identified here is the resolve-specific success branch that still expects header absence, so expanding into missing-agent or malformed-agent breadth gaps for create-market, comment-post, or event-trade would go beyond the local task.",
+      "confidence": 0.93,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-3-execute-step-4/questions.json:30",
+        ".fleet/tasks/bayes-market-u44-execute-step-3-execute-step-4/questions.json:32",
+        "tests/test_bayes_market_api.py:6276",
+        "tests/test_bayes_market_api.py:6326",
+        "tests/test_bayes_market_api.py:6347",
+        "tests/test_bayes_market_api.py:6534",
+        "tests/test_bayes_market_api.py:6461",
+        "tests/test_bayes_market_api.py:6508"
+      ],
+      "uncertainty": "This is an inference from the task wording plus the current coverage distribution; there is no explicit note saying broader auth-breadth gaps are permanently deferred.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "`backend/server.py` already attaches rate-limit headers on successful protected writes through `BayesHandler.handle_api()`, and the shared breadth test already exercises resolve on that path, so the task can stay tests-only."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The new shared breadth test already covers limiter-enabled resolve success via `market_resolution_with_headers(...)` plus `assert_rate_limit_headers(..., limit=2, remaining=1)`, so step 4 does not need new dedicated enabled-limiter resolve-success coverage."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.91,
+      "impact": "The valid-success branch inside `test_market_resolve_http_requires_valid_agent_id_when_enabled` is the only resolve-specific disabled-limiter no-header proof currently visible, so that behavior must remain asserted somewhere after the refactor."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "`market_resolution_with_headers()` defaults to active market `m2` and outcome `delayed`, and `setUp()` resets server state before each test, so it is a stable fixture for both disabled-limiter and enabled-limiter resolve-success requests."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "All relevant seams for this decision are visible in the current checkout, so no child task is needed before implementation proceeds."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

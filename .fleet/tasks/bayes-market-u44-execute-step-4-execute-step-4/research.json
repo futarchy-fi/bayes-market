@@ -1,0 +1,101 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. The current backend still makes ProbabilityEdit representative because limiter enforcement and quota-header emission remain centralized for the full protected POST surface. `WRITE_ROUTE_POLICIES` and the protected suffix sets still define one shared five-route write surface, `resolve_write_route_category(...)` still classifies those routes before dispatch, `_enforce_write_controls()` still applies `resolve_write_request_agent(...)` plus `enforce_rate_limit(...)` before `route_request(...)`, and `BayesHandler.handle_api()` still emits quota headers only after successful protected writes or on `rate_limit_exceeded` with `Retry-After`. None of the route handlers own separate limiter logic, so the seam that drives remaining-quota decrement, `429`, `Retry-After`, and per-agent isolation is still shared.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:191",
+        "backend/server.py:196",
+        "backend/server.py:199",
+        "backend/server.py:393",
+        "backend/server.py:472",
+        "backend/server.py:488",
+        "backend/server.py:523",
+        "backend/server.py:3894",
+        "backend/server.py:3906",
+        "backend/server.py:3933",
+        "backend/server.py:3960",
+        "backend/server.py:4039",
+        "backend/server.py:4066"
+      ],
+      "uncertainty": "The only way this conclusion would change is if a protected POST route stopped going through the shared classifier and handler adapter, and there is no sign of that in this checkout.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. The current tests already freeze the limiter behavior at the right layer: ProbabilityEdit owns the full matrix for remaining-quota decrement, disabled-limiter header absence, anonymous no-header success, `429 rate_limit_exceeded`, `Retry-After`, and per-agent isolation, while the other protected POST routes are covered by first-success breadth checks rather than cloned exhaustion matrices. The dedicated comment-post success contract and the five-route first-success loop already prove that create-market, comment-post, market-resolve, and event-trade receive enabled-limiter success headers through the same shared seam. Duplicating the full ProbabilityEdit limiter matrix on those routes would therefore repeat the same central contract instead of adding new coverage value.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:15",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:16",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:18",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:52",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:53",
+        "tests/test_bayes_market_api.py:6246",
+        "tests/test_bayes_market_api.py:6276",
+        "tests/test_bayes_market_api.py:6328",
+        "tests/test_bayes_market_api.py:6347",
+        "tests/test_bayes_market_api.py:6358",
+        "tests/test_bayes_market_api.py:6519",
+        "tests/test_bayes_market_api.py:6544",
+        "tests/test_bayes_market_api.py:6567"
+      ],
+      "uncertainty": "A broader matrix on another route would still be possible as a policy choice, but the current plan and test inventory do not require it.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "No. There is no codebase evidence that the step-3 breadth work introduced a disagreement that would justify cloning the ProbabilityEdit limiter matrix onto another route in this phase. The route-breadth tests added success-path header coverage across all five protected POST routes, but the route handlers themselves still only return payload and status and do not emit rate-limit headers or perform route-local quota accounting. I also reran `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` in this checkout, and the focused sentinel slice still passed cleanly with 21 tests. In this state, step 4 should remain preservation-only: keep ProbabilityEdit as the sole limiter matrix and only widen cross-route assertions if a future shared-seam failure appears.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:25",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:26",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:52",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:53",
+        "backend/server.py:3894",
+        "backend/server.py:3906",
+        "backend/server.py:3933",
+        "backend/server.py:3960",
+        "backend/server.py:4066",
+        "tests/test_bayes_market_api.py:6246",
+        "tests/test_bayes_market_api.py:6276",
+        "tests/test_bayes_market_api.py:6328",
+        "tests/test_bayes_market_api.py:6519",
+        "tests/test_bayes_market_api.py:6544",
+        "tests/test_bayes_market_api.py:6567"
+      ],
+      "uncertainty": "The passing focused test run is runtime verification rather than file evidence, so the file citations here anchor the structural reason that no route-specific divergence is expected.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "All five protected POST routes still share the same pre-routing agent-validation and rate-limit seam, so ProbabilityEdit remains representative for limiter behavior."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The existing ProbabilityEdit tests still freeze decrement, `429`, `Retry-After`, and per-agent isolation, while the breadth loop already covers success-path headers on the other protected routes."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "There is still no route-local quota or header logic to justify cross-route duplication; any real bug would have to come from the shared write-control seam."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed because the relevant plan context, backend code, and focused tests are already enough to answer this step with high confidence."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,79 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat only shared-path misses as backend gaps worth fixing: a classifier/router mismatch on the five protected POST routes, a protected POST path that bypasses `BayesHandler.handle_api()` and `_enforce_write_controls()`, or success/`429` quota headers that diverge from `rate_limit_headers(...)`. Stale test expectations by themselves stay test bugs, not backend bugs.",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Patch `backend/server.py` just because an older test expectation no longer matches the shared adapter contract.",
+        "Fix route-local handlers individually instead of holding the shared classifier/adapter seam accountable."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep the route-breadth intent fixed to all five protected POST routes for the success path and the missing-agent failure path, while leaving `429` plus `Retry-After` coverage representative in the existing ProbabilityEdit tests instead of cloning that branch across create-market, comment-post, resolve, and event-trade.",
+      "based_on": ["q2", "q4"],
+      "alternatives_rejected": [
+        "Reduce the breadth check to a smaller subset of protected routes plus source inspection.",
+        "Duplicate the full `429` matrix for every protected POST route."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Treat successful `POST /v1/markets/{id}/resolve` responses under enabled rate limiting as part of the same shared success-header contract as the other protected POST routes. Any assertion that resolve success must omit quota headers when a valid agent id is present is stale test drift, not an admin-write exception that warrants a backend special case.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Introduce a route-specific resolve exception that suppresses quota headers despite the centralized `handle_api()` success branch.",
+        "Leave the stale resolve success expectation in place and weaken the new breadth test around it."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Preserve the current quota-accounting order and visible header contract: `_enforce_write_controls()` remains pre-routing, success plus `429 rate_limit_exceeded` remain the only quota-header responses, unsupported POST routes stay the explicit no-header negative control, and route-local replay or `409` outcomes are not broadened in this step.",
+      "based_on": ["q4", "q6"],
+      "alternatives_rejected": [
+        "Move quota charging after route-local idempotency or terminal checks.",
+        "Start attaching quota headers to non-`429` application errors or unsupported POST routes."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Extend `BayesMarketApiAuthRateLimitTests` in `tests/test_bayes_market_api.py` with the missing request helpers and shared route-spec inventory needed to exercise all five protected POST routes through live HTTP: create-market, comment-post, market-resolve, probability-edit, and event-trade.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add one route-breadth success test that enables rate limiting, sends a valid request with an agent id through each protected POST route, and asserts every `201` response carries the shared `X-RateLimit-*` headers. Update the stale resolve-success expectation so enabled-limiter coverage expects header presence rather than absence.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add one matching route-breadth missing-agent test that enables required agent ids, replays the same five protected POST routes without the Bayes agent header, and asserts each request fails with the expected `401 missing_agent_id` category details and no quota headers.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Keep the existing ProbabilityEdit `429` and `Retry-After` assertions plus the unsupported POST negative control as the representative shared-path checks, and avoid adding per-route `429`, replay, or `409` header assertions unless the breadth tests prove the shared seam is wrong.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Run the focused auth/rate-limit HTTP test slice. If the new breadth coverage exposes a real backend gap, patch only the shared backend seam in `backend/server.py` (`resolve_write_route_category(...)`, `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `BayesHandler.handle_api()`, or `rate_limit_headers(...)`) while preserving the current quota-accounting order.",
+      "depends_on": [2, 3, 4]
+    },
+    {
+      "step": 6,
+      "task": "Rerun the focused test slice after any changes, review the diff to confirm the work stayed scoped to tests plus a shared-path backend fix only if needed, then commit the worktree with the required task message.",
+      "depends_on": [5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

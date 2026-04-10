@@ -1,0 +1,64 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat step 4 as a preservation pass for the existing negative auth and header coverage. Keep the current absence-path assertions on ProbabilityEdit, market-resolve, create-market, the unsupported POST control, and the duplicate-header classifier seam instead of expanding comment-post or event-trade with new route-local missing/invalid-agent or disabled-limiter tests.",
+      "based_on": ["q1", "q3", "q5"],
+      "alternatives_rejected": [
+        "Add new route-local missing-agent, invalid-agent, or disabled-limiter tests for comment-post and event-trade.",
+        "Broaden create-market into a new explicit no-quota-header sentinel beyond its current missing-agent auth failure."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep the current ProbabilityEdit HTTP tests as the single shared regression seam for remaining-quota decrement, `429 rate_limit_exceeded`, `Retry-After`, and per-agent isolation because the protected-write limiter and quota headers are enforced centrally in `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `rate_limit_headers(...)`, and `BayesHandler.handle_api()`.",
+      "based_on": ["q2", "q4"],
+      "alternatives_rejected": [
+        "Clone the full limiter matrix onto create-market, comment-post, market-resolve, or event-trade.",
+        "Move quota assertions into route-specific handlers instead of relying on the shared protected-write path."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "If the step-3 breadth work exposed a regression, fix only the shared protected-write path or restore the preserved sentinel tests; do not reshape the task into broader route-local negative coverage unless a shared-seam defect requires it.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Add speculative route-local tests without evidence of a shared-path bug.",
+        "Change route handlers independently of the central write-control seam."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit the current auth and rate-limit coverage in `tests/test_bayes_market_api.py` after the step-3 breadth changes, and confirm the preserved sentinel set still consists of the existing ProbabilityEdit missing/blank/malformed/disabled/429 tests, market-resolve missing/blank/malformed plus disabled-limiter tests, create-market missing-agent coverage, the unsupported POST router `404` control, and the direct duplicate-header `resolve_write_request_agent(...)` check.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "If any preserved sentinel was weakened or accidentally widened, update the affected tests to restore the current absence-path contract while leaving comment-post and event-trade as success-path-only routes for this phase.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Only if the preserved tests reveal a real regression, patch the shared protected-write backend seam in `backend/server.py` at `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `rate_limit_headers(...)`, or `BayesHandler.handle_api()` so the existing negative and limiter contract holds without introducing route-local special cases.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Keep the current ProbabilityEdit limiter matrix as the sole regression seam for remaining-quota decrement, `429`, `Retry-After`, and per-agent isolation, and avoid adding duplicate cross-route assertions unless step 3 proves the shared seam is no longer representative.",
+      "depends_on": [1, 3]
+    },
+    {
+      "step": 5,
+      "task": "Run the focused Bayes market auth and rate-limit tests covering the preserved sentinels, verify the diff stays scoped to the intended step-4 preservation work, then stage and commit the task artifact with the requested message.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact pytest target should count as the required 'focused backend HTTP auth/rate-limit breadth' slice for step 5 once the new coverage lands in this checkout: the whole `BayesMarketApiAuthRateLimitTests` class, or a narrower named subset plus a few representative replay/rejection tests?",
+      "category": "requirements",
+      "why_it_matters": "The current branch still lacks the new breadth helpers and all-routes header sentinel, so step 5 needs a concrete command to decide when verification is complete instead of rerunning an ad hoc mix of tests."
+    },
+    {
+      "id": "q2",
+      "question": "If the new route-breadth tests are still not present in this checkout, should step 5 treat that as a blocker and leave `backend/server.py` untouched, or is it expected to run only the pre-existing auth/rate-limit slice and report that the breadth prerequisite never arrived?",
+      "category": "requirements",
+      "why_it_matters": "The task wording says to run the focused breadth tests 'once they are available in this checkout'. The branch state still looks pre-breadth, so the step needs a clear rule for what to do if that prerequisite is still missing."
+    },
+    {
+      "id": "q3",
+      "question": "What result should be treated as sufficient proof that the audit required no backend change versus a shared-path patch being necessary and sufficient: breadth tests passing with test-only changes, or one targeted fix inside `resolve_write_route_category(...)`, `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `BayesHandler.handle_api()`, or `rate_limit_headers(...)` while route-local handlers remain unchanged?",
+      "category": "design",
+      "why_it_matters": "The audit of `backend/server.py` still shows a centralized protected-write seam. Step 5 needs a precise threshold for when to preserve the backend as-is and when a shared-path patch is justified."
+    },
+    {
+      "id": "q4",
+      "question": "Which success-path route assertions are required before step 5 can claim the breadth gap is closed: should all five protected POST routes (`/v1/markets`, `/v1/markets/{id}/comments`, `/v1/markets/{id}/resolve`, `/v1/markets/{id}/orders/probability-edit`, and `/v1/markets/{id}/orders/event-trade`) each prove shared `X-RateLimit-*` header emission when the limiter is enabled, including replacing the current resolve-success no-header expectation?",
+      "category": "codebase",
+      "why_it_matters": "Today the auth/rate-limit suite is still centered on ProbabilityEdit, there is no first-class comment or event-trade helper in `BayesMarketApiAuthRateLimitTests`, and the resolve-success assertion is still stale."
+    },
+    {
+      "id": "q5",
+      "question": "During the final diff review for step 5, which file scope is considered acceptable: only `backend/server.py`, `tests/test_bayes_market_api.py`, and this task's `.fleet` artifacts, or are any other backend-side files expected to move as part of the audit confirmation?",
+      "category": "requirements",
+      "why_it_matters": "The step explicitly says the work should stay scoped to backend code only. Defining the allowed diff boundary prevents accidental drift into frontend, docs, or unrelated backend files."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The protected write surface is still exactly the five POST routes recognized by `resolve_write_route_category(...)`: create market, post comment, resolve market, probability edit, and event trade.",
+      "confidence": 0.99,
+      "if_wrong": "The breadth tests and any audit conclusion would be incomplete, because another protected write path could still bypass the shared classifier or shared header seam."
+    },
+    {
+      "id": "a2",
+      "assumption": "`route_request(...)` still only returns `(payload, status)` and does not emit rate-limit headers itself; `BayesHandler.handle_api()` plus `send_json()` remain the only HTTP header-emission seam, with `rate_limit_headers(...)` called only from the success and `429 rate_limit_exceeded` branches.",
+      "confidence": 0.99,
+      "if_wrong": "A hidden route-local or adapter-local header path would mean the audit is incomplete and a backend fix could be required even if the current shared seam looks correct."
+    },
+    {
+      "id": "a3",
+      "assumption": "This checkout still does not contain the new all-routes auth/rate-limit breadth coverage: `BayesMarketApiAuthRateLimitTests` has ProbabilityEdit-centric helpers, no dedicated comment or event-trade helper, and still expects resolve success to omit quota headers.",
+      "confidence": 0.97,
+      "if_wrong": "Step 5 should immediately run the existing breadth tests instead of treating their availability as an open prerequisite."
+    },
+    {
+      "id": "a4",
+      "assumption": "If verification exposes a real bug, the correct fix should stay in the shared classifier or HTTP adapter path inside `backend/server.py`, not in route-local business handlers such as `create_market(...)`, `handle_comment_post(...)`, `handle_probability_edit(...)`, `handle_event_trade(...)`, or `handle_market_resolution(...)`.",
+      "confidence": 0.94,
+      "if_wrong": "The premise that one shared protected-write seam is sufficient would need to be revisited before implementing or approving any backend change."
+    },
+    {
+      "id": "a5",
+      "assumption": "The existing ProbabilityEdit HTTP tests remain the canonical proof for quota decrement math, `429` plus `Retry-After`, and per-agent isolation, so the missing breadth work is primarily about route coverage rather than duplicating the full limiter matrix across every protected route.",
+      "confidence": 0.92,
+      "if_wrong": "Step 5 would need a substantially broader focused test slice than the current plan implies, because each protected route would need its own full limiter-behavior matrix."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

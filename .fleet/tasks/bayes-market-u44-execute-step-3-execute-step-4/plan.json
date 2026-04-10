@@ -1,0 +1,59 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat `test_protected_post_routes_emit_rate_limit_headers_on_first_success` as the canonical limiter-enabled resolve-success proof and remove the stale enabled-path `assert_rate_limit_headers_absent(valid_headers)` expectation from the deeper resolve auth test instead of adding a second dedicated resolve-success test.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Keep duplicating enabled-limiter resolve-success coverage in a second dedicated resolve test.",
+        "Replace the shared helper contract with a weaker resolve-only header-presence assertion."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Preserve the resolve-specific disabled-limiter no-header seam alongside the missing-agent, blank-agent, and malformed-agent assertions by keeping or minimally relocating one successful resolve request with `RATE_LIMIT_PER_MIN` disabled, rather than dropping that proof during the cleanup.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Delete the valid resolve branch entirely and rely only on the limiter-enabled breadth test.",
+        "Move the disabled-limiter assertion into a broader non-resolve test matrix."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Leave the older `test_market_resolve_http_requires_agent_id_when_enabled` test untouched and keep the patch tests-only in `tests/test_bayes_market_api.py`, because the task is a narrow resolve-coverage refactor rather than a broader auth-suite consolidation or backend behavior change.",
+      "based_on": ["q3", "q5"],
+      "alternatives_rejected": [
+        "Consolidate or rename the overlapping resolve auth tests in the same patch.",
+        "Expand the change into create-market, comment-post, or event-trade auth coverage."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Re-read the shared `assert_rate_limit_headers(...)` coverage and the resolve auth tests in `tests/test_bayes_market_api.py` so the edit lands on the existing stale seam without changing unrelated route coverage.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Refactor `test_market_resolve_http_requires_valid_agent_id_when_enabled` just enough so the missing-agent, blank-agent, and malformed-agent branches continue asserting `assert_rate_limit_headers_absent(...)`, while the limiter-enabled resolve-success contract is no longer owned by that test.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Keep one resolve-specific successful request with rate limiting disabled asserting header absence and accepted resolve payload/state, either in the same test or a tiny adjacent resolve-only test if the cleanup naturally splits the success branch for clarity.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Run focused BayesMarketApiAuthRateLimitTests coverage around the shared protected-route success test and the resolve auth tests, confirm the diff stays tests-only, and commit the implementation worktree with the requested task message.",
+      "depends_on": [2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact focused rerun should satisfy step 5 for the preserved auth and rate-limit sentinels: the full 21-test `BayesMarketApiAuthRateLimitTests` class via `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests`, or a narrower pytest selector limited to the 19 preserved sentinel tests that excludes the comment-post and five-route first-success breadth checks?",
+      "category": "requirements",
+      "why_it_matters": "The branch already has a simple class-level command and a narrower sentinel-only slice. Picking one stable selector determines what the execute leaf must rerun and what later validation should treat as the canonical focused test gate."
+    },
+    {
+      "id": "q2",
+      "question": "For the diff audit, does step 5 need one comparison baseline or two: `ff/Tbayes-market-u44-execute-step-3` to review the inherited step-4 preservation diff, and the current branch start commit `504af7c8` to prove this leaf itself adds only the task artifact?",
+      "category": "requirements",
+      "why_it_matters": "A single baseline cannot answer both scope questions. Comparing only to `step-3` mixes inherited step-4 work with this leaf, while comparing only to the current branch start would hide whether the parent step-4 diff is still confined to the intended preservation seam."
+    },
+    {
+      "id": "q3",
+      "question": "If the step-3-to-step-4 audit still shows `backend/server.py` as the only product-file diff, should step 5 treat that inherited refactor as a scope failure that must be called out explicitly, or is the acceptable outcome just to confirm that this execute leaf introduces no additional non-artifact changes?",
+      "category": "design",
+      "why_it_matters": "Earlier validation already flagged the execute-step-2 `backend/server.py` edit as unjustified because the preserved sentinel class was passing. The final execution step needs a clear rule for whether it is expected to fail on that inherited scope issue or merely document it."
+    },
+    {
+      "id": "q4",
+      "question": "What concrete execute-phase evidence should this leaf commit if the correct implementation outcome is a no-op outside `.fleet/tasks/`: only a recorded test command and diff summary, or also an explicit verdict about whether the current branch still violates the step-4 preservation-only boundary?",
+      "category": "codebase",
+      "why_it_matters": "The prior step-4 validation artifacts rejected branches that stopped after research and planning even when the focused tests passed. Step 5 needs a durable artifact that distinguishes completed execution from another planning-only no-op."
+    },
+    {
+      "id": "q5",
+      "question": "When the focused rerun passes, should the final step-5 commit be artifact-only under `.fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/`, or is it expected to stage additional cleanup if the inherited diff review still says `backend/server.py` sits outside the intended preservation work?",
+      "category": "requirements",
+      "why_it_matters": "The checkout is clean and already merged through step 4, so the final execution leaf needs a clear expectation for whether it simply records the verification outcome or widens into corrective code changes before committing."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This checkout already contains the full merged step-4 history and starts clean, so execute-step-5 is primarily an execution-and-audit leaf rather than a feature-implementation leaf.",
+      "confidence": 0.99,
+      "if_wrong": "The task would first need to absorb missing code or artifact work before a focused rerun and diff audit would be meaningful."
+    },
+    {
+      "id": "a2",
+      "assumption": "The preserved auth/rate-limit seam is locally runnable in two stable forms: the simple 21-test class command and a narrower 19-test pytest selector that isolates the preserved sentinels.",
+      "confidence": 0.95,
+      "if_wrong": "The execute leaf could choose a command that misses a required sentinel or includes unrelated auth/rate-limit coverage, making the recorded verification ambiguous."
+    },
+    {
+      "id": "a3",
+      "assumption": "Relative to `ff/Tbayes-market-u44-execute-step-3`, the only surviving product-file diff in the inherited step-4 history is `backend/server.py`; the rest of the visible delta is `.fleet` task metadata.",
+      "confidence": 0.99,
+      "if_wrong": "The scope audit would need to account for more than one product file, which would materially change both the diff-review question set and the likely execution outcome."
+    },
+    {
+      "id": "a4",
+      "assumption": "The focused auth and rate-limit rerun still passes in this checkout, so the most likely correct execute-step-5 outcome is a recorded no-op verification rather than another backend or test edit.",
+      "confidence": 0.98,
+      "if_wrong": "A failing rerun would reopen the shared-seam implementation question and invalidate the assumption that this leaf should only document existing scope."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child tasks are needed because the relevant tests, branch baselines, and prior validation findings are all present locally in this worktree.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up child task would be needed to reconstruct missing branch ancestry or locate the canonical test and diff gates before execution could proceed safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

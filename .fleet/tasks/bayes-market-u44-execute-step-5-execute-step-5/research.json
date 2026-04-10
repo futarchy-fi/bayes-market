@@ -1,0 +1,109 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. The parent step-5 commit can reuse the merged execute-step-1 result as checkout-authoritative evidence instead of rerunning `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests`, because that artifact already marks the run authoritative for the checkout and the later merged history adds only task artifacts. The step-1 branch's bundled `backend/server.py` revert remains a scope violation to report separately, but it does not invalidate the recorded green 21-test result unless `backend/server.py` or `tests/test_bayes_market_api.py` changed afterward.",
+      "confidence": 0.93,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json:5",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json:13",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-4/research.json:6"
+      ],
+      "uncertainty": "This reuse is only safe while the current checkout stays product-identical to the merged execute-step-1 result for `backend/server.py` and `tests/test_bayes_market_api.py`.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Both comparisons are needed, but for different claims. Use `ff/Tbayes-market-u44-execute-step-5-execute-step-1..HEAD` restricted to `backend/server.py` and `tests/test_bayes_market_api.py` as the proof that the recorded step-1 run is still product-identical and therefore reusable. Also use `b45886e9..HEAD` as the leaf-local proof that this execute-step-5 leaf introduced only task artifacts while preparing the final parent record. Using only one of those comparisons would miss either runtime-authoritativeness or artifact-only leaf hygiene.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-4/research.json:15",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-2/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-2/validation.json:9",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:68",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-5/questions.json:12"
+      ],
+      "uncertainty": "The exact command presentation can be `--name-only` or a file-restricted full diff; the material requirement is that both checks show no fresh product delta.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. This leaf must create the missing parent artifact `.fleet/tasks/bayes-market-u44-execute-step-5/execution.json` before staging. The latest execute-step-4 validation explicitly rejected the branch because that parent execute artifact was absent, and the parent step-5 plan places writing the execute artifact in step 4 before the final staging-and-commit step.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-4/validation.json:12",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:35",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:63",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:68"
+      ],
+      "uncertainty": "The JSON shape of the parent artifact is flexible, but the artifact itself is not optional if this step is going to count as complete.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. The allowed leaf-local staged diff is task artifacts only: the new parent `.fleet/tasks/bayes-market-u44-execute-step-5/execution.json` plus this leaf's own task files under `.fleet/tasks/...`. Any fresh edit to `backend/server.py` or `tests/test_bayes_market_api.py` in this leaf should be treated as a blocker, because those product files are inherited audit subjects for the parent record, not permitted outputs of the final artifact-writing step.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/validation.json:12",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-4/research.json:80",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:68",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-5/questions.json:24"
+      ],
+      "uncertainty": "Task-artifact additions should stay inside the `bayes-market-u44` lineage; unrelated `.fleet/tasks` output would still be scope spillover.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "No. A single comparison against the branch-start merge commit is not enough for the last-mile artifact-only certification. The final sequence should check the branch-diff proofs first, then inspect both the live working tree and the staged index: confirm the step-1-to-HEAD product-file diff is empty, confirm `b45886e9..HEAD` stays task-artifact-only, inspect `git diff --name-only` for any unstaged drift, stage with `git add -A`, and inspect `git diff --cached --name-only` so the index still contains only the allowed artifact paths before committing.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-2/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-2/validation.json:9",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:68",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-5/questions.json:30"
+      ],
+      "uncertainty": "Adding `git status --short` as a final summary check is reasonable, but the core requirement is separate worktree and index inspection rather than a single historical diff.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "This leaf starts from merge commit `b45886e9` with the earlier child history already merged, so its remaining valid scope is additive task-artifact output rather than new product implementation."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The missing parent `.fleet/tasks/bayes-market-u44-execute-step-5/execution.json` remains the main completion gap, so a commit that adds only this leaf's metadata would still leave step 5 incomplete."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Across the inherited full-task audit, the only product files are still `backend/server.py` and `tests/test_bayes_market_api.py`, which means any new leaf-local product edit would be an unintended regression."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The recorded 21-test execute-step-1 result is reusable once git confirms those two product files have not changed since that run, so this leaf does not need an automatic fresh rerun just to write research."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed because the relevant ancestry, prior validations, and git baselines are already present in this worktree."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

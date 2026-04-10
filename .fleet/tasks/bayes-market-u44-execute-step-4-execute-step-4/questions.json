@@ -1,0 +1,51 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Does the current backend still centralize remaining-quota decrement, `429 rate_limit_exceeded`, `Retry-After`, and per-agent isolation in the shared protected-write seam for all five protected POST routes, so that the existing ProbabilityEdit limiter matrix is still representative?",
+      "category": "codebase",
+      "why_it_matters": "If any protected POST route has drifted off the shared seam, step 4 would need broader route-local assertions or a backend fix instead of relying on ProbabilityEdit as the sole limiter regression matrix."
+    },
+    {
+      "id": "q2",
+      "question": "Do the current tests already freeze the limiter behavior where it belongs: full decrement/`429`/`Retry-After`/per-agent-isolation coverage on ProbabilityEdit, with only first-success breadth checks on create-market, comment-post, market-resolve, and event-trade?",
+      "category": "requirements",
+      "why_it_matters": "This decides whether duplicating the full limiter matrix across the other protected POST routes would add meaningful signal or only repeat the same shared contract."
+    },
+    {
+      "id": "q3",
+      "question": "Did the step-3 route-breadth work or any current route-local handler code introduce a disagreement that would justify cloning the ProbabilityEdit limiter matrix onto another protected POST route in this phase?",
+      "category": "verification",
+      "why_it_matters": "Step 4 should stay preservation-only unless there is concrete evidence that the shared seam is no longer representative after the breadth changes."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "All five protected POST routes still pass through `resolve_write_request_agent(...)`, `_enforce_write_controls()`, and `BayesHandler.handle_api()` before route-local logic, so limiter and quota-header behavior remains centralized.",
+      "confidence": 0.99,
+      "if_wrong": "A route-specific bypass would mean ProbabilityEdit is no longer a safe stand-in for the other protected write routes."
+    },
+    {
+      "id": "a2",
+      "assumption": "The current ProbabilityEdit tests still provide the intended shared limiter matrix for decrement, `429`, `Retry-After`, and per-agent isolation, while the step-3 breadth loop already proves enabled-limiter success headers on the other protected POST routes.",
+      "confidence": 0.98,
+      "if_wrong": "Step 4 would need either extra route-local assertions or restoration of missing limiter coverage before it could stop at preservation."
+    },
+    {
+      "id": "a3",
+      "assumption": "No route-local handler has started emitting rate-limit headers or performing its own quota accounting, so a disagreement would have to come from the shared write-control seam rather than from a specific route implementation.",
+      "confidence": 0.96,
+      "if_wrong": "Duplicating the matrix on another route could become necessary to catch a route-specific contract divergence."
+    },
+    {
+      "id": "a4",
+      "assumption": "No child task is needed because the parent step-4 plan, the backend seam, and the focused auth/rate-limit tests in this checkout are enough to answer the step locally.",
+      "confidence": 0.99,
+      "if_wrong": "A deeper exploration task would be needed before deciding whether cross-route limiter duplication is warranted."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

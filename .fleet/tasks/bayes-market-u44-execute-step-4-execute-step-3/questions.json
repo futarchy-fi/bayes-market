@@ -1,0 +1,51 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The prior validation says this leaf task has no local `questions.json`. Should this step formalize the missing question set from that validation so the leaf has an auditable driver?",
+      "category": "process",
+      "why_it_matters": "Without a task-local question record, the research output is hard to audit and the next validation pass will have to infer scope again."
+    },
+    {
+      "id": "q2",
+      "question": "Did any preserved auth/rate-limit sentinel actually fail or widen in this checkout before permitting a shared-seam change in `backend/server.py`?",
+      "category": "verification",
+      "why_it_matters": "The parent plan allows a backend patch only if the preserved tests reveal a real regression in the shared protected-write seam."
+    },
+    {
+      "id": "q3",
+      "question": "If the preserved sentinel audit stays clean, should this phase remain a no-op outside `.fleet/tasks/` and avoid further `backend/server.py` changes?",
+      "category": "scope",
+      "why_it_matters": "This decides whether step 3 should stop at task artifacts or continue touching production code without a reproduced failure."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The parent step-4 plan is still the controlling scope for this leaf: restore tests only if a preserved sentinel drifted, and touch `backend/server.py` only if a preserved sentinel exposes a real shared-seam defect.",
+      "confidence": 0.99,
+      "if_wrong": "This leaf could justify broader implementation work than the parent plan currently allows."
+    },
+    {
+      "id": "a2",
+      "assumption": "The focused `BayesMarketApiAuthRateLimitTests` class is still the representative preserved sentinel slice for this phase.",
+      "confidence": 0.98,
+      "if_wrong": "A different or broader test slice would be needed before deciding whether a backend patch is justified."
+    },
+    {
+      "id": "a3",
+      "assumption": "The missing question set can be reconstructed directly from the previous validation artifact's `missed_questions` list without inventing new scope.",
+      "confidence": 0.96,
+      "if_wrong": "A separate question phase would be needed before this research artifact could be trusted."
+    },
+    {
+      "id": "a4",
+      "assumption": "No child task is needed because the parent plan, prior validation, backend seam, and preserved tests in this checkout are sufficient to answer the missing questions locally.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up exploration task would be needed before deciding whether production code changes are in scope."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

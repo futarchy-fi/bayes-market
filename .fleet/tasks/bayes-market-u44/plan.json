@@ -1,0 +1,75 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat the in-scope write surface as the full five-route POST set resolved by `resolve_write_route_category(...)`: create market, post comment, resolve market, probability edit, and event trade. Unsupported POST paths stay outside the rate-limit-header contract.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Limit the task to the two order routes only.",
+        "Expand header expectations to unsupported POST paths that never pass the protected-write classifier."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep the shared `handle_api()` plus `rate_limit_headers(...)` contract as the single source of truth: emit `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `X-RateLimit-Policy` on successful protected-write responses and on `429 rate_limit_exceeded`, while continuing to omit quota headers for disabled-limiter and missing-agent cases and not broadening 400/409 application errors in this task.",
+      "based_on": ["q2", "q4", "q5"],
+      "alternatives_rejected": [
+        "Add route-local header plumbing inside each write handler.",
+        "Expand quota headers to every post-gate 400/409 application error.",
+        "Narrow the contract by dropping `X-RateLimit-Policy`."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Preserve the current quota-accounting order where `_enforce_write_controls()` spends quota before route-specific idempotency replay or terminal rejection logic. This task only freezes the visible header contract; it does not change whether replays or rejected protected writes consume quota.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Special-case idempotent replays so they do not consume quota.",
+        "Charge quota only for newly accepted writes."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Implement this task primarily as HTTP contract coverage in `tests/test_bayes_market_api.py`, because the shared adapter already emits success-path headers across the protected POST surface. Keep the existing ProbabilityEdit tests as the shared proof for decrement math, `Retry-After`, `429`, and per-agent isolation, and add route-breadth success assertions for the other write endpoints instead of duplicating the full 429 matrix everywhere.",
+      "based_on": ["q1", "q2", "q6"],
+      "alternatives_rejected": [
+        "Restructure backend write handlers despite the current shared adapter already covering the behavior.",
+        "Duplicate the full rate-limit exhaustion matrix for every protected write route."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit `backend/server.py` to keep `BayesHandler.handle_api()` and `rate_limit_headers(...)` as the only header-emission seam for protected POSTs, and patch backend code only if the new route-breadth tests expose a gap in that shared path.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Extend the threaded HTTP test scaffolding in `BayesMarketApiAuthRateLimitTests` with small request helpers or inline bodies for create-market, comment-post, market-resolve, and event-trade submissions so each protected write route can be exercised with a valid `X-Bayes-Agent-Id` and positive `RATE_LIMIT_PER_MIN`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add or update success-path header assertions for all five protected POST routes, including changing the stale resolve success expectation to header presence when the limiter is enabled, and adding first-class coverage for comment-post plus explicit breadth checks for create-market and event-trade.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Keep the existing absence-path assertions for missing or invalid agent IDs, disabled limiter mode, and unsupported POST routes, and rely on the current ProbabilityEdit tests as the shared regression seam for remaining-quota decrement, `429` responses, `Retry-After`, and per-agent isolation.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Run the focused backend HTTP auth/rate-limit test slice, review the resulting diff to confirm the task stayed backend-and-tests only, and commit the completed worktree with the requested message.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,109 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Reuse the merged execute-step-1 run result instead of rerunning `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` again in this leaf. `.fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json` already marks that command result as `authoritative_for_checkout`, records the canonical class-level command, and records a green 21-test outcome. The branch history after merge commit `cfcbe53f` adds only `.fleet/tasks/bayes-market-u44-execute-step-5-execute-step-{2,3,4}` artifacts, not new product or test changes, so the parent step-5 execute artifact should cite that existing observed result rather than duplicate the rerun.",
+      "confidence": 0.92,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json:5",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json:13",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json:16",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/validation.json:4"
+      ],
+      "uncertainty": "This depends on the current branch state staying product-identical to the merged execute-step-1 checkout. If `backend/server.py` or `tests/test_bayes_market_api.py` changed after `cfcbe53f`, a fresh rerun would become necessary.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Write a top-level `.fleet/tasks/bayes-market-u44-execute-step-5/execution.json`. That should follow the sibling execute-phase precedent rather than inventing a new filename, while extending the payload to include the parent-specific audit fields: the canonical command, the observed result, the primary diff summary, the secondary diff summary, and the final scope verdict. The local codebase has exactly one execute-phase artifact precedent, and it is named `execution.json`.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:36",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:63",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json:1",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json:2",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/validation.json:4"
+      ],
+      "uncertainty": "The precise JSON shape beyond the sibling schema is inferred, because the existing `execution.json` precedent does not yet include diff summaries or a top-level scope verdict.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The parent record should include the primary diff stat and an explicit grouped path inventory, not just a bare stat plus a conclusion sentence. In the observed `ff/Tbayes-market-u44-execute-step-2...HEAD` range, the only product files are `backend/server.py` and `tests/test_bayes_market_api.py`; every other changed path stays under the `bayes-market-u44` task-artifact lineage in `.fleet/tasks/...`. The durable summary should therefore say both things explicitly: `64 files changed, 4242 insertions(+), 27 deletions(-)` overall, with product paths limited to those two files and the remaining paths grouped as task artifacts.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:16",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:26",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-2/research.json:18",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-2/research.json:31",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-2/research.json:43"
+      ],
+      "uncertainty": "The inventory does not need to dump all 64 paths verbatim. A grouped inventory that explicitly names the two product files and the `.fleet/tasks/bayes-market-u44-*` artifact lineage is sufficient.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "The parent step-5 record should briefly restate the specific surviving `backend/server.py` helper-extraction delta, not just say that `backend/server.py` is the lone inherited product-file delta. The minimal useful restatement is that the surviving inherited change is the agent-id normalization helper extraction around `_invalid_agent_id_reason(...)`, `_normalize_write_request_agent_id(...)`, and `resolve_write_request_agent(...)`. It can cite the execute-step-3 child for provenance, but omitting those function names would blur the distinction between the surviving delta and the route-suffix matcher refactor that execute-step-1 already reverted.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-3/research.json:20",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/execution.json:9",
+        "backend/server.py:418",
+        "backend/server.py:427",
+        "backend/server.py:464"
+      ],
+      "uncertainty": "The parent artifact only needs a one-sentence named summary plus a citation to the child evidence. It does not need to reproduce the full secondary diff hunk.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Record an explicit hard verdict that the branch does not clear the parent step-5 backend-and-tests-only scope gate. A softer partial-pass outcome is not supported by the local validation trail. The canonical auth/rate-limit gate is already green, and the primary diff still stays within backend/tests plus task artifacts, but step-4 validation already held that the inherited `backend/server.py` change was unjustified because no failing preserved sentinel required it. That inherited plan-adherence failure still controls the gate outcome.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/validation.json:11",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:26",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/plan.json:36",
+        ".fleet/tasks/bayes-market-u44-execute-step-5/research.json:60"
+      ],
+      "uncertainty": "This verdict would change only if a later branch either reverts the inherited backend helper extraction or introduces new evidence that a preserved sentinel failure actually required it.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The branch already contains the merged child history and has not added new product changes since the checkout-authoritative execute-step-1 run, so this leaf can stay artifact-only under `.fleet/tasks/...`."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The canonical focused gate remains `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests`; the only change is that the parent execute artifact can now reuse the merged step-1 result instead of rerunning it."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The authoritative baselines are still `ff/Tbayes-market-u44-execute-step-2...HEAD` for the full-task scope audit and `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` for inherited-delta attribution."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "In the primary baseline, the product-file boundary is still only `backend/server.py` and `tests/test_bayes_market_api.py`; everything else remains in the `bayes-market-u44` task-artifact lineage."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The unresolved issue is inherited plan adherence, not runtime health. The green auth/rate-limit result is already recorded, but the inherited `backend/server.py` helper extraction still prevents the branch from clearing the step-5 scope gate."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

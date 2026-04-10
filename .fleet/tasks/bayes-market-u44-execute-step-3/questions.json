@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should step 3 land the new success-path breadth as one shared matrix or `subTest(...)` loop inside `BayesMarketApiAuthRateLimitTests`, or are separate named tests expected for create-market, comment-post, market-resolve, probability-edit, and event-trade?",
+      "category": "design",
+      "why_it_matters": "The current class mixes route-specific auth tests with a few shared helper methods, while the task wording asks for both first-class comment-post coverage and explicit breadth checks for create-market and event-trade. The intended granularity determines whether those routes can be folded into one breadth sentinel or need standalone test names."
+    },
+    {
+      "id": "q2",
+      "question": "For the new non-ProbabilityEdit success checks, should the assertions pin the full shared `assert_rate_limit_headers(...)` contract with exact `limit` and `remaining` values, or only prove that `X-RateLimit-*` headers are present while leaving quota math to the existing ProbabilityEdit tests?",
+      "category": "requirements",
+      "why_it_matters": "The test class already has one helper that asserts all four quota headers plus the reset window, but the parent plan also says ProbabilityEdit remains the shared proof for decrement math, `429`, and per-agent isolation. This changes how strict and repetitive the new route-breadth assertions should be."
+    },
+    {
+      "id": "q3",
+      "question": "Should the existing resolve auth test be rewritten so its successful branch runs with a positive `RATE_LIMIT_PER_MIN` and now expects quota headers, or should resolve keep its current auth-only test and gain a separate enabled-limiter success test?",
+      "category": "codebase",
+      "why_it_matters": "Today `test_market_resolve_http_requires_valid_agent_id_when_enabled` leaves rate limiting disabled and asserts that the successful `201` response has no quota headers. Step 3 explicitly calls that expectation stale once the limiter is enabled, so the file needs a clear choice between in-place replacement and an additive test."
+    },
+    {
+      "id": "q4",
+      "question": "What exactly counts as \"first-class coverage\" for comment-post in this step: a dedicated success-path HTTP test that asserts both the accepted comment payload and rate-limit headers, or inclusion in a broader all-routes header loop without route-specific payload checks?",
+      "category": "requirements",
+      "why_it_matters": "Comment-post now has helper scaffolding in the auth/rate-limit class, but it still has no route-local auth or quota-header assertions. The task wording can mean either route-specific proof or mere participation in the five-route breadth check."
+    },
+    {
+      "id": "q5",
+      "question": "For create-market and event-trade, does \"explicit breadth checks\" allow their success-path header assertions to live inside a shared all-routes loop, or must each route have a directly named assertion site outside the loop even though they already have general HTTP success tests elsewhere in the file?",
+      "category": "design",
+      "why_it_matters": "These routes already have ordinary HTTP coverage, but not rate-limit breadth coverage in `BayesMarketApiAuthRateLimitTests`. Clarifying the acceptable shape avoids either under-specifying the new auth/rate-limit proof or duplicating existing route-behavior tests."
+    },
+    {
+      "id": "q6",
+      "question": "Are missing-agent and invalid-agent no-header regressions for comment-post and event-trade intentionally out of scope for this step and reserved for the follow-on absence-path work, or should step 3 begin adding those breadth failures now because these routes currently lack any auth/rate-limit negative tests?",
+      "category": "requirements",
+      "why_it_matters": "The parent plan frames step 3 around success-path headers and step 4 around preserving absence-path coverage, but comment-post and event-trade currently have no auth/rate-limit negatives in this class. The scope line affects whether this patch stays success-only or starts absorbing the next step."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Step 3 can likely stay tests-only in `tests/test_bayes_market_api.py`, because the shared `BayesHandler.handle_api()` plus `rate_limit_headers(...)` path already appears to emit quota headers for protected-write successes and the current auth/rate-limit class passes unchanged.",
+      "confidence": 0.95,
+      "if_wrong": "A real shared-seam backend bug would still need a targeted patch in `backend/server.py` before the new breadth tests can pass."
+    },
+    {
+      "id": "a2",
+      "assumption": "The step-2 helper defaults are the intended reset-safe success fixtures for step 3: create-market with a generated unique title, comment-post on active `m1`, market-resolve on `m2` with outcome `delayed`, and event-trade on active `m1` with outcome `yes`.",
+      "confidence": 0.98,
+      "if_wrong": "The new success-path assertions could fail for route-specific business reasons instead of exercising the shared rate-limit header contract."
+    },
+    {
+      "id": "a3",
+      "assumption": "The existing ProbabilityEdit tests remain the canonical proof for remaining-quota decrement, `429`, `Retry-After`, and per-agent isolation, so the new work only needs one-shot success-path breadth on the other protected POST routes.",
+      "confidence": 0.96,
+      "if_wrong": "Step 3 would need a much broader per-route limiter matrix instead of narrow success-path coverage."
+    },
+    {
+      "id": "a4",
+      "assumption": "The current resolve success no-header assertion is only stale when rate limiting is turned on; if a test continues to leave `RATE_LIMIT_PER_MIN` disabled, header absence remains the correct expectation.",
+      "confidence": 0.97,
+      "if_wrong": "The implementation would need to revisit the actual backend contract rather than only changing the test setup."
+    },
+    {
+      "id": "a5",
+      "assumption": "Comment-post should end this step with at least one route-specific success-path assertion in the auth/rate-limit class, because it currently has no auth or quota-header coverage and the task explicitly calls for first-class coverage.",
+      "confidence": 0.84,
+      "if_wrong": "A shared all-routes breadth sentinel without a dedicated comment-post test would be sufficient, and a standalone test could be unnecessary duplication."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat this as a concrete-failure-driven backend step: only change `backend/server.py` if the new breadth tests show an actual mismatch across the frozen protected POST surface, and do not invent a resolve-only exception when the likely discrepancy is stale header expectations under an enabled limiter.",
+      "based_on": ["q1", "q6"],
+      "alternatives_rejected": [
+        "Patch the server speculatively before reproducing a failing breadth case.",
+        "Add a special-case `POST /v1/markets/{id}/resolve` carveout that suppresses success quota headers."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep any fix inside the shared classifier or adapter seam in `backend/server.py` (`resolve_write_route_category(...)`, `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `BayesHandler.handle_api()`, or `rate_limit_headers(...)`) and avoid route-local changes in the individual POST handlers.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Add per-route header or auth logic inside `create_market(...)`, `handle_comment_post(...)`, `handle_probability_edit(...)`, `handle_event_trade(...)`, or `handle_market_resolution(...)`.",
+        "Split quota-header behavior across separate route-specific helpers."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Freeze the protected POST boundary to the existing five market-scoped routes and keep unsupported POSTs outside write-control enforcement and quota-header emission.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Expand the classifier to unsupported POSTs such as `/v1/orders/probability-edit`.",
+        "Use a catch-all POST classification that broadens auth or rate limiting beyond the current router surface."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Preserve the shared quota-header contract by continuing to use `rate_limit_headers(...)` for successful protected POSTs and `429 rate_limit_exceeded` responses, including `X-RateLimit-Policy`, while keeping non-`429` application errors free of `X-RateLimit-*` headers.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Drop `X-RateLimit-Policy` or emit only a subset of the shared success headers on some routes.",
+        "Attach quota headers to later `400` or `409` application errors after write controls have already consumed quota."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Run or inspect the new breadth coverage in `tests/test_bayes_market_api.py` with the limiter enabled to isolate the exact shared-path failure, distinguishing a real backend mismatch from stale resolve-success header expectations.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Patch only the matching shared seam in `backend/server.py`: use `resolve_write_route_category(...)` for a classifier/router mismatch, `resolve_write_request_agent(...)` or `_enforce_write_controls()` for agent-id gating drift, or `BayesHandler.handle_api()` / `rate_limit_headers(...)` for shared success-or-429 header behavior.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "While applying the backend fix, keep the five-route boundary frozen so unsupported POSTs still fall through to router `404 not_found` without auth, rate limiting, or quota headers, and avoid route-local handler edits.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Re-run the breadth slice plus the existing HTTP rate-limit regressions to confirm all protected POST successes still emit the full shared header set including `X-RateLimit-Policy`, `429 rate_limit_exceeded` still adds `Retry-After` plus quota headers, and non-`429` application errors still omit `X-RateLimit-*` headers.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Review the final diff to ensure the patch stays confined to `backend/server.py` and only the shared classifier/adapter path, then land it once the targeted tests prove no broadened scope or header-emission regression.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

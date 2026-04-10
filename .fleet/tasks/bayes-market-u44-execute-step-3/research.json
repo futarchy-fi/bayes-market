@@ -1,0 +1,133 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use a shared success-path breadth matrix or `subTest(...)` loop for the all-routes header sweep, not five new standalone named tests. The plan calls for route-breadth success assertions rather than duplicating per-route matrices, and the richer quota-behavior proof already lives in the dedicated ProbabilityEdit tests. The practical exception is comment-post: because step 3 explicitly asks for first-class coverage and this class currently only has helper scaffolding for that route, comment-post should also get at least one route-specific success assertion instead of living only as an anonymous loop case.",
+      "confidence": 0.85,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:37",
+        ".fleet/tasks/bayes-market-u44/plan.json:59",
+        "tests/test_bayes_market_api.py:6092",
+        "tests/test_bayes_market_api.py:6108",
+        "tests/test_bayes_market_api.py:6233",
+        "tests/test_bayes_market_api.py:6499"
+      ],
+      "uncertainty": "The plan does not prescribe the exact test-method count, so the precise split between one shared loop and one dedicated comment-post test is still a test-shape choice.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Pin the full shared `assert_rate_limit_headers(...)` contract for the new non-ProbabilityEdit success checks, but only on a single successful request per route. `handle_api()` emits the complete `rate_limit_headers(...)` bundle wholesale on successful protected writes, and the helper already freezes `limit`, `remaining`, `policy`, and reset-window behavior. ProbabilityEdit should remain the canonical proof for repeated decrement math, `429`, `Retry-After`, and per-agent isolation, so the other routes do not need duplicate multi-request limiter matrices beyond an exact first-success header assertion.",
+      "confidence": 0.91,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:16",
+        ".fleet/tasks/bayes-market-u44/plan.json:37",
+        "backend/server.py:492",
+        "backend/server.py:512",
+        "backend/server.py:4042",
+        "tests/test_bayes_market_api.py:6186",
+        "tests/test_bayes_market_api.py:6233",
+        "tests/test_bayes_market_api.py:6246"
+      ],
+      "uncertainty": "A weaker presence-only helper would still prove that headers exist, but it would under-specify the contract compared with the existing shared assertion helper and plan language.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Keep the current resolve auth test's missing-agent, blank-agent, and malformed-agent no-header coverage in place and add a separate enabled-limiter resolve success test, or split the current mixed test into two tests with that effect. The current valid-success no-header assertion is only correct because `RATE_LIMIT_PER_MIN` stays at the default disabled value; step 4 also explicitly preserves disabled-limiter absence coverage, so replacing the current test wholesale with a limiter-enabled variant would drop that resolve-specific disabled-limiter seam.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:59",
+        ".fleet/tasks/bayes-market-u44/plan.json:64",
+        "backend/server.py:494",
+        "backend/server.py:4042",
+        "tests/test_bayes_market_api.py:6170",
+        "tests/test_bayes_market_api.py:6379"
+      ],
+      "uncertainty": "The exact refactor shape is not fixed by the plan; the important part is preserving the disabled-limiter no-header proof while adding a limiter-enabled success assertion for resolve.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "First-class coverage for comment-post should be a dedicated success-path HTTP test that asserts the accepted comment payload and the rate-limit headers. This route has a distinct acceptance contract that returns a `comment` object rather than an order/result pair, and the auth/rate-limit class currently only has helper methods for it. A loop-only header case would prove the shared header seam, but it would not independently freeze the route-local accepted-comment surface that step 3 calls out.",
+      "confidence": 0.88,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:59",
+        "tests/test_bayes_market_api.py:6092",
+        "tests/test_bayes_market_api.py:6108",
+        "backend/server.py:3401",
+        "backend/server.py:3437",
+        "backend/server.py:3502"
+      ],
+      "uncertainty": "The plan does not say exactly how much of the comment payload to pin; at minimum the route-specific accepted `comment` envelope should be asserted alongside headers.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "For create-market and event-trade, explicit breadth checks can live inside a shared all-routes loop as long as those routes appear as explicit `subTest(...)` cases. They already have ordinary success coverage elsewhere in the suite, so step 3 only needs to prove that they participate in the auth/rate-limit success-header contract. Separate standalone header tests for those two routes are optional, not required by the current plan.",
+      "confidence": 0.89,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:59",
+        "tests/test_bayes_market_api.py:6041",
+        "tests/test_bayes_market_api.py:6145",
+        "tests/test_bayes_market_api.py:6648",
+        "tests/test_bayes_market_api.py:6906",
+        "tests/test_bayes_market_api.py:3461"
+      ],
+      "uncertainty": "A reviewer could still prefer separate named tests for readability, but the checked-in plan only requires explicit breadth, not route-by-route test-method proliferation.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "Those missing-agent and invalid-agent no-header regressions are intentionally out of scope for step 3. The parent plan separates step 3's success-path header work from step 4's absence-path preservation and explicitly keeps ProbabilityEdit as the representative negative and `429` seam. On that reading, step 3 should stay success-focused instead of starting new missing-agent or malformed-agent matrices for comment-post and event-trade.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:37",
+        ".fleet/tasks/bayes-market-u44/plan.json:59",
+        ".fleet/tasks/bayes-market-u44/plan.json:64",
+        "tests/test_bayes_market_api.py:6288",
+        "tests/test_bayes_market_api.py:6312",
+        "tests/test_bayes_market_api.py:6326",
+        "tests/test_bayes_market_api.py:6340",
+        "tests/test_bayes_market_api.py:6429"
+      ],
+      "uncertainty": "If a later step broadens absence-path coverage across all five routes, comment-post and event-trade negatives may still be added there, but the current step-3 scope does not require starting that work now.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Step 3 should stay tests-only unless a new breadth assertion proves a real shared-path bug. The current code already classifies the five protected POST routes centrally and emits success-path quota headers through one shared `handle_api()` plus `rate_limit_headers(...)` seam."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The step-2 helper defaults are valid reset-safe success fixtures: `setUp()` resets state before each test, create-market generates unique titles, comment-post defaults to active `m1`, market-resolve defaults to active `m2` with valid `delayed`, and event-trade defaults to active `m1`/`yes` with a valid atomic buy formula."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep ProbabilityEdit as the shared proof for repeated quota behavior. The current plan explicitly leaves decrement math, `429`, `Retry-After`, and per-agent isolation there instead of cloning that matrix across the other four routes."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Treat the current resolve no-header assertion as disabled-limiter coverage, not as evidence of a resolve-specific backend exception. It only becomes stale if the same expectation is carried into a limiter-enabled success test."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Comment-post should finish step 3 with at least one route-specific success assertion in the auth/rate-limit class. The task plan singles it out for first-class coverage, and the current class otherwise only exposes helper scaffolding for that route."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

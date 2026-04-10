@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use `git diff ff/Tbayes-market-u44-execute-step-2...HEAD` as the single authoritative scope baseline for this audit, and use any narrower comparison only as supporting attribution for where an inherited delta entered history.",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Audit only the local uncommitted worktree state in this leaf.",
+        "Treat `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` as a second authoritative scope gate."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Classify allowed workflow artifacts narrowly: only `.fleet/tasks/...` paths within the `bayes-market-u44` task chain are acceptable workflow output, and the only permitted product files in the audited range are `tests/test_bayes_market_api.py` and `backend/server.py`.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Allow any file under `.fleet/tasks/...` regardless of task lineage.",
+        "Treat additional non-workflow files as acceptable if the overall diff still looks mostly task-oriented."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Record both scope facts in the execution artifact: the branch stays inside the narrow file boundary, and the inherited `backend/server.py` delta still carries the step-4 plan-adherence objection because no failing preserved sentinel justified that production edit.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Clear the scope audit solely because the diff touches only the two allowed product files.",
+        "Escalate this leaf into backend cleanup instead of preserving the objection as evidence."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep the work in one leaf by writing an execute artifact that captures the audited file list, diff-stat summary, inherited backend attribution context, and final yes/no scope verdict before staging and committing the resulting task-artifact update.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Split the scope audit into child tasks even though the required git history and artifacts are already local.",
+        "Leave the audit implicit in shell output without a durable execution record."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Run `git diff --name-only ff/Tbayes-market-u44-execute-step-2...HEAD` and classify every path as either an allowed `bayes-market-u44` workflow artifact or one of the two allowed product files so the audit has an explicit file-boundary inventory.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Run `git diff --stat ff/Tbayes-market-u44-execute-step-2...HEAD` and confirm the diff summary still limits non-workflow changes to `backend/server.py` and `tests/test_bayes_market_api.py`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Use the prior step-4 validation and the secondary `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` context to explain that the current `backend/server.py` delta is inherited history and remains objectionable even though it stays within the narrow file boundary.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Write this task's execute artifact under `.fleet/tasks/bayes-market-u44-execute-step-5-execute-step-2/` with the audited file list, diff-stat summary, inherited-scope note, and a final verdict on whether the overall task remains limited to workflow artifacts plus the two allowed product files.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Stage the new plan/execution task artifacts and commit the worktree with the requested message after confirming no unintended product edits were introduced by this leaf.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

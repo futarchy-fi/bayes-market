@@ -1,0 +1,69 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` as the exact canonical focused backend HTTP auth/rate-limit gate for this leaf, and do not substitute a narrower preserved-sentinel selector or reuse adjacent step-5 run history as the recorded gate.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Record only a narrower preserved-sentinel selector as the gate for this leaf.",
+        "Treat a prior adjacent step-5 rerun as sufficient and skip a fresh local invocation in this checkout."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Run the command exactly from the repo root through the plain `python3` unittest entrypoint and preserve the durable result as both the exit status and the literal unittest outcome block so the record distinguishes a real rerun from an invocation problem.",
+      "based_on": ["q2", "q5"],
+      "alternatives_rejected": [
+        "Capture only a pass/fail boolean without the literal unittest summary or failure block.",
+        "Swap the invocation to pytest, a virtualenv-specific launcher, or another wrapper."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Treat the fresh local rerun in this worktree as authoritative for this checkout even if it differs from earlier artifacts, because this leaf exists to record checkout-specific execute-phase proof rather than inherit validation-side evidence.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Use earlier green evidence under `.fleet/tasks/bayes-market-u44-execute-step-5/` as the authoritative result for this leaf.",
+        "Merge local and inherited results into a combined gate record."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "If the canonical rerun fails, stop after recording the exact failure output and non-zero exit status as the gate result instead of widening scope into root-cause triage inside this leaf.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Begin debugging or code changes immediately if the rerun is red.",
+        "Suppress the failure details and record only that the command did not pass."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Run `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` from the repo root in the current worktree so the leaf executes the exact canonical auth/rate-limit gate it is responsible for.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Capture the command's exit status together with the literal unittest outcome block for that rerun, preserving either the successful `Ran N tests ... / OK` summary or the failing traceback and error block as the authoritative gate result for this checkout.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Write the observed gate result into this task's execute-phase artifact under `.fleet/tasks/bayes-market-u44-execute-step-5-execute-step-1/` without substituting adjacent step-5 evidence, and if the rerun failed stop after recording that exact failure output.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Stage the resulting task-artifact updates and commit the worktree with the requested plan-phase commit message once the artifact records the canonical gate result cleanly.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

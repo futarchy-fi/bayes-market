@@ -1,0 +1,139 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "No. In the current checkout, none of the preserved step-4 absence-path sentinels appear weakened or accidentally widened. The merged execute-step-1 validation already recorded that `tests/test_bayes_market_api.py` was untouched while the preserved sentinel inventory remained present, and the current auth/rate-limit class still contains the same ProbabilityEdit, market-resolve, create-market, duplicate-header, and unsupported-route checks. There is no affected test to update just to restore the existing absence-path contract.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:38",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-1/validation.json:4",
+        "tests/test_bayes_market_api.py:6370",
+        "tests/test_bayes_market_api.py:6394",
+        "tests/test_bayes_market_api.py:6408",
+        "tests/test_bayes_market_api.py:6422",
+        "tests/test_bayes_market_api.py:6461",
+        "tests/test_bayes_market_api.py:6501",
+        "tests/test_bayes_market_api.py:6589",
+        "tests/test_bayes_market_api.py:6606",
+        "tests/test_bayes_market_api.py:6625",
+        "tests/test_bayes_market_api.py:6641"
+      ],
+      "uncertainty": "The task-local `.fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/questions.json` is absent in this checkout, so these execute-step-2 answers are inferred from the parent step-4 plan, the merged execute-step-1 validation artifact, and the current code/test inventory.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. Step 2 should remain a no-op with respect to route-local negative expansion. The parent plan says to restore affected tests only if a preserved sentinel drifted, while leaving comment-post and event-trade as success-path-only routes for this phase. The only current coverage on those routes is the dedicated comment-post success contract and the five-route first-success breadth loop, which should stay untouched here.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:6",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:42",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-1/research.json:53",
+        "tests/test_bayes_market_api.py:6246",
+        "tests/test_bayes_market_api.py:6276"
+      ],
+      "uncertainty": "A later phase could still choose to add route-local auth negatives for comment-post or event-trade, but the current step-4 preservation scope explicitly defers that breadth.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "If any drift were found, the authoritative tests to restore are the existing ProbabilityEdit sentinels (`test_probability_edit_http_requires_agent_id_when_enabled`, `test_probability_edit_http_missing_agent_id_error_omits_retry_after_and_quota_headers`, `test_probability_edit_http_rejects_blank_agent_id_when_required`, `test_probability_edit_http_rejects_malformed_agent_id_when_required`, `test_probability_edit_http_omits_rate_limit_headers_when_limiter_disabled`, `test_probability_edit_http_omits_rate_limit_headers_without_agent_id`, `test_probability_edit_http_emits_retry_after_and_quota_headers_on_429`, `test_probability_edit_http_decrements_remaining_quota_headers_per_agent_id`, `test_probability_edit_http_rate_limits_per_agent_id`, `test_probability_edit_http_keeps_quota_windows_isolated_by_agent_id`), the market-resolve negatives (`test_market_resolve_http_requires_valid_agent_id_when_enabled`, `test_market_resolve_http_omits_rate_limit_headers_when_limiter_disabled`, and `test_market_resolve_http_requires_agent_id_when_enabled`), the create-market missing-agent sentinel, the unsupported POST router `404` control, and the direct duplicate-header classifier seam.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:6",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:38",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-1/research.json:35",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-1/research.json:69",
+        "tests/test_bayes_market_api.py:6328",
+        "tests/test_bayes_market_api.py:6347",
+        "tests/test_bayes_market_api.py:6358",
+        "tests/test_bayes_market_api.py:6370",
+        "tests/test_bayes_market_api.py:6394",
+        "tests/test_bayes_market_api.py:6408",
+        "tests/test_bayes_market_api.py:6422",
+        "tests/test_bayes_market_api.py:6461",
+        "tests/test_bayes_market_api.py:6501",
+        "tests/test_bayes_market_api.py:6519",
+        "tests/test_bayes_market_api.py:6544",
+        "tests/test_bayes_market_api.py:6567",
+        "tests/test_bayes_market_api.py:6589",
+        "tests/test_bayes_market_api.py:6606",
+        "tests/test_bayes_market_api.py:6625",
+        "tests/test_bayes_market_api.py:6641"
+      ],
+      "uncertainty": "The only small ambiguity is whether to name the anonymous ProbabilityEdit no-header success case as part of the same frozen absence-path family or as a separate no-header sentinel; the current local task history supports preserving it either way.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "No. There is still no concrete failing sentinel or reproduced regression that would justify invoking the conditional shared-seam backend-fix step from this phase. The plan allows backend changes only if preserved tests expose a real regression, and the execute-step-1 validation explicitly says the preserved sentinel coverage is intact and passing while the only non-artifact diff was an unproven refactor in `backend/server.py`. In the current code, the shared auth and limiter seam is still centralized in `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `rate_limit_headers(...)`, and `handle_api()`.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:26",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:47",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-1/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-1/validation.json:12",
+        "backend/server.py:464",
+        "backend/server.py:515",
+        "backend/server.py:4031",
+        "backend/server.py:4058"
+      ],
+      "uncertainty": "This answer speaks to current necessity, not to whether the step-1 backend refactor should eventually be reverted or reviewed separately for scope hygiene.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. ProbabilityEdit should remain the sole shared limiter regression seam for remaining-quota decrement, `429 rate_limit_exceeded`, `Retry-After`, and per-agent isolation. The plan explicitly preserves that scope, and the shared runtime still emits quota headers centrally from `_enforce_write_controls()` plus `handle_api()` and `rate_limit_headers(...)`. Comment-post, create-market, market-resolve, and event-trade already have first-success breadth coverage through the shared route loop, so cloning the full limiter matrix onto them would widen the phase without new shared-seam evidence.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:16",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:53",
+        "backend/server.py:515",
+        "backend/server.py:4031",
+        "backend/server.py:4058",
+        "tests/test_bayes_market_api.py:6276",
+        "tests/test_bayes_market_api.py:6328",
+        "tests/test_bayes_market_api.py:6519",
+        "tests/test_bayes_market_api.py:6544",
+        "tests/test_bayes_market_api.py:6567"
+      ],
+      "uncertainty": "The route-breadth loop already proves first-success headers across all five protected POST routes, so any broader limiter duplication would be a policy choice rather than something the current codebase forces.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The preserved sentinel inventory is still intact in `tests/test_bayes_market_api.py`, so execute-step-2 does not need restorative test edits just to get back to the current absence-path contract."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Comment-post and event-trade should remain success-path-only in this phase, which keeps the patch scope narrow and avoids speculative new negative matrices."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No failing sentinel currently justifies escalating into the conditional shared-backend fix step, so `backend/server.py` should not drive the step-2 decision."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "ProbabilityEdit remains the representative limiter seam for decrement math, `429`, `Retry-After`, and per-agent isolation, so cross-route duplication is unnecessary in this preservation pass."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed. The parent plan, merged step-1 research/validation artifacts, and the current backend/test files are enough to answer the execute-step-2 scope questions locally."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,135 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Step 4 is best read as preservation-only for negative auth/header coverage, not as a new route-local negative-matrix expansion. The parent `u44` plan says step 4 should keep the existing absence-path assertions and keep ProbabilityEdit as the shared limiter seam, while the backend still enforces agent validation and rate limiting centrally before route dispatch for all five protected POST routes. In the current auth/rate-limit class, comment-post and event-trade only appear in success-path coverage, so there is no code-level sign that this phase is meant to add route-local missing/invalid-agent or disabled-limiter tests for them. The preserved negative set should therefore stay on ProbabilityEdit and resolve, with create-market kept as its existing missing-agent auth sentinel and unsupported POST kept as the no-header negative control.",
+      "confidence": 0.9,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:63",
+        ".fleet/tasks/bayes-market-u44/plan.json:64",
+        "backend/server.py:384",
+        "backend/server.py:418",
+        "backend/server.py:4008",
+        "backend/server.py:4040",
+        "tests/test_bayes_market_api.py:6246",
+        "tests/test_bayes_market_api.py:6276",
+        "tests/test_bayes_market_api.py:6589",
+        "tests/test_bayes_market_api.py:6641"
+      ],
+      "uncertainty": "An earlier exploratory plan under `.fleet/tasks/bayes-market-u44-execute-step-1-execute-step-4/plan.json:62` proposed filling one non-ProbabilityEdit route-breadth gap, but the later parent plan and the current suite shape both point to preservation of the existing subset instead.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. The current ProbabilityEdit HTTP tests should remain the sole shared regression seam for remaining-quota decrement, `429 rate_limit_exceeded`, `Retry-After`, and per-agent isolation. `_enforce_write_controls()` spends quota before route dispatch, `rate_limit_headers(...)` computes the counters centrally, and `BayesHandler.handle_api()` attaches quota headers only on successful protected writes and on `429` responses. The existing ProbabilityEdit tests already pin decrement math, `429`, `Retry-After`, exhaustion, and cross-agent isolation, so cloning that matrix onto create-market, comment-post, market-resolve, or event-trade would only duplicate the same shared seam.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:36",
+        ".fleet/tasks/bayes-market-u44/plan.json:37",
+        "backend/server.py:457",
+        "backend/server.py:492",
+        "backend/server.py:4008",
+        "backend/server.py:4042",
+        "backend/server.py:4046",
+        "tests/test_bayes_market_api.py:6328",
+        "tests/test_bayes_market_api.py:6519",
+        "tests/test_bayes_market_api.py:6544",
+        "tests/test_bayes_market_api.py:6567"
+      ],
+      "uncertainty": "This would change only if one protected POST route stopped using the shared write-control path, but `resolve_write_route_category(...)` and `route_request(...)` still align on the same five protected POST routes in this checkout.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Treat the current sentinels as follows. ProbabilityEdit owns the representative negative and limiter matrix through `test_probability_edit_http_missing_agent_id_error_omits_retry_after_and_quota_headers`, `test_probability_edit_http_rejects_blank_agent_id_when_required`, `test_probability_edit_http_rejects_malformed_agent_id_when_required`, `test_probability_edit_http_omits_rate_limit_headers_when_limiter_disabled`, `test_probability_edit_http_decrements_remaining_quota_headers_per_agent_id`, `test_probability_edit_http_emits_retry_after_and_quota_headers_on_429`, `test_probability_edit_http_rate_limits_per_agent_id`, and `test_probability_edit_http_keeps_quota_windows_isolated_by_agent_id`. Resolve keeps the non-ProbabilityEdit auth/no-header surface through `test_market_resolve_http_requires_valid_agent_id_when_enabled` plus `test_market_resolve_http_omits_rate_limit_headers_when_limiter_disabled`; `test_market_resolve_http_requires_agent_id_when_enabled` is still useful overlap for the simple missing-agent path. Create-market's preserved sentinel is `test_create_market_http_requires_agent_id_when_enabled`, but that one proves the missing-agent auth branch only, not explicit header absence. The out-of-scope router control stays `test_unsupported_post_route_stays_router_not_found_when_auth_enabled`, and the `multiple_values` classifier seam stays `test_resolve_write_request_agent_rejects_duplicate_header_lines_when_required`.",
+      "confidence": 0.96,
+      "evidence": [
+        "tests/test_bayes_market_api.py:6328",
+        "tests/test_bayes_market_api.py:6347",
+        "tests/test_bayes_market_api.py:6394",
+        "tests/test_bayes_market_api.py:6408",
+        "tests/test_bayes_market_api.py:6422",
+        "tests/test_bayes_market_api.py:6461",
+        "tests/test_bayes_market_api.py:6501",
+        "tests/test_bayes_market_api.py:6519",
+        "tests/test_bayes_market_api.py:6544",
+        "tests/test_bayes_market_api.py:6567",
+        "tests/test_bayes_market_api.py:6589",
+        "tests/test_bayes_market_api.py:6606",
+        "tests/test_bayes_market_api.py:6625",
+        "tests/test_bayes_market_api.py:6641"
+      ],
+      "uncertainty": "The only real nuance is create-market: the current test inventory preserves its missing-agent auth failure, but unlike ProbabilityEdit, resolve, and unsupported POST it does not explicitly assert absent quota headers.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "A real bug worth fixing is only a mismatch in the shared protected-write path, not a reason to reshape route-local tests in isolation. The route handlers return payload/status tuples, while protected-write classification, agent validation, quota spend, quota-header emission, and `Retry-After` live in `resolve_write_route_category(...)`, `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `rate_limit_headers(...)`, and `BayesHandler.handle_api()`. If step-3 breadth work disagrees with an absence-path test, the fix should therefore stay in that shared seam; step 4 should not broaden route-local tests unless they expose a shared-path defect.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-4/plan.json:6",
+        ".fleet/tasks/bayes-market-u44-execute-step-1-execute-step-4/plan.json:35",
+        "backend/server.py:384",
+        "backend/server.py:418",
+        "backend/server.py:3779",
+        "backend/server.py:4008",
+        "backend/server.py:4035",
+        "backend/server.py:4046"
+      ],
+      "uncertainty": "The only scope ambiguity comes from earlier exploratory planning about whether to add one extra non-ProbabilityEdit sentinel, but that is a test-shape choice. It does not change where a backend bug would actually live.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "The intended preserved matrix is the current one: HTTP blank-agent and invalid-format coverage plus the direct duplicate-header-line check at `resolve_write_request_agent(...)`. `resolve_write_request_agent(...)` already treats repeated header lines and comma-separated raw values as the same `multiple_values` invalid-agent reason inside the classifier seam, and the existing direct `Message()` test freezes that behavior without needing another end-to-end protected-POST case. There is no codebase evidence that step 4 is supposed to broaden into HTTP comma-separated or repeated-header transport coverage on a live route.",
+      "confidence": 0.91,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44/plan.json:63",
+        ".fleet/tasks/bayes-market-u44/plan.json:64",
+        "backend/server.py:431",
+        "backend/server.py:448",
+        "tests/test_bayes_market_api.py:6408",
+        "tests/test_bayes_market_api.py:6422",
+        "tests/test_bayes_market_api.py:6461",
+        "tests/test_bayes_market_api.py:6625"
+      ],
+      "uncertainty": "There is no explicit statement that end-to-end comma-separated or repeated-header HTTP coverage would be unwelcome; the stronger conclusion is simply that the current step and suite do not require it because the `multiple_values` branch is already frozen at the classifier seam.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "All five protected POST routes still share one pre-routing agent-validation and limiter gate, so negative auth/header behavior remains centrally enforced rather than route-local."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "WRONG",
+      "confidence": 0.84,
+      "impact": "ProbabilityEdit, market-resolve, and unsupported POST do provide explicit no-header negatives, but create-market currently preserves only the missing-agent auth failure and does not assert absent quota headers. The preserved set should describe create-market as an auth sentinel, not as a full no-header sentinel."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.94,
+      "impact": "Comment-post and event-trade can stay success-only in this phase. Adding route-local missing/invalid-agent or disabled-limiter tests for them would broaden the task beyond the current preserved subset."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "ProbabilityEdit remains the right shared limiter regression seam because quota is charged before route dispatch and quota headers are emitted centrally after success or `429`, not inside route handlers."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed. The relevant backend seam, current test inventory, and prior task artifacts are all present locally, and the focused auth/rate-limit class passes in this checkout."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

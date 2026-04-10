@@ -1,0 +1,69 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep the scaffolding local to `BayesMarketApiAuthRateLimitTests` and follow the existing pattern of thin `*_with_headers(...)` wrappers that delegate to `request_with_headers(...)`, reusing the existing resolve helper instead of introducing a broader shared test layer.",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Move the work into a new shared HTTP helper framework",
+        "Add helper methods that return only `(status, payload)` and drop response headers"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use the existing top-level builders for create-market and event-trade, keep comment-post as a minimal inline `{ \"accountId\": ..., \"body\": ... }` payload, and preserve overridable route/body parameters so later tests can reuse the helpers without fixture collisions.",
+      "based_on": ["q1", "q2", "q3"],
+      "alternatives_rejected": [
+        "Add a first-class `build_comment_post_body(...)` helper in this step",
+        "Hard-code non-overridable payloads that only work for a single test shape"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Standardize on reset-safe success fixtures for the new scaffold: create-market with an overridable non-colliding title, comment-post against active `m1`, resolve via existing `market_resolution_with_headers(...)` on `m2` with outcome `delayed`, and event-trade against active `m1`/`yes` using the atomic-formula builder.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Resolve or trade on fixtures that would collide with existing auth/rate-limit tests",
+        "Use a fixed create-market title without an override for multi-create scenarios"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep the helper scope limited to valid request submission plus header exposure: helpers should accept an optional `agent_id`, but tests remain responsible for setting `RATE_LIMIT_PER_MIN` and choosing a valid `X-Bayes-Agent-Id` when they need success-path coverage.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Hide auth and rate-limit defaults inside the helper implementations",
+        "Make step 2 responsible for header assertions that belong to step 3"
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Extend `BayesMarketApiAuthRateLimitTests` with small header-aware request helpers for the missing protected write routes: create-market, comment-post, and event-trade. Keep `market_resolution_with_headers(...)` as the resolve-path helper rather than replacing it.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Wire those helpers through `request_with_headers(...)` so every protected write route returns `(status, payload, response_headers)` and accepts an optional `agent_id` translated into `X-Bayes-Agent-Id`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Use stable success payload defaults in the helper surface: reuse `build_create_market_body(...)` and `build_event_trade_body(...)`, keep the comment body inline, and preserve overrides for titles, account IDs, market IDs, and outcomes to avoid future fixture collisions.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Limit this patch to scaffolding only, leaving `RATE_LIMIT_PER_MIN` setup and success-path header assertions to the follow-on tests in step 3 while ensuring each protected POST route can now be exercised with a valid agent id under a positive limiter.",
+      "depends_on": [2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

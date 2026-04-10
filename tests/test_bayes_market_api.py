@@ -6159,6 +6159,7 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         server.reset_state()
         self._original_auth_require_agent_id = server.AUTH_REQUIRE_AGENT_ID
         self._original_rate_limit_per_min = server.RATE_LIMIT_PER_MIN
+        self._create_market_title_index = 0
 
     def tearDown(self) -> None:
         server.AUTH_REQUIRE_AGENT_ID = self._original_auth_require_agent_id
@@ -6223,6 +6224,56 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         status, payload, _ = self.request_with_headers(method, path, body, timeout=timeout, headers=headers)
         return status, payload
 
+    def _headers_with_agent_id(self, agent_id: str | None = None) -> dict[str, str]:
+        return {} if agent_id is None else {server.AGENT_ID_HEADER: agent_id}
+
+    def _next_create_market_title(self) -> str:
+        self._create_market_title_index += 1
+        return f"HTTP Auth Create Market {self._create_market_title_index}"
+
+    def create_market(
+        self,
+        *,
+        title: str | None = None,
+        description: str = "A test market",
+        outcomes: list[dict[str, str]] | None = None,
+        expires_at: str = "2026-12-31T23:59:59Z",
+        liquidity: float = 10000.0,
+        agent_id: str | None = None,
+    ):
+        status, payload, _ = self.create_market_with_headers(
+            title=title,
+            description=description,
+            outcomes=outcomes,
+            expires_at=expires_at,
+            liquidity=liquidity,
+            agent_id=agent_id,
+        )
+        return status, payload
+
+    def create_market_with_headers(
+        self,
+        *,
+        title: str | None = None,
+        description: str = "A test market",
+        outcomes: list[dict[str, str]] | None = None,
+        expires_at: str = "2026-12-31T23:59:59Z",
+        liquidity: float = 10000.0,
+        agent_id: str | None = None,
+    ):
+        return self.request_with_headers(
+            "POST",
+            "/v1/markets",
+            build_create_market_body(
+                title=self._next_create_market_title() if title is None else title,
+                description=description,
+                outcomes=outcomes,
+                expires_at=expires_at,
+                liquidity=liquidity,
+            ),
+            headers=self._headers_with_agent_id(agent_id),
+        )
+
     def probability_edit(
         self,
         probability: float,
@@ -6244,29 +6295,105 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         account_id: str = "acct_http_auth",
         agent_id: str | None = None,
     ):
-        headers = {} if agent_id is None else {server.AGENT_ID_HEADER: agent_id}
         return self.request_with_headers(
             "POST",
             "/v1/markets/m1/orders/probability-edit",
             build_unconditional_probability_edit_body(account_id, "m1", "yes", probability),
-            headers=headers,
+            headers=self._headers_with_agent_id(agent_id),
+        )
+
+    def comment_post(
+        self,
+        *,
+        market_id: str = "m1",
+        account_id: str = "acct_http_auth_comment",
+        comment_body: str = "HTTP auth comment",
+        agent_id: str | None = None,
+    ):
+        status, payload, _ = self.comment_post_with_headers(
+            market_id=market_id,
+            account_id=account_id,
+            comment_body=comment_body,
+            agent_id=agent_id,
+        )
+        return status, payload
+
+    def comment_post_with_headers(
+        self,
+        *,
+        market_id: str = "m1",
+        account_id: str = "acct_http_auth_comment",
+        comment_body: str = "HTTP auth comment",
+        agent_id: str | None = None,
+    ):
+        return self.request_with_headers(
+            "POST",
+            f"/v1/markets/{market_id}/comments",
+            {"accountId": account_id, "body": comment_body},
+            headers=self._headers_with_agent_id(agent_id),
+        )
+
+    def event_trade(
+        self,
+        *,
+        market_id: str = "m1",
+        outcome_id: str = "yes",
+        account_id: str = "acct_http_auth_trade",
+        size: float = 12.5,
+        side: str = "buy",
+        agent_id: str | None = None,
+        idempotency_key: str | None = None,
+    ):
+        status, payload, _ = self.event_trade_with_headers(
+            market_id=market_id,
+            outcome_id=outcome_id,
+            account_id=account_id,
+            size=size,
+            side=side,
+            agent_id=agent_id,
+            idempotency_key=idempotency_key,
+        )
+        return status, payload
+
+    def event_trade_with_headers(
+        self,
+        *,
+        market_id: str = "m1",
+        outcome_id: str = "yes",
+        account_id: str = "acct_http_auth_trade",
+        size: float = 12.5,
+        side: str = "buy",
+        agent_id: str | None = None,
+        idempotency_key: str | None = None,
+    ):
+        return self.request_with_headers(
+            "POST",
+            f"/v1/markets/{market_id}/orders/event-trade",
+            build_event_trade_body(
+                account_id,
+                market_id,
+                outcome_id,
+                size=size,
+                side=side,
+                idempotency_key=idempotency_key,
+            ),
+            headers=self._headers_with_agent_id(agent_id),
         )
 
     def market_resolution_with_headers(
         self,
         *,
-        market_id: str = "m1",
+        market_id: str = "m2",
         account_id: str = "ops_http_auth",
-        outcome_id: str = "yes",
+        outcome_id: str = "delayed",
         final_probabilities: dict[str, float] | None = None,
         agent_id: str | None = None,
     ):
-        headers = {} if agent_id is None else {server.AGENT_ID_HEADER: agent_id}
         return self.request_with_headers(
             "POST",
             f"/v1/markets/{market_id}/resolve",
             build_market_resolution_body(account_id, outcome_id, final_probabilities=final_probabilities),
-            headers=headers,
+            headers=self._headers_with_agent_id(agent_id),
         )
 
     def assert_rate_limit_headers(self, headers: dict[str, str], *, limit: int, remaining: int) -> None:
@@ -6328,6 +6455,88 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(payload["result"]["status"], "accepted")
         self.assert_rate_limit_headers(response_headers, limit=2, remaining=1)
+
+    def test_comment_post_http_returns_accepted_comment_contract_with_rate_limit_headers(self):
+        server.RATE_LIMIT_PER_MIN = 2
+
+        status, payload, response_headers = self.comment_post_with_headers(
+            market_id="m1",
+            account_id="acct_http_headers_comment_contract",
+            comment_body="HTTP auth comment contract",
+            agent_id="agent-header-comment-contract",
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(set(payload), {"comment", "meta"})
+        self.assertEqual(
+            set(payload["comment"]),
+            {"commentId", "marketId", "seq", "accountId", "body", "createdAt"},
+        )
+        self.assertEqual(payload["comment"]["marketId"], "m1")
+        self.assertEqual(payload["comment"]["seq"], 1)
+        self.assertEqual(payload["comment"]["accountId"], "acct_http_headers_comment_contract")
+        self.assertEqual(payload["comment"]["body"], "HTTP auth comment contract")
+        self.assertTrue(payload["comment"]["commentId"])
+        self.assertTrue(payload["comment"]["createdAt"].endswith("Z"))
+        self.assertEqual(payload["meta"].keys(), {"timestamp"})
+        self.assertTrue(payload["meta"]["timestamp"].endswith("Z"))
+        self.assert_rate_limit_headers(response_headers, limit=2, remaining=1)
+
+        self.assertEqual(server.MARKET_COMMENT_SEQUENCES["m1"], 1)
+        self.assertEqual(len(server.COMMENTS), 1)
+        self.assertEqual(server.COMMENTS[payload["comment"]["commentId"]], payload["comment"])
+
+    def test_protected_post_routes_emit_rate_limit_headers_on_first_success(self):
+        server.RATE_LIMIT_PER_MIN = 2
+
+        route_requests = (
+            (
+                "create-market",
+                lambda agent_id: self.create_market_with_headers(agent_id=agent_id),
+            ),
+            (
+                "probability-edit",
+                lambda agent_id: self.probability_edit_with_headers(
+                    0.8,
+                    account_id="acct_http_headers_breadth_probability",
+                    agent_id=agent_id,
+                ),
+            ),
+            (
+                "market-resolve",
+                lambda agent_id: self.market_resolution_with_headers(
+                    market_id="m2",
+                    account_id="ops_http_headers_breadth_resolve",
+                    outcome_id="delayed",
+                    agent_id=agent_id,
+                ),
+            ),
+            (
+                "comment-post",
+                lambda agent_id: self.comment_post_with_headers(
+                    market_id="m1",
+                    account_id="acct_http_headers_breadth_comment",
+                    comment_body="HTTP auth breadth comment",
+                    agent_id=agent_id,
+                ),
+            ),
+            (
+                "event-trade",
+                lambda agent_id: self.event_trade_with_headers(
+                    market_id="m1",
+                    outcome_id="yes",
+                    account_id="acct_http_headers_breadth_trade",
+                    agent_id=agent_id,
+                ),
+            ),
+        )
+
+        for label, request in route_requests:
+            with self.subTest(label=label):
+                status, _, response_headers = request(f"agent-header-breadth-{label}")
+
+                self.assertEqual(status, 201)
+                self.assert_rate_limit_headers(response_headers, limit=2, remaining=1)
 
     def test_probability_edit_http_decrements_remaining_quota_headers_per_agent_id(self):
         server.RATE_LIMIT_PER_MIN = 3
@@ -6464,6 +6673,7 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
 
     def test_market_resolve_http_requires_valid_agent_id_when_enabled(self):
         server.AUTH_REQUIRE_AGENT_ID = True
+        server.RATE_LIMIT_PER_MIN = 1
 
         missing_status, missing_payload, missing_headers = self.market_resolution_with_headers(
             account_id="ops_http_auth_missing",
@@ -6475,12 +6685,6 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         invalid_status, invalid_payload, invalid_headers = self.market_resolution_with_headers(
             account_id="ops_http_auth_invalid",
             agent_id="ops admin",
-        )
-        valid_status, valid_payload, valid_headers = self.market_resolution_with_headers(
-            market_id="m2",
-            account_id="ops_http_auth_valid",
-            outcome_id="delayed",
-            agent_id="agent-admin-valid",
         )
 
         self.assert_agent_id_error(
@@ -6505,12 +6709,25 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
             reason="invalid_format",
         )
         self.assert_rate_limit_headers_absent(invalid_headers)
-        self.assertEqual(valid_status, 201)
-        self.assertEqual(valid_payload["market"]["id"], "m2")
-        self.assertEqual(valid_payload["market"]["resolution"], "delayed")
-        self.assertEqual(valid_payload["result"]["status"], "accepted")
-        self.assert_rate_limit_headers_absent(valid_headers)
-        self.assertEqual(server.MARKETS["m1"]["status"], "active")
+        self.assertEqual(server.MARKETS["m2"]["status"], "active")
+
+    def test_market_resolve_http_omits_rate_limit_headers_when_limiter_disabled(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+
+        status, payload, response_headers = self.market_resolution_with_headers(
+            market_id="m2",
+            account_id="ops_http_auth_valid",
+            outcome_id="delayed",
+            agent_id="agent-admin-valid",
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["id"], "m2")
+        self.assertEqual(payload["market"]["status"], "resolved")
+        self.assertEqual(payload["market"]["resolution"], "delayed")
+        self.assertEqual(payload["result"]["status"], "accepted")
+        self.assert_rate_limit_headers_absent(response_headers)
+        self.assertEqual(server.MARKETS["m2"]["status"], "resolved")
 
     def test_probability_edit_http_emits_retry_after_and_quota_headers_on_429(self):
         server.AUTH_REQUIRE_AGENT_ID = True
@@ -6584,21 +6801,19 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
 
     def test_create_market_http_requires_agent_id_when_enabled(self):
         server.AUTH_REQUIRE_AGENT_ID = True
-        body = build_create_market_body(title="HTTP Auth Create Market")
+        market_title = "HTTP Auth Create Market"
 
-        unauthorized_status, unauthorized_payload = self.request("POST", "/v1/markets", body)
-        authorized_status, authorized_payload = self.request(
-            "POST",
-            "/v1/markets",
-            body,
-            headers={server.AGENT_ID_HEADER: "agent-create-auth"},
+        unauthorized_status, unauthorized_payload = self.create_market(title=market_title)
+        authorized_status, authorized_payload = self.create_market(
+            title=market_title,
+            agent_id="agent-create-auth",
         )
 
         self.assertEqual(unauthorized_status, 401)
         self.assertEqual(unauthorized_payload["error"]["code"], "missing_agent_id")
         self.assertEqual(unauthorized_payload["error"]["details"]["header"], server.AGENT_ID_HEADER)
         self.assertEqual(authorized_status, 201)
-        self.assertEqual(authorized_payload["market"]["title"], body["title"])
+        self.assertEqual(authorized_payload["market"]["title"], market_title)
         self.assertEqual(len(server.MARKETS), len(server.INITIAL_MARKETS) + 1)
 
     def test_market_resolve_http_requires_agent_id_when_enabled(self):

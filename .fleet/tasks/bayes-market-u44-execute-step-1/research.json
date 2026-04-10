@@ -1,0 +1,163 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The in-scope protected-write surface is the full five-route POST set selected by `resolve_write_route_category(...)`: `POST /v1/markets`, `POST /v1/markets/{id}/comments`, `POST /v1/markets/{id}/resolve`, `POST /v1/markets/{id}/orders/probability-edit`, and `POST /v1/markets/{id}/orders/event-trade`. Unsupported POST paths stay outside the rate-limit and quota-header contract.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:384",
+        "backend/server.py:391",
+        "backend/server.py:398",
+        "backend/server.py:400",
+        "backend/server.py:402",
+        "backend/server.py:418",
+        ".fleet/tasks/bayes-market-u44/plan.json:6",
+        "tests/test_bayes_market_api.py:6426"
+      ],
+      "uncertainty": "The checkout's task artifact path differs from the prompt suffix, but the parent task plan and the shared classifier agree on the same five-route boundary.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Keep emitting `X-RateLimit-*` headers only on successful protected-write responses and on `429 rate_limit_exceeded`. `BayesHandler.handle_api()` adds `rate_limit_headers(agent_id)` only when `status < 400`, and only attaches quota headers on failures for the `rate_limit_exceeded` branch. The parent task plan freezes that shared contract and explicitly does not broaden `400` or `409` application errors. The backend audit did not expose a gap in this seam.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:4035",
+        "backend/server.py:4042",
+        "backend/server.py:4046",
+        "backend/server.py:4048",
+        "backend/server.py:4049",
+        ".fleet/tasks/bayes-market-u44/plan.json:16",
+        "tests/test_bayes_market_api.py:6106",
+        "tests/test_bayes_market_api.py:6302",
+        "tests/test_bayes_market_api.py:6252",
+        "tests/test_bayes_market_api.py:6908",
+        "tests/test_bayes_market_api.py:6925"
+      ],
+      "uncertainty": "The only mismatch I found is in tests, not the backend: resolve success still has a stale header-absence expectation.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Protected POSTs should continue consuming quota before route-specific idempotency replay or terminal rejection logic. `_enforce_write_controls()` calls `enforce_rate_limit()` before routing, and each protected handler checks idempotency or terminal rejection after that point. The parent plan freezes that ordering instead of special-casing replays or rejected writes. Under the current shared adapter, successful replays can surface the updated quota snapshot, while rejected `409` responses still consume quota but omit headers because they are not success or `429` responses.",
+      "confidence": 0.94,
+      "evidence": [
+        "backend/server.py:4008",
+        "backend/server.py:4013",
+        "backend/server.py:3461",
+        "backend/server.py:3475",
+        "backend/server.py:3529",
+        "backend/server.py:3543",
+        "backend/server.py:3555",
+        "backend/server.py:3621",
+        "backend/server.py:3635",
+        "backend/server.py:3638",
+        "backend/server.py:3720",
+        "backend/server.py:3732",
+        "backend/server.py:3744",
+        ".fleet/tasks/bayes-market-u44/plan.json:27",
+        "tests/test_bayes_market_api.py:6892",
+        "tests/test_bayes_market_api.py:6908",
+        "tests/test_bayes_market_api.py:7172",
+        "tests/test_bayes_market_api.py:7334"
+      ],
+      "uncertainty": "There is no dedicated quota-accounting test for replayed or rejected protected writes; this answer comes from call order plus the replay and rejection contract tests.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Keep `X-RateLimit-Policy` as part of the contract. `rate_limit_headers(...)` always includes it, the auth/rate-limit test helpers assert it on presence and absence paths, and the parent task plan explicitly rejects narrowing the surface to only `Limit`, `Remaining`, and `Reset`.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:492",
+        "backend/server.py:512",
+        "backend/server.py:516",
+        "tests/test_bayes_market_api.py:6059",
+        "tests/test_bayes_market_api.py:6062",
+        "tests/test_bayes_market_api.py:6068",
+        "tests/test_bayes_market_api.py:6072",
+        ".fleet/tasks/bayes-market-u44/plan.json:16",
+        ".fleet/tasks/bayes-market-u44/plan.json:21"
+      ],
+      "uncertainty": "None beyond an explicit future product decision to narrow the public header set.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. Protected write routes should keep omitting quota headers when `RATE_LIMIT_PER_MIN <= 0` or when no normalized `X-Bayes-Agent-Id` is available. Both `enforce_rate_limit()` and `rate_limit_headers()` no-op in those cases, and the existing ProbabilityEdit HTTP tests already freeze the omission behavior. The parent plan keeps that omission unchanged across the rest of the protected POST surface.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:457",
+        "backend/server.py:459",
+        "backend/server.py:492",
+        "backend/server.py:494",
+        "backend/server.py:4042",
+        ".fleet/tasks/bayes-market-u44/plan.json:16",
+        "tests/test_bayes_market_api.py:6138",
+        "tests/test_bayes_market_api.py:6147",
+        "tests/test_bayes_market_api.py:6149",
+        "tests/test_bayes_market_api.py:6159"
+      ],
+      "uncertainty": "Current explicit absence assertions only cover ProbabilityEdit, but the shared adapter and helper logic make the same omission apply to the other protected POST routes.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "The minimum expected test matrix is route-breadth success-path header coverage for all five protected POST routes, while keeping the existing ProbabilityEdit tests as the shared proof for remaining-quota decrement, `429`, `Retry-After`, and per-agent isolation. The shared adapter already emits success-path headers across the protected surface, so the main gap is breadth in `tests/test_bayes_market_api.py`: ProbabilityEdit already has the full header matrix, resolve still has a stale success-path absence assertion, create-market has auth coverage but no success header assertion, and comment-post plus event-trade need first-class header checks. This audit does not indicate a backend patch unless those new breadth tests fail.",
+      "confidence": 0.96,
+      "evidence": [
+        "backend/server.py:4035",
+        "backend/server.py:4042",
+        ".fleet/tasks/bayes-market-u44/plan.json:37",
+        ".fleet/tasks/bayes-market-u44/plan.json:49",
+        ".fleet/tasks/bayes-market-u44/plan.json:54",
+        ".fleet/tasks/bayes-market-u44/plan.json:59",
+        ".fleet/tasks/bayes-market-u44/plan.json:64",
+        "tests/test_bayes_market_api.py:6027",
+        "tests/test_bayes_market_api.py:6042",
+        "tests/test_bayes_market_api.py:6106",
+        "tests/test_bayes_market_api.py:6119",
+        "tests/test_bayes_market_api.py:6252",
+        "tests/test_bayes_market_api.py:6299",
+        "tests/test_bayes_market_api.py:6372"
+      ],
+      "uncertainty": "Comment-post currently has no auth/rate-limit-specific HTTP coverage, so the exact helper shape is still an implementation detail rather than a frozen testing API.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Implementation and tests should target exactly the five POST routes resolved by `resolve_write_route_category(...)`; unsupported POST paths should stay outside the quota-header contract."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The shared `BayesHandler.handle_api()` plus `rate_limit_headers(...)` path is the right implementation boundary. The backend audit did not show a reason to add route-local header plumbing."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Anonymous requests and disabled-limiter mode should keep omitting quota headers across the protected write surface unless someone explicitly changes the contract."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The frontend currently sends `X-Bayes-Agent-Id` but does not read response headers, so this task can stay backend-and-tests only."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Keep `X-RateLimit-Policy` unless there is an explicit API-contract narrowing; removing it would require coordinated helper and test updates."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

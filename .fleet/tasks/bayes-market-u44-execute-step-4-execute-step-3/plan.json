@@ -1,0 +1,64 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use the reconstructed task-local question set as the auditable driver for this leaf and keep the scope tied to the parent step-4 preservation rules instead of inventing broader backend work.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Treat the missing local question file as permission to redefine the task scope.",
+        "Plan speculative backend or test expansion work not anchored to the validation artifact."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Treat the preserved `BayesMarketApiAuthRateLimitTests` slice as the execution gate for any `backend/server.py` change. Because the focused sentinel currently passes locally, the default implementation path is no production-code edit.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Patch the protected-write seam despite the preserved sentinel remaining green.",
+        "Broaden the failure signal to unrelated routes or unpreserved tests before deciding whether the shared seam regressed."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "If execution later reproduces a preserved-sentinel failure, limit the fix to the shared protected-write seam in `backend/server.py` and avoid route-local special cases; otherwise keep this leaf as a no-op outside `.fleet/tasks/`.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Introduce route-specific auth or limiter branches to satisfy one endpoint.",
+        "Continue touching production code after a clean sentinel audit."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Reconfirm the parent gate by running the preserved `BayesMarketApiAuthRateLimitTests` sentinel and mapping its missing-agent, malformed-agent, duplicate-header, quota-header, `429`, and `Retry-After` assertions back to the shared protected-write seam in `backend/server.py`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "If the preserved sentinel remains green, make no changes to `backend/server.py` or route-local handlers and keep the branch scoped to task artifacts only for this leaf.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Only if step 1 exposes a real regression, patch the central protected-write path at `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `rate_limit_headers(...)`, or `BayesHandler.handle_api()` so the existing negative-auth and rate-limit contracts pass again without endpoint-specific special cases.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Re-run the focused auth/rate-limit sentinel after either the no-op decision or any shared-seam fix, then inspect the diff to verify the outcome stays inside `.fleet/tasks/` unless a reproduced shared-seam defect required the backend edit.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Stage the resulting task artifact changes and commit them with the requested message once the scoped outcome is verified.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

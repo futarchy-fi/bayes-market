@@ -1,0 +1,113 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use the full class command `python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests` as the canonical focused rerun for step 5. The preserved inventory is the 19-test subset because `test_comment_post_http_returns_accepted_comment_contract_with_rate_limit_headers` and `test_protected_post_routes_emit_rate_limit_headers_on_first_success` are step-3 breadth coverage, not preserved absence-path sentinels, but the step-4 validation artifacts consistently treat the whole 21-test class as the focused gate. I reran that class here and it passed (`Ran 21 tests in 0.631s`). I also reran an explicit 19-test pytest selector for the preserved-only subset and it passed (`19 passed in 0.67s`), so that narrower selector is a useful supporting audit, not the canonical recorded gate.",
+      "confidence": 0.93,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:57",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:58",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-1/research.json:6",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-1/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-4/validation.json:4",
+        "tests/test_bayes_market_api.py:6246",
+        "tests/test_bayes_market_api.py:6276"
+      ],
+      "uncertainty": "The plan text says to rerun the focused tests covering the preserved sentinels and does not name the command explicitly, so the choice depends on how prior step-4 validations operationalized that gate. Those artifacts point to the 21-test class command.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Step 5 needs two baselines. Compare `ff/Tbayes-market-u44-execute-step-3...ff/Tbayes-market-u44-execute-step-4` to judge whether the inherited step-4 history stayed within the intended preservation seam, and compare `504af7c8...HEAD` to prove what this execute-step-5 leaf itself adds. Local diff inspection shows the first baseline still carries the inherited `.fleet` task history plus `backend/server.py`, while the second baseline isolates this leaf's task artifacts. One baseline cannot answer both questions.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/questions.json:12",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/questions.json:14",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-4/validation.json:4"
+      ],
+      "uncertainty": "The exact artifact set on `504af7c8...HEAD` changes once this research file is added and committed, but it remains task-artifact-only either way.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Treat the inherited `backend/server.py` refactor as a scope failure that must be called out explicitly. Earlier validation already rejected commit `4d650c77` because the focused auth/rate-limit class was passing while `backend/server.py` still changed, and the parent step-4 plan allows backend edits only if a preserved sentinel fails. Step 5 should separately confirm that this leaf adds no additional non-artifact changes, but that narrower statement is not sufficient by itself because it would leave the inherited preservation-scope breach undocumented.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:47",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:48",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-1/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-1/validation.json:12",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/validation.json:13"
+      ],
+      "uncertainty": "The remaining ambiguity is procedural rather than substantive: the final artifact can document the inherited scope breach without attempting to repair it in this leaf.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "This leaf should commit both the recorded execution evidence and an explicit preservation-boundary verdict. The minimum durable record is: the canonical rerun command and result, the diff summary against `ff/Tbayes-market-u44-execute-step-3`, the diff summary against `504af7c8`, and a plain statement saying whether the merged step-4 branch still violates the preservation-only boundary. Prior validation already said planning artifacts plus a passing rerun were not enough; the missing piece was an execute-phase verdict that distinguishes a completed no-op audit from work that stopped after planning.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/questions.json:24",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/questions.json:26",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-4/validation.json:8",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-4/validation.json:11",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/validation.json:13"
+      ],
+      "uncertainty": "The artifact format can vary, but it needs an explicit yes-or-no style boundary verdict rather than only raw command output or a diff list.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "When the focused rerun passes, the final step-5 commit should stay artifact-only under `.fleet/tasks/bayes-market-u44-execute-step-4-execute-step-5/`. If the inherited diff audit still shows `backend/server.py` outside the intended preservation work, this leaf should document that inherited scope violation instead of widening into cleanup code changes. The step-4 plan makes backend edits conditional on a failing preserved sentinel, and both the 21-test class rerun and the narrower 19-test preserved-only rerun pass in this checkout.",
+      "confidence": 0.91,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:42",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:48",
+        ".fleet/tasks/bayes-market-u44-execute-step-4/plan.json:57",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-3/research.json:44",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-3/research.json:53",
+        ".fleet/tasks/bayes-market-u44-execute-step-4-execute-step-2/validation.json:13"
+      ],
+      "uncertainty": "A separate follow-up task could still choose to revert or clean up the inherited backend refactor, but there is no local evidence that execute-step-5 itself is supposed to absorb that extra scope.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "This worktree already contains the merged step-4 history and started clean, so execute-step-5 is an execution-and-audit leaf rather than a feature-implementation branch."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Both stable rerun forms exist locally and pass: the 21-test class command is a simple canonical gate, and the narrower 19-test pytest selector cleanly isolates the preserved sentinels."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The inherited step-4 product diff remains centered on `backend/server.py`, so the scope audit can clearly separate that inherited issue from this leaf's task-artifact-only delta."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Because the focused reruns pass in this checkout, the correct step-5 outcome is to record verification and scope findings rather than reopen backend or test implementation work."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed. The relevant tests, branch ancestry, and earlier validation findings are all available locally."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
