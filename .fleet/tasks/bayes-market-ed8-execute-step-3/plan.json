@@ -1,0 +1,69 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep this step test-only in `tests/test_bayes_market_api.py` and focus the stricter response-shape assertions on the live HTTP health tests, because the route-level tests already cover `/v1/health` dispatch and helper-level tests already freeze the nested component schema.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Reopening `backend/server.py` implementation work for a step whose remaining gap is coverage only",
+        "Duplicating the same response-shape assertions across helper, route, and HTTP layers"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Freeze the `/v1/health` HTTP contract as the exact top-level field set `service`, `status`, `timestamp`, `version`, `uptime_seconds`, and `components`, with `components` keyed exactly as `db`, `inference`, and `auth`, while leaving nested component-object field details to the existing helper-level tests.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Only checking that a few additive fields exist without pinning the full public envelope",
+        "Repeating the full nested per-component schema assertions at the HTTP boundary"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Treat `uptime_seconds` as a stable public type/shape assertion only at the HTTP boundary by checking that it is a float, and avoid exact-value or precision assertions there because the value depends on live process uptime.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Asserting an exact uptime value in the HTTP test",
+        "Promoting helper-level rounding behavior into a brittle end-to-end equality check"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Tighten the unchanged legacy health-route coverage to assert that `/health` and `/healthz` still return the exact three-field payload shape `service`, `status`, and `timestamp`, instead of only proving that some `/v1/health`-only fields are absent.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Keeping the legacy compatibility checks limited to absence of `version`, `uptime_seconds`, and `components`",
+        "Comparing the full live legacy payload by literal dict equality despite the dynamic timestamp"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Update the existing `/v1/health` HTTP test in `tests/test_bayes_market_api.py` so it asserts the exact top-level key set, the inherited `service`/`status` values and `timestamp` shape, `version == server.ENGINE_CONFIG.version`, `uptime_seconds` being a float, and the exact `components` key set.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Keep the HTTP coverage focused on the public response envelope by avoiding new end-to-end assertions for nested `db`, `inference`, and `auth` subfields that are already frozen by the helper-level tests in the same module.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Tighten the legacy `/health` and `/healthz` HTTP test to assert the exact unchanged three-field payload shape and timestamp formatting, preserving compatibility expectations for existing probes and clients.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Run the focused health-route tests in `tests/test_bayes_market_api.py`, then review the diff and commit the step-3 test-plan implementation once the planning artifact is in place.",
+      "depends_on": [2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
