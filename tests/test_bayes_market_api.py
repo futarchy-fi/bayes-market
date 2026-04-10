@@ -4026,32 +4026,81 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/close",
             build_market_close_body("ops_admin", idempotency_key="idem-close-replay"),
         )
+        first_events_payload, first_events_status = server.route_request("GET", "/v1/markets/m1/events")
+        scope_key = ("m1", "ops_admin", "idem-close-replay")
+        command = deepcopy(server.COMMANDS[first_payload["result"]["commandId"]])
+        event = deepcopy(server.EVENTS[first_payload["result"]["eventId"]])
+        terminal_outcome = deepcopy(server.TERMINAL_OUTCOMES[first_payload["result"]["commandId"]])
+        replay_snapshot = snapshot_domain_state()
         second_payload, second_status = server.route_request(
             "POST",
             "/v1/markets/m1/close",
             build_market_close_body("ops_admin", idempotency_key="idem-close-replay"),
         )
+        second_events_payload, second_events_status = server.route_request("GET", "/v1/markets/m1/events")
 
         self.assertEqual(first_status, 201)
+        self.assertEqual(first_events_status, 200)
         self.assertEqual(second_status, 201)
-        self.assertEqual(first_payload["result"]["commandId"], second_payload["result"]["commandId"])
-        self.assertEqual(first_payload["result"]["eventId"], second_payload["result"]["eventId"])
+        self.assertEqual(second_events_status, 200)
+        self.assertEqual(command["payload"], expected_market_close_payload())
+        self.assertEqual(server.IDEMPOTENCY_KEYS[scope_key], first_payload["result"]["commandId"])
+        self.assertEqual(first_payload["result"]["status"], "accepted")
+        self.assertEqual(
+            terminal_outcome,
+            {
+                "eventId": first_payload["result"]["eventId"],
+                "eventType": "CommandAccepted",
+                "eventPayload": event["payload"],
+                "status": 201,
+                "response": first_payload,
+            },
+        )
+        self.assertEqual(event["eventType"], "CommandAccepted")
+        self.assertEqual(event["seq"], 1)
+        self.assertEqual(event["prevEventHash"], server.GENESIS_EVENT_HASH)
+        self.assertEqual(first_events_payload["events"], [event])
+        self.assertEqual(
+            first_events_payload["chain"],
+            {
+                "genesisHash": server.GENESIS_EVENT_HASH,
+                "headSeq": event["seq"],
+                "headHash": event["eventHash"],
+            },
+        )
+        self.assertEqual(second_payload["result"], first_payload["result"])
         self.assertEqual(second_payload["market"], first_payload["market"])
+        self.assertEqual(
+            {key: value for key, value in second_payload["meta"].items() if key != "replayed"},
+            first_payload["meta"],
+        )
         self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(second_events_payload["events"], first_events_payload["events"])
+        self.assertEqual(second_events_payload["chain"], first_events_payload["chain"])
+        self.assertEqual(second_events_payload["pagination"], first_events_payload["pagination"])
         self.assertEqual(len(server.COMMANDS), 1)
         self.assertEqual(len(server.EVENTS), 1)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
+        assert_domain_state_unchanged(self, replay_snapshot)
 
     def test_market_close_rejects_already_closed_market_with_terminal_response(self):
         server.MARKETS["m1"]["status"] = "closed"
         before_state = snapshot_market_close_rejection_state("m1")
+        baseline_command_count = len(server.COMMANDS)
+        baseline_event_count = len(server.EVENTS)
+        baseline_terminal_outcome_count = len(server.TERMINAL_OUTCOMES)
+        baseline_head_seq = server.MARKET_EVENT_SEQUENCES.get("m1", 0)
+        baseline_head_hash = server.LAST_EVENT_HASHES.get("m1", server.GENESIS_EVENT_HASH)
 
         payload, status = server.route_request(
             "POST",
             "/v1/markets/m1/close",
             build_market_close_body("ops_admin", idempotency_key="idem-close-closed"),
         )
+        events_payload, events_status = server.route_request("GET", "/v1/markets/m1/events")
 
         self.assertEqual(status, 409)
+        self.assertEqual(events_status, 200)
         self.assertTrue(payload["result"]["commandId"].startswith("cmd_"))
         self.assertTrue(payload["result"]["eventId"].startswith("evt_"))
         self.assertTrue(payload["result"]["emittedAt"].endswith("Z"))
@@ -4082,6 +4131,13 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             },
         )
         assert_market_close_rejection_state_unchanged(self, "m1", before_state)
+        self.assertEqual(len(server.COMMANDS), baseline_command_count + 1)
+        self.assertEqual(len(server.EVENTS), baseline_event_count + 1)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), baseline_terminal_outcome_count + 1)
+        self.assertEqual(
+            server.IDEMPOTENCY_KEYS[("m1", "ops_admin", "idem-close-closed")],
+            payload["result"]["commandId"],
+        )
         command = server.COMMANDS[payload["result"]["commandId"]]
         self.assertEqual(command["commandId"], payload["result"]["commandId"])
         self.assertEqual(command["payload"], expected_market_close_payload())
@@ -4089,12 +4145,32 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(event["commandId"], payload["result"]["commandId"])
         self.assertEqual(event["eventId"], payload["result"]["eventId"])
         self.assertEqual(event["emittedAt"], payload["result"]["emittedAt"])
+        self.assertEqual(event["eventType"], "CommandRejected")
+        self.assertEqual(event["seq"], baseline_head_seq + 1)
+        self.assertEqual(event["prevEventHash"], baseline_head_hash)
         self.assertEqual(
             event["payload"],
             {
                 "reasonCode": "market_already_closed",
                 "reason": "Market is already closed",
                 "retryHint": "reuse the original idempotency key to replay the prior outcome",
+            },
+        )
+        terminal_outcome = server.TERMINAL_OUTCOMES[payload["result"]["commandId"]]
+        self.assertEqual(terminal_outcome["eventId"], payload["result"]["eventId"])
+        self.assertEqual(terminal_outcome["eventType"], "CommandRejected")
+        self.assertEqual(terminal_outcome["eventPayload"], event["payload"])
+        self.assertEqual(terminal_outcome["status"], 409)
+        self.assertEqual(terminal_outcome["response"], payload)
+        self.assertEqual(server.MARKET_EVENT_SEQUENCES["m1"], event["seq"])
+        self.assertEqual(server.LAST_EVENT_HASHES["m1"], event["eventHash"])
+        self.assertEqual(events_payload["events"], [event])
+        self.assertEqual(
+            events_payload["chain"],
+            {
+                "genesisHash": server.GENESIS_EVENT_HASH,
+                "headSeq": event["seq"],
+                "headHash": event["eventHash"],
             },
         )
 
@@ -4152,14 +4228,21 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 }
                 server.MARKETS["m1"].update(deepcopy(market_updates))
                 before_state = snapshot_market_close_rejection_state("m1")
+                baseline_command_count = len(server.COMMANDS)
+                baseline_event_count = len(server.EVENTS)
+                baseline_terminal_outcome_count = len(server.TERMINAL_OUTCOMES)
+                baseline_head_seq = server.MARKET_EVENT_SEQUENCES["m1"]
+                baseline_head_hash = server.LAST_EVENT_HASHES["m1"]
 
                 payload, status = server.route_request(
                     "POST",
                     "/v1/markets/m1/close",
                     build_market_close_body("ops_admin", idempotency_key=idempotency_key),
                 )
+                events_payload, events_status = server.route_request("GET", "/v1/markets/m1/events")
 
                 self.assertEqual(status, 409)
+                self.assertEqual(events_status, 200)
                 self.assertTrue(payload["result"]["commandId"].startswith("cmd_"))
                 self.assertTrue(payload["result"]["eventId"].startswith("evt_"))
                 self.assertTrue(payload["result"]["emittedAt"].endswith("Z"))
@@ -4186,6 +4269,13 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     },
                 )
                 assert_market_close_rejection_state_unchanged(self, "m1", before_state)
+                self.assertEqual(len(server.COMMANDS), baseline_command_count + 1)
+                self.assertEqual(len(server.EVENTS), baseline_event_count + 1)
+                self.assertEqual(len(server.TERMINAL_OUTCOMES), baseline_terminal_outcome_count + 1)
+                self.assertEqual(
+                    server.IDEMPOTENCY_KEYS[("m1", "ops_admin", idempotency_key)],
+                    payload["result"]["commandId"],
+                )
                 command = server.COMMANDS[payload["result"]["commandId"]]
                 self.assertEqual(command["commandId"], payload["result"]["commandId"])
                 self.assertEqual(command["payload"], expected_market_close_payload())
@@ -4193,6 +4283,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 self.assertEqual(event["commandId"], payload["result"]["commandId"])
                 self.assertEqual(event["eventId"], payload["result"]["eventId"])
                 self.assertEqual(event["emittedAt"], payload["result"]["emittedAt"])
+                self.assertEqual(event["eventType"], "CommandRejected")
+                self.assertEqual(event["seq"], baseline_head_seq + 1)
+                self.assertEqual(event["prevEventHash"], baseline_head_hash)
                 self.assertEqual(
                     event["payload"],
                     {
@@ -4201,6 +4294,18 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                         "retryHint": "close an active market",
                     },
                 )
+                terminal_outcome = server.TERMINAL_OUTCOMES[payload["result"]["commandId"]]
+                self.assertEqual(terminal_outcome["eventId"], payload["result"]["eventId"])
+                self.assertEqual(terminal_outcome["eventType"], "CommandRejected")
+                self.assertEqual(terminal_outcome["eventPayload"], event["payload"])
+                self.assertEqual(terminal_outcome["status"], 409)
+                self.assertEqual(terminal_outcome["response"], payload)
+                self.assertEqual(server.MARKET_EVENT_SEQUENCES["m1"], event["seq"])
+                self.assertEqual(server.LAST_EVENT_HASHES["m1"], event["eventHash"])
+                self.assertEqual(len(events_payload["events"]), baseline_event_count + 1)
+                self.assertEqual(events_payload["events"][-1], event)
+                self.assertEqual(events_payload["chain"]["headSeq"], event["seq"])
+                self.assertEqual(events_payload["chain"]["headHash"], event["eventHash"])
 
     def test_market_close_rejected_terminal_outcomes_replay_for_status_conflicts(self):
         cases = (
@@ -4256,20 +4361,32 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             with self.subTest(case=label):
                 server.reset_state()
                 server.MARKETS["m1"].update(deepcopy(market_updates))
+                before_rejection_state = snapshot_market_close_rejection_state("m1")
+                baseline_command_count = len(server.COMMANDS)
+                baseline_event_count = len(server.EVENTS)
+                baseline_terminal_outcome_count = len(server.TERMINAL_OUTCOMES)
+                baseline_head_seq = server.MARKET_EVENT_SEQUENCES.get("m1", 0)
+                baseline_head_hash = server.LAST_EVENT_HASHES.get("m1", server.GENESIS_EVENT_HASH)
+                scope_key = ("m1", "ops_admin", idempotency_key)
 
                 first_payload, first_status = server.route_request(
                     "POST",
                     "/v1/markets/m1/close",
                     build_market_close_body("ops_admin", idempotency_key=idempotency_key),
                 )
+                first_events_payload, first_events_status = server.route_request("GET", "/v1/markets/m1/events")
+                replay_snapshot = snapshot_domain_state()
                 second_payload, second_status = server.route_request(
                     "POST",
                     "/v1/markets/m1/close",
                     build_market_close_body("ops_admin", idempotency_key=idempotency_key),
                 )
+                second_events_payload, second_events_status = server.route_request("GET", "/v1/markets/m1/events")
 
                 self.assertEqual(first_status, 409)
+                self.assertEqual(first_events_status, 200)
                 self.assertEqual(second_status, 409)
+                self.assertEqual(second_events_status, 200)
                 self.assertTrue(first_payload["result"]["commandId"].startswith("cmd_"))
                 self.assertTrue(first_payload["result"]["eventId"].startswith("evt_"))
                 self.assertTrue(first_payload["result"]["emittedAt"].endswith("Z"))
@@ -4296,10 +4413,57 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                         "retryHint": retry_hint,
                     },
                 )
+                assert_market_close_rejection_state_unchanged(self, "m1", before_rejection_state)
+                self.assertEqual(len(server.COMMANDS), baseline_command_count + 1)
+                self.assertEqual(len(server.EVENTS), baseline_event_count + 1)
+                self.assertEqual(len(server.TERMINAL_OUTCOMES), baseline_terminal_outcome_count + 1)
+                self.assertEqual(server.IDEMPOTENCY_KEYS[scope_key], first_payload["result"]["commandId"])
+                command = server.COMMANDS[first_payload["result"]["commandId"]]
+                self.assertEqual(command["payload"], expected_market_close_payload())
+                event = server.EVENTS[first_payload["result"]["eventId"]]
+                self.assertEqual(event["eventType"], "CommandRejected")
+                self.assertEqual(event["seq"], baseline_head_seq + 1)
+                self.assertEqual(event["prevEventHash"], baseline_head_hash)
+                self.assertEqual(
+                    event["payload"],
+                    {
+                        "reasonCode": expected_code,
+                        "reason": expected_message,
+                        "retryHint": retry_hint,
+                    },
+                )
+                terminal_outcome = server.TERMINAL_OUTCOMES[first_payload["result"]["commandId"]]
+                self.assertEqual(terminal_outcome["eventId"], first_payload["result"]["eventId"])
+                self.assertEqual(terminal_outcome["eventType"], "CommandRejected")
+                self.assertEqual(terminal_outcome["eventPayload"], event["payload"])
+                self.assertEqual(terminal_outcome["status"], 409)
+                self.assertEqual(terminal_outcome["response"], first_payload)
+                self.assertEqual(server.MARKET_EVENT_SEQUENCES["m1"], event["seq"])
+                self.assertEqual(server.LAST_EVENT_HASHES["m1"], event["eventHash"])
+                self.assertEqual(first_events_payload["events"], [event])
+                self.assertEqual(
+                    first_events_payload["chain"],
+                    {
+                        "genesisHash": server.GENESIS_EVENT_HASH,
+                        "headSeq": event["seq"],
+                        "headHash": event["eventHash"],
+                    },
+                )
                 self.assertEqual(second_payload["result"], first_payload["result"])
+                self.assertEqual(second_payload["error"], first_payload["error"])
+                self.assertEqual(
+                    {key: value for key, value in second_payload["meta"].items() if key != "replayed"},
+                    first_payload["meta"],
+                )
                 self.assertTrue(second_payload["meta"]["replayed"])
+                self.assertEqual(second_events_payload["events"], first_events_payload["events"])
+                self.assertEqual(second_events_payload["chain"], first_events_payload["chain"])
+                self.assertEqual(second_events_payload["pagination"], first_events_payload["pagination"])
                 self.assertEqual(len(server.COMMANDS), 1)
                 self.assertEqual(len(server.EVENTS), 1)
+                self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
+                assert_market_close_rejection_state_unchanged(self, "m1", before_rejection_state)
+                assert_domain_state_unchanged(self, replay_snapshot)
 
     def test_market_resolution_accepts_final_probabilities_body_and_canonicalizes_command_payload(self):
         final_probabilities = {"yes": 0.0, "no": 0.0, "delayed": 1.0}
