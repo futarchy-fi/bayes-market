@@ -1,0 +1,64 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep the current ProbabilityEdit limiter matrix as the sole regression seam for remaining-quota decrement, `429 rate_limit_exceeded`, `Retry-After`, and per-agent isolation because all protected POST routes still rely on the same shared write-control seam.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Clone the full limiter matrix onto create-market, comment-post, market-resolve, or event-trade without evidence of route-local divergence.",
+        "Treat route-local handlers as separate limiter seams even though quota accounting and rate-limit headers remain centralized."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Treat this execution step as preservation-only: maintain the current ProbabilityEdit-vs-breadth split in the tests, and only widen cross-route limiter assertions if execution proves the shared seam is no longer representative.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Preemptively add duplicate decrement, exhaustion, or per-agent-isolation assertions on other protected POST routes.",
+        "Reshape the task into broader route-local limiter coverage despite the current shared-seam evidence."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep the work within one worker because the relevant backend seam, existing test inventory, and focused verification path are already known from the local research.",
+      "based_on": ["q1", "q2", "q3"],
+      "alternatives_rejected": [
+        "Spawn a child task to re-audit backend route handling.",
+        "Split test-preservation and backend-fix exploration into parallel workers."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Re-audit the protected-write coverage in `tests/test_bayes_market_api.py` and confirm the current shape still matches the researched contract: ProbabilityEdit owns the decrement/`429`/`Retry-After`/per-agent-isolation matrix, while create-market, comment-post, market-resolve, and event-trade remain first-success breadth checks.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "If the test shape drifted, update the affected tests to restore ProbabilityEdit as the sole limiter matrix and keep the other protected POST routes free of duplicate cross-route exhaustion assertions.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Only if the preserved tests expose a real regression, patch the shared protected-write seam in `backend/server.py` so the centralized remaining-quota decrement, `429`, `Retry-After`, and per-agent isolation behavior is restored without introducing route-specific limiter logic.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Run the focused Bayes market auth/rate-limit tests that exercise the ProbabilityEdit limiter matrix and the protected-route breadth checks, and verify the results do not justify cloning the limiter matrix onto another route.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Review the diff to ensure the step stayed preservation-only, then stage and commit the task work once the focused verification passes.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
