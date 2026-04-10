@@ -1,0 +1,123 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Step 3 should preserve temporary compatibility for the current string-based callers while introducing the shared filters object. The recorded parent plan splits the work so step 3 changes only `types.ts`, `client.ts`, and `hooks.ts`, step 4 updates `useMarkets(...)` call sites, and step 5 refreshes frontend tests. In this checkout, `MarketList.tsx` still calls `useMarkets(statusFilter || undefined)` and `api-client.test.ts` still calls `listMarkets(\"active\")`, so making step 3 object-only would leave checked-in callers out of sync before the later steps land. The safest transition is to accept both the old string form and the new filter object until step 4/5 finish the migration.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg/plan.json:58",
+        ".fleet/tasks/bayes-market-0zg/plan.json:63",
+        "frontend/src/routes/MarketList.tsx:11",
+        "frontend/src/routes/MarketList.tsx:12",
+        "frontend/src/__tests__/api-client.test.ts:37",
+        "frontend/src/lib/api/client.ts:69",
+        "frontend/src/lib/query/hooks.ts:272"
+      ],
+      "uncertainty": "The codebase makes the need for compatibility clear, but it does not force one exact migration tactic; overloads, a union parameter, or widening step 3 to include same-step caller edits would all satisfy the transition.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The canonical frontend model should normalize omitted `includeResolved` and `includeResolved: false` to the same effective request and query key. The backend already defaults omitted `include_resolved` to `false`, and the default `/v1/markets` response freezes `meta.filters.include_resolved == false`; keeping `{}` and `{ includeResolved: false }` as distinct frontend keys would create duplicate caches for the same server behavior. The clean contract is: `includeResolved` stays optional in the shared type, normalization collapses `undefined` and `false` together, the API client omits `include_resolved` unless the normalized effective value is `true`, and `queryKeys.markets(...)` uses the normalized shape instead of raw caller input.",
+      "confidence": 0.92,
+      "evidence": [
+        "backend/server.py:1736",
+        "backend/server.py:1738",
+        "backend/server.py:1748",
+        "tests/test_bayes_market_api.py:657",
+        "tests/test_bayes_market_api.py:663",
+        "tests/test_bayes_market_api.py:671",
+        "tests/test_bayes_market_api.py:677",
+        "frontend/src/lib/query/hooks.ts:15"
+      ],
+      "uncertainty": "There is no checked-in frontend normalization helper yet, so the exact canonical object shape is inferred from the backend default contract and the existing React Query key behavior.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The shared frontend filter model should normalize `{ status: \"resolved\", includeResolved: false }` to the same effective request and query key as `status: \"resolved\"` or `{ status: \"resolved\", includeResolved: true }`. The backend already computes `effective_include_resolved = include_resolved or status == \"resolved\"` and returns normalized metadata with `include_resolved: true` for both the plain resolved-status case and the contradictory raw query. If the frontend preserves the contradictory raw shape, it can create separate cache entries for a response the server has already normalized to one effective filter mode.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:1738",
+        "backend/server.py:1748",
+        "tests/test_bayes_market_api.py:679",
+        "tests/test_bayes_market_api.py:685",
+        "tests/test_bayes_market_api.py:687",
+        "tests/test_bayes_market_api.py:693",
+        "frontend/src/lib/query/hooks.ts:15",
+        ".fleet/tasks/bayes-market-0zg-execute-step-2/plan.json:16"
+      ],
+      "uncertainty": "Only a deliberate choice to preserve raw caller intent in the cache key, even when the backend normalizes it away, would argue for a different answer.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Step 3 should update the frontend list-response typing for the expanded `/v1/markets` metadata as well as the request-side filter shape. The parent plan says this workstream should carry the new filter through the shared market-collection contract, not treat it as backend-only, and `frontend/src/lib/api/types.ts` is already the contract file in scope for step 3. The backend handler and tests now freeze `meta.filters` with both `status` and `include_resolved`, while the frontend still types `MarketListResponse.meta` as the generic `Meta`; leaving that unchanged would make the new market-list filter only half-modeled in the shared type layer.",
+      "confidence": 0.78,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg/plan.json:27",
+        ".fleet/tasks/bayes-market-0zg/plan.json:58",
+        "backend/server.py:1748",
+        "tests/test_bayes_market_api.py:663",
+        "tests/test_bayes_market_api.py:677",
+        "tests/test_bayes_market_api.py:685",
+        "tests/test_bayes_market_api.py:693",
+        "frontend/src/lib/api/types.ts:49",
+        "frontend/src/lib/api/types.ts:52",
+        "frontend/src/lib/api/types.ts:273"
+      ],
+      "uncertainty": "The step title explicitly names the request/query helpers, so a narrower reading could defer frontend response typing to a later follow-up; the repo does not yet have frontend assertions against `meta.filters`.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "The shared `MarketListFilters.status` field should be typed as optional `MarketStatus`, with omission representing the default or all-status mode. The only current sentinel for \"all\" is the Market List route's local empty-string UI state, and that route already translates `\"\"` to `undefined` before it calls `useMarkets(...)`. There is no shared search-param or filter helper in this checkout that needs a literal `\"all\"`, so adding that alias to the common API/query contract would leak a UI-only sentinel into the shared filter type for no current codebase need.",
+      "confidence": 0.97,
+      "evidence": [
+        "frontend/src/lib/api/types.ts:31",
+        "frontend/src/routes/MarketList.tsx:8",
+        "frontend/src/routes/MarketList.tsx:11",
+        "frontend/src/routes/MarketList.tsx:12",
+        "frontend/src/__tests__/MarketList.test.tsx:44",
+        ".fleet/tasks/bayes-market-0zg/plan.json:63"
+      ],
+      "uncertainty": "A later UI abstraction could still choose to define its own local `\"all\"` sentinel, but the current shared API/query layer does not need that value in its public type.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The current backend handler and tests already freeze the intended wire semantics: `include_resolved` is the query parameter name, omission means `false`, `status=resolved` forces effective resolved inclusion, and the response metadata echoes the normalized effective value."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "This checkout has no separate market-list filter helper module, and the parent plan names `frontend/src/lib/api/types.ts` as part of the step-3 seam, so defining the shared filter type there and reusing it from the client/hooks is consistent with the existing structure."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The repo’s own plan explicitly treats camelCase `includeResolved` as the frontend-facing property and `include_resolved` as the wire-level query parameter, which makes the API client the right translation boundary."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The existing Market List route already keeps its UI-only empty-string sentinel local and converts it to `undefined` before calling `useMarkets(...)`, so the shared filter contract can stay close to backend semantics with optional `MarketStatus` rather than adding an `\"all\"` alias."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Because the parent plan defers caller updates to step 4 and frontend test refreshes to step 5, step 3 needs a compile-safe migration path for the still-string-based `MarketList` and `api-client.test.ts` call sites."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

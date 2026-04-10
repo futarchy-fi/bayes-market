@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should step 3 preserve temporary compatibility for the current string-based callers of `listMarkets(...)` and `useMarkets(...)` (for example via overloads or same-step call-site edits), or is it acceptable for this step to widen those APIs to a filters object even though `frontend/src/routes/MarketList.tsx` and `frontend/src/__tests__/api-client.test.ts` still pass a raw status string today?",
+      "category": "codebase",
+      "why_it_matters": "In this worktree, `frontend/src/lib/api/client.ts` and `frontend/src/lib/query/hooks.ts` still accept `status?: string`, while `frontend/src/routes/MarketList.tsx` and the API-client test exercise that exact signature. Changing only the three named files to an object-shaped filter can leave the branch temporarily type-broken unless the compatibility strategy is explicit."
+    },
+    {
+      "id": "q2",
+      "question": "What should the canonical frontend representation of the default hidden-resolved mode be: omit `includeResolved`, pass `includeResolved: false`, or normalize both forms to the same serialized request and query key?",
+      "category": "design",
+      "why_it_matters": "The backend now defaults omitted `include_resolved` to `false`, but the frontend request and cache layers currently have no normalization helper at all. This choice determines URL serialization, whether `queryKeys.markets({})` and `queryKeys.markets({ includeResolved: false })` collapse to one cache entry, and how much raw wire behavior leaks into callers."
+    },
+    {
+      "id": "q3",
+      "question": "Should the shared frontend filter model normalize the contradictory combination `{ status: \"resolved\", includeResolved: false }` to the same effective request/key as `status: \"resolved\"` or `{ status: \"resolved\", includeResolved: true }`, or should it preserve the caller's raw input and rely on the backend to normalize?",
+      "category": "design",
+      "why_it_matters": "The backend contract in this branch already treats `status=resolved` as an effective resolved-inclusive query and returns `meta.filters.include_resolved == true` even when the raw query included `include_resolved=false`. If the frontend keeps the raw contradictory shape distinct, it can create duplicate cache keys for the same server result."
+    },
+    {
+      "id": "q4",
+      "question": "Is step 3 expected to update frontend response typing for the expanded `/v1/markets` metadata, specifically `meta.filters.include_resolved`, or is the shared filter shape for this step intentionally request-side only?",
+      "category": "requirements",
+      "why_it_matters": "The backend tests now freeze `meta.filters` with both `status` and `include_resolved`, but `frontend/src/lib/api/types.ts` still models `MarketListResponse.meta` as a generic `Meta` with only `apiVersion` and `timestamp`. Before editing `types.ts`, we need to know whether this step owns the full list-contract shape or only the input side used by `client.ts` and `hooks.ts`."
+    },
+    {
+      "id": "q5",
+      "question": "Should the new shared `MarketListFilters.status` field be typed as only `MarketStatus` with omission representing the default/all state, or does the frontend contract need an explicit alias such as `\"all\"` to support current and upcoming Market List UI state?",
+      "category": "design",
+      "why_it_matters": "This worktree does not yet have a shared market-list filter type, and the current Market List route keeps the selector state as `\"\"`. The choice here determines whether the shared API/query contract stays close to the backend's normalized semantics or whether a UI-only sentinel becomes part of the common filter object that step 4 will consume."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The backend `/v1/markets` contract is already fixed in this worktree: the wire param is `include_resolved`, omission means `false`, `status=resolved` still returns resolved rows on its own, and the normalized response metadata echoes `include_resolved` after that effective-mode calculation.",
+      "confidence": 0.99,
+      "if_wrong": "The frontend filter shape could encode the wrong semantics or canonicalize contradictory combinations incorrectly."
+    },
+    {
+      "id": "a2",
+      "assumption": "The shared frontend filter object should live in `frontend/src/lib/api/types.ts` and be reused by `frontend/src/lib/api/client.ts` and `frontend/src/lib/query/hooks.ts`, because this checkout has no existing market-list filter helper module yet.",
+      "confidence": 0.97,
+      "if_wrong": "The implementation seam may belong in a separate helper module, and forcing the type to live only in `types.ts` would create the wrong abstraction boundary."
+    },
+    {
+      "id": "a3",
+      "assumption": "The frontend-facing property should be camelCase `includeResolved`, with serialization to the backend's snake_case `include_resolved` happening inside the API client layer.",
+      "confidence": 0.99,
+      "if_wrong": "The filter contract would either expose wire-format naming directly to components/hooks or require a different translation boundary than the current plan describes."
+    },
+    {
+      "id": "a4",
+      "assumption": "The shared request filter type should probably keep `status` as an optional `MarketStatus` and use omission rather than a typed `\"all\"` sentinel for the canonical default, leaving any UI-only empty-string state in route code.",
+      "confidence": 0.85,
+      "if_wrong": "Step 3 would need a wider filter union and step 4 would intentionally leak an all-status sentinel into the common API/query contract."
+    },
+    {
+      "id": "a5",
+      "assumption": "Even if broader caller updates are deferred to step 4, step 3 still needs a compile-safe transition strategy for the current string-based `MarketList` and test call sites.",
+      "confidence": 0.94,
+      "if_wrong": "The branch may allow an intermediate broken interface change between steps, and preserving compatibility in step 3 would be unnecessary extra work."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

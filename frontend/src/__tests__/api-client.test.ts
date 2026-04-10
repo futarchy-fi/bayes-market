@@ -27,7 +27,15 @@ describe("API Client", () => {
   });
 
   it("listMarkets calls /v1/markets", async () => {
-    const body = { markets: [], count: 0, meta: { apiVersion: "1.0", timestamp: "" } };
+    const body = {
+      markets: [],
+      count: 0,
+      meta: {
+        apiVersion: "1.0",
+        timestamp: "",
+        filters: { status: null, include_resolved: false },
+      },
+    };
     mockFetch.mockResolvedValue(jsonResponse(body));
     const result = await listMarkets();
     expect(mockFetch).toHaveBeenCalledWith("/v1/markets", expect.objectContaining({ headers: {} }));
@@ -35,10 +43,51 @@ describe("API Client", () => {
   });
 
   it("listMarkets passes status filter", async () => {
-    const body = { markets: [], count: 0, meta: { apiVersion: "1.0", timestamp: "" } };
+    const body = {
+      markets: [],
+      count: 0,
+      meta: {
+        apiVersion: "1.0",
+        timestamp: "",
+        filters: { status: "active", include_resolved: false },
+      },
+    };
     mockFetch.mockResolvedValue(jsonResponse(body));
     await listMarkets("active");
     expect(mockFetch).toHaveBeenCalledWith("/v1/markets?status=active", expect.any(Object));
+  });
+
+  it("listMarkets serializes includeResolved in snake_case", async () => {
+    const body = {
+      markets: [],
+      count: 0,
+      meta: {
+        apiVersion: "1.0",
+        timestamp: "",
+        filters: { status: null, include_resolved: true },
+      },
+    };
+    mockFetch.mockResolvedValue(jsonResponse(body));
+    await listMarkets({ includeResolved: true });
+    expect(mockFetch).toHaveBeenCalledWith("/v1/markets?include_resolved=true", expect.any(Object));
+  });
+
+  it("listMarkets normalizes resolved filters to include resolved rows", async () => {
+    const body = {
+      markets: [],
+      count: 0,
+      meta: {
+        apiVersion: "1.0",
+        timestamp: "",
+        filters: { status: "resolved", include_resolved: true },
+      },
+    };
+    mockFetch.mockResolvedValue(jsonResponse(body));
+    await listMarkets({ status: "resolved", includeResolved: false });
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/v1/markets?status=resolved&include_resolved=true",
+      expect.any(Object),
+    );
   });
 
   it("getMarket calls /v1/markets/{id}", async () => {

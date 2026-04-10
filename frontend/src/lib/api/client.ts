@@ -15,6 +15,7 @@ import type {
   ProbabilityEditPayload,
   EventTradePayload,
   Session,
+  MarketListFilterInput,
 } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
@@ -28,6 +29,11 @@ export class BayesApiError extends Error {
     super(`${code}: ${status}`);
     this.name = "BayesApiError";
   }
+}
+
+export interface NormalizedMarketListFilters {
+  status?: string;
+  includeResolved?: true;
 }
 
 async function request<T>(
@@ -66,11 +72,43 @@ async function request<T>(
   return body as T;
 }
 
+export function normalizeMarketListFilters(
+  filters?: MarketListFilterInput,
+): NormalizedMarketListFilters {
+  const status = typeof filters === "string"
+    ? filters
+    : filters?.status;
+  const includeResolved = (
+    typeof filters !== "string"
+    && filters?.includeResolved === true
+  ) || status === "resolved";
+
+  return {
+    ...(status ? { status } : {}),
+    ...(includeResolved ? { includeResolved: true } : {}),
+  };
+}
+
+function serializeMarketListFilters(filters?: MarketListFilterInput): string {
+  const normalizedFilters = normalizeMarketListFilters(filters);
+  const params = new URLSearchParams();
+
+  if (normalizedFilters.status) {
+    params.set("status", normalizedFilters.status);
+  }
+
+  if (normalizedFilters.includeResolved) {
+    params.set("include_resolved", "true");
+  }
+
+  const queryString = params.toString();
+  return queryString ? `?${queryString}` : "";
+}
+
 export function listMarkets(
-  status?: string,
+  filters?: MarketListFilterInput,
 ): Promise<MarketListResponse> {
-  const params = status ? `?status=${encodeURIComponent(status)}` : "";
-  return request<MarketListResponse>(`/v1/markets${params}`);
+  return request<MarketListResponse>(`/v1/markets${serializeMarketListFilters(filters)}`);
 }
 
 export interface CreateMarketPayload {
