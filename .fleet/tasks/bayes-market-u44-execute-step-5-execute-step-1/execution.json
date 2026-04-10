@@ -1,0 +1,18 @@
+{
+  "phase": "execute",
+  "recorded_at": "2026-04-10T13:41:22Z",
+  "authoritative_for_checkout": true,
+  "command": "python3 tests/test_bayes_market_api.py BayesMarketApiAuthRateLimitTests",
+  "cwd": "/tmp/temporal-worktrees/task-bayes-market-u44-execute-step-5-execute-step-1",
+  "source_changes": [
+    {
+      "file": "backend/server.py",
+      "summary": "Reverted the protected-write route-suffix refactor and restored the original inline `resolve_write_route_category(...)` matcher."
+    }
+  ],
+  "result": {
+    "status": "passed",
+    "exit_status": 0,
+    "unittest_output": ".....................\n----------------------------------------------------------------------\nRan 21 tests in 0.629s\n\nOK"
+  }
+}
