@@ -1,0 +1,75 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat `include_resolved` as a strict optional boolean query param on `GET /v1/markets`: accept it at most once, allow only `true` or `false`, default a missing value to `false`, and return `400 invalid_query` for blanks, duplicates, or unsupported literals.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Accept permissive truthy and falsy aliases like `1`, `0`, `yes`, or `no`.",
+        "Treat blank or duplicate values as implicit defaults instead of contract errors."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep `status=resolved` as a sufficient explicit request for resolved markets even after the default list excludes them; when `status=resolved` is combined with `include_resolved=false`, normalize to an effective resolved-inclusive query instead of silently returning an empty list.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Require callers to pass both `status=resolved` and `include_resolved=true`.",
+        "Honor the contradictory combination literally and return no rows.",
+        "Reject `status=resolved&include_resolved=false` as a hard error."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Carry the new filter through the shared market-collection contract rather than treating it as backend-only: backend `meta.filters` should expose `include_resolved`, and the frontend market-list client/query surface should adopt a shared filters object that can map camelCase `includeResolved` to the wire-level `include_resolved` param.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Keep the backend response metadata and frontend query helpers modeled around `status` only.",
+        "Add the backend flag without updating the shared frontend collection contract."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Only the screens that genuinely need resolved markets in their default collection should opt back in: `System` for aggregate counts and `BayesNetGraph` for resolved detail pages. `MarketList` should keep resolved markets hidden unless the user explicitly selects `status=resolved`, while `Portfolio`, `AssumptionPanel`, and `ConditionalEditor` stay on the new default because they already narrow the collection or do not need resolved rows.",
+      "based_on": ["q4", "q3"],
+      "alternatives_rejected": [
+        "Opt every `useMarkets()` caller back into resolved markets and effectively undo the new default.",
+        "Leave `System` and the graph on the new default and accept undercounted stats or missing resolved focus nodes."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Patch `backend/server.py` so `list_markets(...)` parses and validates `include_resolved`, computes the effective resolved-inclusion mode with `status=resolved` still working on its own, filters `MARKETS` accordingly, and returns `meta.filters` with both `status` and normalized `include_resolved`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Extend `tests/test_bayes_market_api.py` to freeze the new backend contract: default `/v1/markets` excludes resolved entries, `include_resolved=true` restores them, `status=resolved` still returns resolved rows, `status=resolved&include_resolved=false` normalizes to the resolved result set, and invalid blank, duplicate, or unsupported `include_resolved` values produce `400 invalid_query`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Introduce a shared frontend market-list filter shape and thread it through `frontend/src/lib/api/types.ts`, `frontend/src/lib/api/client.ts`, and `frontend/src/lib/query/hooks.ts` so `listMarkets(...)`, `useMarkets(...)`, and `queryKeys.markets(...)` can represent `status` plus `includeResolved` and serialize the latter as `include_resolved`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Update the `useMarkets(...)` call sites to match the new filter model: keep `frontend/src/routes/MarketList.tsx` using the default hidden-resolved behavior plus status selection, opt `frontend/src/routes/System.tsx` into `includeResolved: true`, opt `frontend/src/features/graph/BayesNetGraph.tsx` into `includeResolved: true`, and leave `frontend/src/routes/Portfolio.tsx`, `frontend/src/features/assumptions/AssumptionPanel.tsx`, and `frontend/src/features/trading/ConditionalEditor.tsx` on the new default.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Refresh the affected frontend tests, starting with `frontend/src/__tests__/api-client.test.ts` and the route/component tests impacted by the new opt-in behavior, then run focused backend and frontend test slices that cover `/v1/markets` filtering and the updated collection consumers.",
+      "depends_on": [2, 3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
