@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What specific failure in the new route-breadth coverage should count as a real shared-path backend bug worth patching in `backend/server.py`, rather than stale test expectations, given that the current audit already shows `_enforce_write_controls()` running before `route_request(...)` and `BayesHandler.handle_api()` as the only protected-POST quota-header seam?",
+      "category": "requirements",
+      "why_it_matters": "Step 4 is supposed to preserve existing behavior unless the broadened tests prove a gap in the shared path. This question keeps the work from drifting into speculative backend edits."
+    },
+    {
+      "id": "q2",
+      "question": "Which replay or terminal-rejection scenarios are intended to freeze the current quota-accounting order after any backend patch: should protected POST replays that return `201` continue to reflect already-spent quota, and should post-gate `409` outcomes such as `market_not_active` or `min_asset_violation` remain headerless even though `_enforce_write_controls()` has already consumed quota?",
+      "category": "design",
+      "why_it_matters": "The current architecture charges quota before route-specific idempotency and rejection logic. Step 4 needs to know which existing HTTP contracts are the authoritative sentinels for preserving that order."
+    },
+    {
+      "id": "q3",
+      "question": "Should disabled-limiter mode (`RATE_LIMIT_PER_MIN <= 0`) and missing or invalid `X-Bayes-Agent-Id` cases continue to emit no quota headers at all across every protected POST route, with `Retry-After` remaining exclusive to `429 rate_limit_exceeded` responses?",
+      "category": "requirements",
+      "why_it_matters": "This is the explicit negative-contract requirement for the step, and it is currently implemented centrally by `rate_limit_headers(...)` plus the `handle_api()` error branch."
+    },
+    {
+      "id": "q4",
+      "question": "If a backend fix is required, must it stay inside the shared write-control and header path (`resolve_write_request_agent(...)`, `_enforce_write_controls()`, `BayesHandler.handle_api()`, or `rate_limit_headers(...)`) and avoid changing route-local idempotency or terminal-rejection handlers such as comment post, probability edit, event trade, or market resolve?",
+      "category": "design",
+      "why_it_matters": "A route-local fix could easily change quota-accounting order or broaden header emission in only one handler, which is exactly what this audit step is trying to prevent."
+    },
+    {
+      "id": "q5",
+      "question": "Are the existing ProbabilityEdit HTTP rate-limit tests still the representative proof for remaining-quota decrement, per-agent isolation, and `429` plus `Retry-After` behavior, so step 4 only needs to verify those shared invariants are not regressed by any backend patch instead of duplicating the full limiter matrix across create-market, comment-post, resolve, and event-trade?",
+      "category": "codebase",
+      "why_it_matters": "The limiter and quota-header logic are centralized. Clarifying whether ProbabilityEdit remains the canonical coverage keeps this step scoped to preservation checks rather than multiplying redundant route-specific tests."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "All protected POST requests still flow through `BayesHandler.do_POST()` into `BayesHandler.handle_api(\"POST\")`, so `_enforce_write_controls()` remains the single pre-routing quota gate.",
+      "confidence": 0.99,
+      "if_wrong": "A protected route could bypass the shared limiter or shared header seam, which would justify a backend patch even if the current audit looks clean."
+    },
+    {
+      "id": "a2",
+      "assumption": "`rate_limit_headers(...)` still returns an empty map when `RATE_LIMIT_PER_MIN <= 0` or the normalized agent id is empty, so disabled-limiter and missing-agent no-header behavior is a shared invariant across the protected POST surface.",
+      "confidence": 0.99,
+      "if_wrong": "Step 4 would need to identify and reconcile route-specific exceptions instead of treating the no-header cases as globally frozen."
+    },
+    {
+      "id": "a3",
+      "assumption": "Quota headers are still emitted only from `BayesHandler.handle_api()` on successful protected writes and on `429 rate_limit_exceeded`, with non-429 `400` and `409` application errors staying headerless even if quota was already charged.",
+      "confidence": 0.98,
+      "if_wrong": "Any backend patch would first need to remove or align alternate header-emission behavior before this step could claim the shared seam is preserved."
+    },
+    {
+      "id": "a4",
+      "assumption": "Existing HTTP replay and rejection tests, especially for ProbabilityEdit and market resolve, are sufficient sentinels for this step's ordering concerns because they exercise route-specific idempotent replay and terminal rejection after the shared limiter runs.",
+      "confidence": 0.86,
+      "if_wrong": "Additional route-specific verification would be needed to prove a backend patch did not silently change quota-accounting order on another protected endpoint."
+    },
+    {
+      "id": "a5",
+      "assumption": "If the broadened tests fail, the most likely backend fix remains a shared-path classification or header-seam adjustment, not a change to route-local business logic.",
+      "confidence": 0.9,
+      "if_wrong": "This step may need to revisit the premise that one shared limiter/header seam is sufficient for every protected POST route."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
