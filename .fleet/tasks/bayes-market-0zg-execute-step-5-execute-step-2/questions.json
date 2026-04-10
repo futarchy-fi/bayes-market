@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "In `frontend/src/__tests__/MarketList.test.tsx`, should the refreshed default \"All statuses\" scenario freeze both the initial `listMarkets(undefined)` request and the absence of resolved rows, rather than only proving that cards render?",
+      "category": "requirements",
+      "why_it_matters": "The route now encodes the new default through an `undefined` filter, and the backend default excludes resolved markets. If the test only proves that some cards render, it can still pass with contradictory fixtures."
+    },
+    {
+      "id": "q2",
+      "question": "Should step 2 replace the current single shared `mockResolvedValue(...)` with a request-aware `listMarkets` mock keyed by the received filter argument, instead of relying on one contradictory fixture or on fragile call-order-specific responses?",
+      "category": "design",
+      "why_it_matters": "The current suite returns the same market collection for every request, even when the route asks for different filters. The test strategy determines whether request-shape assertions are actually connected to the rendered output."
+    },
+    {
+      "id": "q3",
+      "question": "For explicit status selections in `MarketList`, should the suite prove both `{ status: \"active\" }` and `{ status: \"resolved\" }` and render the matching active-only or resolved-only collection, without expecting a separate `{ includeResolved: true }` opt-in on this route?",
+      "category": "requirements",
+      "why_it_matters": "The route only exposes a status dropdown, but the client and backend normalize the resolved path specially. The test needs a precise request contract for the active and resolved branches."
+    },
+    {
+      "id": "q4",
+      "question": "When `MarketList.test.tsx` stubs `MarketListResponse.meta.filters`, should those fixtures mirror the backend's normalized effective filters, especially `include_resolved: true` for the resolved collection, even though the route itself does not read `meta.filters`?",
+      "category": "codebase",
+      "why_it_matters": "Contradictory response metadata can freeze impossible request/response combinations and hide regressions in exactly the contract this step is trying to protect."
+    },
+    {
+      "id": "q5",
+      "question": "Is `frontend/src/__tests__/MarketList.test.tsx` itself the intended seam for this leaf, or should step 2 also add lower-level `useMarkets(...)` or query-key assertions to cover the filter normalization?",
+      "category": "design",
+      "why_it_matters": "The plan names a route-level test refresh, but `useMarkets(...)` and the query keys sit underneath it. This answer sets the boundary between route behavior coverage and lower-level query-hook coverage."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The current `MarketList` suite does not yet prove the new default because its shared fixture returns a resolved row while claiming `include_resolved: false`.",
+      "confidence": 0.99,
+      "if_wrong": "The existing file would already be sufficient, and the leaf would only need cosmetic cleanup rather than a real test-contract refresh."
+    },
+    {
+      "id": "a2",
+      "assumption": "The route still maps the blank dropdown selection to `undefined` and any explicit option to `{ status: ... }`.",
+      "confidence": 0.99,
+      "if_wrong": "The request expectations in the refreshed suite would need to change, and the step title itself would be pointing at the wrong contract."
+    },
+    {
+      "id": "a3",
+      "assumption": "For `MarketList`, selecting `resolved` should continue to rely on `status=resolved` rather than a separate `{ includeResolved: true }` filter object.",
+      "confidence": 0.97,
+      "if_wrong": "The refreshed route test would need a different request expectation and might imply a UI/API contract change."
+    },
+    {
+      "id": "a4",
+      "assumption": "No child task is needed because the route, query hook, API client, backend handler, and current tests provide enough local evidence to answer this leaf.",
+      "confidence": 0.98,
+      "if_wrong": "A deeper investigation task would be needed before the suite could be reworked safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
