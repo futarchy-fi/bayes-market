@@ -7,6 +7,7 @@ import type {
   EngineStatsResponse,
   AccountRiskResponse,
   OrderResponse,
+  EventTradeResponse,
   CommentResponse,
   ApiError,
   CommentPayload,
@@ -239,8 +240,8 @@ export function submitEventTrade(
   marketId: string,
   payload: EventTradePayload,
   session: Session,
-): Promise<OrderResponse> {
-  return request<OrderResponse>(
+): Promise<EventTradeResponse> {
+  return request<EventTradeResponse>(
     `/v1/markets/${encodeURIComponent(marketId)}/orders/event-trade`,
     {
       method: "POST",

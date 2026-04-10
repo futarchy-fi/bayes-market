@@ -89,11 +89,13 @@ function parseMarketPriceMessage(value: unknown): MarketPriceMessage | null {
     return null;
   }
 
-  const resolutionProbabilities = value.resolutionProbabilities == null
-    ? undefined
-    : parseMarginals(value.resolutionProbabilities);
-  if (value.resolutionProbabilities != null && !resolutionProbabilities) {
-    return null;
+  let resolutionProbabilities: Record<string, number> | undefined;
+  if (value.resolutionProbabilities != null) {
+    const parsedResolutionProbabilities = parseMarginals(value.resolutionProbabilities);
+    if (!parsedResolutionProbabilities) {
+      return null;
+    }
+    resolutionProbabilities = parsedResolutionProbabilities;
   }
 
   return {

@@ -1,29 +1,30 @@
 import { useState } from "react";
 import { useEventTrade } from "@/lib/query/hooks";
 import { useSession } from "@/features/session/context";
-import type { Market, AssetDelta } from "@/lib/api/types";
+import type { EventTradeOrder, Market } from "@/lib/api/types";
 
-function TradeReceipt({ delta }: { delta: AssetDelta }) {
-  const impact = delta.impactScore;
-  const impactColor = impact > 0.5 ? "var(--color-danger)" : impact > 0.2 ? "var(--color-warning, orange)" : "var(--color-text-muted)";
-
+function TradeReceipt({ order, outcomeLabel }: { order: EventTradeOrder; outcomeLabel: string }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "var(--space-sm)", marginTop: "var(--space-xs)", fontSize: "0.75rem" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "var(--space-sm)", marginTop: "var(--space-xs)", fontSize: "0.75rem" }}>
       <div>
-        <div style={{ color: "var(--color-text-muted)" }}>Before</div>
-        <div style={{ fontFamily: "var(--font-mono)" }}>{delta.beforeMinAsset.toFixed(2)}</div>
+        <div style={{ color: "var(--color-text-muted)" }}>Side</div>
+        <div style={{ fontFamily: "var(--font-mono)" }}>{order.side}</div>
       </div>
       <div>
-        <div style={{ color: "var(--color-text-muted)" }}>After</div>
-        <div style={{ fontFamily: "var(--font-mono)" }}>{delta.afterMinAsset.toFixed(2)}</div>
+        <div style={{ color: "var(--color-text-muted)" }}>Outcome</div>
+        <div style={{ fontFamily: "var(--font-mono)" }}>{outcomeLabel}</div>
       </div>
       <div>
-        <div style={{ color: "var(--color-text-muted)" }}>Impact</div>
-        <div style={{ fontFamily: "var(--font-mono)", color: impactColor }}>{(impact * 100).toFixed(1)}%</div>
+        <div style={{ color: "var(--color-text-muted)" }}>Size</div>
+        <div style={{ fontFamily: "var(--font-mono)" }}>{order.size.toFixed(2)}</div>
       </div>
       <div>
-        <div style={{ color: "var(--color-text-muted)" }}>Limit</div>
-        <div style={{ fontFamily: "var(--font-mono)" }}>{delta.riskLimit.toFixed(2)}</div>
+        <div style={{ color: "var(--color-text-muted)" }}>Price</div>
+        <div style={{ fontFamily: "var(--font-mono)" }}>{(order.price * 100).toFixed(1)}%</div>
+      </div>
+      <div>
+        <div style={{ color: "var(--color-text-muted)" }}>Notional</div>
+        <div style={{ fontFamily: "var(--font-mono)" }}>{order.notional.toFixed(2)}</div>
       </div>
     </div>
   );
@@ -37,15 +38,19 @@ export function EventTradePanel({ market }: Props) {
   const { session, isConfigured } = useSession();
   const mutation = useEventTrade(market.id);
   const [selectedOutcome, setSelectedOutcome] = useState<string>("");
+  const [size, setSize] = useState<string>("1");
   const [side, setSide] = useState<"buy" | "sell">("buy");
 
   if (market.status !== "active") return null;
   if (!isConfigured) return null;
 
   const currentPrice = selectedOutcome ? (market.marginals[selectedOutcome] ?? 0) : 0;
+  const parsedSize = Number(size);
+  const isValidSize = Number.isFinite(parsedSize) && parsedSize > 0;
+  const canSubmit = selectedOutcome.length > 0 && isValidSize && !mutation.isPending;
 
   const handleTrade = () => {
-    if (!selectedOutcome) return;
+    if (!selectedOutcome || !isValidSize) return;
 
     mutation.mutate({
       payload: {
@@ -55,6 +60,7 @@ export function EventTradePanel({ market }: Props) {
           outcomeId: selectedOutcome,
           negated: false,
         }]],
+        size: parsedSize,
         side,
         idempotencyKey: crypto.randomUUID(),
       },
@@ -113,26 +119,43 @@ export function EventTradePanel({ market }: Props) {
           </span>
         )}
 
+        <input
+          type="number"
+          inputMode="decimal"
+          min="0.000001"
+          step="0.1"
+          value={size}
+          onChange={(e) => setSize(e.target.value)}
+          style={sizeInputStyle}
+          aria-label="Trade size"
+        />
+
         <button
           onClick={handleTrade}
-          disabled={!selectedOutcome || mutation.isPending}
+          disabled={!canSubmit}
           style={{
             ...tradeBtnStyle,
             background: side === "buy" ? "var(--color-success, #22c55e)" : "var(--color-danger, #ef4444)",
-            opacity: selectedOutcome ? 1 : 0.5,
-            cursor: selectedOutcome && !mutation.isPending ? "pointer" : "not-allowed",
+            opacity: canSubmit ? 1 : 0.5,
+            cursor: canSubmit ? "pointer" : "not-allowed",
           }}
         >
           {mutation.isPending
             ? "Submitting..."
-            : `${side === "buy" ? "Buy" : "Sell"} ${selectedOutcome || "..."}`}
+            : `${side === "buy" ? "Buy" : "Sell"} ${selectedOutcome || "..."} (${size || "0"})`}
         </button>
       </div>
 
       {mutation.isSuccess && (
         <div style={successStyle}>
-          <div>Trade accepted — Order {mutation.data.order.orderId}</div>
-          <TradeReceipt delta={mutation.data.assetDelta} />
+          <div>Trade accepted - Order {mutation.data.order.id}</div>
+          <TradeReceipt
+            order={mutation.data.order}
+            outcomeLabel={
+              market.outcomes.find((outcome) => outcome.id === mutation.data.order.targetOutcomeId)?.name
+              ?? mutation.data.order.targetOutcomeId
+            }
+          />
         </div>
       )}
 
@@ -167,6 +190,11 @@ const selectStyle: React.CSSProperties = {
   background: "var(--color-bg)",
   color: "var(--color-text)",
   fontSize: "0.85rem",
+};
+
+const sizeInputStyle: React.CSSProperties = {
+  ...selectStyle,
+  width: "96px",
 };
 
 const tradeBtnStyle: React.CSSProperties = {
