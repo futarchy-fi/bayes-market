@@ -1,0 +1,68 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat `frontend/src/routes/Portfolio.tsx` as a dual-read page: fetch `/exposure` and `/risk` in parallel, drive the holdings table from exposure, and render the existing risk summary cards only when risk data exists so a `/risk` 404 no longer hides live EventTrade positions.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Keep the route gated on `useAccountRisk(...)` and show nothing for exposure-only accounts.",
+        "Normalize missing-account `404`s inside the shared query hooks instead of handling the split read-model behavior in the route."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Replace the current per-market risk rows with a single per-outcome exposure table that uses `useMarkets()` only for market-title lookup and otherwise renders raw `outcomeId` values rather than adding extra market-detail hydration.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Keep the old per-market risk table as a second positions surface alongside exposure.",
+        "Add per-market `getMarket(...)` hydration just to resolve human-readable outcome names in this step."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep `frontend/src/features/trading/EventTradePanel.tsx` submit-driven: preserve the local size input as the source of position size, but translate backend `position_limit_exceeded` failures into explicit inline limit copy using the returned error details while keeping generic error fallback behavior for everything else.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Add an upfront exposure query and headroom widget before submit.",
+        "Leave the panel on the current raw `error.message` rendering."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep `frontend/src/routes/MarketDetail.tsx` and its risk-based `PositionCard` out of scope for this step so the implementation stays limited to the EventTrade panel and portfolio surface named in the task.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Expand the step into a broader market-detail exposure rewrite."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Refine `frontend/src/features/trading/EventTradePanel.tsx` so the quick-trade form clearly presents the position-size input and adds a focused formatter/helper for `BayesApiError` `position_limit_exceeded` responses, including requested size, current net size, resulting net size, and the max-position cap in the inline error state.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Rework `frontend/src/routes/Portfolio.tsx` to query `useAccountExposure(session.accountId)`, `useAccountRisk(session.accountId)`, and `useMarkets()` together, handling independent loading and `404 account_not_found` cases in-component so exposure-only accounts can still render holdings while truly empty accounts still get a sensible empty/error state.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Replace the existing per-market risk table in `frontend/src/routes/Portfolio.tsx` with a live per-outcome exposure table that shows market link/title, raw `outcomeId`, signed/net size, absolute size, last trade price, and recency, while keeping the current risk metric cards and risk timestamp visible only when `/risk` returned data.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Add or extend targeted frontend tests, primarily in `frontend/src/__tests__/Portfolio.test.tsx` plus a new EventTrade-panel test file if needed, to cover exposure-only rendering, optional risk-summary rendering, and clear position-limit error messaging; then run the relevant `frontend` Vitest subset for those UI paths.",
+      "depends_on": [1, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
