@@ -1,0 +1,59 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep this leaf scoped to `frontend/src/__tests__/System.test.tsx` and freeze both halves of the System contract there: the explicit `listMarkets({ includeResolved: true })` request and the aggregate UI derived from the resolved-inclusive collection.",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Add new lower-level hook or API-client assertions for this leaf even though those seams are already covered elsewhere.",
+        "Only assert the request shape or headings without proving the rendered aggregate behavior changes with resolved rows included."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Promote the default `listMarkets` fixture in `System.test.tsx` to a mixed active-plus-resolved response whose `meta.filters` remains aligned with the collection, specifically `{ status: null, include_resolved: true }`, so the route's opt-in behavior is exercised by default.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Keep an active-only shared fixture and only override one aggregate test with resolved data.",
+        "Return resolved rows from the mock while leaving `meta.filters.include_resolved` contradictory."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Use section- or card-scoped assertions with distinct fixture totals so duplicate labels like `Active` and `Resolved` are verified in the correct section, while also checking the zero-value `Closed` and `Draft` cards that should result from an active-plus-resolved-only fixture.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Use broad `getByText` or `getAllByText` checks that can pass against the wrong `Active` or `Resolved` label.",
+        "Skip the zero-value status cards even though they are part of the same derived status-count map."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Refactor `frontend/src/__tests__/System.test.tsx` so `beforeEach` seeds a contract-consistent mixed market response, using one active and one resolved fixture with unique aggregate totals (for example volume `450 + 1150 = 1.6K` and liquidity `1200 + 3000 = 4.2K`) and `meta.filters.include_resolved: true`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Refresh the market-counts coverage in `frontend/src/__tests__/System.test.tsx` to prove the route calls `listMarkets({ includeResolved: true })` and that the `Markets` section renders the expected `Total`, `Active`, `Resolved`, `Closed`, and `Draft` values from the mixed fixture.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Tighten the `Platform Stats` assertions in `frontend/src/__tests__/System.test.tsx` with section-scoped or card-scoped queries that verify the formatted `Total Volume` and `Total Liquidity` plus the `Active` and `Resolved` counts from the same resolved-inclusive collection.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Run the focused frontend verification for `frontend/src/__tests__/System.test.tsx` and make only incidental query/helper adjustments needed to keep the refreshed scoped assertions stable.",
+      "depends_on": [2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
