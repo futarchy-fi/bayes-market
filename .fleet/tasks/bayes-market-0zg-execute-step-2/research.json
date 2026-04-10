@@ -1,0 +1,102 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Step 2 should stay confined to the existing `BayesMarketApiUnitTests` `/v1/markets` slice that calls `server.route_request(...)` directly. The plan for this workstream names step 2 as an extension of `tests/test_bayes_market_api.py`, the existing market-list/filter assertions already live in the unit-test block, and the integration class only uses `GET /v1/markets` as a side check after create-market flows rather than as the primary contract-freeze surface for query parsing. I did not find codebase evidence that this step also requires mirrored HTTP/integration coverage for `include_resolved`.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg/plan.json:53",
+        ".fleet/tasks/bayes-market-0zg-execute-step-1/plan.json:57",
+        ".fleet/tasks/bayes-market-0zg-execute-step-1/validation.json:4",
+        "tests/test_bayes_market_api.py:656",
+        "tests/test_bayes_market_api.py:6911",
+        "tests/test_bayes_market_api.py:7016",
+        "tests/test_bayes_market_api.py:7082"
+      ],
+      "uncertainty": "The repo does contain an HTTP integration layer, so mirrored coverage could still be added later as extra defense, but it is not surfaced as a requirement of this step.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The test should pin both the resolved result set and the normalized metadata `meta.filters == {\"status\": \"resolved\", \"include_resolved\": true}`. The handler derives one effective boolean with `status == \"resolved\"` forcing resolved inclusion, and it returns that normalized value in `meta.filters`. The existing `/v1/markets` tests already treat `meta.filters` as part of the frozen response contract for the default, explicit opt-in, resolved-only, and contradictory cases.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-0zg-execute-step-1/plan.json:16",
+        ".fleet/tasks/bayes-market-0zg-execute-step-1/plan.json:26",
+        "backend/server.py:1760",
+        "backend/server.py:1770",
+        "tests/test_bayes_market_api.py:662",
+        "tests/test_bayes_market_api.py:684",
+        "tests/test_bayes_market_api.py:692"
+      ],
+      "uncertainty": "Only a deliberate product choice to echo raw input instead of normalized filters would change this, and the checked-in handler plus prior plan artifacts both point the other way.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Invalid `include_resolved` coverage should follow the current `/v1/markets` unit-test style: call `server.route_request(...)`, assert that it raises `server.ApiError`, and pin the structured `invalid_query` details. That is how the adjacent list-market validation tests already check invalid `status` and duplicate filters. Serialized HTTP error payload assertions are used in the integration class when exercising the real HTTP server, but that is a different test layer from the one step 2 is extending.",
+      "confidence": 0.98,
+      "evidence": [
+        "tests/test_bayes_market_api.py:694",
+        "tests/test_bayes_market_api.py:707",
+        "tests/test_bayes_market_api.py:719",
+        "tests/test_bayes_market_api.py:7246",
+        "tests/test_bayes_market_api.py:7311"
+      ],
+      "uncertainty": "Additional HTTP-level duplication would be compatible with this choice, but it would be additive rather than the primary expectation for this step.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "For this step, exact market ordering should be treated as part of the frozen `/v1/markets` contract because that is already how the test file models the endpoint. The handler iterates `MARKETS.values()` without an explicit sort, and `reset_state()` restores `INITIAL_MARKETS` in stable insertion order (`m1`, `m2`, `m3`). Existing list tests already assert exact ID arrays rather than unordered membership, so extending this slice should keep pinning those arrays for consistency with the checked-in contract.",
+      "confidence": 0.92,
+      "evidence": [
+        "backend/server.py:61",
+        "backend/server.py:169",
+        "backend/server.py:1737",
+        "backend/server.py:1766",
+        "backend/server.py:242",
+        "tests/test_bayes_market_api.py:661",
+        "tests/test_bayes_market_api.py:675",
+        "tests/test_bayes_market_api.py:683"
+      ],
+      "uncertainty": "The endpoint does not separately document sort semantics, so this is an implementation-derived contract frozen by existing tests rather than by standalone API documentation.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Step 2 can stay in the existing `/v1/markets` unit-test block in `BayesMarketApiUnitTests` without adding a new helper layer or mirrored HTTP integration coverage."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The expected seeded result sets are stable after each `setUp()`: default active rows are `m1` and `m2`, while `m3` is the resolved fixture used for opt-in and `status=resolved` assertions."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Testing the blank case as `?include_resolved=` is the right way to distinguish an invalid blank value from an omitted parameter, because the router preserves blank query values before validation."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The normalized contract includes `meta.filters.include_resolved == true` for `status=resolved` requests, including the contradictory `status=resolved&include_resolved=false` case, so the tests should freeze metadata as well as rows."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "This checkout already contains the target backend logic and the intended `/v1/markets` assertions, so a baseline implementation branch can preserve or transplant this exact slice instead of deriving new semantics from scratch."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
