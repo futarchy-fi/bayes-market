@@ -4,9 +4,11 @@ import {
   getMarket,
   getMarketPreview,
   getAccountRisk,
+  getAccountExposure,
   submitEventTrade,
   BayesApiError,
 } from "@/lib/api/client";
+import type { AccountExposureResponse } from "@/lib/api/types";
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
@@ -52,6 +54,40 @@ describe("API Client", () => {
     mockFetch.mockResolvedValue(jsonResponse(body));
     await getAccountRisk("a1");
     expect(mockFetch).toHaveBeenCalledWith("/v1/accounts/a1/risk", expect.any(Object));
+  });
+
+  it("getAccountExposure calls /v1/accounts/{id}/exposure", async () => {
+    const body = {
+      account: {
+        id: "a1",
+        exposure: {
+          maxPositionSize: 100,
+          updatedAt: "2026-04-10T12:00:00Z",
+          positions: [
+            {
+              marketId: "m1",
+              outcomeId: "yes",
+              netSize: 8.5,
+              absSize: 8.5,
+              lastTradePrice: 0.65,
+              updatedAt: "2026-04-10T11:54:00Z",
+              lastOrderId: "ord_1",
+              lastCommandId: "cmd_1",
+            },
+          ],
+        },
+      },
+      meta: {
+        apiVersion: "1.0",
+        timestamp: "2026-04-10T12:00:00Z",
+      },
+    } satisfies AccountExposureResponse;
+    mockFetch.mockResolvedValue(jsonResponse(body));
+
+    const result = await getAccountExposure("a1");
+
+    expect(mockFetch).toHaveBeenCalledWith("/v1/accounts/a1/exposure", expect.any(Object));
+    expect(result).toEqual(body);
   });
 
   it("getMarketPreview calls /v1/markets/{id}/meta", async () => {
