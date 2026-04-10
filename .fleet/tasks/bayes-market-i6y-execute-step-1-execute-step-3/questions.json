@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "For this seam-only phase, what is the minimum allowed value at `account.positions`: must `get_account_positions(account_id)` already return a minimally serialized list of live rows, or is a thinner placeholder shape acceptable as long as the outer `{ \"account\": { \"id\": ..., \"positions\": ... }, \"meta\": ... }` envelope is established?",
+      "category": "design",
+      "why_it_matters": "Step 3 explicitly defers the full positions serializer, but the getter still needs a stable response body. Freezing too much leaks the wrong public contract, while freezing too little makes the next route and test work ambiguous."
+    },
+    {
+      "id": "q2",
+      "question": "Should `get_account_positions(account_id)` mirror `/v1/accounts/{id}/exposure` exactly for account existence by raising `404 account_not_found` when `ACCOUNT_EXPOSURE` is missing or when all rows disappear after live-row filtering, rather than treating raw membership in `ACCOUNT_EXPOSURE` as sufficient?",
+      "category": "requirements",
+      "why_it_matters": "The current exposure getter is projection-local and treats fully pruned or rounded-zero accounts as absent. The new getter needs one precise liveness rule before it can decide whether to return data or a 404."
+    },
+    {
+      "id": "q3",
+      "question": "Is it acceptable for this phase to reuse `serialize_account_exposure_positions(account)` as the temporary source for `account.positions`, or must `get_account_positions(...)` avoid that helper because it would expose richer `/exposure`-specific fields such as `absSize`, `updatedAt`, `lastOrderId`, and `lastCommandId` before the dedicated positions serializer lands?",
+      "category": "design",
+      "why_it_matters": "The existing exposure serializer already gives deterministic ordering and live-row filtering, but it also bakes in a larger row schema than the positions task plans to keep."
+    },
+    {
+      "id": "q4",
+      "question": "Besides `account.id` and `account.positions`, should this getter include any account-level metadata in phase 1, or should it stay strictly minimal and leave fields like account `updatedAt` or any nested wrapper object out until a later contract decision?",
+      "category": "requirements",
+      "why_it_matters": "Existing account reads put route-specific data under `account.risk` or `account.exposure`; the new getter needs one clear outer shape so later route wiring and regressions do not guess."
+    },
+    {
+      "id": "q5",
+      "question": "What is the minimum regression boundary for this getter-only step: direct `get_account_positions(...)` coverage for the happy path and 404 semantics, or should tests wait until step 4 wires `/v1/accounts/{id}/positions` through `route_request(...)`?",
+      "category": "codebase",
+      "why_it_matters": "This checkout is already mid-rollout, with `/v1/accounts/{id}/positions` advertised from `ACCOUNT_SERVICE_INDEX_ROUTES` while the dispatcher still only recognizes `risk` and `exposure`, so the safest test seam for the new getter needs to be explicit."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The only authoritative store for live account positions in this checkout is `ACCOUNT_EXPOSURE`; there is no separate `ACCOUNT_POSITIONS` projection or standalone account registry.",
+      "confidence": 0.99,
+      "if_wrong": "Building `get_account_positions(...)` on top of `ACCOUNT_EXPOSURE` would mirror the wrong model and could miss the real source of truth."
+    },
+    {
+      "id": "a2",
+      "assumption": "This phase should already establish the standard account-read envelope `{ \"account\": { \"id\": account_id, \"positions\": ... }, \"meta\": make_meta() }`, even though the detailed row serializer is intentionally deferred.",
+      "confidence": 0.97,
+      "if_wrong": "The step would be creating only an internal helper seam, and the public route plus tests would still need a different wrapper decision later."
+    },
+    {
+      "id": "a3",
+      "assumption": "Projection-local liveness should stay aligned with `/exposure`: missing `ACCOUNT_EXPOSURE` entries and accounts whose rows collapse to no live positions should resolve as `404 account_not_found`.",
+      "confidence": 0.96,
+      "if_wrong": "The new route would intentionally diverge from `/exposure` and might need to return `200` with an empty positions payload for risk-only or fully pruned accounts."
+    },
+    {
+      "id": "a4",
+      "assumption": "This phase is not supposed to freeze the richer `/exposure` row contract under the new route; exposing extra fields beyond the minimal positions payload would be premature.",
+      "confidence": 0.9,
+      "if_wrong": "Reusing the full exposure serializer would be acceptable now, and the later serializer phase would mainly become a cleanup or narrowing pass."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child subtasks are needed because the relevant behavior is concentrated in `backend/server.py`, the parent task artifacts, and the existing backend tests.",
+      "confidence": 0.94,
+      "if_wrong": "A separate subtask would be needed to audit another hidden contract owner before the getter can be implemented safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

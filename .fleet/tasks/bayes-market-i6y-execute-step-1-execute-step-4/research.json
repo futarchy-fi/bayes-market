@@ -1,0 +1,105 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The remaining production seam is the account dispatcher in `route_request(...)`. The service index already advertises `/v1/accounts/{id}/positions` through `ACCOUNT_SERVICE_INDEX_ROUTES` and `service_index_payload()`, but the matched account-path branch still only recognizes `risk` and `exposure`. The implementation target for this step is therefore the existing `len(parts) == 4 && parts[:2] == [\"v1\", \"accounts\"]` branch, not another route declaration.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:127",
+        "backend/server.py:850",
+        "backend/server.py:3932",
+        "tests/test_bayes_market_api.py:578"
+      ],
+      "uncertainty": "The task-local `questions.json` is absent in this checkout, so the step-4 scope was recovered from the parent child-step plan. The root-route regression is also currently stale against the already-updated service-index tuple.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. `/v1/accounts/{id}/positions` should be recognized inside the existing matched-account branch so it inherits the same GET-only behavior and the same structured `405 method_not_allowed` payload as `/risk` and `/exposure`. The child plan explicitly chooses that design, and the current direct plus threaded `/risk` and `/exposure` tests already freeze the shared account-read contract.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:15",
+        "backend/server.py:3932",
+        "tests/test_bayes_market_api.py:1116",
+        "tests/test_bayes_market_api.py:1159",
+        "tests/test_bayes_market_api.py:5941"
+      ],
+      "uncertainty": "None material. Making `/positions` a special-case branch would create a contract exception inside the account-read surface.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The router change should be additive only: preserve the existing `/risk` and `/exposure` dispatch behavior and add a third `positions` dispatch arm for `GET /v1/accounts/{id}/positions`. The current branch already dispatches `risk` and `exposure` directly, and the child plan for this step explicitly says not to alter the current `/risk` or `/exposure` behavior while broadening the recognized terminal segment.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:62",
+        "backend/server.py:3941",
+        "backend/server.py:3943",
+        "tests/test_bayes_market_api.py:4685"
+      ],
+      "uncertainty": "The current exposure route coverage is stronger than the risk happy-path coverage in this excerpt, but both routes clearly share the same dispatcher branch and method gate.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "This dispatcher step is not fully self-contained in the current checkout because `get_account_positions(account_id)` is not present yet. The child-step plan makes the router broadening depend on the prior getter step, so the intended implementation sequence is: add the dedicated getter first, then widen the dispatcher to call it. If the getter has not landed by execution time, this branch must bundle that prerequisite seam.",
+      "confidence": 0.93,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:57",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:62",
+        "backend/server.py:1656",
+        "backend/server.py:1677"
+      ],
+      "uncertainty": "The getter's absence is inferred from the current source layout and symbol search rather than from one explicit compile failure in this research phase.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Keep this child step scoped to backend route plumbing in `backend/server.py`. The parent and child plans separate service-index and dispatcher wiring from the later `/positions` regression expansion, even though the repository eventually mirrors public account routes with both direct and threaded HTTP tests. For this step, the decision is to preserve the backend route contract now and defer broader `/positions` test expansion to the later backend-regression phase.",
+      "confidence": 0.86,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y/plan.json:64",
+        ".fleet/tasks/bayes-market-i6y-execute-step-1/plan.json:67",
+        "tests/test_bayes_market_api.py:5910",
+        "tests/test_bayes_market_api.py:5941"
+      ],
+      "uncertainty": "The repo's long-run testing style still favors threaded HTTP parity for public account routes, so later phases should add it. This answer is only about the minimum scope of the dispatcher-specific child step.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Treat `/positions` as an additive account read beside `/risk` and `/exposure`; widen the existing account dispatcher instead of replacing any current route."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep the shared GET-only `405 method_not_allowed` behavior centralized for matched account paths so `/positions` stays contract-consistent with the existing account reads."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The service-index side of the rollout is already present, so the remaining production gap for this child step is the router branch, plus the prerequisite getter seam if it has not landed yet."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Preserve existing `/risk` and `/exposure` behavior exactly while adding `/positions`; any broader branch refactor would widen scope without evidence that the current behavior should change."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.86,
+      "impact": "Keep this child step backend-only and defer the fuller `/positions` regression and threaded HTTP expansion to the later backend-test phase."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

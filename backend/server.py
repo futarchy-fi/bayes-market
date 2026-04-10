@@ -127,6 +127,7 @@ max_position_size = 100.0
 ACCOUNT_SERVICE_INDEX_ROUTES = (
     "/v1/accounts/{id}/risk",
     "/v1/accounts/{id}/exposure",
+    "/v1/accounts/{id}/positions",
 )
 LEGACY_HEALTH_ROUTES = ("/health", "/healthz")
 VERSIONED_HEALTH_ROUTE = "/v1/health"
@@ -1625,6 +1626,43 @@ def serialize_account_exposure_position(position: dict[str, Any]) -> dict[str, A
     }
 
 
+def serialize_account_position(position: dict[str, Any]) -> dict[str, Any] | None:
+    """Project one live position row into the minimal public positions shape."""
+    market_id = position.get("marketId")
+    outcome_id = position.get("outcomeId")
+    if market_id is None or outcome_id is None:
+        return None
+
+    net_size = round_exposure_value(position.get("netSize"))
+    if net_size == 0.0:
+        return None
+
+    return {
+        "marketId": str(market_id),
+        "outcomeId": str(outcome_id),
+        "netSize": net_size,
+        "lastTradePrice": round_exposure_value(position.get("lastTradePrice")),
+    }
+
+
+def serialize_account_positions(account: dict[str, Any]) -> list[dict[str, Any]]:
+    """Project all live position rows in deterministic lexical order."""
+    positions = account.get("positions")
+    if not isinstance(positions, dict):
+        return []
+
+    serialized_positions: list[dict[str, Any]] = []
+    for position in positions.values():
+        if not isinstance(position, dict):
+            continue
+        serialized_position = serialize_account_position(position)
+        if serialized_position is not None:
+            serialized_positions.append(serialized_position)
+
+    serialized_positions.sort(key=lambda position: (position["marketId"], position["outcomeId"]))
+    return serialized_positions
+
+
 def serialize_account_exposure_positions(account: dict[str, Any]) -> list[dict[str, Any]]:
     """Project all live exposure rows in deterministic lexical order."""
     positions = account.get("positions")
@@ -1668,6 +1706,25 @@ def get_account_exposure(account_id: str) -> tuple[dict[str, Any], int]:
         "account": {
             "id": account_id,
             "exposure": exposure,
+        },
+        "meta": make_meta(),
+    }, 200
+
+
+def get_account_positions(account_id: str) -> tuple[dict[str, Any], int]:
+    """Return the read model for one account's current live open positions."""
+    account = ACCOUNT_EXPOSURE.get(account_id)
+    if account is None:
+        raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
+
+    positions = serialize_account_positions(account)
+    if not positions:
+        raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
+
+    return {
+        "account": {
+            "id": account_id,
+            "positions": positions,
         },
         "meta": make_meta(),
     }, 200
@@ -3928,8 +3985,9 @@ def route_request(
         )
 
     parts = [part for part in path.split("/") if part]
-    if len(parts) == 4 and parts[:2] == ["v1", "accounts"] and parts[3] in {"risk", "exposure"}:
+    if len(parts) == 4 and parts[:2] == ["v1", "accounts"] and parts[3] in {"risk", "exposure", "positions"}:
         account_id = parts[2]
+        resource = parts[3]
         if method != "GET":
             raise ApiError(
                 405,
@@ -3937,9 +3995,11 @@ def route_request(
                 f"{method} is not allowed for this resource",
                 {"method": method, "path": path},
             )
-        if parts[3] == "risk":
+        if resource == "risk":
             return get_account_risk(account_id)
-        return get_account_exposure(account_id)
+        if resource == "exposure":
+            return get_account_exposure(account_id)
+        return get_account_positions(account_id)
 
     if len(parts) >= 3 and parts[:2] == ["v1", "markets"]:
         market_id = parts[2]
