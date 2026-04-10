@@ -1,0 +1,45 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should `/v1/health` follow the normal versioned-API method contract and return `405 method_not_allowed` for non-`GET` requests on the same path, or is it acceptable for non-`GET` methods to keep falling through to the router's generic `404 not_found`?",
+      "category": "requirements",
+      "why_it_matters": "The current router treats `/health` and `/healthz` as GET-only probes that implicitly 404 on other methods, while most `/v1/*` resources explicitly 405 on method mismatch. Step 2 introduces a new versioned route, so its error contract needs to be frozen before writing router coverage."
+    },
+    {
+      "id": "q2",
+      "question": "How should the root service index advertise the new health endpoint: as a bare path like `/v1/health` to match the existing `routes.health` entries, or as `GET /v1/health` to match other method-specific GET-only entries, and does the order of `/health`, `/healthz`, and `/v1/health` matter?",
+      "category": "requirements",
+      "why_it_matters": "Today `service_index_payload()` exposes `routes.health` as path strings only, while other route groups mix bare paths and method-prefixed strings. Step 2 explicitly changes that list, so the string format and preferred ordering should be pinned for stable assertions and consumer expectations."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Step 2 should stay backend-only inside `backend/server.py`, because `BayesHandler` already forwards any `/v1/*` request through `route_request()` and the existing frontend health client still intentionally targets the legacy `/health` route.",
+      "confidence": 0.95,
+      "if_wrong": "The work would need to expand beyond router wiring into HTTP-dispatch changes or frontend client updates that are not named in the step title."
+    },
+    {
+      "id": "a2",
+      "assumption": "The new route should reuse the existing `v1_health_payload()` helper added in step 1 rather than constructing a second versioned health payload inline inside `route_request()`.",
+      "confidence": 0.99,
+      "if_wrong": "Step 2 would need additional payload-assembly branching, which would reopen the step-1 contract instead of only wiring the route to it."
+    },
+    {
+      "id": "a3",
+      "assumption": "Legacy `/health` and `/healthz` must remain on the minimal `health_payload()` shape with no `version`, `uptime_seconds`, or `components` additions, because existing tests, frontend usage, and ops documentation still treat those paths as the stable probe contract.",
+      "confidence": 0.97,
+      "if_wrong": "This step would become a broader compatibility migration touching backend tests, frontend consumers, and operational runbooks rather than a small additive route change."
+    },
+    {
+      "id": "a4",
+      "assumption": "The root service index should advertise all three health routes together so the new versioned endpoint is discoverable without removing the legacy probes that still need to stay live.",
+      "confidence": 0.94,
+      "if_wrong": "The index would need a different discovery policy, such as replacing the legacy entries or keeping `/v1/health` undiscoverable until a later migration step."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
