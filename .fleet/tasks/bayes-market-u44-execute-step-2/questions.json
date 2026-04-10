@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should step 2 follow the existing `BayesMarketApiAuthRateLimitTests` style by adding thin `*_with_headers(...)` wrappers that delegate to `request_with_headers(...)`, or is the intent to keep create-market, comment-post, and event-trade request bodies inline and only preserve the current resolve/probability helpers?",
+      "category": "design",
+      "why_it_matters": "The class already exposes `probability_edit_with_headers(...)` and `market_resolution_with_headers(...)`, while reusable payload builders already exist for create-market, market-resolve, and event-trade but not for comment-post. The expected abstraction level determines whether this step stays a small scaffolding patch or adds a broader helper surface."
+    },
+    {
+      "id": "q2",
+      "question": "What should be the canonical minimal-success payloads and fixture targets for the four non-ProbabilityEdit routes in this HTTP test slice: create-market with a unique title, comment-post against an active market, market-resolve against a market/outcome pair that will not collide with other tests, and event-trade against an active market/outcome with a valid atomic formula?",
+      "category": "codebase",
+      "why_it_matters": "The server enforces route-specific preconditions: create-market titles must be unique, comment-post requires a non-empty `accountId` and `body` on an active market, resolve requires a resolvable market plus a valid outcome, and event-trade requires an atomic formula whose literal matches the target market and outcome. Picking the wrong fixtures would make the new scaffold exercise rejection paths instead of the success path step 3 needs."
+    },
+    {
+      "id": "q3",
+      "question": "Does step 2 need a first-class comment payload helper such as `build_comment_post_body(...)`, or is an inline `{ \"accountId\": ..., \"body\": ... }` payload the intended shape because comment-post is only being introduced for this narrow auth/rate-limit scaffold?",
+      "category": "design",
+      "why_it_matters": "`tests/test_bayes_market_api.py` already has reusable builders for create-market, market-resolve, probability-edit, and event-trade, but none for comment-post. Deciding whether to add one affects consistency in the test module and how readable the later header-coverage tests will be."
+    },
+    {
+      "id": "q4",
+      "question": "Is the scope of this step strictly to make valid HTTP submissions reachable with `(status, payload, headers)` for each protected write route, leaving header assertions to step 3, or should the new helpers also centralize default `X-Bayes-Agent-Id` and positive `RATE_LIMIT_PER_MIN` assumptions that later tests will rely on directly?",
+      "category": "requirements",
+      "why_it_matters": "The plan splits scaffolding from assertions, but the current class already bakes some defaults into `probability_edit_with_headers(...)` and `market_resolution_with_headers(...)`. Clarifying whether the new scaffolding should only centralize request submission or also centralize auth/rate-limit defaults changes the helper signatures and future duplication."
+    },
+    {
+      "id": "q5",
+      "question": "Should the new route helpers preserve the same return contract as the existing wrappers, namely exposing response headers via `request_with_headers(...)`, instead of adding simpler request helpers that discard headers?",
+      "category": "design",
+      "why_it_matters": "Step 3 is planned to assert `X-RateLimit-*` headers across the protected POST surface. If step 2 adds helpers that only return `(status, payload)`, the next step will immediately need to refactor or bypass them."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new scaffolding should stay inside `BayesMarketApiAuthRateLimitTests` and mirror the existing `probability_edit_with_headers(...)` and `market_resolution_with_headers(...)` pattern rather than introducing a broader shared test framework.",
+      "confidence": 0.96,
+      "if_wrong": "The patch could overfit this class and need a follow-up refactor to a different helper location or abstraction."
+    },
+    {
+      "id": "a2",
+      "assumption": "Valid success fixtures already exist in reset state: create-market can use a unique title, comment-post can target active `m1`, event-trade can target active `m1` with outcome `yes`, and resolve can target `m2` with outcome `delayed` to avoid interfering with the existing `m1` trade helpers.",
+      "confidence": 0.93,
+      "if_wrong": "The chosen requests could trigger 400/409 application errors or interfere with existing assertions, so the helper defaults would need different targets."
+    },
+    {
+      "id": "a3",
+      "assumption": "Because `setUp()` calls `server.reset_state()`, one-shot success submissions do not need idempotency keys for this scaffolding step unless a later header test explicitly wants replay behavior.",
+      "confidence": 0.94,
+      "if_wrong": "The helpers would need optional idempotency-key defaults or unique-value generation to avoid accidental collisions across repeated requests."
+    },
+    {
+      "id": "a4",
+      "assumption": "A minimal inline comment payload is sufficient for step 2 unless the codebase wants explicit builder symmetry with the other write routes for readability.",
+      "confidence": 0.82,
+      "if_wrong": "Skipping a comment helper now would leave step 3 with inconsistent and noisier test bodies."
+    },
+    {
+      "id": "a5",
+      "assumption": "The helper return shape should continue exposing response headers, because the next planned step adds success-path `X-RateLimit-*` assertions for all protected write routes.",
+      "confidence": 0.98,
+      "if_wrong": "The next step's tests would need a different abstraction and this scaffolding work would be partially thrown away."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
