@@ -1,0 +1,121 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The accumulator should expose `averageCost` as a positive execution-price basis and keep side encoded only in signed `netSize`. The current EventTrade model stores `price` as a positive atomic probability and stores `side` separately, while the frozen P&L formula is `(mark - averageCost) * netSize` and explicitly relies on signed `netSize` to make profitable shorts positive. A sign-bearing basis would double-encode side and break that formula for shorts. The step title's 'signed average cost' should therefore be read as average-cost replay for a signed position, not a negative basis for short survivors.",
+      "confidence": 0.96,
+      "evidence": [
+        "backend/server.py:1324",
+        "backend/server.py:1327",
+        "backend/server.py:1329",
+        "backend/server.py:3484",
+        "backend/server.py:3498",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:50"
+      ],
+      "uncertainty": "The only ambiguity is the wording of the step title. The code and frozen P&L formula both point to an unsigned basis with sign carried by `netSize`.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Replay should round at every fill transition, not only once at the end. The write path already persists EventTrade `size` and `price` rounded to six decimals, and the shared netting helper rounds `currentNetSize`, `signedDelta`, and `resultingNetSize` on each mutation with exact-zero cleanup. To stay consistent with the live projection, the accumulator should normalize each fill's `size` and `price`, round the signed delta and surviving `netSize` after every step, and round each recomputed weighted `averageCost` immediately as well.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:1132",
+        "backend/server.py:1224",
+        "backend/server.py:1324",
+        "backend/server.py:1334",
+        "backend/server.py:1381",
+        "backend/server.py:3484",
+        "backend/server.py:3499",
+        "backend/server.py:3500",
+        "tests/test_bayes_market_api.py:4396"
+      ],
+      "uncertainty": "No material uncertainty. Delaying normalization until the end would diverge from the backend's existing mutation semantics around zero-crossing and exact-flat pruning.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "If a matched replay fill is malformed for accumulator math, the helper should downgrade the whole slice to 'no usable history' rather than skip that fill and continue or raise. Step 1 already isolated the safe skip policy to ordering fields like missing `filledAt` or `id` before a fill becomes replay input. Once a fill is selected for replay, `side`, `size`, and `price` are essential to net-size and basis math; skipping one of them can silently invent a basis that no longer matches the live row, while raising would violate the existing read-path preference for defensive fallback over hard failure. The safe read-model policy is to stop replay for that slice and let the later `/positions` layer use the planned `unrealizedPnl: 0.0` fallback.",
+      "confidence": 0.81,
+      "evidence": [
+        "backend/server.py:1332",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-1/plan.json:28",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:17",
+        "backend/server.py:1732",
+        "tests/test_bayes_market_api.py:4456",
+        "tests/test_bayes_market_api.py:4836"
+      ],
+      "uncertainty": "There is no existing accumulator implementation yet, so the whole-slice downgrade is inferred from the repo's read-only fallback patterns and from the risk of silently drifting away from the live projection if one required fill is skipped.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "`historyFound` should mean that at least one fill was successfully validated and applied into accumulator state. It should not mean merely that some matching candidate existed, because malformed or unreplayable candidates still need the missing-history fallback. It also should not mean 'finished with a survivor consistent enough to price', because replay/live consistency is a separate downstream check. In other words, `historyFound` is a signal that usable replay history exists, not a combined history-plus-reconciliation verdict.",
+      "confidence": 0.86,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-1/plan.json:28",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:17",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:82",
+        "backend/server.py:1732"
+      ],
+      "uncertainty": "The boolean is not implemented yet, so this is inferred from the frozen no-history fallback and from the need to keep mismatch handling separate from the notion of 'usable history'.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "The later `/positions` read path should keep trusting the live `ACCOUNT_EXPOSURE` row for liveness and for the wire `netSize`, but treat a replayed `netSize` mismatch as unusable pricing history and fall back to `unrealizedPnl: 0.0` for that slice. The codebase has already frozen `ACCOUNT_EXPOSURE` as the sole liveness gate and explicitly rejected rebuilding the open-position set from `ORDERS` alone. Switching the wire row over to the replayed survivor would change the route's existing live-position contract, while pricing through a mismatched replay would make P&L depend on corrupted or incomplete history. The defensive rule is therefore: keep the live row, do not trust replay for pricing when its survivor disagrees, and use the no-usable-history fallback.",
+      "confidence": 0.9,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:17",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:20",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:22",
+        "backend/server.py:1651",
+        "backend/server.py:1732",
+        "tests/test_bayes_market_api.py:4767"
+      ],
+      "uncertainty": "If the product later wants explicit reconciliation diagnostics, the route could surface a mismatch flag. The current contract evidence only supports a defensive P&L fallback, not replacing live projection data with replayed history.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep the accumulator as a pure read-time helper. It should derive replay state without mutating `ACCOUNT_EXPOSURE`, `ORDERS`, or any other stored projection."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Step 2 should consume the ordered fill list from the prior helper seam. Re-scanning raw `ORDERS` inside the accumulator would blur the boundary between collection and replay math that the step-3 plan already split apart."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The replay state machine is already frozen by the parent plan: same-side weighted-average recompute, partial-offset basis carry, full-close zeroing, and sign-flip reset to the crossing fill price."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "EventTrade `price` remains a positive atomic probability regardless of side. Short handling therefore has to come from `side` and signed `netSize`, not from negative stored prices."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The accumulator is explanatory only. `ACCOUNT_EXPOSURE` remains the sole liveness gate for `/v1/accounts/{id}/positions`, and replay only augments rows that are already live there."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No child task is needed. The open seams are local to `backend/server.py`, `tests/test_bayes_market_api.py`, and the existing `i6y` task artifacts already present in this worktree."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

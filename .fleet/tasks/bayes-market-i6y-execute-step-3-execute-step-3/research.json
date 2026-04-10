@@ -1,0 +1,122 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "This leaf step should backfill the missing step-2 replay seam in `backend/server.py` and then thread it into `/positions`; it cannot safely assume a prerequisite branch will land first. In the current worktree, `serialize_account_position(...)` still emits only the pre-P&L minimal row and `get_account_positions(...)` just returns that projection. The parent step-3 plan explicitly makes serializer threading depend on the prior ordered-fill helper and accumulator outputs, and the recorded validation for execute-step-2 says those helpers never landed in code here because that branch changed only `.fleet` artifacts and left `backend/server.py` and the tests untouched.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:1651",
+        "backend/server.py:1666",
+        "backend/server.py:1732",
+        "tests/test_bayes_market_api.py:4767",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:77",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:82",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-2/validation.json:4",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-2/validation.json:12"
+      ],
+      "uncertainty": "The only uncertainty is process-level, not technical: another branch could theoretically land later, but there is no in-tree evidence that this task is meant to wait for it.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Treat a matched slice as unusable for pricing if any selected replay fill lacks valid accumulator inputs after collection. The collection helper may skip otherwise matching rows that are missing `filledAt` or `id`, but once a fill is admitted for replay, `side`, `size`, and `price` are mandatory. That means downgrading the whole slice to no usable history when `side` is not `buy` or `sell`, when `size` or `price` cannot be parsed into finite floats, when `size <= 0`, or when `price` falls outside the probability range `[0.0, 1.0]`. This matches the codebase's existing write-path conventions: EventTrade requests require a positive size and valid side, accepted orders persist `price` as an atomic probability, and other probability-bearing paths already reject non-finite or out-of-range numeric inputs.",
+      "confidence": 0.77,
+      "evidence": [
+        "backend/server.py:972",
+        "backend/server.py:2416",
+        "backend/server.py:2444",
+        "backend/server.py:3479",
+        "backend/server.py:3488",
+        "backend/server.py:2195",
+        "backend/server.py:2771",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-2/plan.json:26",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-2/plan.json:64",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-2/validation.json:8"
+      ],
+      "uncertainty": "The current codebase had not yet frozen the exact replay-side numeric guardrail in implemented code; the `[0.0, 1.0]` price rule is inferred from the backend's broader probability semantics and from `query_market_atomic_probability_for_inference(...)` being the canonical source of order prices.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Keep the live wire row's `netSize` from `ACCOUNT_EXPOSURE` and degrade only `unrealizedPnl` to `0.0` when replay reconstructs a different surviving `netSize`. The route's liveness, ordering, and base row fields are already defined by the live exposure projection, and the earlier step-2 research explicitly resolved replay/live disagreement as unusable pricing history rather than as authority to rewrite the row or fail the whole request. Trusting replay over the live projection would change the public `/positions` contract; failing the request would also violate the established projection-local read behavior.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:1651",
+        "backend/server.py:1666",
+        "backend/server.py:1732",
+        "tests/test_bayes_market_api.py:4767",
+        ".fleet/tasks/bayes-market-i6y/plan.json:15",
+        ".fleet/tasks/bayes-market-i6y/plan.json:26",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:17",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-2/research.json:66"
+      ],
+      "uncertainty": "If the route later grows reconciliation diagnostics, it could surface the mismatch reason separately. The current codebase evidence only supports a defensive P&L fallback while preserving the live row.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Preserve the row and downgrade only that row's `unrealizedPnl` to `0.0` if `query_market_atomic_probability_for_inference(marketId, outcomeId)` raises. The current `/positions` read path is projection-local on `ACCOUNT_EXPOSURE`: it skips malformed rows, keeps lexical ordering, and only raises `404 account_not_found` when no live rows survive. Making one missing market or one inference failure tear down the entire account response would introduce a new cross-system hard dependency that the route does not currently have. The least disruptive integration is therefore to catch mark-query failures per row and treat them the same way as missing or unusable replay history.",
+      "confidence": 0.69,
+      "evidence": [
+        "backend/server.py:972",
+        "backend/server.py:1651",
+        "backend/server.py:1666",
+        "backend/server.py:1732",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4836",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:17"
+      ],
+      "uncertainty": "There is no earlier artifact that names mark-query failure behavior explicitly; this is inferred from the route's existing projection-local contract and from the broader fallback decisions already frozen for missing or unusable history.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Keep the public row minimal and expose only `unrealizedPnl: 0.0` in missing-history, malformed-history, mismatch, or mark-failure cases. Step 3 is additive to a route whose tests already assert exact minimal row dictionaries, and the parent plans freeze the wire shape as `marketId`, `outcomeId`, `netSize`, `lastTradePrice`, plus computed `unrealizedPnl` only. There is no codebase evidence that this step is supposed to widen `/positions` with diagnostics, basis metadata, or a history-status field.",
+      "confidence": 0.96,
+      "evidence": [
+        "backend/server.py:1651",
+        "tests/test_bayes_market_api.py:4767",
+        ".fleet/tasks/bayes-market-i6y/plan.json:26",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:17",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:49"
+      ],
+      "uncertainty": "A later product change could add diagnostics, but that would be a deliberate contract expansion beyond what the current plans and tests support.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Implement the replay integration by augmenting the existing `/v1/accounts/{id}/positions` route and its tests in place; no route redesign is needed."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep liveness, lexical ordering, rounded-zero pruning, and `404 account_not_found` behavior sourced from `ACCOUNT_EXPOSURE`; replay only augments row pricing."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Use positive `averageCost`, signed `netSize`, and the account-perspective formula `(mark - averageCost) * netSize`; do not introduce a separate short formula or a sign-bearing basis."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Replay should stay read-time and limited to filled `EventTrade` rows in `ORDERS` that match the live slice, with no new persisted basis fields or ProbabilityEdit involvement."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "No child investigation is needed; the relevant seams and prior task evidence are local to `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `i6y` artifacts."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
