@@ -4020,6 +4020,45 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["market"]["status"], "closed")
         scope_mock.assert_called_once_with("m1", "ops_admin", "idem-close")
 
+    def test_market_close_route_records_engine_timing_and_refreshes_compile_snapshot_on_success(self):
+        server.refresh_market_compile_snapshot("m1", compile_time_ms=12.345)
+        previous_compile_state = deepcopy(server.MARKET_ENGINE_STATS["m1"])
+
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/close",
+            build_market_close_body("ops_admin", idempotency_key="idem-close-engine-stats"),
+        )
+        stats_payload, stats_status = server.route_request("GET", "/v1/markets/m1/engine-stats")
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["status"], "closed")
+        self.assertEqual(payload["meta"]["idempotencyKeyEcho"], "idem-close-engine-stats")
+        self.assertNotIn("replayed", payload["meta"])
+        self.assertEqual(stats_status, 200)
+        self.assertEqual(stats_payload["marketId"], "m1")
+        self.assertEqual(stats_payload["engine"]["mode"], "EXACT")
+        self.assertEqual(stats_payload["engine"]["backend"], "junction_tree")
+        self.assertEqual(stats_payload["engine"]["version"], "0.1.0")
+        self.assertEqual(stats_payload["engine"]["precision"], "float64")
+        self.assertEqual(stats_payload["engine"]["compile_type"], "junction_tree")
+        self.assertEqual(stats_payload["engine"]["source_state_hash"], server.market_replay_state_hash("m1"))
+        self.assertNotEqual(stats_payload["engine"]["source_state_hash"], previous_compile_state["source_state_hash"])
+        self.assertEqual(
+            stats_payload["engine"]["compile_id"],
+            f"comp-{stats_payload['engine']['source_state_hash'].split(':', 1)[-1][:12]}",
+        )
+        self.assertEqual(stats_payload["diagnostics"]["request_count"], 1)
+        self.assertEqual(stats_payload["diagnostics"]["error_count"], 0)
+        self.assertEqual(stats_payload["diagnostics"]["inference"]["count"], 1)
+        self.assertEqual(stats_payload["diagnostics"]["cache"], {"hits": 0, "misses": 0, "hit_rate": 0.0})
+        self.assertIn("compile_time_ms", stats_payload["diagnostics"])
+        self.assertIn("memory_bytes", stats_payload["diagnostics"])
+        self.assertIn("last_updated", stats_payload["diagnostics"])
+        self.assertGreaterEqual(stats_payload["diagnostics"]["compile_time_ms"], 0.0)
+        self.assertGreater(stats_payload["diagnostics"]["memory_bytes"], 0)
+        self.assertTrue(stats_payload["diagnostics"]["last_updated"].endswith("Z"))
+
     def test_market_close_idempotency_replays_terminal_acceptance(self):
         first_payload, first_status = server.route_request(
             "POST",
@@ -4043,6 +4082,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(first_events_status, 200)
         self.assertEqual(second_status, 201)
         self.assertEqual(second_events_status, 200)
+        self.assertEqual(first_payload["meta"]["idempotencyKeyEcho"], "idem-close-replay")
+        self.assertNotIn("replayed", first_payload["meta"])
         self.assertEqual(command["payload"], expected_market_close_payload())
         self.assertEqual(server.IDEMPOTENCY_KEYS[scope_key], first_payload["result"]["commandId"])
         self.assertEqual(first_payload["result"]["status"], "accepted")
@@ -4074,6 +4115,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             {key: value for key, value in second_payload["meta"].items() if key != "replayed"},
             first_payload["meta"],
         )
+        self.assertEqual(second_payload["meta"]["idempotencyKeyEcho"], "idem-close-replay")
         self.assertTrue(second_payload["meta"]["replayed"])
         self.assertEqual(second_events_payload["events"], first_events_payload["events"])
         self.assertEqual(second_events_payload["chain"], first_events_payload["chain"])
@@ -4387,6 +4429,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 self.assertEqual(first_events_status, 200)
                 self.assertEqual(second_status, 409)
                 self.assertEqual(second_events_status, 200)
+                self.assertEqual(first_payload["meta"]["idempotencyKeyEcho"], idempotency_key)
+                self.assertNotIn("replayed", first_payload["meta"])
                 self.assertTrue(first_payload["result"]["commandId"].startswith("cmd_"))
                 self.assertTrue(first_payload["result"]["eventId"].startswith("evt_"))
                 self.assertTrue(first_payload["result"]["emittedAt"].endswith("Z"))
@@ -4455,6 +4499,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     {key: value for key, value in second_payload["meta"].items() if key != "replayed"},
                     first_payload["meta"],
                 )
+                self.assertEqual(second_payload["meta"]["idempotencyKeyEcho"], idempotency_key)
                 self.assertTrue(second_payload["meta"]["replayed"])
                 self.assertEqual(second_events_payload["events"], first_events_payload["events"])
                 self.assertEqual(second_events_payload["chain"], first_events_payload["chain"])
