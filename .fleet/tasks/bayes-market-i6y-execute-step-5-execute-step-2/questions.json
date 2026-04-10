@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact five public fields must each `/v1/accounts/{id}/positions` row expose now, and should the route still return them under `account.positions` in the standard account getter envelope with `meta`?",
+      "category": "requirements",
+      "why_it_matters": "This checkout has no live `/positions` route, and the last local implementation in git history exposed only four fields from `ACCOUNT_EXPOSURE` (`marketId`, `outcomeId`, `netSize`, `lastTradePrice`), so the new test contract cannot be inferred from current code."
+    },
+    {
+      "id": "q2",
+      "question": "What inventory-accounting rule should replay use for EventTrade positions: weighted-average cost for same-sign adds, and for partial closes or sign flips should the trade first realize P&L against the existing average cost before reopening any residual size at the flip fill price?",
+      "category": "design",
+      "why_it_matters": "Current `compute_account_pnl(...)` in `backend/server.py` just sums signed `size * price` and signed marked value per market, so it never distinguishes adds from closes and cannot unambiguously satisfy the new weighted-average, partial-close, and sign-flip scenarios without an explicit lot-accounting rule."
+    },
+    {
+      "id": "q3",
+      "question": "Are `/positions` rows meant to be outcome-level open legs keyed by `marketId|outcomeId`, or market-level aggregates like the existing `/pnl.positions`; and if the new route is leg-level, should `/pnl` stay market-aggregated or switch to the same replay model underneath?",
+      "category": "codebase",
+      "why_it_matters": "The live exposure projection and the old `/positions` route were outcome-level, while `compute_account_pnl(...)` and the frontend API types are market-level; the grouping boundary determines both where the new tests belong and whether `/pnl` expectations also have to move."
+    },
+    {
+      "id": "q4",
+      "question": "What does the task mean by `missing-history fallback`: if replay cannot reconstruct an open position from `ORDERS`, should `/positions` and any related P&L logic fall back to `ACCOUNT_EXPOSURE`, to stored last-trade metadata, or to a `404`/empty result?",
+      "category": "requirements",
+      "why_it_matters": "The current codebase has two different sources of truth for EventTrade state: `ACCOUNT_EXPOSURE` for live rows and `ORDERS` replay for `/pnl`; the named fallback behavior decides which source wins when they diverge or history is incomplete."
+    },
+    {
+      "id": "q5",
+      "question": "Once replay says a position is fully closed, should `/positions` keep the older projection-local semantics and disappear again (`404 account_not_found` / no live rows), while realized P&L remains available only through `/pnl`, or should closed rows still be visible on `/positions`?",
+      "category": "requirements",
+      "why_it_matters": "The current `/exposure` getter and the historical `/positions` route both treated zero live rows as not found, but a replay-based implementation can still reconstruct closed trading history, so close-out semantics affect the new partial-close and sign-flip tests directly."
+    },
+    {
+      "id": "q6",
+      "question": "Should the new tests re-establish the existing direct-getter versus routed-endpoint parity pattern for `get_account_positions(account_id)` exactly the way `get_account_exposure(account_id)` is asserted today, including shared GET-only `405` behavior and matching `account` payloads?",
+      "category": "codebase",
+      "why_it_matters": "The current `BayesMarketExposureProjectionTests` already lock getter-versus-route parity for `/exposure`, and the earlier local `/positions` implementation followed the same pattern; without fixing that expectation, the new route tests could drift from the established account-read surface."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This step is resurrecting `/v1/accounts/{id}/positions` as a backend-only account read route, reusing the established account getter envelope and parity style, not expanding into frontend client or UI work yet.",
+      "confidence": 0.86,
+      "if_wrong": "The implementation would need broader changes in `frontend/src/lib/api/*`, query hooks, and UI surfaces instead of staying focused on `backend/server.py` and `tests/test_bayes_market_api.py`."
+    },
+    {
+      "id": "a2",
+      "assumption": "The earlier four-field exposure-backed `/positions` contract is no longer sufficient; the current task's `five-field` wording implies a new richer row schema tied to replayed position accounting.",
+      "confidence": 0.82,
+      "if_wrong": "The required test change is much smaller, and pulling replay/P&L behavior into the route would be unnecessary scope creep."
+    },
+    {
+      "id": "a3",
+      "assumption": "Weighted-average cost is the intended accounting method for EventTrade position replay, with partial closes realizing against the prior average cost and sign flips behaving as close-then-open at the flip execution price.",
+      "confidence": 0.69,
+      "if_wrong": "Expected values for every add/close/flip scenario change, and the implementation may need FIFO, LIFO, or purely signed-notional accounting instead."
+    },
+    {
+      "id": "a4",
+      "assumption": "When replay history is missing or insufficient, the safest intended behavior is to fall back to the live `ACCOUNT_EXPOSURE` projection rather than drop still-open positions entirely.",
+      "confidence": 0.63,
+      "if_wrong": "The tests should assert a harder failure or empty result on history gaps, and the implementation should avoid mixing replay state with the live exposure projection."
+    },
+    {
+      "id": "a5",
+      "assumption": "Existing `/exposure` behavior and its parity assertions remain unchanged; this task adds `/positions` coverage and any needed replay/P&L alignment without redefining the exposure contract.",
+      "confidence": 0.84,
+      "if_wrong": "The diff must update current exposure expectations too, and the task is broader than adding a new route contract plus replay-specific regressions."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
