@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Which current tests are the authoritative preserved sentinels for step 4 now that the step-3 breadth loop exists: the ProbabilityEdit negatives and limiter seams (`test_probability_edit_http_requires_agent_id_when_enabled`, `test_probability_edit_http_missing_agent_id_error_omits_retry_after_and_quota_headers`, `test_probability_edit_http_rejects_blank_agent_id_when_required`, `test_probability_edit_http_rejects_malformed_agent_id_when_required`, `test_probability_edit_http_omits_rate_limit_headers_when_limiter_disabled`, `test_probability_edit_http_emits_retry_after_and_quota_headers_on_429`, `test_probability_edit_http_decrements_remaining_quota_headers_per_agent_id`, `test_probability_edit_http_rate_limits_per_agent_id`, `test_probability_edit_http_keeps_quota_windows_isolated_by_agent_id`), the market-resolve negatives (`test_market_resolve_http_requires_valid_agent_id_when_enabled`, `test_market_resolve_http_omits_rate_limit_headers_when_limiter_disabled`, and the older `test_market_resolve_http_requires_agent_id_when_enabled`), the create-market missing-agent check, the unsupported POST `404` control, and the direct duplicate-header `resolve_write_request_agent(...)` check?",
+      "category": "codebase",
+      "why_it_matters": "The file now has both the new step-3 success-path breadth test and older overlapping absence-path tests. Step 4 needs an explicit canonical inventory before any cleanup can safely distinguish preserved sentinels from incidental overlap."
+    },
+    {
+      "id": "q2",
+      "question": "For ProbabilityEdit specifically, does the preserved shared limiter seam include only the current remaining-quota, `429`, `Retry-After`, and per-agent-isolation tests, or should the anonymous success case `test_probability_edit_http_omits_rate_limit_headers_without_agent_id` also be treated as part of the frozen absence-path contract?",
+      "category": "requirements",
+      "why_it_matters": "The plan text names ProbabilityEdit as the shared limiter regression seam, but the current class also has a distinct no-agent/no-header success case. Clarifying whether that case is in scope determines which ProbabilityEdit assertions are allowed to move or consolidate later."
+    },
+    {
+      "id": "q3",
+      "question": "Should step 4 treat `test_protected_post_routes_emit_rate_limit_headers_on_first_success` and the dedicated comment-post success contract as step-3 breadth coverage that stays untouched, while preservation work is limited to the narrower auth and no-header sentinel subset?",
+      "category": "design",
+      "why_it_matters": "The new breadth coverage now proves first-success quota headers across all protected POST routes, but the step-4 plan is framed as an absence-path preservation pass. This boundary prevents step 4 from accidentally broadening or trimming the step-3 success-path layer."
+    },
+    {
+      "id": "q4",
+      "question": "Is the direct `test_resolve_write_request_agent_rejects_duplicate_header_lines_when_required` check intended to remain the only proof of the `multiple_values` branch, or should step 4 also preserve or add coverage for comma-separated single-header values or transport-level duplicated agent-id headers on an actual HTTP request?",
+      "category": "design",
+      "why_it_matters": "The shared validator in `resolve_write_request_agent(...)` rejects both repeated header lines and comma-containing raw values as `invalid_agent_id` with `reason=\"multiple_values\"`, but the current suite freezes only the direct classifier seam. The answer decides whether step 4 stays narrowly preservational or expands into more transport-specific edge cases."
+    },
+    {
+      "id": "q5",
+      "question": "Is the standalone `test_market_resolve_http_requires_agent_id_when_enabled` intentionally preserved as an extra market-resolve missing-agent sentinel even though `test_market_resolve_http_requires_valid_agent_id_when_enabled` already covers missing, blank, and malformed agent ids in one place?",
+      "category": "requirements",
+      "why_it_matters": "The audit found two market-resolve missing-agent tests with overlapping coverage but different structure. Step 4 needs to know whether that duplication is deliberate regression protection or incidental leftover before any future reshaping touches it."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "All five protected POST routes still flow through the same pre-routing auth and limiter seam in `resolve_write_request_agent(...)`, `BayesHandler._enforce_write_controls()`, and `BayesHandler.handle_api()`, with quota headers emitted centrally via `rate_limit_headers(...)` after successful routing or a `rate_limit_exceeded` error.",
+      "confidence": 0.99,
+      "if_wrong": "The current ProbabilityEdit-heavy limiter coverage would no longer be representative, and step 4 would need route-local backend fixes or broader route-specific tests."
+    },
+    {
+      "id": "a2",
+      "assumption": "The current `BayesMarketApiAuthRateLimitTests` still contain the preserved sentinel set named in the task: ProbabilityEdit missing/blank/malformed/disabled/`429` coverage plus remaining-quota and per-agent-isolation seams, market-resolve missing/blank/malformed plus disabled-limiter coverage, create-market missing-agent coverage, the unsupported POST router `404` control, and the direct duplicate-header classifier check.",
+      "confidence": 0.98,
+      "if_wrong": "Step 2 would first need to restore missing sentinel coverage before deciding whether any shared backend regression exists."
+    },
+    {
+      "id": "a3",
+      "assumption": "The step-3 additions `test_protected_post_routes_emit_rate_limit_headers_on_first_success` and the dedicated comment-post success test are supporting breadth coverage, not new absence-path sentinels that step 4 is meant to expand.",
+      "confidence": 0.94,
+      "if_wrong": "Step 4 would need to revisit the step-3 success-path layer as part of the preservation pass rather than treating it as already-settled context."
+    },
+    {
+      "id": "a4",
+      "assumption": "Create-market is intentionally preserved with only its current combined missing-agent/authorized-success coverage and does not need new route-local blank-agent, malformed-agent, or disabled-limiter sentinels for this phase.",
+      "confidence": 0.9,
+      "if_wrong": "The next execution step would need to add new create-market negatives instead of preserving the current narrower sentinel set."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the relevant plan context, backend seam, and current auth/rate-limit tests are all local to this checkout and were sufficient to identify the remaining implementation questions.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-up exploration task would be required before implementation could safely distinguish intended sentinels from accidental overlap."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
