@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useEventTrade } from "@/lib/query/hooks";
 import { useSession } from "@/features/session/context";
+import { BayesApiError } from "@/lib/api/client";
 import type { EventTradeOrder, Market } from "@/lib/api/types";
 
 function TradeReceipt({ order, outcomeLabel }: { order: EventTradeOrder; outcomeLabel: string }) {
@@ -34,6 +35,48 @@ interface Props {
   market: Market;
 }
 
+interface PositionLimitExceededDetails {
+  requestedSize: number | null;
+  currentNetSize: number | null;
+  resultingNetSize: number | null;
+  maxPositionSize: number | null;
+}
+
+function readNumericDetail(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readPositionLimitDetails(error: BayesApiError): PositionLimitExceededDetails {
+  return {
+    requestedSize: readNumericDetail(error.details.requestedSize),
+    currentNetSize: readNumericDetail(error.details.currentNetSize),
+    resultingNetSize: readNumericDetail(error.details.resultingNetSize),
+    maxPositionSize: readNumericDetail(error.details.maxPositionSize),
+  };
+}
+
+function formatPositionSize(value: number): string {
+  return value.toFixed(2);
+}
+
+function formatTradeError(error: unknown): string {
+  if (!(error instanceof BayesApiError) || error.code !== "position_limit_exceeded") {
+    return error instanceof Error ? error.message : "Trade failed";
+  }
+
+  const { requestedSize, currentNetSize, resultingNetSize, maxPositionSize } = readPositionLimitDetails(error);
+  if (
+    requestedSize == null
+    || currentNetSize == null
+    || resultingNetSize == null
+    || maxPositionSize == null
+  ) {
+    return "Position limit exceeded. Trade would exceed the max position size for this outcome.";
+  }
+
+  return `Position limit exceeded. Requested size ${formatPositionSize(requestedSize)} would move net size from ${formatPositionSize(currentNetSize)} to ${formatPositionSize(resultingNetSize)}; max position size is ${formatPositionSize(maxPositionSize)}.`;
+}
+
 export function EventTradePanel({ market }: Props) {
   const { session, isConfigured } = useSession();
   const mutation = useEventTrade(market.id);
@@ -48,6 +91,7 @@ export function EventTradePanel({ market }: Props) {
   const parsedSize = Number(size);
   const isValidSize = Number.isFinite(parsedSize) && parsedSize > 0;
   const canSubmit = selectedOutcome.length > 0 && isValidSize && !mutation.isPending;
+  const inlineErrorMessage = mutation.isError ? formatTradeError(mutation.error) : null;
 
   const handleTrade = () => {
     if (!selectedOutcome || !isValidSize) return;
@@ -99,19 +143,22 @@ export function EventTradePanel({ market }: Props) {
           </button>
         </div>
 
-        {/* Outcome selector */}
-        <select
-          value={selectedOutcome}
-          onChange={(e) => setSelectedOutcome(e.target.value)}
-          style={selectStyle}
-        >
-          <option value="">Select outcome...</option>
-          {market.outcomes.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name} @ {((market.marginals[o.id] ?? 0) * 100).toFixed(1)}%
-            </option>
-          ))}
-        </select>
+        <label style={fieldGroupStyle}>
+          <span style={fieldLabelStyle}>Outcome</span>
+          <select
+            value={selectedOutcome}
+            onChange={(e) => setSelectedOutcome(e.target.value)}
+            style={selectStyle}
+            aria-label="Trade outcome"
+          >
+            <option value="">Select outcome...</option>
+            {market.outcomes.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name} @ {((market.marginals[o.id] ?? 0) * 100).toFixed(1)}%
+              </option>
+            ))}
+          </select>
+        </label>
 
         {selectedOutcome && (
           <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
@@ -119,16 +166,19 @@ export function EventTradePanel({ market }: Props) {
           </span>
         )}
 
-        <input
-          type="number"
-          inputMode="decimal"
-          min="0.000001"
-          step="0.1"
-          value={size}
-          onChange={(e) => setSize(e.target.value)}
-          style={sizeInputStyle}
-          aria-label="Trade size"
-        />
+        <label style={fieldGroupStyle}>
+          <span style={fieldLabelStyle}>Position Size</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0.000001"
+            step="0.1"
+            value={size}
+            onChange={(e) => setSize(e.target.value)}
+            style={sizeInputStyle}
+            aria-label="Position size"
+          />
+        </label>
 
         <button
           onClick={handleTrade}
@@ -159,9 +209,9 @@ export function EventTradePanel({ market }: Props) {
         </div>
       )}
 
-      {mutation.isError && (
+      {inlineErrorMessage && (
         <div style={errorStyle}>
-          {mutation.error instanceof Error ? mutation.error.message : "Trade failed"}
+          {inlineErrorMessage}
         </div>
       )}
     </div>
@@ -194,7 +244,20 @@ const selectStyle: React.CSSProperties = {
 
 const sizeInputStyle: React.CSSProperties = {
   ...selectStyle,
-  width: "96px",
+  width: "124px",
+};
+
+const fieldGroupStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "4px",
+};
+
+const fieldLabelStyle: React.CSSProperties = {
+  fontSize: "0.72rem",
+  fontWeight: 600,
+  color: "var(--color-text-muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
 };
 
 const tradeBtnStyle: React.CSSProperties = {
