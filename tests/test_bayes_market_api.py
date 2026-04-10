@@ -8050,6 +8050,55 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         self.assert_rate_limit_headers_absent(response_headers)
         self.assertEqual(server.MARKETS["m2"]["status"], "resolved")
 
+    def test_market_close_http_requires_valid_agent_id_when_enabled(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+
+        missing_status, missing_payload, missing_headers = self.market_close_with_headers(
+            account_id="ops_http_auth_missing",
+        )
+        blank_status, blank_payload, blank_headers = self.market_close_with_headers(
+            account_id="ops_http_auth_blank",
+            agent_id="   ",
+        )
+        invalid_status, invalid_payload, invalid_headers = self.market_close_with_headers(
+            account_id="ops_http_auth_invalid",
+            agent_id="ops admin",
+        )
+        valid_status, valid_payload, valid_headers = self.market_close_with_headers(
+            account_id="ops_http_auth_valid",
+            agent_id="agent-admin-valid",
+        )
+
+        self.assert_agent_id_error(
+            missing_status,
+            missing_payload,
+            code="missing_agent_id",
+            category=server.MARKET_ADMIN_WRITE_CATEGORY,
+        )
+        self.assert_rate_limit_headers_absent(missing_headers)
+        self.assert_agent_id_error(
+            blank_status,
+            blank_payload,
+            code="blank_agent_id",
+            category=server.MARKET_ADMIN_WRITE_CATEGORY,
+        )
+        self.assert_rate_limit_headers_absent(blank_headers)
+        self.assert_agent_id_error(
+            invalid_status,
+            invalid_payload,
+            code="invalid_agent_id",
+            category=server.MARKET_ADMIN_WRITE_CATEGORY,
+            reason="invalid_format",
+        )
+        self.assert_rate_limit_headers_absent(invalid_headers)
+        self.assertEqual(valid_status, 201)
+        self.assertEqual(valid_payload["market"]["id"], "m1")
+        self.assertEqual(valid_payload["market"]["status"], "closed")
+        self.assertEqual(valid_payload["market"], server.MARKETS["m1"])
+        self.assertEqual(valid_payload["result"]["status"], "accepted")
+        self.assertTrue(valid_payload["result"]["terminal"])
+        self.assert_rate_limit_headers_absent(valid_headers)
+
     def test_probability_edit_http_emits_retry_after_and_quota_headers_on_429(self):
         server.AUTH_REQUIRE_AGENT_ID = True
         server.RATE_LIMIT_PER_MIN = 1
