@@ -1,0 +1,87 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "This leaf should backfill the missing replay helper seam in `backend/server.py` before wiring `/v1/accounts/{id}/positions`, because the current checkout still lacks the ordered-fill helper and replay outputs such as `averageCost` and `historyFound` that step 3 depends on.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Assume a prerequisite branch will land first and only edit the serializer call sites.",
+        "Defer the `/positions` work until another branch adds the replay helper."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep `ACCOUNT_EXPOSURE` as the authority for live-row existence, rounded-zero pruning, lexical `(marketId, outcomeId)` ordering, and wire `netSize`/`lastTradePrice`; replay augments only `unrealizedPnl` and must not rewrite or remove a surviving live row.",
+      "based_on": ["q3", "q5"],
+      "alternatives_rejected": [
+        "Trust replayed survivor size over the live exposure row.",
+        "Rebuild the positions response directly from `ORDERS` history.",
+        "Fail the whole request when replay and live exposure disagree."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Treat a slice as having no usable replay history if no matching filled `EventTrade` orders exist or if any selected fill has unusable accumulator inputs, including invalid `side`, non-finite or non-parsable `size`/`price`, `size <= 0`, or probability `price` outside `[0.0, 1.0]`; in those cases the public row stays minimal and reports `unrealizedPnl: 0.0`.",
+      "based_on": ["q2", "q5"],
+      "alternatives_rejected": [
+        "Skip malformed fills and continue replay from the remaining history.",
+        "Expose a diagnostic history-status field on the wire.",
+        "Raise from `/positions` when one row's history cannot be replayed."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "When replay yields a valid surviving basis for a live slice, mark it with `query_market_atomic_probability_for_inference(marketId, outcomeId)` and compute account-perspective `unrealizedPnl` as `(mark - averageCost) * netSize`, preserving the helper convention that `averageCost` stays positive while `netSize` carries direction.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Use `lastTradePrice` as the mark.",
+        "Introduce separate long and short P&L formulas.",
+        "Persist or expose basis metadata instead of one wire-level P&L scalar."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Handle mark-query failures per row by preserving the live row and downgrading only that row's `unrealizedPnl` to `0.0`, matching the route's existing projection-local behavior instead of making inference availability a hard dependency for the whole account read.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Fail the entire `/positions` request on the first mark lookup error.",
+        "Drop the affected row from the response."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add the missing replay helper seam in `backend/server.py`: collect the matching filled `EventTrade` orders for one `(accountId, marketId, outcomeId)` slice in deterministic `(filledAt, id)` order, and expose replay outputs needed by `/positions` such as surviving `netSize`, `averageCost`, and `historyFound`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Update the `/positions` serialization path in `backend/server.py` so it still normalizes live `ACCOUNT_EXPOSURE` rows, prunes rounded-zero rows, and sorts surviving rows lexically, while consulting the replay helper for each live slice after liveness has already been determined.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "For each surviving live row, compute `unrealizedPnl` from the replayed basis only when usable history exists, the replayed survivor is compatible with the live slice, and the mark query succeeds; otherwise emit the same minimal row shape with `unrealizedPnl: 0.0`.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Extend `tests/test_bayes_market_api.py` with focused regressions for seeded exposure rows with no replayable history, malformed-history downgrade behavior, replay/live mismatch fallback, successful mark-to-market pricing for a valid survivor, and route-level preservation of lexical ordering plus `404 account_not_found` when all rows are pruned.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Run the targeted `/v1/accounts/{id}/positions` backend tests that cover the new replay seam and serializer behavior, then review the diff for contract consistency before landing the implementation.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
