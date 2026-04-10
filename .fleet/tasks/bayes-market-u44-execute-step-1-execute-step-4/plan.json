@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat only shared-path mismatches across the frozen five protected POST routes as real backend bugs. Failures that merely expect route-local quota headers on non-429 rejections, or expect idempotent replays to avoid quota spend, are stale expectations rather than reasons to change `backend/server.py`.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Patch the backend proactively before a breadth test proves a shared-path miss.",
+        "Adjust route-local handlers to satisfy expectations that conflict with the current shared quota/header contract."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Freeze the current quota-accounting order at `_enforce_write_controls()` before `route_request(...)`: replayed protected POSTs that still return `201` must continue to reflect already-consumed quota, while post-gate `409` terminal outcomes such as `market_not_active` or `min_asset_violation` stay headerless even though quota was charged first.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Move quota charging after route-local idempotency checks or acceptance logic.",
+        "Attach `X-RateLimit-*` headers to non-429 terminal rejections so they expose post-spend state."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep disabled-limiter and missing or invalid agent-id paths on the shared no-header contract, with `Retry-After` remaining exclusive to `429 rate_limit_exceeded`, and keep ProbabilityEdit as the canonical limiter/quota-header matrix while adding only narrow route-breadth sentinels for the other protected POST routes.",
+      "based_on": ["q3", "q5"],
+      "alternatives_rejected": [
+        "Clone the full limiter matrix across create-market, comment-post, resolve, and event-trade.",
+        "Broaden `Retry-After` or `X-RateLimit-*` emission to non-429 auth and validation failures."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "If verification exposes a real bug, patch only the shared write-control and header seam in `backend/server.py` (`resolve_write_route_category(...)`, `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `BayesHandler.handle_api()`, or `rate_limit_headers(...)`) and avoid route-local replay or rejection changes.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Add route-specific quota-header logic inside create-market, comment-post, resolve, probability-edit, or event-trade handlers.",
+        "Change route-local idempotency or terminal-rejection helpers to compensate for a shared-path failure."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit the protected POST path in `backend/server.py` from `resolve_write_route_category(...)` through `resolve_write_request_agent(...)`, `_enforce_write_controls()`, and `BayesHandler.handle_api()` to pin the frozen invariants: the five-route protected surface, pre-routing quota spend, success-or-429-only header emission, and headerless non-429 application errors.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Extend the HTTP auth/rate-limit test scaffolding in `tests/test_bayes_market_api.py` only where route breadth needs it, such as header-aware helpers for create-market, comment-post, or event-trade requests, while leaving the existing ProbabilityEdit tests as the primary shared limiter matrix.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add focused regressions that verify quota-order preservation instead of duplicating the full limiter suite: one replayed protected POST success should still return `201` with quota headers reflecting already-spent quota, one post-gate `409` terminal rejection should remain headerless after `_enforce_write_controls()` has already run, and unsupported legacy POSTs should still bypass write controls entirely.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Add or preserve no-header sentinels for disabled-limiter and missing or invalid agent-id cases across the protected POST surface, filling the current route-breadth gap with at least one non-ProbabilityEdit route such as comment-post or create-market rather than cloning every limiter scenario onto every route.",
+      "depends_on": [2]
+    },
+    {
+      "step": 5,
+      "task": "If any new sentinel reveals a real shared-path bug, patch only `backend/server.py` in the shared classifier or header seam, then run the targeted auth/rate-limit and replay/rejection tests to confirm the quota-accounting order and no-header behavior remain intact.",
+      "depends_on": [3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
