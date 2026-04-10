@@ -7088,6 +7088,43 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
             },
         )
 
+    def assert_market_close_http_rejection_contract(
+        self,
+        payload: dict[str, object],
+        *,
+        idempotency_key: str,
+        code: str,
+        message: str,
+        details: dict[str, object],
+        retry_hint: str,
+    ) -> None:
+        self.assertTrue(payload["result"]["commandId"].startswith("cmd_"))
+        self.assertTrue(payload["result"]["eventId"].startswith("evt_"))
+        self.assertTrue(payload["result"]["emittedAt"].endswith("Z"))
+        self.assertEqual(
+            payload["error"],
+            {
+                "code": code,
+                "message": message,
+                "details": details | {"commandId": payload["result"]["commandId"]},
+            },
+        )
+        self.assertEqual(
+            payload["result"],
+            {
+                "terminal": True,
+                "status": "rejected",
+                "eventType": "CommandRejected",
+                "eventId": payload["result"]["eventId"],
+                "commandId": payload["result"]["commandId"],
+                "emittedAt": payload["result"]["emittedAt"],
+                "reasonCode": code,
+                "reason": message,
+                "retryHint": retry_hint,
+            },
+        )
+        self.assertEqual(payload["meta"]["idempotencyKeyEcho"], idempotency_key)
+
     def test_market_close_http_replays_same_idempotency_key(self):
         body = build_market_close_body("ops_http", idempotency_key="idem-threaded-close")
         expected_market = server.build_closed_market_snapshot(server.MARKETS["m1"])
@@ -7122,6 +7159,105 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
         self.assertEqual(second_events_payload["events"], first_events_payload["events"])
         self.assertEqual(second_events_payload["chain"], first_events_payload["chain"])
         self.assertEqual(second_events_payload["pagination"], first_events_payload["pagination"])
+
+    def test_market_close_http_replays_rejected_terminal_outcomes_for_status_conflicts(self):
+        cases = (
+            (
+                "closed",
+                "idem-threaded-close-closed",
+                {"status": "closed"},
+                "market_already_closed",
+                "Market is already closed",
+                {
+                    "marketId": "m1",
+                    "status": "closed",
+                },
+                "reuse the original idempotency key to replay the prior outcome",
+            ),
+            (
+                "draft",
+                "idem-threaded-close-draft",
+                {"status": "draft"},
+                "market_not_closable",
+                "Market can only be closed from active status",
+                {
+                    "marketId": "m1",
+                    "status": "draft",
+                    "allowedStatuses": ["active"],
+                },
+                "close an active market",
+            ),
+            (
+                "resolved",
+                "idem-threaded-close-resolved",
+                {
+                    "status": "resolved",
+                    "resolution": "yes",
+                    "resolutionProbabilities": {"yes": 1.0, "no": 0.0},
+                },
+                "market_not_closable",
+                "Market can only be closed from active status",
+                {
+                    "marketId": "m1",
+                    "status": "resolved",
+                    "allowedStatuses": ["active"],
+                },
+                "close an active market",
+            ),
+        )
+
+        for status_label, idempotency_key, market_updates, expected_code, expected_message, expected_details, retry_hint in cases:
+            with self.subTest(status=status_label):
+                server.reset_state()
+                server.MARKETS["m1"].update(deepcopy(market_updates))
+                body = build_market_close_body("ops_http", idempotency_key=idempotency_key)
+
+                first_status, first_payload = self.market_close("m1", body, timeout=10)
+                first_events_status, first_events_payload = self.market_events("m1", timeout=10)
+                second_status, second_payload = self.market_close("m1", body, timeout=10)
+                second_events_status, second_events_payload = self.market_events("m1", timeout=10)
+
+                self.assertEqual(first_status, 409)
+                self.assertEqual(first_events_status, 200)
+                self.assertEqual(second_status, 409)
+                self.assertEqual(second_events_status, 200)
+                self.assert_market_close_http_rejection_contract(
+                    first_payload,
+                    idempotency_key=idempotency_key,
+                    code=expected_code,
+                    message=expected_message,
+                    details=expected_details,
+                    retry_hint=retry_hint,
+                )
+                self.assertEqual(second_payload["error"], first_payload["error"])
+                self.assertEqual(second_payload["result"], first_payload["result"])
+                self.assertEqual(
+                    {key: value for key, value in second_payload["meta"].items() if key != "replayed"},
+                    first_payload["meta"],
+                )
+                self.assertTrue(second_payload["meta"]["replayed"])
+
+                self.assertEqual(first_events_payload["pagination"]["returned"], 1)
+                self.assertEqual(len(first_events_payload["events"]), 1)
+                first_event = first_events_payload["events"][0]
+                self.assertEqual(first_event["commandId"], first_payload["result"]["commandId"])
+                self.assertEqual(first_event["eventId"], first_payload["result"]["eventId"])
+                self.assertEqual(first_event["eventType"], "CommandRejected")
+                self.assertEqual(
+                    first_event["payload"],
+                    {
+                        "reasonCode": expected_code,
+                        "reason": expected_message,
+                        "retryHint": retry_hint,
+                    },
+                )
+                self.assertEqual(first_event["seq"], 1)
+                self.assertEqual(first_event["prevEventHash"], first_events_payload["chain"]["genesisHash"])
+                self.assertEqual(first_events_payload["chain"]["headSeq"], 1)
+                self.assertEqual(first_events_payload["chain"]["headHash"], first_event["eventHash"])
+                self.assertEqual(second_events_payload["events"], first_events_payload["events"])
+                self.assertEqual(second_events_payload["chain"], first_events_payload["chain"])
+                self.assertEqual(second_events_payload["pagination"], first_events_payload["pagination"])
 
     def test_concurrent_duplicate_probability_edit_idempotency_key_replays_without_double_append(self):
         operations = [
