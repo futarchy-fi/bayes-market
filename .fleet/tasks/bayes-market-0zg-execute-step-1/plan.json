@@ -1,0 +1,69 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat `include_resolved` as a strict HTTP query parameter on `GET /v1/markets`: accept at most one value, default omission to `false`, preserve blank values as invalid input because the route parses with `keep_blank_values=True`, and reject anything other than the explicit string literals `true` or `false` with the existing `400 invalid_query` contract.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Reuse the permissive environment-variable boolean parser and accept values like `1`, `yes`, or `on`.",
+        "Treat a blank or malformed `include_resolved` value as equivalent to the default `false`."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Compute a normalized effective resolved-inclusion mode before filtering so `status=resolved` remains a standalone way to fetch resolved markets. That effective mode should resolve to `true` when the caller explicitly requests resolved markets via `status=resolved`, even if `include_resolved` is omitted or explicitly `false`, and `meta.filters.include_resolved` should expose that normalized value rather than the raw input.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Require callers to send both `status=resolved` and `include_resolved=true` to get resolved markets.",
+        "Honor the contradictory combination `status=resolved&include_resolved=false` literally and return an empty list or a normalized `false` filter."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Apply filtering in two stages inside `list_markets(...)`: first remove resolved rows when the effective inclusion mode is `false`, then apply the existing validated `status` equality filter when present. Return `meta.filters` with both `status` and normalized `include_resolved` so the response contract matches the actual filter behavior.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Keep a single status-only filter pass and expose `include_resolved` in metadata without using it to shape the result set.",
+        "Fold the logic into ad hoc branches for each status/include combination instead of keeping one normalized filter path."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Verify the backend contract with targeted API tests that cover the new default exclusion of resolved markets, explicit `include_resolved=true`, preserved `status=resolved` behavior, contradictory `status=resolved&include_resolved=false`, invalid and duplicate `include_resolved` inputs, and the expanded `meta.filters` shape.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Rely on manual inspection of `backend/server.py` without test coverage for the new query semantics.",
+        "Only adjust existing happy-path tests and leave invalid-input and contradiction cases unpinned."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Patch `backend/server.py` so `list_markets(...)` parses and validates `include_resolved` with the existing strict query-parameter error shape, then derives one normalized boolean for effective resolved inclusion alongside the current validated `status` filter.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Update the market collection filtering path to exclude resolved rows by default, preserve `status=resolved` as a standalone resolved-market request, and return `meta.filters` containing both `status` and normalized `include_resolved`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Extend `tests/test_bayes_market_api.py` to lock the new default response count, explicit opt-in behavior, preserved `status=resolved` semantics, contradictory query normalization, invalid/duplicate `include_resolved` handling, and the new `meta.filters` contract.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Run the focused backend markets API tests, review the diff to confirm the task stays limited to the backend handler plus tests, and commit the completed implementation with the requested message.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
