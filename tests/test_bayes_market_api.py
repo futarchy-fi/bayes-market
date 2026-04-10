@@ -7088,6 +7088,41 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
             },
         )
 
+    def test_market_close_http_replays_same_idempotency_key(self):
+        body = build_market_close_body("ops_http", idempotency_key="idem-threaded-close")
+        expected_market = server.build_closed_market_snapshot(server.MARKETS["m1"])
+
+        first_status, first_payload = self.market_close("m1", body, timeout=10)
+        first_events_status, first_events_payload = self.market_events("m1", timeout=10)
+        second_status, second_payload = self.market_close("m1", body, timeout=10)
+        second_events_status, second_events_payload = self.market_events("m1", timeout=10)
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(first_events_status, 200)
+        self.assertEqual(first_payload["market"], expected_market)
+        self.assertEqual(
+            first_payload["result"],
+            {
+                "terminal": True,
+                "status": "accepted",
+                "eventType": "CommandAccepted",
+                "eventId": first_payload["result"]["eventId"],
+                "commandId": first_payload["result"]["commandId"],
+                "emittedAt": first_payload["result"]["emittedAt"],
+            },
+        )
+        self.assertEqual(first_payload["meta"]["idempotencyKeyEcho"], "idem-threaded-close")
+        self.assertEqual(second_status, 201)
+        self.assertEqual(second_events_status, 200)
+        self.assertEqual(second_payload["market"], first_payload["market"])
+        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
+        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
+        self.assertEqual(second_payload["meta"]["idempotencyKeyEcho"], first_payload["meta"]["idempotencyKeyEcho"])
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(second_events_payload["events"], first_events_payload["events"])
+        self.assertEqual(second_events_payload["chain"], first_events_payload["chain"])
+        self.assertEqual(second_events_payload["pagination"], first_events_payload["pagination"])
+
     def test_concurrent_duplicate_probability_edit_idempotency_key_replays_without_double_append(self):
         operations = [
             (
