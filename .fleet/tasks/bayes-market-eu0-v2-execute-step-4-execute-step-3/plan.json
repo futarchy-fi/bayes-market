@@ -1,0 +1,54 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep this step strictly inside `frontend/src/lib/query/hooks.ts`, adding only the exposure query key and hook export while deferring consumer wiring and dedicated tests to later planned steps.",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Update `Portfolio.tsx`, `MarketDetail.tsx`, or other routes to consume exposure data in this step.",
+        "Expand the step into new React Query hook tests instead of leaving coverage to the later test-focused step."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Mirror the existing account-risk query surface by adding `queryKeys.accountExposure(accountId)` as `[\"accounts\", accountId, \"exposure\"]` and implementing `useAccountExposure(accountId)` as the same thin `useQuery` wrapper shape used by `useAccountRisk(accountId)`.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Introduce a grouped `queryKeys.account(...)` namespace or broader account-key refactor.",
+        "Add exposure-specific query behavior such as polling, `staleTime`, `select`, or placeholder data."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Preserve the raw API error contract for exposure reads by letting `useAccountExposure(accountId)` surface `getAccountExposure(accountId)` errors unchanged, including `404 account_not_found`, with no hook-level normalization.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Convert missing-account exposure reads into synthetic empty `{ positions: [] }` data at the hook layer.",
+        "Hide backend exposure errors behind fallback hook data."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Extend the `queryKeys` object in `frontend/src/lib/query/hooks.ts` with `accountExposure: (accountId: string) => [\"accounts\", accountId, \"exposure\"] as const`, placing it alongside the existing account-scoped keys to preserve the current flat cache-key layout.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add `useAccountExposure(accountId)` in `frontend/src/lib/query/hooks.ts` next to `useAccountRisk(accountId)` as a thin `useQuery` wrapper that calls `api.getAccountExposure(accountId)`, uses the new exposure query key, and sets `enabled: accountId.length > 0` without extra query options.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Keep the hook contract additive by leaving error handling untouched, avoiding hook-level 404 normalization, and making no consumer or test changes in this step so later invalidation and coverage work can build on the new query surface cleanly.",
+      "depends_on": [2]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
