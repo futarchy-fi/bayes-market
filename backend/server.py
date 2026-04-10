@@ -4050,10 +4050,33 @@ def transition_market_to_closed(
     *,
     closed_at: str | None = None,
 ) -> dict[str, Any]:
-    """Return a closed market snapshot without mutating stored state."""
+    """Return a closed market snapshot for an active market without mutating stored state."""
     market = MARKETS.get(market_id)
     if not market:
         raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    status = str(market["status"])
+    if status == "closed":
+        raise ApiError(
+            409,
+            "market_already_closed",
+            "Market is already closed",
+            {
+                "marketId": market_id,
+                "status": status,
+            },
+        )
+    if status != "active":
+        raise ApiError(
+            409,
+            "market_not_closable",
+            "Market can only be closed from active status",
+            {
+                "marketId": market_id,
+                "status": status,
+                "allowedStatuses": ["active"],
+            },
+        )
 
     transition_timestamp = utc_timestamp() if closed_at is None else str(closed_at)
     closed_market = deepcopy(market)
@@ -4714,28 +4737,29 @@ def handle_market_close(market_id: str, payload: dict[str, Any] | None) -> tuple
             idempotency_key=idempotency_key,
         )
         market = MARKETS[market_id]
-        if market["status"] == "closed":
+        market_status = str(market["status"])
+        if market_status == "closed":
             return build_terminal_rejection_response(
                 command,
                 code="market_already_closed",
                 message="Market is already closed",
                 details={
                     "marketId": market_id,
-                    "status": market["status"],
+                    "status": market_status,
                     "commandId": command["commandId"],
                 },
                 retry_hint="reuse the original idempotency key to replay the prior outcome",
                 status=409,
                 scope_key=scope_key,
             )
-        if market["status"] != "active":
+        if market_status != "active":
             return build_terminal_rejection_response(
                 command,
                 code="market_not_closable",
                 message="Market can only be closed from active status",
                 details={
                     "marketId": market_id,
-                    "status": market["status"],
+                    "status": market_status,
                     "allowedStatuses": ["active"],
                     "commandId": command["commandId"],
                 },

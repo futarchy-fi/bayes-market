@@ -156,6 +156,26 @@ def assert_domain_state_unchanged(test_case: unittest.TestCase, snapshot: dict[s
     test_case.assertEqual(server.ACCOUNT_EXPOSURE, snapshot["account_exposure"])
 
 
+def snapshot_market_close_rejection_state(market_id: str) -> dict[str, object]:
+    return {
+        "market": deepcopy(server.MARKETS[market_id]),
+        "conditional_marginals": deepcopy(server.CONDITIONAL_MARGINALS),
+        "account_risk": deepcopy(server.ACCOUNT_RISK),
+        "account_exposure": deepcopy(server.ACCOUNT_EXPOSURE),
+    }
+
+
+def assert_market_close_rejection_state_unchanged(
+    test_case: unittest.TestCase,
+    market_id: str,
+    snapshot: dict[str, object],
+) -> None:
+    test_case.assertEqual(server.MARKETS[market_id], snapshot["market"])
+    test_case.assertEqual(server.CONDITIONAL_MARGINALS, snapshot["conditional_marginals"])
+    test_case.assertEqual(server.ACCOUNT_RISK, snapshot["account_risk"])
+    test_case.assertEqual(server.ACCOUNT_EXPOSURE, snapshot["account_exposure"])
+
+
 def pick_probability_distinct_from_current(market_id: str, outcome_id: str, rng: random.Random) -> float:
     current_probability = float(server.MARKETS[market_id]["marginals"][outcome_id])
     return rng.choice([candidate for candidate in PROPERTY_PROBABILITIES if candidate != current_probability])
@@ -3712,6 +3732,74 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.MARKETS["m1"], baseline_market)
         assert_domain_state_unchanged(self, before_state)
 
+    def test_close_market_command_revalidates_market_status_before_mutating_market(self):
+        command = {
+            "schemaVersion": "bayes-command/v1",
+            "commandId": "cmd_close_revalidate",
+            "marketId": "m1",
+            "accountId": "ops_admin",
+            "commandType": "AdminOp",
+            "submittedAt": server.utc_timestamp(),
+            "payload": expected_market_close_payload(),
+            "meta": {
+                "source": "test",
+            },
+        }
+        cases = (
+            (
+                "closed",
+                {
+                    "status": "closed",
+                },
+                "market_already_closed",
+                {
+                    "marketId": "m1",
+                    "status": "closed",
+                },
+            ),
+            (
+                "draft",
+                {
+                    "status": "draft",
+                },
+                "market_not_closable",
+                {
+                    "marketId": "m1",
+                    "status": "draft",
+                    "allowedStatuses": ["active"],
+                },
+            ),
+            (
+                "resolved",
+                {
+                    "status": "resolved",
+                    "resolution": "yes",
+                    "resolutionProbabilities": {"yes": 1.0, "no": 0.0},
+                },
+                "market_not_closable",
+                {
+                    "marketId": "m1",
+                    "status": "resolved",
+                    "allowedStatuses": ["active"],
+                },
+            ),
+        )
+
+        for label, updates, expected_code, expected_details in cases:
+            with self.subTest(status=label):
+                server.reset_state()
+                server.MARKETS["m1"].update(deepcopy(updates))
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.close_market_command(command)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 409)
+                self.assertEqual(error.code, expected_code)
+                self.assertEqual(error.details, expected_details)
+                assert_domain_state_unchanged(self, before_state)
+
     def test_market_close_accepts_active_market_and_emits_terminal_acceptance(self):
         account_id = "acct_close_preserved"
         server.route_request(
@@ -3735,11 +3823,20 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         baseline_exposure = deepcopy(server.ACCOUNT_EXPOSURE)
         baseline_conditionals = deepcopy(server.CONDITIONAL_MARGINALS)
 
-        payload, status = server.route_request(
-            "POST",
-            "/v1/markets/m1/close",
-            build_market_close_body("ops_admin", idempotency_key="idem-close") | {"unexpected": "noise"},
-        )
+        with patch.object(server, "resolve_market_command", autospec=True) as resolve_mock, patch.object(
+            server,
+            "settle_market_account_risk",
+            autospec=True,
+        ) as settle_risk_mock, patch.object(
+            server,
+            "settle_market_account_exposure",
+            autospec=True,
+        ) as settle_exposure_mock:
+            payload, status = server.route_request(
+                "POST",
+                "/v1/markets/m1/close",
+                build_market_close_body("ops_admin", idempotency_key="idem-close") | {"unexpected": "noise"},
+            )
 
         self.assertEqual(trade_status, 201)
         self.assertEqual(status, 201)
@@ -3754,6 +3851,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.CONDITIONAL_MARGINALS, baseline_conditionals)
         self.assertEqual(server.ACCOUNT_RISK, baseline_risk)
         self.assertEqual(server.ACCOUNT_EXPOSURE, baseline_exposure)
+        resolve_mock.assert_not_called()
+        settle_risk_mock.assert_not_called()
+        settle_exposure_mock.assert_not_called()
         command = server.COMMANDS[payload["result"]["commandId"]]
         self.assertEqual(command["commandType"], "AdminOp")
         self.assertEqual(command["payload"], expected_market_close_payload())
@@ -3858,7 +3958,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_market_close_rejects_already_closed_market_with_terminal_response(self):
         server.MARKETS["m1"]["status"] = "closed"
-        before_state = snapshot_domain_state()
+        before_state = snapshot_market_close_rejection_state("m1")
 
         payload, status = server.route_request(
             "POST",
@@ -3873,37 +3973,122 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["error"]["details"]["status"], "closed")
         self.assertEqual(payload["result"]["status"], "rejected")
         self.assertEqual(payload["result"]["eventType"], "CommandRejected")
-        self.assertEqual(server.MARKETS["m1"], before_state["markets"]["m1"])
+        assert_market_close_rejection_state_unchanged(self, "m1", before_state)
         command = server.COMMANDS[payload["result"]["commandId"]]
         self.assertEqual(command["payload"], expected_market_close_payload())
         event = server.EVENTS[payload["result"]["eventId"]]
         self.assertEqual(event["payload"]["reasonCode"], "market_already_closed")
 
     def test_market_close_rejects_non_active_market_with_terminal_response(self):
-        server.MARKETS["m1"]["status"] = "resolved"
-        server.MARKETS["m1"]["resolution"] = "yes"
-        server.MARKETS["m1"]["resolutionProbabilities"] = {"yes": 1.0, "no": 0.0}
-        before_state = snapshot_domain_state()
-
-        payload, status = server.route_request(
-            "POST",
-            "/v1/markets/m1/close",
-            build_market_close_body("ops_admin", idempotency_key="idem-close-resolved"),
+        cases = (
+            (
+                "draft",
+                "idem-close-draft",
+                {
+                    "status": "draft",
+                },
+            ),
+            (
+                "resolved",
+                "idem-close-resolved",
+                {
+                    "status": "resolved",
+                    "resolution": "yes",
+                    "resolutionProbabilities": {"yes": 1.0, "no": 0.0},
+                },
+            ),
         )
 
-        self.assertEqual(status, 409)
-        self.assertEqual(payload["error"]["code"], "market_not_closable")
-        self.assertEqual(payload["error"]["message"], "Market can only be closed from active status")
-        self.assertEqual(payload["error"]["details"]["marketId"], "m1")
-        self.assertEqual(payload["error"]["details"]["status"], "resolved")
-        self.assertEqual(payload["error"]["details"]["allowedStatuses"], ["active"])
-        self.assertEqual(payload["result"]["status"], "rejected")
-        self.assertEqual(payload["result"]["eventType"], "CommandRejected")
-        self.assertEqual(server.MARKETS["m1"], before_state["markets"]["m1"])
-        command = server.COMMANDS[payload["result"]["commandId"]]
-        self.assertEqual(command["payload"], expected_market_close_payload())
-        event = server.EVENTS[payload["result"]["eventId"]]
-        self.assertEqual(event["payload"]["reasonCode"], "market_not_closable")
+        for status_label, idempotency_key, market_updates in cases:
+            with self.subTest(status=status_label):
+                server.reset_state()
+                account_id = "acct_close_reject_invariants"
+                server.route_request(
+                    "POST",
+                    "/v1/markets/m1/orders/probability-edit",
+                    build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
+                )
+                server.route_request(
+                    "POST",
+                    "/v1/markets/m1/orders/event-trade",
+                    build_event_trade_body(account_id, "m1", "yes", size=8.0),
+                )
+                server.CONDITIONAL_MARGINALS["m1"] = {
+                    server.context_state_key(
+                        [{"variableId": server.MARKETS["m2"]["variableId"], "outcomeId": "yes"}]
+                    ): {
+                        "yes": 0.9,
+                        "no": 0.1,
+                    }
+                }
+                server.MARKETS["m1"].update(deepcopy(market_updates))
+                before_state = snapshot_market_close_rejection_state("m1")
+
+                payload, status = server.route_request(
+                    "POST",
+                    "/v1/markets/m1/close",
+                    build_market_close_body("ops_admin", idempotency_key=idempotency_key),
+                )
+
+                self.assertEqual(status, 409)
+                self.assertEqual(payload["error"]["code"], "market_not_closable")
+                self.assertEqual(payload["error"]["message"], "Market can only be closed from active status")
+                self.assertEqual(payload["error"]["details"]["marketId"], "m1")
+                self.assertEqual(payload["error"]["details"]["status"], status_label)
+                self.assertEqual(payload["error"]["details"]["allowedStatuses"], ["active"])
+                self.assertEqual(payload["result"]["status"], "rejected")
+                self.assertEqual(payload["result"]["eventType"], "CommandRejected")
+                assert_market_close_rejection_state_unchanged(self, "m1", before_state)
+                command = server.COMMANDS[payload["result"]["commandId"]]
+                self.assertEqual(command["payload"], expected_market_close_payload())
+                event = server.EVENTS[payload["result"]["eventId"]]
+                self.assertEqual(event["payload"]["reasonCode"], "market_not_closable")
+
+    def test_market_close_rejected_terminal_outcomes_replay_for_status_conflicts(self):
+        cases = (
+            (
+                "already_closed",
+                "idem-close-replay-closed",
+                {
+                    "status": "closed",
+                },
+                "market_already_closed",
+            ),
+            (
+                "draft_not_closable",
+                "idem-close-replay-draft",
+                {
+                    "status": "draft",
+                },
+                "market_not_closable",
+            ),
+        )
+
+        for label, idempotency_key, market_updates, expected_code in cases:
+            with self.subTest(case=label):
+                server.reset_state()
+                server.MARKETS["m1"].update(deepcopy(market_updates))
+
+                first_payload, first_status = server.route_request(
+                    "POST",
+                    "/v1/markets/m1/close",
+                    build_market_close_body("ops_admin", idempotency_key=idempotency_key),
+                )
+                second_payload, second_status = server.route_request(
+                    "POST",
+                    "/v1/markets/m1/close",
+                    build_market_close_body("ops_admin", idempotency_key=idempotency_key),
+                )
+
+                self.assertEqual(first_status, 409)
+                self.assertEqual(second_status, 409)
+                self.assertEqual(first_payload["error"]["code"], expected_code)
+                self.assertEqual(second_payload["error"]["code"], expected_code)
+                self.assertEqual(first_payload["result"]["commandId"], second_payload["result"]["commandId"])
+                self.assertEqual(first_payload["result"]["eventId"], second_payload["result"]["eventId"])
+                self.assertTrue(second_payload["meta"]["replayed"])
+                self.assertEqual(len(server.COMMANDS), 1)
+                self.assertEqual(len(server.EVENTS), 1)
 
     def test_market_resolution_accepts_final_probabilities_body_and_canonicalizes_command_payload(self):
         final_probabilities = {"yes": 0.0, "no": 0.0, "delayed": 1.0}
