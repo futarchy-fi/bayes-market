@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Prove the shared write-control and quota-header seams with live HTTP tests in `BayesMarketApiAuthRateLimitTests`, because `_enforce_write_controls()` only runs from `BayesHandler.handle_api()` before `route_request(...)` and `rate_limit_headers(...)` is only attached after routing or in the centralized 429 branch.",
+      "based_on": ["q1", "q2", "q5"],
+      "alternatives_rejected": [
+        "Rely on lower-level unit tests that call `resolve_write_route_category(...)`, `resolve_write_request_agent(...)`, or `_enforce_write_controls()` directly.",
+        "Use only a route-inventory assertion without sending requests through the HTTP handler."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep `backend/server.py` unchanged unless the new breadth tests expose a mismatch, because the audit already shows the five protected POST routes are the only ones categorized by `resolve_write_route_category(...)`, they are all dispatched in `route_request(...)`, and no route-local code calls `rate_limit_headers(...)` or writes quota headers.",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Refactor write-control or header-emission code preemptively despite the current single-seam design.",
+        "Add an implementation-only invariant as the primary proof instead of extending behavioral HTTP coverage."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Represent the protected write surface as one shared test matrix in `tests/test_bayes_market_api.py`, backed by small request helpers for the currently uncovered comment and event-trade routes, so the success and auth-failure assertions iterate the same five-route inventory without copy-paste drift.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Write five independent near-duplicate tests with inline request setup.",
+        "Cover only the already-tested create-market, resolve, and probability-edit routes."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "For each protected POST route, pin a 201 success case with `X-RateLimit-*` headers and a 401 missing-agent-id case with no quota headers; keep the existing representative 429 assertion as the central proof of the `Retry-After` plus quota-header error branch instead of cloning it across all five routes.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Repeat the full 429 contract test on every protected POST route.",
+        "Assert only one success route and infer the rest from source inspection."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add or refactor auth/rate-limit test helpers in `tests/test_bayes_market_api.py` so `BayesMarketApiAuthRateLimitTests` can issue valid requests for all five protected POST routes, including a minimal `comment_post_with_headers(...)` helper using `{\"accountId\": ..., \"body\": ...}` and an `event_trade_with_headers(...)` helper using `build_event_trade_body(...)`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Define one protected-route spec list in `BayesMarketApiAuthRateLimitTests` that enumerates `POST /v1/markets`, `POST /v1/markets/{id}/resolve`, `POST /v1/markets/{id}/comments`, `POST /v1/markets/{id}/orders/probability-edit`, and `POST /v1/markets/{id}/orders/event-trade`, along with the category and request callable each test case needs.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add a route-breadth success test that enables rate limiting, sends one valid request through each protected route via `handle_api()`, and asserts each 201 response carries the shared `X-RateLimit-*` headers, proving the common post-routing header-emission seam without route-local header writes.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Add a matching route-breadth auth-failure test that enables required agent ids, replays the same five routes without the Bayes agent header, and asserts each request fails with the expected 401 category-specific error and no quota headers, proving the common pre-routing enforcement path rejects before route-local behavior executes.",
+      "depends_on": [2]
+    },
+    {
+      "step": 5,
+      "task": "Run the targeted auth/rate-limit test slice and only patch `backend/server.py` if the new coverage reveals a real mismatch between `resolve_write_route_category(...)`, `_enforce_write_controls()`, `route_request(...)`, and `handle_api()`; otherwise leave the server code untouched and rely on the expanded HTTP suite plus the existing representative 429 test.",
+      "depends_on": [3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
