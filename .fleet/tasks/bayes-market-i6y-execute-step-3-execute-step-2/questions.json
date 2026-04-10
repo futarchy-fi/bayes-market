@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What sign convention should the accumulator expose for `averageCost`: should it remain a positive execution-price basis with side encoded only in signed `netSize`, or should the helper really return a sign-bearing basis as the step title says?",
+      "category": "design",
+      "why_it_matters": "The parent plan calls for a 'signed average cost', but the later wire-level P&L formula is frozen as `(mark - averageCost) * netSize`, which only behaves naturally for shorts if the basis sign convention is explicit."
+    },
+    {
+      "id": "q2",
+      "question": "At what points should replay math round with the backend's canonical six-decimal helpers: after every fill transition for `size`, signed delta, surviving `netSize`, and recomputed average cost, or only once on the final accumulator result?",
+      "category": "codebase",
+      "why_it_matters": "The write path already persists rounded EventTrade `size` and `price`, and exposure netting uses `round_risk_value(...)` on each mutation. Zero-crossing and exact-flat behavior can change if replay waits until the end to normalize."
+    },
+    {
+      "id": "q3",
+      "question": "If an otherwise matched replay fill is missing or malformed for accumulator math, such as absent or invalid `side`, `size`, or `price`, should the helper skip that fill and continue, downgrade the whole slice to 'no usable history', or raise?",
+      "category": "requirements",
+      "why_it_matters": "Step 1 only freezes candidate filtering and `(filledAt, id)` ordering. The accumulator still needs a read-path policy for manually seeded or partially corrupted `ORDERS` rows before it can derive a stable basis."
+    },
+    {
+      "id": "q4",
+      "question": "What exactly should the accumulator's `historyFound` signal mean: that at least one matching replay candidate existed, that at least one fill was successfully applied after validation, or that replay finished with a survivor that is internally consistent enough to price?",
+      "category": "design",
+      "why_it_matters": "Step 3's fallback behavior depends on this boolean. Malformed fills, skipped fills, and flat-after-replay cases all produce different downstream behavior unless the signal's semantics are frozen now."
+    },
+    {
+      "id": "q5",
+      "question": "If replay reconstructs a surviving `netSize` that disagrees with the live `ACCOUNT_EXPOSURE` row's `netSize`, which source should the later `/positions` read path trust: the live projection, the replayed history, or a defensive fallback such as `unrealizedPnl: 0.0` for inconsistent slices?",
+      "category": "requirements",
+      "why_it_matters": "The current contract keeps `ACCOUNT_EXPOSURE` as the liveness gate, but tests and fixtures also seed live rows directly without guaranteed matching order history. A mismatch rule is needed before the accumulator output can be consumed safely."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The replay accumulator is a pure read-time helper in `backend/server.py` and must not mutate `ACCOUNT_EXPOSURE`, `ORDERS`, or any other stored projection state.",
+      "confidence": 0.99,
+      "if_wrong": "This step would expand into a projection-write or migration task rather than a narrow read-model helper."
+    },
+    {
+      "id": "a2",
+      "assumption": "Step 2 should consume the already matched and deterministically ordered EventTrade fills from the prior helper seam, not re-scan raw `ORDERS` itself.",
+      "confidence": 0.95,
+      "if_wrong": "The accumulator boundary would be broader than the step ordering implies, and tests would need to cover filtering plus basis replay in one function."
+    },
+    {
+      "id": "a3",
+      "assumption": "The state-machine transitions themselves are already frozen by the parent step-3 plan: same-side fills recompute weighted average cost, partial offsets keep the prior basis on the surviving same-sign remainder, full closes zero the basis, and sign-flip survivors reset basis to the crossing fill price.",
+      "confidence": 0.96,
+      "if_wrong": "The replay math would need a different accounting model than the one already selected in the parent plan, and the later P&L regressions would have to be redesigned."
+    },
+    {
+      "id": "a4",
+      "assumption": "Accepted EventTrade order `price` values remain positive atomic probabilities regardless of side, so sell/short handling must come from `side` and signed `netSize`, not from negative prices.",
+      "confidence": 0.98,
+      "if_wrong": "The accumulator would need a different basis-sign convention and likely a different unrealized-P&L formula."
+    },
+    {
+      "id": "a5",
+      "assumption": "The accumulator is explanatory only: `ACCOUNT_EXPOSURE` stays the sole liveness gate for `/v1/accounts/{id}/positions`, and this helper only derives replay state for rows that are already considered live.",
+      "confidence": 0.99,
+      "if_wrong": "The implementation would need to reconstruct live positions from history rather than augment the existing projection."
+    },
+    {
+      "id": "a6",
+      "assumption": "No child task is needed because the remaining open seams are local to `backend/server.py` and the existing `i6y` task artifacts, not hidden in another service or package.",
+      "confidence": 0.97,
+      "if_wrong": "A follow-on child investigation would be needed before the accumulator could be scoped safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
