@@ -4546,10 +4546,6 @@ class BayesMarketEventTradeTests(unittest.TestCase):
         )
         self.assertEqual(server.ACCOUNT_RISK, {})
 
-    @unittest.skip(
-        "position-limit enforcement wiring lives in eu0-v2 step-4+ (frontend-heavy, "
-        "skipped during selective salvage). Primitive exists; handler wire-up pending."
-    )
     def test_event_trade_position_limit_exceeded_is_side_effect_free_and_idempotency_key_remains_reusable(self):
         account_id = "acct_event_trade_limit"
         idempotency_key = "idem-event-trade-limit"

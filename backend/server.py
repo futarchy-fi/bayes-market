@@ -4419,6 +4419,24 @@ def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[
                     )
                 return replay_terminal_outcome(existing_command_id)
 
+        preview = preview_event_trade_position_net_change(account_id, market_id, normalized_payload)
+        if abs(preview["resultingNetSize"]) > max_position_size:
+            raise ApiError(
+                400,
+                "position_limit_exceeded",
+                "Trade would exceed max position size",
+                {
+                    "accountId": account_id,
+                    "marketId": market_id,
+                    "outcomeId": normalized_payload["formula"][0][0]["outcomeId"],
+                    "side": normalized_payload["side"],
+                    "requestedSize": normalized_payload["size"],
+                    "currentNetSize": preview["currentNetSize"],
+                    "resultingNetSize": preview["resultingNetSize"],
+                    "maxPositionSize": max_position_size,
+                },
+            )
+
         submitted_at = utc_timestamp()
         command = materialize_event_trade_command(
             market_id=market_id,
