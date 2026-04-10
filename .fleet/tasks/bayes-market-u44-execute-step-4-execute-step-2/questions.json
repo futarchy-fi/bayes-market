@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Which exact tests count as the preserved absence-path sentinels for this step: only the existing ProbabilityEdit cases for missing/blank/invalid agent ids and limiter-disabled header absence plus `test_unsupported_post_route_stays_router_not_found_when_auth_enabled`, or should the market-resolve missing/blank/invalid-agent assertions also be treated as frozen sentinels that must remain header-free?",
+      "category": "requirements",
+      "why_it_matters": "The current suite already freezes header absence across several auth failures, but step 2 needs a precise sentinel set before changing any nearby tests so we do not silently narrow or widen the protected absence-path contract."
+    },
+    {
+      "id": "q2",
+      "question": "Should step 2 keep the shared limiter regression seam entirely in the existing ProbabilityEdit tests for remaining-quota decrement, `429 rate_limit_exceeded`, `Retry-After`, and per-agent isolation, or is any of that quota-behavior coverage supposed to migrate into other route tests during this cleanup?",
+      "category": "requirements",
+      "why_it_matters": "The task description explicitly points at the current ProbabilityEdit tests as the shared seam, and duplicating those assertions across other routes would change the scope from restoring sentinels to broadening route coverage."
+    },
+    {
+      "id": "q3",
+      "question": "When the task says to leave comment-post and event-trade as success-path-only routes for this phase, does that mean step 2 should avoid adding any new missing/invalid-agent or unsupported-route absence-path tests for those endpoints, even if other protected POST routes keep auth-failure coverage?",
+      "category": "requirements",
+      "why_it_matters": "The checkout currently has no comment-post auth/rate-limit tests and only direct route coverage for event-trade, so the phase boundary determines whether this work stays focused on restoring existing sentinels or expands into new route matrices."
+    },
+    {
+      "id": "q4",
+      "question": "Which resolve test is the intended edit target if prior changes weakened adjacent expectations: the helper-based `test_market_resolve_http_requires_valid_agent_id_when_enabled` that currently mixes missing/blank/invalid failures with one successful resolve case, or the older duplicate `test_market_resolve_http_requires_agent_id_when_enabled` further down the class?",
+      "category": "codebase",
+      "why_it_matters": "The auth/rate-limit class currently has two resolve auth tests, and step 2 needs a clear target so the cleanup does not leave contradictory coverage or duplicate assertions behind."
+    },
+    {
+      "id": "q5",
+      "question": "For the unsupported-route sentinel, should `/v1/orders/probability-edit` remain the canonical regression proving unclassified POST routes stay router-level `404 not_found` with no quota headers when auth is enabled, or are there additional unsupported POST paths that this phase is expected to freeze as part of the absence-path contract?",
+      "category": "design",
+      "why_it_matters": "The current backend only applies write controls to the routes selected by `resolve_write_route_category(...)`, so the unsupported-route sentinel is the clearest proof that auth/rate-limit enforcement is not leaking onto out-of-scope POST paths."
+    },
+    {
+      "id": "q6",
+      "question": "If the audit confirms the current server behavior already matches the preserved absence-path contract, is the intended implementation outcome for step 2 allowed to be tests-only cleanup in `BayesMarketApiAuthRateLimitTests` with no backend changes?",
+      "category": "codebase",
+      "why_it_matters": "The local code path still centralizes header emission in `BayesHandler.handle_api()` and the targeted sentinel slice currently passes, so clarifying whether backend refactoring is out of scope avoids unnecessary churn."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The preserved absence-path contract is that quota headers remain absent on missing/blank/invalid-agent failures, on successful requests when the limiter is disabled or no agent id is present, and on unsupported POST routes that do not match `resolve_write_route_category(...)`.",
+      "confidence": 0.99,
+      "if_wrong": "The cleanup would freeze the wrong header-presence boundary and could accidentally widen quota-header expectations onto ordinary error or out-of-scope routes."
+    },
+    {
+      "id": "a2",
+      "assumption": "The existing ProbabilityEdit tests are intentionally the shared regression seam for remaining-quota decrement, `429` payloads, `Retry-After`, and per-agent isolation, so step 2 should not duplicate those behaviors on other routes.",
+      "confidence": 0.96,
+      "if_wrong": "The implementation would need broader multi-route limiter tests, and restricting the phase to sentinel restoration would leave required quota coverage missing."
+    },
+    {
+      "id": "a3",
+      "assumption": "Comment-post and event-trade are out of scope for new absence-path coverage in this phase and should remain success-path-only routes for now.",
+      "confidence": 0.94,
+      "if_wrong": "The phase would need additional auth-failure and unsupported-route tests for those endpoints, which materially expands the work beyond restoring existing sentinels."
+    },
+    {
+      "id": "a4",
+      "assumption": "Any drift to fix in this step is most likely stale or duplicated test coverage, not server behavior, because `BayesHandler.handle_api()` still emits quota headers only on `status < 400` and on `rate_limit_exceeded`, and the targeted pytest slice for the preserved sentinels currently passes.",
+      "confidence": 0.98,
+      "if_wrong": "A backend path is leaking or suppressing headers outside the current seam, so test-only cleanup would mask a real server regression."
+    },
+    {
+      "id": "a5",
+      "assumption": "The canonical unsupported-route sentinel for this contract is `POST /v1/orders/probability-edit`, since it stays outside the frozen protected POST surface and currently returns router-level `404 not_found` without quota headers even when auth is enabled.",
+      "confidence": 0.93,
+      "if_wrong": "Step 2 would need to preserve a broader set of unsupported-route sentinels rather than relying on a single legacy-path regression."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
