@@ -1,0 +1,61 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Implement the aggregate-status helper in `backend/server.py` against the planned `/v1/health.components` mapping contract, where each component value exposes a service-health `status`, instead of backfilling the missing step-2 component builders here or exposing a second public API over raw status iterables. If an iterable-based reduction loop is useful, keep it private to the helper.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Backfill the missing shared `db`/`inference`/`auth` builders in this child task.",
+        "Make the public helper accept only a raw iterable of statuses and force later `/v1/health` assembly to peel nested component objects apart route-locally.",
+        "Expose both a mapping-based and iterable-based public helper even though the current codebase only needs the mapping contract."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep the reducer strict to the `/v1/health` vocabulary `ok | degraded | unhealthy` and have it raise `ValueError` for an empty component set, a missing component `status`, or any unexpected status string so dropped components and cross-domain status leaks fail fast instead of silently producing misleading service health.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Normalize unrelated status words such as account-capacity `healthy` inside this helper.",
+        "Default an empty component set to `ok`.",
+        "Silently coerce unexpected inputs to `degraded` or `unhealthy`."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Add focused helper-level tests in `tests/test_bayes_market_api.py` that inject synthetic component objects to prove the precedence order `unhealthy > degraded > ok` and the strict failure cases now, rather than waiting for later `/v1/health` route tests that can only observe all-`ok` builders in this checkout.",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Rely only on later route-level `/v1/health` coverage to catch precedence regressions indirectly.",
+        "Skip non-`ok` reducer tests until the component builders eventually emit degraded or unhealthy states in a different branch."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add a shared aggregate-status helper near the existing health helpers in `backend/server.py`, freezing its public input contract to a `components` mapping whose values contain `status` and optionally factoring any raw-status scan into a private inner helper.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Implement strict reduction and validation so the helper returns `unhealthy` if any component is unhealthy, otherwise `degraded` if any component is degraded, otherwise `ok`, and raises `ValueError` for empty input, missing `status`, or any unexpected service-health status.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Extend `tests/test_bayes_market_api.py` with focused helper-level coverage that injects synthetic component mappings to assert the all-`ok` case, degraded precedence, unhealthy precedence, and failure cases for empty input and invalid status values.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Run the targeted server-helper tests for the new aggregate helper and confirm the slice stays scoped to reusable health helper behavior only: no component-builder backfill, no `/v1/health` payload assembly, and no `/health` or `/healthz` route changes in this child.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
