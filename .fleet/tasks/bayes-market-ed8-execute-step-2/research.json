@@ -1,0 +1,63 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Treat `/v1/health` like the other explicit `/v1/*` resources and return `405 method_not_allowed` for non-`GET` methods on that same path. The current legacy probes `/health` and `/healthz` are special-cased as GET-only and otherwise fall through to the router-wide `404 not_found`, but the versioned API surface consistently raises `405` once a concrete `/v1/*` resource is recognized. Freezing `/v1/health` to that versioned-route pattern is the most codebase-consistent contract.",
+      "confidence": 0.94,
+      "evidence": [
+        "backend/server.py:3879",
+        "backend/server.py:3882",
+        "backend/server.py:3895",
+        "backend/server.py:3930",
+        "backend/server.py:4041",
+        "tests/test_bayes_market_api.py:773",
+        "tests/test_bayes_market_api.py:1025"
+      ],
+      "uncertainty": "There is no checked-in `/v1/health` route test or plan line that explicitly names the non-`GET` status code, so the `405` choice is inferred from the existing `/v1/*` router contract rather than from an already-frozen health-specific assertion.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Advertise the new endpoint as the bare path `/v1/health`, not `GET /v1/health`, and append it after the existing legacy probes so the health list becomes [`/health`, `/healthz`, `/v1/health`]. The current `routes.health` contract is path-only, the service index already uses bare-path style for GET-only read routes such as `routes.accounts`, and the parent step says to advertise the new endpoint alongside the legacy probes rather than reformat or reorder that legacy list.",
+      "confidence": 0.88,
+      "evidence": [
+        "backend/server.py:801",
+        "backend/server.py:807",
+        "backend/server.py:809",
+        "tests/test_bayes_market_api.py:577",
+        ".fleet/tasks/bayes-market-ed8/plan.json:63"
+      ],
+      "uncertainty": "The service index is not globally uniform because some route groups include explicit method prefixes, so the bare-path format and append-last ordering are inferred from the existing `routes.health`/`routes.accounts` style and the step's additive wording rather than from a dedicated formatting rule.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep the step backend-only in `backend/server.py`: `BayesHandler` already dispatches `/v1/*` requests through `route_request()`, while the frontend health client still calls `/health`, so no frontend or HTTP-dispatch expansion is needed."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Wire `GET /v1/health` to `v1_health_payload()` directly. Rebuilding the payload inline in `route_request()` would duplicate the helper boundary added in step 1 and risk contract drift."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Leave `/health` and `/healthz` on the minimal `health_payload()` contract. The backend router, backend HTTP tests, frontend health client, and ops docs all still treat those endpoints as stable legacy probes."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Update the root service index to list all three health routes together. The parent plan explicitly calls for advertising the new endpoint alongside the legacy probes, not replacing or hiding them."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
