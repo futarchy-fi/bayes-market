@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should `POST /v1/markets/{id}/reopen` reuse the same request envelope and replay contract as `POST /v1/markets/{id}/close`, meaning required `accountId`, optional `idempotencyKey`, an `AdminOp` command, and terminal accepted/rejected outcome replay?",
+      "category": "requirements",
+      "why_it_matters": "The existing `handle_market_close(...)` and `handle_market_resolution(...)` flows in `backend/server.py` both depend on that envelope and persist replayable terminal outcomes. The task brief says 'inverse of /close' but does not spell out the request-body contract."
+    },
+    {
+      "id": "q2",
+      "question": "What is the canonical success contract for a reopen: the normalized command `payload.kind`, the accepted event payload shape, and whether success should expose a timestamp such as `reopenedAt`?",
+      "category": "design",
+      "why_it_matters": "Close and resolve each freeze a specific `AdminOp` payload kind plus a specific `CommandAccepted` event payload in `backend/server.py` and `tests/test_bayes_market_api.py`. Reopen needs the same level of contract clarity before tests can be written."
+    },
+    {
+      "id": "q3",
+      "question": "How should `/reopen` behave for `draft` markets, given that the task explicitly calls out `409` for already `active` or `resolved` but the status model also includes `draft`?",
+      "category": "requirements",
+      "why_it_matters": "The codebase allows `active|resolved|closed|draft` via `ALLOWED_MARKET_STATUSES`, so the endpoint needs a defined rule for `draft` rather than assuming only the three statuses named in the task."
+    },
+    {
+      "id": "q4",
+      "question": "What exact symbolic rejection contract should `/reopen` use for conflict cases: separate codes/messages for `active` vs `resolved` (and possibly `draft`), or one generic `market_not_reopenable` shape with `allowedStatuses: [\"closed\"]`?",
+      "category": "design",
+      "why_it_matters": "This repo freezes rejection contracts tightly. `close` and `resolve` each emit stable `error.code`, `error.message`, `error.details`, `result.reasonCode`, and `retryHint` values, and the tests assert those fields exactly."
+    },
+    {
+      "id": "q5",
+      "question": "On a successful reopen, is the state change strictly `closed -> active` with existing marginals, conditional marginals, account risk, and account exposure preserved, or are any additional side effects/recomputations expected?",
+      "category": "design",
+      "why_it_matters": "Today `close` is intentionally light: it does not settle risk, prune exposure, or clear conditionals. If reopen is truly the inverse, it may be only a status flip, but that should be explicit before touching replay/state-hash behavior."
+    },
+    {
+      "id": "q6",
+      "question": "Is the follow-up implementation scope backend-only, or should it also add a frontend API client/admin UI surface for reopening markets?",
+      "category": "requirements",
+      "why_it_matters": "The repo has a frontend client for `resolve` in `frontend/src/lib/api/client.ts`, but there is no existing close/reopen client surface. The task title only names the HTTP endpoint, so UI/client scope is still ambiguous."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new endpoint is intended to be a symmetric market-admin `AdminOp` alongside `/close`: same `accountId` + optional idempotency envelope, same market write lock usage, and same terminal-outcome replay semantics.",
+      "confidence": 0.96,
+      "if_wrong": "The implementation would need a materially different handler contract and a different HTTP/test surface than the existing close pattern."
+    },
+    {
+      "id": "a2",
+      "assumption": "A successful reopen should only restore `market.status` to `active`; it should not change marginals, outcomes, liquidity, volume, conditional marginals, account risk, or account exposure.",
+      "confidence": 0.83,
+      "if_wrong": "The change is not actually 'small scope' and would need extra state-transition logic plus much broader regression coverage."
+    },
+    {
+      "id": "a3",
+      "assumption": "The route belongs to the existing protected market-admin write surface, so service-index listing, `resolve_write_route_category(...)`, agent-id validation, and rate limiting should all treat `/reopen` the same way they treat `/close` and `/resolve`.",
+      "confidence": 0.97,
+      "if_wrong": "The endpoint could be added but accidentally bypass admin auth/rate-limit behavior or remain undocumented in the service index."
+    },
+    {
+      "id": "a4",
+      "assumption": "Unless clarified otherwise, the coding phase should stop at backend server/test changes and not add frontend UI/client work.",
+      "confidence": 0.72,
+      "if_wrong": "A backend-only implementation would leave the requested functionality unreachable from the shipped frontend surface."
+    },
+    {
+      "id": "a5",
+      "assumption": "The normalized command kind will follow the existing naming pattern and be something like `ReopenMarket`.",
+      "confidence": 0.78,
+      "if_wrong": "The command/event fixtures and any replay logic keyed on `payload.kind` would need a different canonical label."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
