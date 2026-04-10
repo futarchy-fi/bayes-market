@@ -18,6 +18,7 @@ export const queryKeys = {
   marketComments: (id: string) => ["markets", id, "comments"] as const,
   engineStats: (id: string) => ["markets", id, "engine-stats"] as const,
   accountRisk: (id: string) => ["accounts", id, "risk"] as const,
+  accountExposure: (id: string) => ["accounts", id, "exposure"] as const,
   health: () => ["health"] as const,
   serviceIndex: () => ["service-index"] as const,
 };
@@ -310,6 +311,14 @@ export function useAccountRisk(accountId: string) {
   return useQuery({
     queryKey: queryKeys.accountRisk(accountId),
     queryFn: () => api.getAccountRisk(accountId),
+    enabled: accountId.length > 0,
+  });
+}
+
+export function useAccountExposure(accountId: string) {
+  return useQuery({
+    queryKey: queryKeys.accountExposure(accountId),
+    queryFn: () => api.getAccountExposure(accountId),
     enabled: accountId.length > 0,
   });
 }
