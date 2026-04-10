@@ -1,0 +1,68 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep the new exposure invalidation logic as private `QueryClient` helpers inside `frontend/src/lib/query/hooks.ts`, next to the existing market invalidation helpers, so step 4 stays additive and does not reopen shared query-key structure or grouped account invalidation.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Export new shared invalidation utilities outside `hooks.ts` for this step.",
+        "Invalidate a broad `[\"accounts\"]` prefix and refresh every account-scoped query family."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Have `useEventTrade(marketId)` invalidate exactly `queryKeys.accountExposure(variables.payload.accountId)` after a successful mutation, because the trade payload already identifies the single affected submitting account.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Invalidate every cached exposure query after each trade.",
+        "Reintroduce grouped account invalidation that would also refresh unrelated account data."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Have `useResolveMarket(marketId)` invalidate all cached exposure queries through a focused matcher for keys shaped like `[\"accounts\", <id>, \"exposure\"]`, because resolution can settle multiple traders but must not change `/risk` freshness behavior.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Invalidate only `payload.accountId` after resolution.",
+        "Use a raw `[\"accounts\"]` prefix that would also invalidate `accountRisk(...)`."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep this step implementation-only and leave dedicated React Query invalidation tests to the later coverage step, while preserving the current frontend behavior outside the new exposure invalidation paths.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Expand step 4 into new hook-level invalidation test harness work before the dedicated coverage step."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add focused exposure invalidation helpers in `frontend/src/lib/query/hooks.ts`: one helper for invalidating a single `queryKeys.accountExposure(accountId)` entry and one helper for invalidating the cached exposure family with a predicate that matches only `[\"accounts\", id, \"exposure\"]` keys.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Update `useEventTrade(marketId)` so its `onSuccess` callback reads the mutation variables and invalidates the submitting account's exposure query in addition to the existing market, market-events, and engine-stats keys.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Update `useResolveMarket(marketId)` so its `onSuccess` callback invalidates all cached exposure queries alongside the existing market-scoped invalidation, while avoiding any broad `accounts` prefix invalidation and leaving `queryKeys.accountRisk(...)` freshness unchanged.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Run the relevant frontend verification for the touched query hook file if available, but defer new mutation-hook invalidation tests to the planned follow-up coverage step.",
+      "depends_on": [2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
