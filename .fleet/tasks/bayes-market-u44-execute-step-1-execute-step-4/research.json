@@ -1,0 +1,136 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "A route-breadth failure is a real shared-path backend bug only if it proves that one of the frozen protected POST routes (`/v1/markets`, `/v1/markets/{id}/resolve`, `/v1/markets/{id}/comments`, `/v1/markets/{id}/orders/probability-edit`, or `/v1/markets/{id}/orders/event-trade`) is misclassified or bypasses the shared write-control/header seam, or that `handle_api()` applies the wrong shared header policy. Failures that merely expect route-local handlers to emit quota headers on non-429 errors, to skip quota spend on idempotent replays, or to auth/rate-limit unsupported legacy routes are stale expectations: the current contract resolves the protected surface centrally before routing and only attaches quota headers on successful responses or `rate_limit_exceeded`.",
+      "confidence": 0.96,
+      "evidence": [
+        "backend/server.py:384",
+        "backend/server.py:418",
+        "backend/server.py:3795",
+        "backend/server.py:4008",
+        "backend/server.py:4035",
+        "tests/test_bayes_market_api.py:6252",
+        "tests/test_bayes_market_api.py:6372",
+        "tests/test_bayes_market_api.py:6426"
+      ],
+      "uncertainty": "There is no comment-post-specific HTTP quota-header test in this file; the conclusion depends on the central classifier and shared handler structure rather than route-local header assertions.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes. The preserved order is: classify protected POST, validate/normalize agent, enforce quota in `_enforce_write_controls()`, then run route-local idempotency or terminal-rejection logic, and finally attach headers only in `handle_api()`. That means a replayed protected POST that still returns `201` should continue to show already-consumed quota in its headers, because the replay request is charged before `replay_terminal_outcome()` or `replay_comment_post_outcome()` returns. Post-gate `409` terminal outcomes such as `market_not_active` and `min_asset_violation` should stay headerless even though quota was already consumed, because `handle_api()` does not add quota headers for non-429 errors. If the bucket is already exhausted, the request should stop earlier as `429` and never reach the route-local `409` path.",
+      "confidence": 0.93,
+      "evidence": [
+        "backend/server.py:4008",
+        "backend/server.py:4035",
+        "backend/server.py:2949",
+        "backend/server.py:3528",
+        "backend/server.py:3555",
+        "backend/server.py:3575",
+        "backend/server.py:3720",
+        "tests/test_bayes_market_api.py:6892",
+        "tests/test_bayes_market_api.py:7172",
+        "tests/test_bayes_market_api.py:7260",
+        "tests/test_bayes_market_api.py:7299",
+        "tests/test_bayes_market_api.py:4048"
+      ],
+      "uncertainty": "The test suite proves replay and rejection contracts directly, but it does not contain one dedicated HTTP assertion for every enabled-limiter plus valid-agent 409 case. The no-header conclusion for post-gate 409s follows deterministically from `handle_api()`.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. Disabled-limiter mode and missing or invalid `X-Bayes-Agent-Id` cases should continue to emit no quota headers at all across the protected POST surface, and `Retry-After` should remain exclusive to `429 rate_limit_exceeded`. `rate_limit_headers()` returns `{}` whenever the limiter is disabled or the normalized agent id is empty, and `handle_api()` only adds `Retry-After` inside the `rate_limit_exceeded` branch.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:418",
+        "backend/server.py:457",
+        "backend/server.py:492",
+        "backend/server.py:4035",
+        "tests/test_bayes_market_api.py:6138",
+        "tests/test_bayes_market_api.py:6149",
+        "tests/test_bayes_market_api.py:6185",
+        "tests/test_bayes_market_api.py:6199",
+        "tests/test_bayes_market_api.py:6213",
+        "tests/test_bayes_market_api.py:6252",
+        "tests/test_bayes_market_api.py:6302"
+      ],
+      "uncertainty": "Comment-post does not have a dedicated HTTP no-header test, so that route relies on the same shared-path inference as the other protected POST routes.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. If a fix is required, it should stay inside the shared write-control and header path, most likely `resolve_write_route_category()`/`resolve_write_request_agent()`, `_enforce_write_controls()`, `handle_api()`, or `rate_limit_headers()`. The route-local handlers already freeze each route's idempotent replay and terminal-rejection business semantics; changing them would alter persisted outcome contracts rather than correcting the shared quota/header seam. The only route-adjacent exception would be a proven omission from the shared classifier, which would still be a shared-path classification fix rather than a business-logic rewrite.",
+      "confidence": 0.94,
+      "evidence": [
+        "backend/server.py:384",
+        "backend/server.py:418",
+        "backend/server.py:4008",
+        "backend/server.py:4035",
+        "backend/server.py:3461",
+        "backend/server.py:3529",
+        "backend/server.py:3621",
+        "backend/server.py:3720",
+        "tests/test_bayes_market_api.py:6892",
+        "tests/test_bayes_market_api.py:7172",
+        "tests/test_bayes_market_api.py:7260",
+        "tests/test_bayes_market_api.py:4048"
+      ],
+      "uncertainty": "If a future failing test showed that one specific route is not actually on the protected surface, the fix might touch route classification adjacency, but the current code does not show a reason to alter route-local replay or rejection helpers.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. The existing ProbabilityEdit HTTP rate-limit tests are still the representative proof for remaining-quota decrement, per-agent isolation, and `429` plus `Retry-After` behavior, because quota accounting and header emission are centralized in `enforce_rate_limit()`, `rate_limit_headers()`, and `handle_api()` rather than in route-local handlers. Step 4 should therefore preserve those shared invariants and only use route-breadth checks to confirm that create-market, comment-post, resolve, and event-trade still enter the same protected seam; duplicating the full limiter matrix per route would be redundant.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:457",
+        "backend/server.py:492",
+        "backend/server.py:4035",
+        "tests/test_bayes_market_api.py:6119",
+        "tests/test_bayes_market_api.py:6302",
+        "tests/test_bayes_market_api.py:6327",
+        "tests/test_bayes_market_api.py:6350",
+        "tests/test_bayes_market_api.py:6252",
+        "tests/test_bayes_market_api.py:6372"
+      ],
+      "uncertainty": "There is still value in a small number of non-ProbabilityEdit route-breadth sentinels to confirm classification and no-header behavior, but not in cloning the entire limiter matrix per route.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Protected HTTP POSTs still run through `do_POST()` -> `handle_api(\"POST\")` -> `_enforce_write_controls()` before routing, so the audit should look for classifier omissions or shared-seam regressions, not alternate quota gates."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Disabled-limiter and empty-agent cases remain a shared no-header invariant. Adding quota headers anywhere outside the shared seam would be a contract regression across the protected POST surface."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Quota headers are still centralized in `handle_api()`: success gets current quota state, `429` gets quota state plus `Retry-After`, and other application errors stay headerless even after quota spend."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.84,
+      "impact": "ProbabilityEdit HTTP tests remain the main limiter/header sentinel, while market-resolve and event-trade replay/rejection tests protect route-local outcome contracts. Additional coverage should stay narrow and route-breadth-oriented rather than duplicating the whole limiter matrix."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "If broadened tests fail, the likeliest repair is still a shared-path classification or header-seam adjustment. Route-local business logic changes would be higher risk because they would disturb replay/rejection contracts that already look intentionally frozen."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
