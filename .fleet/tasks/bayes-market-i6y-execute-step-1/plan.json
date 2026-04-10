@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Advertise `/v1/accounts/{id}/positions` in the same bare-path style as the existing account routes and append it after `/v1/accounts/{id}/exposure` so the service index preserves the observable `routes.accounts` ordering contract.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Publish the new route in a different string format such as `GET /v1/accounts/{id}/positions`.",
+        "Insert `/positions` ahead of `/risk` or `/exposure` and change the current ordered discovery contract."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Extend the existing matched-account dispatcher branch instead of adding a special-case router path so `/positions` inherits the same GET-only contract and `405 method_not_allowed` behavior as `/risk` and `/exposure` once the account path matches.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Add a separate route branch for `/positions` with different method handling.",
+        "Let unmatched methods fall through to a generic 404 for the new account path."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Add a thin `get_account_positions(account_id)` seam beside the existing account getters that already returns the standard `{account, meta}` envelope and places the new payload at `account.positions`, while leaving the detailed row serializer work for the follow-on phase.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Delay the `account.positions` envelope until the serializer phase and return a temporary top-level payload shape.",
+        "Reuse `get_account_exposure(...)` directly without a dedicated positions entrypoint."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Use the live `ACCOUNT_EXPOSURE` projection as the source of truth for this entrypoint's account existence so `/positions` matches `/exposure` by returning `404 account_not_found` when the account is missing from that read model or has no surviving live rows.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Treat risk-only accounts as known and return `200` with an empty `positions` payload.",
+        "Introduce cross-read-model account existence logic in this route-plumbing step."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit the current account-read seams in `backend/server.py` around `ACCOUNT_SERVICE_INDEX_ROUTES`, `service_index_payload()`, `get_account_exposure(...)`, `get_account_risk(...)`, and the `/v1/accounts/{id}/...` branch in `route_request(...)` so the new entrypoint mirrors the existing account response conventions exactly.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Extend `ACCOUNT_SERVICE_INDEX_ROUTES` with `/v1/accounts/{id}/positions` immediately after `/v1/accounts/{id}/exposure` so the root service index advertises the new additive account-read route in the frozen account-route order.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add a dedicated `get_account_positions(account_id)` function beside the existing account getters that returns `{ \"account\": { \"id\": account_id, \"positions\": ... }, \"meta\": make_meta() }` and uses `ACCOUNT_EXPOSURE`-backed existence checks, while keeping the actual positions-row serialization deliberately minimal for this phase.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Broaden the existing account-route dispatcher to recognize `positions` alongside `risk` and `exposure`, preserve the shared GET-only `405 method_not_allowed` branch for matched account paths, and dispatch `GET /v1/accounts/{id}/positions` to the new getter without altering the current `/risk` or `/exposure` behavior.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Sanity-check the resulting diff to keep this child step scoped to route-surface plumbing in `backend/server.py` only: the new route is discoverable from the service index, the dispatcher contract stays consistent across all account reads, and the deeper positions serializer and HTTP regression expansion remain deferred to later phases.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
