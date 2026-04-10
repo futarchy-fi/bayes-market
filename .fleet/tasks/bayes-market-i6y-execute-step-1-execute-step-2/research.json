@@ -1,0 +1,83 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes. The root service index should keep the existing bare-path account-route format and append `/v1/accounts/{id}/positions` immediately after `/v1/accounts/{id}/exposure`, making `routes.accounts` exactly [`/v1/accounts/{id}/risk`, `/v1/accounts/{id}/exposure`, `/v1/accounts/{id}/positions`]. `ACCOUNT_SERVICE_INDEX_ROUTES` is an ordered tuple of bare path strings, `service_index_payload()` exposes it verbatim via `list(ACCOUNT_SERVICE_INDEX_ROUTES)`, and the root-route regression already freezes the exact observable list order.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-1-execute-step-2/questions.json:6",
+        "backend/server.py:127",
+        "backend/server.py:129",
+        "backend/server.py:849",
+        "tests/test_bayes_market_api.py:578"
+      ],
+      "uncertainty": "Only a later task-level decision changing the required insertion point or adding method prefixes would alter this, and there is no evidence of that in the current tree.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "For runtime behavior, `ACCOUNT_SERVICE_INDEX_ROUTES` is the only source of truth for `routes.accounts`: `service_index_payload()` does not duplicate or transform the list, it just emits `list(ACCOUNT_SERVICE_INDEX_ROUTES)`. The only exact executable mirror is the root discovery regression in `tests/test_bayes_market_api.py`. The frontend System page renders `index.data.routes` dynamically, so it does not need a hardcoded account-route update. Some prose docs mention earlier service-index surfaces, but they are already stale and not authoritative, so they are not another required contract source for this change.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:827",
+        "backend/server.py:849",
+        "tests/test_bayes_market_api.py:578",
+        "frontend/src/routes/System.tsx:98",
+        "docs/t563-journal-read-surface-freeze.md:36",
+        "docs/t563-journal-read-surface-freeze.md:43"
+      ],
+      "uncertainty": "Historical docs could be refreshed for consistency later, but code correctness and the observable root payload are driven by the backend tuple plus its regression test.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. This child step is strictly additive beside `/v1/accounts/{id}/exposure`. The parent task plan explicitly says to implement `/v1/accounts/{id}/positions` as a new additive account read model beside `/exposure` and rejects replacing `/exposure`. The current router still handles only `risk` and `exposure`, while the frontend client, query keys, and Portfolio page still consume `/exposure`, so this step should extend discovery without removing, renaming, or reordering the existing account routes.",
+      "confidence": 0.99,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y/plan.json:9",
+        "backend/server.py:3931",
+        "frontend/src/lib/api/client.ts:169",
+        "frontend/src/lib/query/hooks.ts:21",
+        "frontend/src/routes/Portfolio.tsx:25"
+      ],
+      "uncertainty": "A later deprecation or migration could happen after `/positions` exists, but nothing in the current plan or codebase schedules that as part of this child step.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Test coverage is intentionally deferred to the later consolidated backend-regression phase. The parent task plan separates step 1, which adds `/v1/accounts/{id}/positions` to the service index, route dispatcher, and backend entrypoint, from step 4, which explicitly owns backend regressions in `tests/test_bayes_market_api.py` for the new service-index route. The existing root discovery test still freezes the pre-positions account-route list, so the final integrated implementation must update that assertion, but the checked-in plan does not assign that test edit to this service-index child step.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y/plan.json:50",
+        ".fleet/tasks/bayes-market-i6y/plan.json:65",
+        "tests/test_bayes_market_api.py:578"
+      ],
+      "uncertainty": "If someone executes this child step in isolation and requires an immediately green tree, they would need to batch the test update early; the current plan still defers formal regression ownership to the later backend-test phase.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The primary production seam is the ordered tuple in `backend/server.py`; no alternate runtime builder for `routes.accounts` was found."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Route order is part of the public contract because the root regression compares the full `routes.accounts` list exactly, not as an unordered set."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Scope stays additive: keep `/v1/accounts/{id}/risk` and `/v1/accounts/{id}/exposure` intact and append `/v1/accounts/{id}/positions` after `/exposure` instead of starting a replacement migration."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

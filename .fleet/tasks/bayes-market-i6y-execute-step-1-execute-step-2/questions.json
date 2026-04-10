@@ -1,0 +1,51 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the root service index advertise `/v1/accounts/{id}/positions` in the same bare-path format as the existing account routes, and should the observable `routes.accounts` order become exactly `[\"/v1/accounts/{id}/risk\", \"/v1/accounts/{id}/exposure\", \"/v1/accounts/{id}/positions\"]`?",
+      "category": "requirements",
+      "why_it_matters": "The current root-route test asserts the full `routes.accounts` list exactly, so both string format and insertion order are part of the public discovery contract."
+    },
+    {
+      "id": "q2",
+      "question": "Is `ACCOUNT_SERVICE_INDEX_ROUTES` the only source of truth for `routes.accounts`, or are there any parallel account-route declarations, docs, or snapshots that also need to change when the new path is advertised?",
+      "category": "codebase",
+      "why_it_matters": "If the tuple is emitted verbatim and nothing else mirrors it, the implementation stays as a one-seam backend change; if there are parallel declarations, leaving them stale would create contract drift."
+    },
+    {
+      "id": "q3",
+      "question": "For this child step, is `/v1/accounts/{id}/positions` strictly additive beside `/v1/accounts/{id}/exposure`, with no replacement or reordering of the existing account routes?",
+      "category": "design",
+      "why_it_matters": "That determines whether the change is a narrow service-index extension or the start of a wider migration that would affect current `/exposure` consumers."
+    },
+    {
+      "id": "q4",
+      "question": "Should this service-index step also update the root discovery regression in `tests/test_bayes_market_api.py`, or is test coverage intentionally deferred until the later consolidated backend-regression phase?",
+      "category": "requirements",
+      "why_it_matters": "The route order is already frozen by a direct assertion, so the implementation scope depends on whether this leaf step is code-only or expected to move the contract test in lockstep."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "`service_index_payload()` emits `routes.accounts` directly from `ACCOUNT_SERVICE_INDEX_ROUTES` via `list(ACCOUNT_SERVICE_INDEX_ROUTES)`, so changing the tuple is the primary production seam for this task.",
+      "confidence": 0.99,
+      "if_wrong": "The implementation would miss another account-route source and the advertised API surface could become internally inconsistent."
+    },
+    {
+      "id": "a2",
+      "assumption": "The ordered `routes.accounts` list is a public contract, not an unordered membership set, because the existing root-route test compares the entire list exactly.",
+      "confidence": 0.97,
+      "if_wrong": "The patch could legally reorder account routes, and the child step would need a different contract rationale than the current tests imply."
+    },
+    {
+      "id": "a3",
+      "assumption": "Advertising `/v1/accounts/{id}/positions` is additive in this step and should not remove or rename the existing `/risk` or `/exposure` entries.",
+      "confidence": 0.96,
+      "if_wrong": "The work would expand from a focused backend discovery change into a broader route-deprecation or client-migration task."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

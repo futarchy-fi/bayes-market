@@ -1,0 +1,55 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use `backend/server.py`'s `ACCOUNT_SERVICE_INDEX_ROUTES` tuple as the only production seam for this child step and insert `/v1/accounts/{id}/positions` immediately after `/v1/accounts/{id}/exposure`, preserving the existing bare-path route string format.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Advertise the new account route with an HTTP-method prefix instead of the existing bare-path format.",
+        "Append `/v1/accounts/{id}/positions` in a different spot or sort the account routes independently of the frozen contract order.",
+        "Introduce a second route list for the root service index instead of extending the existing tuple."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep the service-index change strictly additive so `/v1/accounts/{id}/risk` and `/v1/accounts/{id}/exposure` remain advertised unchanged and in place while `/v1/accounts/{id}/positions` is added beside them.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Replace `/v1/accounts/{id}/exposure` with `/v1/accounts/{id}/positions` in this child step.",
+        "Reorder the existing account routes as part of introducing the new endpoint."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep this child plan scoped to the service-index contract seam and boundary-check the frozen root discovery assertion, while leaving the formal `tests/test_bayes_market_api.py` regression update to the later backend-regression phase already assigned in the parent plan.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Expand this child step to own the deferred backend regression work.",
+        "Ignore the existing exact `routes.accounts` assertion even though it freezes the observable contract."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Update `ACCOUNT_SERVICE_INDEX_ROUTES` in `backend/server.py` so the ordered account route tuple becomes `/risk`, `/exposure`, then `/positions`, with `/v1/accounts/{id}/positions` inserted immediately after `/v1/accounts/{id}/exposure`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Verify the root service index continues to emit `routes.accounts` directly from `list(ACCOUNT_SERVICE_INDEX_ROUTES)` so the observable payload changes only by the new additive trailing entry in the frozen account-route order.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Review the existing root discovery assertion in `tests/test_bayes_market_api.py` against the new contract and keep this child explicitly scoped to the service-index implementation seam, with the assertion update deferred to the later consolidated backend-regression step.",
+      "depends_on": [1, 2]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
