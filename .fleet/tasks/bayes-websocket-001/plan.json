@@ -1,0 +1,109 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Implement WebSocket protocol (RFC 6455 handshake + frame read/write) using only Python stdlib, no external library. The backend is stdlib-only (http.server) and adding a dependency like websockets/wsproto would be inconsistent.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Add websockets library - async-first, conflicts with sync http.server architecture",
+        "Add wsproto library - good protocol handling but adds a dependency to a zero-dependency backend",
+        "Use SSE instead - frontend is already built for WebSocket, SSE would require rewriting the client"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Switch from HTTPServer to ThreadingHTTPServer so WebSocket connections can persist in their own threads while the server continues handling HTTP requests.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Run WebSocket on a separate port - complicates deployment and frontend URL logic",
+        "Use asyncio event loop - would require rewriting the entire server"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Broadcast MarketPriceMessage to WebSocket subscribers at the two points where marginals are mutated: (1) probability edit accepted (server.py ~line 2758) and (2) market resolution (server.py ~line 3446). Use the same MarketPriceMessage format the frontend expects.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Broadcast on every event emission - too noisy, many events don't change marginals",
+        "Periodic polling broadcast - defeats purpose of WebSocket push"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep React Query polling (5000ms) as-is. The frontend already implements dual-path (polling + WebSocket) with WebSocket updates feeding into the React Query cache via setQueryData. No frontend changes needed.",
+      "based_on": ["q3", "q5"],
+      "alternatives_rejected": [
+        "Reduce polling interval when WebSocket connected - optimization for later, not needed now",
+        "Remove polling entirely - reduces resilience"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "No new visual feedback beyond existing CSS transitions. ProbabilityBar already has 'transition: width 0.3s ease' which will animate smoothly when marginals update via WebSocket.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Add flash/highlight animations - increases scope, can be added later"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Switch from HTTPServer to ThreadingHTTPServer in run_server() (server.py line 4427). Import ThreadingHTTPServer from http.server. This is a one-line change that enables concurrent connection handling.",
+      "depends_on": [],
+      "estimated_lines": 5,
+      "risk": "low"
+    },
+    {
+      "step": 2,
+      "task": "Implement WebSocket protocol helpers as module-level functions: (a) ws_accept_key() to compute Sec-WebSocket-Accept from Sec-WebSocket-Key per RFC 6455, (b) ws_read_frame() to read and unmask a WebSocket frame from a socket, (c) ws_send_text() to send an unmasked text frame, (d) ws_send_close() to send a close frame. Place these near the top of server.py after imports.",
+      "depends_on": [],
+      "estimated_lines": 80,
+      "risk": "medium"
+    },
+    {
+      "step": 3,
+      "task": "Add global WebSocket connection registry: WS_CONNECTIONS dict mapping market_id → set of socket objects, plus a _WS_LOCK threading.Lock for thread-safe access. Add helper functions ws_register(market_id, sock), ws_unregister(market_id, sock). Place near other global state (server.py ~line 173).",
+      "depends_on": [],
+      "estimated_lines": 25,
+      "risk": "low"
+    },
+    {
+      "step": 4,
+      "task": "Add WebSocket upgrade detection in do_GET(): check for 'Upgrade: websocket' header and path matching /ws/markets/{marketId}/prices. If matched, perform the RFC 6455 handshake (send 101 Switching Protocols response), register the connection, enter a read loop (handling ping/pong/close frames), and unregister on disconnect. This runs in the handler thread (enabled by ThreadingHTTPServer).",
+      "depends_on": [1, 2, 3],
+      "estimated_lines": 60,
+      "risk": "medium"
+    },
+    {
+      "step": 5,
+      "task": "Implement ws_broadcast(market_id) function: reads current market state from MARKETS[market_id], constructs a MarketPriceMessage JSON matching the frontend's expected format (marketId, status, marginals, seq, emittedAt, approxFlag, resolution, resolutionProbabilities), and sends it to all registered sockets for that market. Handles broken connections by unregistering them.",
+      "depends_on": [3],
+      "estimated_lines": 40,
+      "risk": "low"
+    },
+    {
+      "step": 6,
+      "task": "Hook ws_broadcast() calls into the two marginals mutation points: (a) after probability edit acceptance where market['marginals'] is updated (~line 2758), and (b) after market resolution where status/marginals/resolution are set (~line 3446). Each hook is a single ws_broadcast(market_id) call.",
+      "depends_on": [5],
+      "estimated_lines": 10,
+      "risk": "low"
+    }
+  ],
+  "decomposition_assessment": {
+    "total_steps": 6,
+    "estimated_total_lines": 220,
+    "high_risk_steps": 0,
+    "parallelizable_groups": [["step1", "step2", "step3"], ["step4", "step5"], ["step6"]],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Total estimated lines (220) is well under 500. No high-risk steps (2 medium, 4 low). All work is in a single file (server.py) with tightly coupled changes - the WebSocket protocol helpers, connection registry, upgrade handler, and broadcast function must all work together. Parallelization would be impractical since all changes are in one file. This is a focused backend task with a well-defined frontend contract."
+  },
+  "spawn_children": false,
+  "children": []
+}
