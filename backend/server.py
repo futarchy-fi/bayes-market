@@ -1762,7 +1762,40 @@ def parse_analytics_interval_query(query: dict[str, list[str]]) -> str:
     return interval
 
 
-def parse_market_list_query(query: dict[str, list[str]]) -> dict[str, str | None]:
+def parse_boolean_query_param(
+    query: dict[str, list[str]],
+    name: str,
+    *,
+    default: bool,
+) -> bool:
+    """Parse a single boolean query parameter using the API's lowercase wire format."""
+    values = query.get(name, [])
+    if len(values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            f"{name} must be provided at most once",
+            {"parameter": name, "received": values},
+        )
+
+    if not values:
+        return default
+
+    raw_value = values[0]
+    if raw_value == "true":
+        return True
+    if raw_value == "false":
+        return False
+
+    raise ApiError(
+        400,
+        "invalid_query",
+        f"{name} must be true or false",
+        {"parameter": name, "received": raw_value, "allowed": ["false", "true"]},
+    )
+
+
+def parse_market_list_query(query: dict[str, list[str]]) -> dict[str, Any]:
     """Parse and normalize the supported GET /v1/markets query parameters."""
     status_values = query.get("status", [])
     if len(status_values) > 1:
@@ -1791,7 +1824,8 @@ def parse_market_list_query(query: dict[str, list[str]]) -> dict[str, str | None
             {"parameter": "q", "received": query_values},
         )
 
-    status = status_values[0] if status_values else None
+    raw_status = status_values[0] if status_values else None
+    status: str | None = raw_status
     if status == "all":
         status = None
     elif status is not None and status not in ALLOWED_MARKET_STATUSES:
@@ -1815,10 +1849,15 @@ def parse_market_list_query(query: dict[str, list[str]]) -> dict[str, str | None
     if title_query == "":
         title_query = None
 
+    include_resolved = parse_boolean_query_param(query, "include_resolved", default=False)
+    # status=all and status=resolved both implicitly include resolved markets.
+    effective_include_resolved = include_resolved or raw_status == "all" or status == "resolved"
+
     return {
         "status": status,
         "sort": sort,
         "q": title_query,
+        "include_resolved": effective_include_resolved,
     }
 
 
@@ -2425,7 +2464,10 @@ def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
     status = filters["status"]
     sort = filters["sort"]
     title_query = filters["q"]
+    include_resolved = filters["include_resolved"]
 
+    if not include_resolved:
+        markets = [market for market in markets if market["status"] != "resolved"]
     if status is not None:
         markets = [market for market in markets if market["status"] == status]
     if title_query is not None:
