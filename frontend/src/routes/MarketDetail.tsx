@@ -8,6 +8,8 @@ import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { formatCurrency, timeUntil, truncateHash, formatRelativeTime } from "@/lib/utils/format";
 import { AssumptionProvider } from "@/features/assumptions/AssumptionContext";
 import { AssumptionPanel } from "@/features/assumptions/AssumptionPanel";
+import { HistoryProvider } from "@/features/history/HistoryContext";
+import { UndoRedoToolbar } from "@/features/history/UndoRedoToolbar";
 import { ForceDirectedGraph } from "@/features/graph/ForceDirectedGraph";
 import { JunctionTreePanel } from "@/features/graph/JunctionTreePanel";
 import { DiscussionThread } from "@/features/market/DiscussionThread";
@@ -50,19 +52,25 @@ export default function MarketDetail() {
 
       <ResolveMarketPanel market={m} />
 
-      {m.status === "active" && (
-        <AssumptionProvider>
-          <AssumptionPanel market={m} />
-        </AssumptionProvider>
+      {m.status === "active" ? (
+        <HistoryProvider>
+          <AssumptionProvider>
+            <UndoRedoToolbar />
+            <AssumptionPanel market={m} />
+            <CptPanel market={m} />
+            <EventTradePanel market={m} />
+            <DiscussionThread market={m} />
+            <ForceDirectedGraph focusMarketId={m.id} />
+          </AssumptionProvider>
+        </HistoryProvider>
+      ) : (
+        <>
+          <CptPanel market={m} />
+          <EventTradePanel market={m} />
+          <DiscussionThread market={m} />
+          <ForceDirectedGraph focusMarketId={m.id} />
+        </>
       )}
-
-      <CptPanel market={m} />
-
-      <EventTradePanel market={m} />
-
-      <DiscussionThread market={m} />
-
-      <ForceDirectedGraph focusMarketId={m.id} />
 
       {/* Event Journal */}
       <div>

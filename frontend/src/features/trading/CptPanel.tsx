@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useCpt, useProbabilityEdit } from "@/lib/query/hooks";
 import { useSession } from "@/features/session/context";
 import { formatProbability } from "@/lib/utils/format";
+import { useDraftEdits } from "@/features/history/useDraftEdits";
 import type { Market } from "@/lib/api/types";
 
 interface CptPanelProps {
@@ -19,6 +20,7 @@ export function CptPanel({ market }: CptPanelProps) {
   const { data: cptData, isLoading } = useCpt(market.id);
   const mutation = useProbabilityEdit(market.id);
   const [editing, setEditing] = useState<EditingCell | null>(null);
+  const draftEdits = useDraftEdits();
 
   if (isLoading) {
     return (
@@ -44,25 +46,38 @@ export function CptPanel({ market }: CptPanelProps) {
     const entry = entries[editing.entryIndex];
     if (!entry) return;
 
-    mutation.mutate(
-      {
+    const currentP = entry.marginals[editing.outcomeId] ?? 0;
+    draftEdits.stageDraft({
+      entryIndex: editing.entryIndex,
+      outcomeId: editing.outcomeId,
+      probability: editing.probability,
+      context: entry.context,
+      previousProbability: currentP,
+    });
+    setEditing(null);
+  };
+
+  const handleCommitDrafts = () => {
+    const allDrafts = draftEdits.allDrafts();
+    for (const draft of allDrafts) {
+      const entry = entries[draft.entryIndex];
+      if (!entry) continue;
+      mutation.mutate({
         payload: {
           accountId: session.accountId,
           variableId: market.variableId,
           target: {
             kind: "marginal",
-            outcomeId: editing.outcomeId,
-            probability: editing.probability,
+            outcomeId: draft.outcomeId,
+            probability: draft.probability,
           },
-          context: entry.context,
+          context: draft.context,
           idempotencyKey: crypto.randomUUID(),
         },
         session,
-      },
-      {
-        onSuccess: () => setEditing(null),
-      },
-    );
+      });
+    }
+    draftEdits.clearDrafts();
   };
 
   const handleCancel = () => setEditing(null);
@@ -107,7 +122,10 @@ export function CptPanel({ market }: CptPanelProps) {
                   </td>
                 )}
                 {outcomes.map((o) => {
-                  const p = entry.marginals[o.id] ?? 0;
+                  const serverP = entry.marginals[o.id] ?? 0;
+                  const draftP = draftEdits.getDraft(entryIdx, o.id);
+                  const p = draftP ?? serverP;
+                  const isDrafted = draftP !== undefined;
                   const isEditing = editing?.entryIndex === entryIdx && editing?.outcomeId === o.id;
 
                   if (isEditing) {
@@ -151,6 +169,7 @@ export function CptPanel({ market }: CptPanelProps) {
                         fontFamily: "var(--font-mono)",
                         cursor: isConfigured ? "pointer" : "default",
                         position: "relative",
+                        background: isDrafted ? "rgba(59, 130, 246, 0.06)" : undefined,
                       }}
                       onClick={() => handleCellClick(entryIdx, o.id, p)}
                     >
@@ -166,10 +185,10 @@ export function CptPanel({ market }: CptPanelProps) {
                             width: `${Math.max(2, p * 100)}%`,
                             height: "100%",
                             borderRadius: 3,
-                            background: p > 0.5 ? "var(--color-success)" : "var(--color-info)",
+                            background: isDrafted ? "var(--color-info)" : p > 0.5 ? "var(--color-success)" : "var(--color-info)",
                           }} />
                         </div>
-                        <span>{formatProbability(p)}</span>
+                        <span>{formatProbability(p)}{isDrafted ? " *" : ""}</span>
                       </div>
                     </td>
                   );
@@ -179,6 +198,18 @@ export function CptPanel({ market }: CptPanelProps) {
           </tbody>
         </table>
       </div>
+
+      {draftEdits.hasDrafts && (
+        <div style={{ display: "flex", gap: "var(--space-sm)", alignItems: "center", marginTop: "var(--space-sm)" }}>
+          <button onClick={handleCommitDrafts} disabled={mutation.isPending} style={setBtnStyle}>
+            {mutation.isPending ? "Submitting…" : `Commit ${draftEdits.allDrafts().length} draft(s)`}
+          </button>
+          <button onClick={draftEdits.clearDrafts} style={cancelBtnStyle}>Discard drafts</button>
+          <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+            * = drafted (not yet submitted)
+          </span>
+        </div>
+      )}
 
       {mutation.isSuccess && (
         <div style={successStyle}>

@@ -12,6 +12,8 @@ interface AssumptionState {
   addAssumption: (a: Assumption) => void;
   removeAssumption: (variableId: string) => void;
   clearAll: () => void;
+  /** Restore a full set of assumptions (used by undo) */
+  setAllAssumptions: (assumptions: Assumption[]) => void;
   hasAssumption: (variableId: string) => boolean;
   getAssumption: (variableId: string) => Assumption | undefined;
   /** Context array for API calls */
@@ -36,6 +38,8 @@ export function AssumptionProvider({ children }: { children: ReactNode }) {
 
   const clearAll = useCallback(() => setAssumptions([]), []);
 
+  const setAllAssumptions = useCallback((all: Assumption[]) => setAssumptions(all), []);
+
   const hasAssumption = useCallback(
     (variableId: string) => assumptions.some((a) => a.variableId === variableId),
     [assumptions],
@@ -53,7 +57,7 @@ export function AssumptionProvider({ children }: { children: ReactNode }) {
 
   return (
     <AssumptionCtx.Provider
-      value={{ assumptions, addAssumption, removeAssumption, clearAll, hasAssumption, getAssumption, contextPayload }}
+      value={{ assumptions, addAssumption, removeAssumption, clearAll, setAllAssumptions, hasAssumption, getAssumption, contextPayload }}
     >
       {children}
     </AssumptionCtx.Provider>
