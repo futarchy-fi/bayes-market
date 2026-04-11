@@ -1,0 +1,51 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Is the reported error reproducible? tsc -b and vitest run both pass clean on the current code. Line 40 of MarketList.test.tsx is `});`, not an array access. Was the error from a different commit or branch?",
+      "category": "requirements",
+      "why_it_matters": "If the error doesn't exist, there's nothing to fix. We need to confirm whether this is a stale report or if the error manifests under different conditions (e.g., a different tsconfig, a CI-specific check, or a pending change)."
+    },
+    {
+      "id": "q2",
+      "question": "Where exactly does array indexing of MarketSummary[] occur in the test file? The current file has no `markets[n]` or similar indexed access patterns.",
+      "category": "codebase",
+      "why_it_matters": "The task description says 'array indexing returns T | undefined' which is the noUncheckedIndexedAccess behavior. But the test file doesn't index into any array. We need to identify the actual offending expression to apply the fix."
+    },
+    {
+      "id": "q3",
+      "question": "Should the fix use non-null assertion (!) or explicit value extraction with a guard? The task suggests either approach.",
+      "category": "design",
+      "why_it_matters": "Non-null assertion is simpler but suppresses a real safety check. An explicit guard (if/throw) is safer but more verbose in test code where the values are known constants. For test files, non-null assertion is typically acceptable."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The error described in the task does not currently exist in the codebase - tsc -b passes clean and all 7 tests in MarketList.test.tsx pass.",
+      "confidence": 0.95,
+      "if_wrong": "There may be a different typecheck configuration (e.g., a stricter tsconfig.test.json or a CI lint step) that surfaces this error. Would need to find and run that specific check."
+    },
+    {
+      "id": "a2",
+      "assumption": "noUncheckedIndexedAccess is enabled (confirmed in tsconfig.json line 18), which is the root cause mechanism described in the task.",
+      "confidence": 1.0,
+      "if_wrong": "N/A - this is confirmed by reading the file."
+    },
+    {
+      "id": "a3",
+      "assumption": "If the error did exist, it would be in a pattern like `mockMarkets.markets[0]` where the inferred type becomes `MarketSummary | undefined` instead of `MarketSummary`. The fix would be adding `!` (non-null assertion) or using `as MarketSummary`.",
+      "confidence": 0.9,
+      "if_wrong": "The error could be in a different expression, such as a destructuring pattern or a find() call that also returns T | undefined."
+    },
+    {
+      "id": "a4",
+      "assumption": "Since this is test code with known mock data, non-null assertion (!) is the appropriate fix rather than runtime guards.",
+      "confidence": 0.85,
+      "if_wrong": "The project may have a lint rule or convention against non-null assertions, in which case we'd use explicit const assignment with a type annotation or a helper."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

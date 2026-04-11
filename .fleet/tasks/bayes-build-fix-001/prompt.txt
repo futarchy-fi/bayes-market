@@ -1,0 +1,27 @@
+[Task bayes-build-fix-001] PHASE 1: QUESTION GENERATION
+Title: Fix MarketList.test.tsx TypeScript error
+Description: Fix build error: Type MarketSummary | undefined not assignable to MarketSummary at line 40 in frontend/src/__tests__/MarketList.test.tsx. The issue is array indexing returns T | undefined. Use non-null assertion or explicit value.
+Repo: /home/kelvin/bayes-market
+
+Explore the codebase. Identify what you need to know before building.
+
+Write your output to .fleet/tasks/bayes-build-fix-001/questions.json:
+{
+  "phase": "question",
+  "questions": [
+    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  ],
+  "assumptions": [
+    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  ],
+  "spawn_children": false,
+  "children": []
+}
+
+DECOMPOSITION: Set spawn_children=true if you need to investigate sub-questions
+that are too deep or tangential for this task. Each child runs a FULL 4-phase
+epistemic workflow (question→research→execute→validate). Only decompose when
+a sub-question truly warrants its own investigation cycle.
+Child format: { "id": "...", "title": "...", "description": "..." }
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: bayes-build-fix-001"
