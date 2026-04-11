@@ -1,0 +1,13 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.9,
+  "plan_adherence_notes": "All 4 plan steps were executed correctly. Step 1 (write lock): handle_market_resolution core logic wrapped in get_market_write_lock(market_id), matching the pattern of other mutation handlers. Step 2 (resolvedAt): market['resolvedAt'] = resolved_at added in transition_market_to_resolved after setting marginals. Step 3 (test): test_market_resolution_sets_resolved_at_on_market_object added with 7 assertions covering field presence, type, Zulu format, ISO parsing, UTC timezone, and market object persistence. Minor gap: plan called for 2 tests (resolvedAt + write lock confirmation), but only 1 test was added (resolvedAt only). The write lock change is implicitly validated by the 25 existing resolution tests all passing, so this is acceptable. Step 4 (run tests): 269 tests pass, 0 failures. Deducting 0.1 for the missing dedicated write-lock test.",
+  "research_quality": 0.95,
+  "question_completeness": 0.9,
+  "missed_questions": [
+    "Should the resolvedAt field be included in market summary/list responses, or only in the full market object? (minor — the field is on the market dict so it would appear wherever the full market is serialized)",
+    "Are there any downstream consumers (e.g. WebSocket broadcasts, analytics) that need to be updated to include resolvedAt? (the ws_broadcast already sends market state, so it may already propagate)"
+  ],
+  "verdict": "approve",
+  "reason": "The execution faithfully implemented the plan's 3 core changes: (1) write lock wrapping the entire resolution handler to fix the TOCTOU race condition, (2) resolvedAt timestamp persisted on the market object, (3) a well-structured test validating the new field. All 269 tests pass with 0 failures, including 25 resolution-specific tests. The research correctly identified this as a hardening task on an existing feature, and the plan scoped the work appropriately to ~20 lines of meaningful changes across server.py and the test file. The only minor gap is the absence of a dedicated write-lock test, but the existing test suite provides sufficient implicit coverage since all resolution tests exercise the locked code path."
+}

@@ -3716,6 +3716,7 @@ def transition_market_to_resolved(
     market["resolution"] = outcome_id
     market["resolutionProbabilities"] = deepcopy(new_marginals)
     market["marginals"] = deepcopy(new_marginals)
+    market["resolvedAt"] = resolved_at
     CONDITIONAL_MARGINALS.pop(market_id, None)
     ws_broadcast(market_id)
 
@@ -4249,66 +4250,67 @@ def handle_market_resolution(market_id: str, payload: dict[str, Any] | None) -> 
             )
         idempotency_key = idempotency_key.strip()
 
-    normalized_payload = normalize_market_resolution_payload(market_id, body)
-    account_id = account_id.strip()
-    scope_key = idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
-    if scope_key is not None:
-        existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
-        if existing_command_id is not None:
-            existing_command = COMMANDS[existing_command_id]
-            if existing_command["payload"] != normalized_payload:
-                return build_idempotency_conflict_response(
-                    existing_command_id,
-                    idempotency_key,
-                    market_id,
-                    account_id,
-                    "AdminOp",
-                )
-            return replay_terminal_outcome(existing_command_id)
+    with get_market_write_lock(market_id):
+        normalized_payload = normalize_market_resolution_payload(market_id, body)
+        account_id = account_id.strip()
+        scope_key = idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
+        if scope_key is not None:
+            existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
+            if existing_command_id is not None:
+                existing_command = COMMANDS[existing_command_id]
+                if existing_command["payload"] != normalized_payload:
+                    return build_idempotency_conflict_response(
+                        existing_command_id,
+                        idempotency_key,
+                        market_id,
+                        account_id,
+                        "AdminOp",
+                    )
+                return replay_terminal_outcome(existing_command_id)
 
-    submitted_at = utc_timestamp()
-    command = materialize_market_resolution_command(
-        market_id=market_id,
-        normalized_payload=normalized_payload,
-        account_id=account_id,
-        command_id=generate_command_id(),
-        submitted_at=submitted_at,
-        idempotency_key=idempotency_key,
-    )
-    market = MARKETS[market_id]
-    if market["status"] == "resolved":
-        return build_terminal_rejection_response(
-            command,
-            code="market_already_resolved",
-            message="Market is already resolved",
-            details={
-                "marketId": market_id,
-                "status": market["status"],
-                "currentResolution": market.get("resolution"),
-                "commandId": command["commandId"],
-            },
-            retry_hint="reuse the original idempotency key to replay the prior outcome",
-            status=409,
-            scope_key=scope_key,
+        submitted_at = utc_timestamp()
+        command = materialize_market_resolution_command(
+            market_id=market_id,
+            normalized_payload=normalized_payload,
+            account_id=account_id,
+            command_id=generate_command_id(),
+            submitted_at=submitted_at,
+            idempotency_key=idempotency_key,
         )
-    if market["status"] not in {"active", "closed"}:
-        return build_terminal_rejection_response(
-            command,
-            code="market_not_resolvable",
-            message="Market can only be resolved from active or closed status",
-            details={
-                "marketId": market_id,
-                "status": market["status"],
-                "allowedStatuses": ["active", "closed"],
-                "commandId": command["commandId"],
-            },
-            retry_hint="resolve an active or closed market",
-            status=409,
-            scope_key=scope_key,
-        )
+        market = MARKETS[market_id]
+        if market["status"] == "resolved":
+            return build_terminal_rejection_response(
+                command,
+                code="market_already_resolved",
+                message="Market is already resolved",
+                details={
+                    "marketId": market_id,
+                    "status": market["status"],
+                    "currentResolution": market.get("resolution"),
+                    "commandId": command["commandId"],
+                },
+                retry_hint="reuse the original idempotency key to replay the prior outcome",
+                status=409,
+                scope_key=scope_key,
+            )
+        if market["status"] not in {"active", "closed"}:
+            return build_terminal_rejection_response(
+                command,
+                code="market_not_resolvable",
+                message="Market can only be resolved from active or closed status",
+                details={
+                    "marketId": market_id,
+                    "status": market["status"],
+                    "allowedStatuses": ["active", "closed"],
+                    "commandId": command["commandId"],
+                },
+                retry_hint="resolve an active or closed market",
+                status=409,
+                scope_key=scope_key,
+            )
 
-    resolution = resolve_market_command(command)
-    return build_market_resolution_acceptance_response(command, resolution, scope_key)
+        resolution = resolve_market_command(command)
+        return build_market_resolution_acceptance_response(command, resolution, scope_key)
 
 
 def route_request(

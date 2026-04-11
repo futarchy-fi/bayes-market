@@ -3094,6 +3094,24 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(event["payload"]["pricing"], {"cost": 0.0, "fee": 0.0})
         self.assertEqual(event["payload"]["replayStateHash"], server.market_replay_state_hash("m1"))
 
+    def test_market_resolution_sets_resolved_at_on_market_object(self):
+        from datetime import datetime, timezone
+
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_admin", "yes", idempotency_key="idem-resolved-at-check"),
+        )
+
+        self.assertEqual(status, 201)
+        self.assertIn("resolvedAt", payload["market"])
+        resolved_at = payload["market"]["resolvedAt"]
+        self.assertIsInstance(resolved_at, str)
+        self.assertTrue(resolved_at.endswith("Z"), f"resolvedAt should be Zulu time, got {resolved_at}")
+        parsed = datetime.fromisoformat(resolved_at.replace("Z", "+00:00"))
+        self.assertEqual(parsed.tzinfo, timezone.utc)
+        self.assertEqual(server.MARKETS["m1"]["resolvedAt"], resolved_at)
+
     def test_market_resolution_prunes_last_live_exposure_and_exposure_route_returns_404(self):
         account_id = "acct_resolve_pruned_exposure"
         trade_payload, trade_status = server.route_request(

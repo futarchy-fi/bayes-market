@@ -1,0 +1,111 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "CONFIRMED BUG: handle_market_resolution (line 4231) does NOT acquire get_market_write_lock(), while ALL other write mutation handlers in the codebase do. Specifically: comment post handler (line 3995), probability edit handler (line 4063), and event trade handler (line 4155) all wrap their full lifecycle (idempotency check + status validation + command execution) in `with get_market_write_lock(market_id):`. The resolution handler performs status check (line 4279) and mutation via resolve_market_command (line 4310) without any lock. Note: emit_terminal_event (line 3410) does acquire the lock, but only for event journal writes, not for the status-check-then-mutate sequence. This creates a TOCTOU race: two concurrent resolution requests could both pass the status=='resolved' check and both call resolve_market_command(). NOTE: handle_market_close and handle_market_reopen referenced in the original question do NOT exist in the codebase — the correct comparison is against the three handlers listed above.",
+      "confidence": 0.95,
+      "evidence": [
+        "server.py:4231 - handle_market_resolution has no get_market_write_lock",
+        "server.py:3995 - comment post handler uses get_market_write_lock",
+        "server.py:4063 - probability edit handler uses get_market_write_lock",
+        "server.py:4155 - event trade handler uses get_market_write_lock",
+        "server.py:3410 - emit_terminal_event acquires lock for event journal only",
+        "server.py:4279-4310 - unprotected status check then mutation sequence"
+      ],
+      "uncertainty": "Small chance this was intentionally omitted for a reason not visible in the code (e.g. resolution is expected to be single-threaded admin-only). But the pattern violation is clear."
+    },
+    {
+      "question_id": "q2",
+      "answer": "CONFIRMED: resolvedAt is NOT persisted on the market object. transition_market_to_resolved (line 3672) sets four fields on the market dict: status='resolved' (3715), resolution=outcome_id (3716), resolutionProbabilities (3717), marginals (3718). The resolvedAt timestamp is generated at line 3733 in resolve_market_command() and appears only in: (1) the return dict of transition_market_to_resolved at line 3726, and (2) the event payload at line 3770 in build_market_resolution_acceptance_response(). Adding `market['resolvedAt'] = resolved_at` in transition_market_to_resolved would match the pattern of tracking state-transition timestamps and enable filtering/sorting resolved markets by resolution time.",
+      "confidence": 0.95,
+      "evidence": [
+        "server.py:3715-3718 - market fields set during resolution (no resolvedAt)",
+        "server.py:3726 - resolvedAt only in return dict",
+        "server.py:3770 - resolvedAt only in event payload",
+        "server.py:3733 - resolved_at generated via utc_timestamp()"
+      ],
+      "uncertainty": "None — the absence is clear from the code. The only question is whether it SHOULD be added, which is a requirements call."
+    },
+    {
+      "question_id": "q3",
+      "answer": "The existing settlement is capacity-release and position-cleanup ONLY. settle_market_account_risk (line 3626) removes the market from each account's risk tracking, deletes associated LMSR state slices, and recalculates minAsset by subtracting remaining consumed capacity from riskLimit (lines 3650-3656). The 'payout' is implicit: removing a market's capacity consumption frees up minAsset (available balance), which effectively represents the net effect of the market outcome on the account. settle_market_account_exposure (line 1593) removes all positions for the resolved market from ACCOUNT_EXPOSURE — pure cleanup. There is NO explicit credit/debit of realized gains to winning/losing positions. The LMSR market-maker model means gains/losses are already embedded in the risk capacity consumed, so releasing capacity IS the payout mechanism. No new explicit P&L system is needed.",
+      "confidence": 0.85,
+      "evidence": [
+        "server.py:3626-3669 - settle_market_account_risk: removes market, recalculates minAsset",
+        "server.py:3650-3656 - minAsset = riskLimit - remaining consumed capacity",
+        "server.py:1593-1642 - settle_market_account_exposure: removes positions from tracking",
+        "server.py:3740-3741 - both settlement functions called from resolve_market_command"
+      ],
+      "uncertainty": "15% chance the task requires explicit realized P&L entries per position. However, the LMSR model's risk-capacity approach means minAsset adjustment IS the payout, just expressed differently. The existing assetDelta in the response already captures before/after minAsset per account."
+    },
+    {
+      "question_id": "q4",
+      "answer": "The existing test suite has 38 resolution-related tests that comprehensively cover ALL scenarios listed in the task requirements. Coverage includes: (1) Happy path - 5 tests including main resolution, closed market resolution, final probabilities format, and HTTP routes; (2) Invalid payouts/probabilities - 5 tests covering non-point-mass, missing/unexpected outcomes, invalid values, sum!=1.0, mismatched outcome vs probabilities; (3) Double-resolution guard - test at line 7740 (HTTP rejects already-resolved) and line 3396 (rejects draft markets); (4) Auth - 4 tests for agent ID validation; (5) Idempotency - 4 tests for replay, malformed keys, cross-format; (6) Exposure settlement - 3 tests including cleanup verification. GAPS IDENTIFIED: (a) No test verifies write lock acquisition during resolution; (b) No test checks resolvedAt on the market object (because it's not there). Additional tests needed only for the new code: write lock protection test and resolvedAt field test.",
+      "confidence": 0.9,
+      "evidence": [
+        "test_bayes_market_api.py:2923 - main happy path test",
+        "test_bayes_market_api.py:3205-3332 - 5 probability validation tests",
+        "test_bayes_market_api.py:7740 - double-resolution guard",
+        "test_bayes_market_api.py:7055-7219 - 4 auth tests",
+        "test_bayes_market_api.py:7704-7724 - idempotency tests",
+        "test_bayes_market_api.py:3097,7780,5139 - exposure settlement tests"
+      ],
+      "uncertainty": "The test count (38) includes related tests like market list filtering for resolved status. Core resolution-specific tests number ~25. There may be subtle edge cases not covered (e.g., concurrent resolution race), but the listed task requirements are fully covered."
+    },
+    {
+      "question_id": "q5",
+      "answer": "CONFIRMED: The endpoint already exists and is fully implemented. POST /v1/markets/{id}/resolve is defined at server.py:4433, uses market_admin auth (MARKET_ADMIN_WRITE_CATEGORY at line 234, mapped at line 565), requires X-Bayes-Agent-Id header (policy at line 357), and has a complete workflow: payload validation → normalization → idempotency check → status validation → market mutation → risk settlement → exposure settlement → event emission → response. This task is definitively about HARDENING the existing implementation, not building from scratch. The specific hardening work is: (1) add missing write lock, (2) optionally add resolvedAt to market object, (3) verify test completeness.",
+      "confidence": 0.98,
+      "evidence": [
+        "server.py:4433-4458 - route definition for POST /v1/markets/{id}/resolve",
+        "server.py:4231-4311 - full handle_market_resolution implementation",
+        "server.py:234 - MARKET_ADMIN_WRITE_CATEGORY definition",
+        "server.py:565 - route category mapping",
+        "server.py:357 - write route policy requiring agent_id"
+      ],
+      "uncertainty": "Essentially none. The endpoint is live and tested with 38 tests."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The missing write lock is a bug. However, the specific comparison functions (handle_market_close, handle_market_reopen) do NOT exist — the correct comparison is against handle_comment_post (3995), handle_probability_edit (4063), and handle_event_trade (4155), all of which use get_market_write_lock. The fix is the same: wrap handle_market_resolution's core logic in get_market_write_lock(market_id)."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "This is definitively a hardening task. The endpoint exists at line 4433, the handler is fully implemented at 4231-4311, and 38 tests exist. Scope is: add write lock (~wrapping existing code in a with statement), add resolvedAt to market (~1 line), and verify test coverage (mostly done, add 1-2 targeted tests)."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.90,
+      "impact": "resolvedAt is absent from the market object. Adding market['resolvedAt'] = resolved_at in transition_market_to_resolved (around line 3718) would persist the timestamp. This enables filtering/sorting and matches what the task description implies by 'resolution timestamp'."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "The LMSR model embeds gains/losses in risk capacity. settle_market_account_risk releases capacity by removing the market from risk tracking and recalculating minAsset = riskLimit - remainingConsumed. This IS the payout — freeing consumed capacity effectively credits the account. The assetDelta in the response already reports before/after minAsset per affected account. No new P&L ledger system is needed."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.88,
+      "impact": "38 existing tests cover all task-listed scenarios (happy path, invalid payouts, double-resolution guard). Gaps exist only for code that doesn't exist yet: (1) write lock protection test — needed after adding the lock, (2) resolvedAt on market object test — needed after adding the field. These are incremental additions, not missing coverage of existing functionality."
+    }
+  ],
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.85,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All 5 questions answered with confidence >= 0.85. Zero answers below 0.7. No research gaps remain. The task scope is now precisely defined: (1) wrap handle_market_resolution in get_market_write_lock — a structural change wrapping ~50 lines in a with-statement, (2) add market['resolvedAt'] = resolved_at in transition_market_to_resolved — 1 line, (3) add 1-2 targeted tests for the new code. Total estimated changes: ~10-20 lines across server.py + test file. Single-file focus (server.py + test_bayes_market_api.py). No ambiguity in approach."
+  },
+  "spawn_children": false,
+  "children": []
+}
