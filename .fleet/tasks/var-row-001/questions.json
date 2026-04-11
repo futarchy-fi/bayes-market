@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should useAssumptions be mocked at module level, or should the test wrap VariableRow in a real AssumptionProvider (like AssumptionPanel.test.tsx does with its Seeder pattern) to test assumption toggle integration?",
+      "category": "design",
+      "why_it_matters": "Using a real AssumptionProvider lets us verify that handleAssume actually adds/removes assumptions via context, but mocking gives more isolated unit tests. The task says 'assumption toggle callback' which could mean either."
+    },
+    {
+      "id": "q2",
+      "question": "Does crypto.randomUUID() work in the jsdom test environment, or does it need a mock/polyfill?",
+      "category": "codebase",
+      "why_it_matters": "handleSubmitEdit calls crypto.randomUUID() for idempotencyKey. If jsdom doesn't provide it, edit-submission tests will throw at runtime."
+    },
+    {
+      "id": "q3",
+      "question": "Should the edit flow tests verify the exact mutation payload shape (accountId, variableId, target, context, session), or just verify mutation.mutate was called?",
+      "category": "requirements",
+      "why_it_matters": "The mutation payload includes conditional logic (isTargetMarket determines which variableId is used) and the context from useAssumptions. Testing payload shape catches regressions in that logic but couples the test to implementation details."
+    },
+    {
+      "id": "q4",
+      "question": "Should we test the mutation success/error message rendering (lines 162-171), or is that out of scope given the task description focuses on 'rendering, outcome selection, assumption toggle'?",
+      "category": "requirements",
+      "why_it_matters": "The task description mentions three specific behaviors but mutation feedback is a visible UI feature. Including it adds coverage but may exceed scope."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Mock useMarket, useSession, and useProbabilityEdit at module level; use a real AssumptionProvider with the Seeder pattern for assumption tests (matches the proven pattern in AssumptionPanel.test.tsx).",
+      "confidence": 0.85,
+      "if_wrong": "Would need to restructure all tests to either fully mock or fully integrate useAssumptions. Low risk since the Seeder pattern is already validated in the codebase."
+    },
+    {
+      "id": "a2",
+      "assumption": "crypto.randomUUID() is available in the jsdom environment (Node 19+ provides it globally, and the project uses modern Node).",
+      "confidence": 0.7,
+      "if_wrong": "Will need to mock crypto.randomUUID via vi.stubGlobal or add a polyfill in setup.ts. Easy fix but will cause test failures if not handled."
+    },
+    {
+      "id": "a3",
+      "assumption": "Use fireEvent (not userEvent) for interactions, consistent with existing test files like AssumptionPanel.test.tsx and MarketDetail.test.tsx.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to install/import @testing-library/user-event. Minor change but all existing tests use fireEvent."
+    },
+    {
+      "id": "a4",
+      "assumption": "The 'Assume' button is only rendered for non-target markets (line 116: !isTargetMarket), so tests must use a marketId different from targetMarket.id to test assumption toggling.",
+      "confidence": 1.0,
+      "if_wrong": "N/A — this is directly visible in the source code at line 116."
+    },
+    {
+      "id": "a5",
+      "assumption": "Include mutation success/error message tests since they are straightforward assertions and improve coverage, even though not explicitly listed in the task description.",
+      "confidence": 0.75,
+      "if_wrong": "Tests would simply be removed if deemed out of scope. No structural impact."
+    },
+    {
+      "id": "a6",
+      "assumption": "The test file goes at frontend/src/__tests__/VariableRow.test.tsx following the flat naming convention used by all other test files in that directory.",
+      "confidence": 1.0,
+      "if_wrong": "N/A — the task description explicitly specifies this path."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
