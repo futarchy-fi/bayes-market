@@ -1,0 +1,87 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The existing test mocks `@/lib/api/client` but TradingPanel.test.tsx mocks `@/lib/query/hooks` instead. Since CreateMarketForm uses `useCreateMarket` from hooks (not the raw API client), should we mock `@/lib/query/hooks` (like TradingPanel) to control mutation state, or mock at the API layer?",
+      "category": "design",
+      "why_it_matters": "The TradingPanel pattern of mocking the hook gives direct control over isPending/isError/isSuccess states and the mutate function. The current test mocks @/lib/api/client which doesn't help test mutation state rendering. We need to decide the right mock layer."
+    },
+    {
+      "id": "q2",
+      "question": "CreateMarketForm calls `mutation.mutate(...)` with an `onSuccess` callback that navigates. TradingPanel tests don't test navigation. Should we mock `useNavigate` from react-router-dom, or rely on MemoryRouter's location tracking to verify post-creation navigation?",
+      "category": "design",
+      "why_it_matters": "Navigation testing requires either mocking useNavigate to assert it was called with `/markets/{id}`, or inspecting router state. The approach determines how we verify the success flow."
+    },
+    {
+      "id": "q3",
+      "question": "The `onSuccess` callback is passed inline to `mutation.mutate()` (line 54-58), not on the hook config. When we mock `useCreateMarket` to return a controlled mutate, should we capture and invoke the onSuccess callback manually to test navigation?",
+      "category": "design",
+      "why_it_matters": "Since onSuccess is passed to mutate() not to useMutation(), we need to capture it from mockMutate.mock.calls and manually invoke it with a fake response to trigger the navigate call. This is critical for testing the success flow."
+    },
+    {
+      "id": "q4",
+      "question": "The form has validation logic at line 62: `title.trim().length > 0 && expiresAt.length > 0 && outcomes.every(o => o.id && o.name)`. Should validation tests verify the submit button disabled state, or also test that form submission is prevented?",
+      "category": "requirements",
+      "why_it_matters": "The submit button is disabled when !isValid, so form submission is gated by button state. Testing just the disabled attribute may be sufficient, but we should confirm no other validation path exists."
+    },
+    {
+      "id": "q5",
+      "question": "The existing test already mocks `@/lib/api/client` at line 6. Should the new tests keep this mock and add `@/lib/query/hooks` mock, or replace the client mock entirely since we're mocking at the hook level?",
+      "category": "codebase",
+      "why_it_matters": "Having both mocks could cause confusion. Since we need to control mutation state (isPending, isError, etc.), the hook-level mock is necessary. The client mock may be redundant but removing it changes existing test behavior."
+    },
+    {
+      "id": "q6",
+      "question": "The `useSession` hook is used in CreateMarketForm (line 13) to get session.accountId for the mutate payload. Should we mock `useSession` like TradingPanel does, or does SessionProvider in renderWithProviders provide adequate defaults?",
+      "category": "codebase",
+      "why_it_matters": "If SessionProvider defaults to empty accountId/agentId, the component will pass `session: undefined` to mutate. We may need to mock useSession to test the session-passing logic in handleSubmit (line 52)."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "We should mock `@/lib/query/hooks` (useCreateMarket) at the hook level, following the TradingPanel pattern, rather than mocking the raw API client. This gives direct control over mutation state.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to use a different approach like msw or a real QueryClient to test mutation lifecycle states."
+    },
+    {
+      "id": "a2",
+      "assumption": "We should mock `useNavigate` from react-router-dom to verify navigation after successful creation, and capture the onSuccess callback from mockMutate to invoke it manually with test data.",
+      "confidence": 0.9,
+      "if_wrong": "Would need to use MemoryRouter location state inspection or a different navigation testing approach."
+    },
+    {
+      "id": "a3",
+      "assumption": "The `useSession` hook needs to be mocked (like TradingPanel) to control accountId for testing the session-conditional logic on line 52.",
+      "confidence": 0.85,
+      "if_wrong": "SessionProvider default state might already provide testable values, making the mock unnecessary."
+    },
+    {
+      "id": "a4",
+      "assumption": "The existing 6 render tests should remain unchanged; new tests will be added alongside them in the same describe block.",
+      "confidence": 0.95,
+      "if_wrong": "Existing tests might need refactoring to work with the new mock setup (e.g., useCreateMarket mock needs a default return value)."
+    },
+    {
+      "id": "a5",
+      "assumption": "fireEvent is sufficient for testing form interactions (typing, clicking buttons). No need for userEvent library.",
+      "confidence": 0.85,
+      "if_wrong": "Some interactions like typing in inputs might need userEvent for more realistic simulation, especially if onChange handlers behave differently."
+    },
+    {
+      "id": "a6",
+      "assumption": "The remove outcome button (×) is disabled when outcomes.length <= 2, preventing removal below minimum. Tests should verify both the disabled state and the removal when 3+ outcomes exist.",
+      "confidence": 0.95,
+      "if_wrong": "Minor—would just adjust test expectations for the remove button behavior."
+    },
+    {
+      "id": "a7",
+      "assumption": "The outcome ID input sanitizes to lowercase alphanumeric + underscore (line 105). This validation happens in the onChange handler, not on submit, so tests should verify the sanitized value after input.",
+      "confidence": 0.95,
+      "if_wrong": "If sanitization is server-side or handled differently, test approach would need adjustment."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
