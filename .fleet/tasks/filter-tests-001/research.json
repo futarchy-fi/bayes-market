@@ -1,0 +1,79 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Tests should only verify boolean return values, not TypeScript type narrowing. The existing test pattern (format.test.ts) tests pure functions by checking return values only. Type guard narrowing is a compile-time TypeScript feature — it cannot be meaningfully tested at runtime. The `value is X` annotation is a promise to the compiler, and testing it would require TypeScript-specific tooling (e.g., tsd or expect-type), which this project doesn't use. The boolean return values are what matter for correctness.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/format.test.ts:1-29",
+        "frontend/src/lib/marketListFilters.ts:18-24",
+        "frontend/package.json:20-30"
+      ],
+      "uncertainty": "If the project later adds tsd or expect-type, type-level tests could be added, but that's out of scope."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes, edge cases (null, undefined, empty string, whitespace) should be tested because the code explicitly handles them. isMarketListStatusFilter and isMarketListSort accept `string | null` — null is a documented input. normalizeMarketListFilters uses `filters.q?.trim()` and truthy checks on status/sort, so empty strings and whitespace are meaningful edge cases. The format.test.ts pattern includes edge-adjacent cases (e.g., very small numbers, short strings), so testing edge cases fits the project style. Keep them concise — one-liner style per the format.test.ts pattern.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/lib/marketListFilters.ts:18-20",
+        "frontend/src/lib/marketListFilters.ts:22-24",
+        "frontend/src/lib/marketListFilters.ts:26-42",
+        "frontend/src/__tests__/format.test.ts:17-22"
+      ],
+      "uncertainty": "None — the code clearly handles these cases and they should be covered."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes, round-trip tests (marketListSearchParams → readMarketListFiltersFromSearchParams) are valuable and should be included. These two functions form an encode/decode pair. The query-hooks.test.ts already tests normalization indirectly, but no existing test verifies that encoding then decoding preserves filter semantics. A round-trip test would catch serialization mismatches (e.g., if a new status value is added to the type but not to MARKET_STATUSES). Keep it to 2-3 round-trip cases: one with all filters set, one with defaults/empty, and one with 'all' status (which should normalize away).",
+      "confidence": 0.90,
+      "evidence": [
+        "frontend/src/lib/marketListFilters.ts:56-68",
+        "frontend/src/lib/marketListFilters.ts:70-82",
+        "frontend/src/__tests__/query-hooks.test.ts:1-22"
+      ],
+      "uncertainty": "The round-trip is not perfectly symmetric — normalizeMarketListFilters strips 'all' status and trims whitespace, so the round-trip output won't match the raw input. Tests should assert on the normalized form."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "format.test.ts explicitly imports { describe, it, expect } from 'vitest' even though globals: true is set in vitest.config.ts. New tests should follow the same explicit import pattern for consistency. File should be placed at frontend/src/__tests__/marketListFilters.test.ts."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "vitest.config.ts line 9 configures '@' → './src'. All existing tests use @/ imports successfully."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "All six functions are pure. No fetch, no DOM, no external state. Only URLSearchParams is used, which is available in jsdom."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "jsdom v25.0.1 is installed (package.json line 27) and vitest.config.ts sets environment: 'jsdom'. URLSearchParams is fully supported."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "Confirmed from types.ts: MarketStatus = 'active' | 'resolved' | 'closed' | 'draft'. MarketListSort = 'volume' | 'liquidity' | 'created'. Additionally, MarketListStatusFilter = MarketStatus | 'all' — the 'all' value is important for isMarketListStatusFilter tests."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "format.test.ts uses concise one-liner assertions like `it('formats 0.65 as 65.0%', () => expect(formatProbability(0.65)).toBe('65.0%'))`. Tests are grouped by function in describe blocks. No beforeEach/afterEach needed for pure functions."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
