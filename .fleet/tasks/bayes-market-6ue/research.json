@@ -1,0 +1,133 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Reuse the backend engine version that is already exported as `server.ENGINE_CONFIG.version` and ultimately sourced from `backend.inference.config.DEFAULT_ENGINE_CONFIG.version`. That is the only version source the backend currently publishes on public read routes, while `frontend/package.json` is frontend-only metadata and there is no separate backend/application version constant in the repo today.",
+      "confidence": 0.91,
+      "evidence": [
+        "backend/inference/config.py:34",
+        "backend/inference/config.py:37",
+        "backend/server.py:172",
+        "backend/server.py:845",
+        "backend/server.py:1126",
+        "tests/test_bayes_market_api.py:9378",
+        "frontend/package.json:4"
+      ],
+      "uncertainty": "The repo does not explicitly distinguish service release version from inference-engine version, so a future product decision could still introduce a separate backend release constant.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Treat `git_sha` as the raw full `HEAD` revision string from `git rev-parse HEAD` after trimming, with the literal fallback `\"unknown\"`, and capture it once at module import or process startup rather than on every request. That matches the task wording `from subprocess or unknown`, avoids per-request subprocess work on a read route, and keeps the endpoint stable for idempotency assertions within one server process.",
+      "confidence": 0.56,
+      "evidence": [
+        ".fleet/tasks/bayes-market-6ue/questions.json:12",
+        ".fleet/tasks/bayes-market-6ue/questions.json:14",
+        "backend/server.py:191",
+        "backend/server.py:266",
+        "backend/server.py:756",
+        "backend/server.py:845"
+      ],
+      "uncertainty": "There is no existing git-revision field or subprocess helper anywhere in the repo, so the choice of full SHA versus short SHA is an inference from the task wording and the existing startup-state pattern, not an already-frozen contract.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q3",
+      "answer": "`build_timestamp` should mean module import or process startup time and remain stable for the lifetime of the imported server module. The backend already has startup-scoped process state via `PROCESS_START_MONOTONIC`, `uptime_seconds()` derives from it, and `reset_state()` only clears mutable in-memory domain state without reloading the module or refreshing startup constants.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:191",
+        "backend/server.py:266",
+        "backend/server.py:287",
+        "backend/server.py:756",
+        "backend/server.py:846"
+      ],
+      "uncertainty": "If a test explicitly re-imports `backend/server.py` under a fresh module object, that would create a new startup boundary, but `reset_state()` alone does not.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Return only the four top-level build-info fields on `/v1/version`, without a `meta` envelope, because the closest operational precedents `/health` and `/v1/health` are flat payloads with exact top-level field sets. Separately, the new public route should still be advertised from the root service index, because `GET /` is the repo's public route catalog and the frontend `System` page already renders that catalog directly.",
+      "confidence": 0.76,
+      "evidence": [
+        "backend/server.py:831",
+        "backend/server.py:840",
+        "backend/server.py:851",
+        "backend/server.py:2457",
+        "tests/test_bayes_market_api.py:783",
+        "tests/test_bayes_market_api.py:819",
+        "tests/test_bayes_market_api.py:9371",
+        "frontend/src/routes/System.tsx:91",
+        "docs/t571-per-market-engine-stats-contract-freeze.md:116"
+      ],
+      "uncertainty": "The repo does not settle which service-index bucket should own `/v1/version`, only that public routes are normally advertised and that operational payloads are not consistently wrapped in `meta`.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q5",
+      "answer": "The coding scope is backend-only for this task: add the route in `backend/server.py` and cover it in `tests/test_bayes_market_api.py`. There is no existing frontend client, type, or query hook for `/v1/version`, and the `System` page currently consumes only `/health`, `/`, and market-list data. If the service index is updated, the page will at most show the new path string automatically, but no frontend wiring is required to satisfy the endpoint task itself.",
+      "confidence": 0.92,
+      "evidence": [
+        ".fleet/tasks/bayes-market-6ue/questions.json:30",
+        "backend/server.py:5140",
+        "frontend/src/lib/api/client.ts:254",
+        "frontend/src/lib/api/client.ts:258",
+        "frontend/src/lib/query/hooks.ts:82",
+        "frontend/src/lib/query/hooks.ts:90",
+        "frontend/src/routes/System.tsx:7",
+        "frontend/src/routes/System.tsx:91"
+      ],
+      "uncertainty": "If product explicitly wants the build info rendered as first-class UI data on the `System` page, that would add frontend work beyond the route itself, but nothing in the current task wording or codebase requires that.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "Use one test in each layer: one direct `route_request(...)` test and one HTTP integration test through `BayesHandler`. The closest existing precedent for a top-level operational GET route is `/v1/health`, which is exercised both at dispatch level and over live HTTP, and the task budget of two tests fits that split exactly without overbuilding.",
+      "confidence": 0.9,
+      "evidence": [
+        ".fleet/tasks/bayes-market-6ue/questions.json:36",
+        "backend/server.py:5140",
+        "backend/server.py:5492",
+        "tests/test_bayes_market_api.py:899",
+        "tests/test_bayes_market_api.py:9366"
+      ],
+      "uncertainty": "The suite also has direct-only coverage for `/v1/stats`, so a backend-only split would not be unprecedented, but `/v1/health` is the stronger match because it is another top-level operational route with a fixed JSON shape.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Implementation should target `backend/server.py`'s top-level route table and will automatically flow through `BayesHandler` once `route_request(...)` recognizes `/v1/version`."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No auth or rate-limit additions are needed for `GET /v1/version`, because protected-write agent handling only activates for categorized `POST` routes and exits early for non-write requests."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The endpoint should expose a stable process-start timestamp, and tests should not expect `reset_state()` to refresh it."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Failure-path behavior should keep the `git_sha` field present with the literal string `\"unknown\"`, which gives a stable schema for both implementation and tests."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.88,
+      "impact": "The current repo points to reusing the existing backend engine-version constant rather than adding packaging or release-version machinery as part of this endpoint task."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
