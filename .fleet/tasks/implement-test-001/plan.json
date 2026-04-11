@@ -1,0 +1,54 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Create the greeting module as a Python file at src/greeting.py, keeping it alongside the existing src/ directory which already has hello.txt.",
+      "based_on": [],
+      "alternatives_rejected": [
+        "Place in backend/ directory (reserved for the prediction market backend)",
+        "Create as a standalone script at the repo root"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Include a greet(name) function that returns a personalized greeting string, and a default greeting for when no name is provided.",
+      "based_on": [],
+      "alternatives_rejected": [
+        "Class-based greeting (overkill for a simple module)",
+        "CLI-only script with no importable function"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Add a test file at tests/test_greeting.py following the existing test file naming convention in the project.",
+      "based_on": [],
+      "alternatives_rejected": [
+        "No tests (even simple modules benefit from a basic test)",
+        "Inline doctests only"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create src/greeting.py with a greet(name=None) function that returns a greeting string.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Create tests/test_greeting.py with tests for the greet function (with and without a name argument).",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Run the tests to verify the module works correctly.",
+      "depends_on": [2]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
