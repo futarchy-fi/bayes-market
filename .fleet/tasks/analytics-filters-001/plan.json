@@ -1,0 +1,96 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Render AnalyticsFilters in isolation with direct props and vi.fn() callbacks, using renderWithProviders for Router context",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Integration-style through Analytics page route (would duplicate Analytics.test.tsx coverage and require API mocking)",
+        "Plain render() without providers (would crash due to Link requiring Router context)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Test the Open Market link href and conditional market metadata rendering in addition to dropdown/interval callbacks",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Only test dropdown and interval (would miss the two major conditional rendering branches)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Use toHaveStyle with CSS variable values (var(--color-primary), var(--color-border)) for active/inactive interval button assertions",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Class-based assertions (component uses inline styles, not classes)",
+        "Snapshot testing (brittle and doesn't communicate intent)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Create a makeMarket() helper function following the makeSummary() pattern from AnalyticsSummaryCards.test.tsx for test data",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Inline market objects in each test (verbose and harder to maintain)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Assert presence of metadata spans (Liquidity, Volume, Expires) without checking exact formatted values, since formatCurrency and timeUntil are tested elsewhere",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Assert exact formatted output (couples test to utility implementation details)"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create frontend/src/__tests__/AnalyticsFilters.test.tsx with imports (vitest, testing-library, renderWithProviders, AnalyticsFilters, types) and a makeMarket() helper that returns a MarketSummary with sensible defaults and accepts Partial overrides",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add test: 'renders fallback text when no market is selected' — render with markets array, selectedMarketId, interval, but no selectedMarket. Assert 'Choose a market' is shown, no 'Open Market' link, no metadata spans",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add test: 'renders market details when selectedMarket is provided' — render with a selectedMarket. Assert title, StatusBadge presence, Liquidity/Volume/Expires metadata spans, and 'Open Market' link with correct href (/markets/{id})",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Add test: 'renders market options in dropdown' — render with a markets array of 2+ items. Assert each market title appears as an option in the select element",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Add test: 'calls onMarketChange when dropdown selection changes' — render with vi.fn() for onMarketChange, fire change event on the select, assert callback called with the new market ID value",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Add test: 'calls onIntervalChange when interval button is clicked' — render with vi.fn() for onIntervalChange, click the inactive interval button, assert callback called with the correct interval value",
+      "depends_on": [1]
+    },
+    {
+      "step": 7,
+      "task": "Add test: 'highlights active interval button' — render with interval='day', assert Day button has borderColor var(--color-primary) and Hour button has borderColor var(--color-border). Repeat with interval='hour' to verify the inverse",
+      "depends_on": [1]
+    },
+    {
+      "step": 8,
+      "task": "Run the test suite (npx vitest run AnalyticsFilters) to verify all tests pass, fix any failures",
+      "depends_on": [2, 3, 4, 5, 6, 7]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
