@@ -1,0 +1,83 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Refactor file-level mocks: replace vi.mock('@/lib/api/client') with hook-level mocks for useMarket, useMarketEvents, useAccountRisk (from '@/lib/query/hooks') and useSession (from '@/features/session/context' with importActual to preserve SessionProvider). Add vi.useFakeTimers()/vi.setSystemTime() in beforeEach and vi.useRealTimers() in afterEach.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/MarketDetail.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Refactor existing 7 tests to work with hook-level mocks. All 7 existing tests pass with new mock setup.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/MarketDetail.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Add loading state test: mock useMarket to return { isLoading: true }. Assert SVG spinner is rendered.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/MarketDetail.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Add error state test: mock useMarket to return { error: new Error('Market not found') }. Assert ErrorMessage with 'Market not found' text.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/MarketDetail.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Add Volume/Liquidity/Expires display test with fake timers. Assert Volume: 45.0K, Liquidity: 150.0K, and Expires pattern.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/MarketDetail.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Add PositionCard visible test: mock useSession with configuredSession, mock useAccountRisk with risk data. Assert 'Your Position', minAsset, utilization, and trade count.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/MarketDetail.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Add PositionCard hidden test: mock useSession with unconfiguredSession. Assert 'Your Position' is NOT in the document.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/MarketDetail.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 8,
+      "task": "Add EventRow rendering test: mock useMarketEvents with 2 events. Assert table headers and event data.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/MarketDetail.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 9,
+      "task": "Add EventRow expand/collapse test: fireEvent.click on table row to expand payload JSON, click again to collapse.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/MarketDetail.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 10,
+      "task": "Add ResolveMarketPanel integration test: mock useSession with configuredSession. Assert 'Resolve Market' heading is visible.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/MarketDetail.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 11,
+      "task": "Run full test suite to verify all 15 tests (7 existing + 8 new) pass.",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
