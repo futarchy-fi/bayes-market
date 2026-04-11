@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should tests cover TypeScript type narrowing behavior (i.e., verify that isMarketListStatusFilter and isMarketListSort act as proper type guards), or just boolean return values?",
+      "category": "requirements",
+      "why_it_matters": "Type guard tests would need different assertions than simple boolean checks, and may require TypeScript-specific test patterns."
+    },
+    {
+      "id": "q2",
+      "question": "Should edge cases like null, undefined, empty string, and whitespace-only strings be tested for each function, or just the happy-path valid/invalid values?",
+      "category": "requirements",
+      "why_it_matters": "The code handles null in type guards and whitespace in normalizeMarketListFilters — edge case coverage determines test thoroughness."
+    },
+    {
+      "id": "q3",
+      "question": "For readMarketListFiltersFromSearchParams, should we test round-trip consistency (marketListSearchParams -> readMarketListFiltersFromSearchParams)?",
+      "category": "design",
+      "why_it_matters": "Round-trip tests verify the encode/decode pair works together, catching subtle serialization mismatches that unit tests of each function alone might miss."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Tests should use vitest with `describe`/`it`/`expect` imports, matching the format.test.ts pattern, placed at frontend/src/__tests__/marketListFilters.test.ts",
+      "confidence": 0.95,
+      "if_wrong": "Would need to adjust test framework imports and file location."
+    },
+    {
+      "id": "a2",
+      "assumption": "The @/ path alias resolves correctly in tests (vitest.config.ts already configures this).",
+      "confidence": 0.99,
+      "if_wrong": "Would need relative imports instead of alias imports."
+    },
+    {
+      "id": "a3",
+      "assumption": "No mocking is needed — all six functions are pure utility functions with no external dependencies.",
+      "confidence": 0.99,
+      "if_wrong": "Would need to set up mocks, significantly changing the test structure."
+    },
+    {
+      "id": "a4",
+      "assumption": "URLSearchParams is available in the jsdom test environment without polyfills.",
+      "confidence": 0.98,
+      "if_wrong": "Would need to add a URLSearchParams polyfill to the test setup."
+    },
+    {
+      "id": "a5",
+      "assumption": "The valid MarketStatus values are 'active', 'resolved', 'closed', 'draft' and valid MarketListSort values are 'volume', 'liquidity', 'created' — these are the exhaustive sets to test against.",
+      "confidence": 1.0,
+      "if_wrong": "Tests would have incomplete coverage of valid values."
+    },
+    {
+      "id": "a6",
+      "assumption": "The format.test.ts pattern means: concise one-liner tests where possible, grouped by function in describe blocks, no setup/teardown needed.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to restructure tests to match a different convention."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
