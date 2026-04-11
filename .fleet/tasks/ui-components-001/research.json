@@ -1,0 +1,106 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Follow the task description and create a single file `ui-components.test.tsx`. While the existing convention is one file per component, all existing test files live in `src/__tests__/` and are named after the thing they test. These three components are small, closely related UI primitives from the same `components/ui/` directory. A single grouped test file is a reasonable variation that matches the task spec. The convention of one-file-per-thing still holds - the 'thing' here is the UI components collection.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/__tests__/ErrorBoundary.test.tsx",
+        "frontend/src/__tests__/format.test.ts",
+        "frontend/src/__tests__/Portfolio.test.tsx",
+        "frontend/src/__tests__/MarketDetail.test.tsx",
+        "frontend/src/components/ui/ProbabilityBar.tsx",
+        "frontend/src/components/ui/Spinner.tsx",
+        "frontend/src/components/ui/StatusBadge.tsx"
+      ],
+      "uncertainty": "Team preference may differ - some teams strongly prefer one-file-per-component for test isolation and discoverability."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Use real implementations of `formatProbability` and `statusColor`. No existing component test in the codebase mocks utility functions. ErrorBoundary.test.tsx uses plain render with no mocks. The page-level tests (Portfolio, MarketDetail, MarketList) mock the API client but never utility functions. format.test.ts already covers these utilities in isolation, so real implementations in component tests serve as lightweight integration verification.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/ErrorBoundary.test.tsx:1-45",
+        "frontend/src/__tests__/format.test.ts:1-40",
+        "frontend/src/__tests__/Portfolio.test.tsx:3-5",
+        "frontend/src/__tests__/MarketDetail.test.tsx:3-7"
+      ],
+      "uncertainty": "None - the pattern is clear and consistent across all existing tests."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Cover these edge cases: (1) Basic rendering with multiple outcomes and marginals - the core happy path. (2) Missing marginal entries - the component uses `marginals[o.id] ?? 0` so missing entries default to 0%, verify this behavior. (3) Empty outcomes array - should render the container without crashing. Skip testing color wrapping beyond 8 outcomes and all-zero probabilities - these are pure implementation details (modulo arithmetic and formatProbability output) already covered by the utilities. Focus on the component's rendering behavior, not reimplementing unit tests for its dependencies.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/components/ui/ProbabilityBar.tsx:8-10",
+        "frontend/src/components/ui/ProbabilityBar.tsx:14-30",
+        "frontend/src/__tests__/format.test.ts:5-12"
+      ],
+      "uncertainty": "Whether empty outcomes array is worth testing - it's a degenerate case that may never occur in practice, but it's trivial to add."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Test Spinner's SVG at a practical level: verify it renders an SVG element, and verify the `size` prop controls the width and height attributes. The SVG element has explicit `width={size}` and `height={size}` attributes, making them straightforward to assert via DOM queries. Do NOT test internal SVG structure (circle elements, stroke-dasharray, keyframe definitions) as those are implementation details. For LoadingPage, verify it renders an SVG element (proving a Spinner is present) - don't test Spinner internals again. This matches the ErrorBoundary.test.tsx pattern of testing observable behavior rather than internal markup.",
+      "confidence": 0.92,
+      "evidence": [
+        "frontend/src/components/ui/Spinner.tsx:3-25",
+        "frontend/src/__tests__/ErrorBoundary.test.tsx:15-43"
+      ],
+      "uncertainty": "Whether testing-library provides good SVG querying. SVG elements can be queried via `container.querySelector('svg')` and standard DOM attribute access, which is used in Analytics.test.tsx with `container.querySelector()`."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Plain `render` from @testing-library/react is sufficient for all three components. ProbabilityBar imports only `formatProbability` (a pure function) and the `MarketOutcome` type. Spinner has zero external dependencies. StatusBadge imports only `statusColor` (a pure function). None of them use React context (QueryClient, Session), React Router hooks (useParams, useNavigate), or any other provider-dependent APIs. The existing ErrorBoundary.test.tsx confirms this pattern - simple components that don't need providers use plain `render()`.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/components/ui/ProbabilityBar.tsx:1-3",
+        "frontend/src/components/ui/Spinner.tsx:1-25",
+        "frontend/src/components/ui/StatusBadge.tsx:1-3",
+        "frontend/src/__tests__/ErrorBoundary.test.tsx:1-3",
+        "frontend/src/__tests__/helpers.tsx:1-30"
+      ],
+      "uncertainty": "None - component imports are definitive. No context or router hooks used."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No impact - plain `render` is confirmed sufficient. Component imports show no context, router, or query provider dependencies."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No impact - using real implementations matches the established codebase pattern where only API clients are mocked, never utility functions."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Minor deviation from one-file-per-component convention, but the task spec is explicit and these are small related UI primitives. Acceptable grouping."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No impact - MarketOutcome is `{ id: string; name: string }` as assumed. Test fixtures are trivial: `{ id: 'yes', name: 'Yes' }`."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No impact - Spinner SVG uses explicit `width={size}` and `height={size}` attributes, queryable via `container.querySelector('svg')` and standard DOM attribute access."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No impact - CSS `textTransform: 'uppercase'` is a visual-only transform. The DOM textContent remains in original case, so `screen.getByText('active')` will match the rendered text."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
