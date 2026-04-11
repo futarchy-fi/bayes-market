@@ -1,0 +1,91 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use vi.spyOn(Storage.prototype, 'getItem') and vi.spyOn(Storage.prototype, 'setItem') to spy on jsdom's real localStorage. The jsdom environment (vitest.config.ts line 13) provides a working Storage implementation, so spying on the prototype is cleaner than replacing localStorage entirely. This allows both intercepting calls and falling through to real behavior when needed. The only existing localStorage interaction in tests is Analytics.test.tsx calling localStorage.clear() in beforeEach, confirming the project treats jsdom localStorage as real and usable. Use localStorage.clear() in beforeEach for isolation between tests.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/vitest.config.ts:13",
+        "frontend/src/__tests__/Analytics.test.tsx:67",
+        "frontend/src/features/session/context.tsx:8",
+        "frontend/src/features/session/context.tsx:20"
+      ],
+      "uncertainty": "Whether spyOn(Storage.prototype) works reliably in jsdom for mockReturnValue scenarios (corrupt storage test). If not, could fall back to vi.stubGlobal for that specific test."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Render SessionProvider directly for isolated context testing. renderWithProviders (helpers.tsx) wraps QueryClientProvider, SessionProvider, and MemoryRouter — all unnecessary layers when testing SessionProvider/useSession itself. Direct rendering gives precise control over what's being tested without coupling to unrelated providers. This is consistent with the project pattern where unit-style tests (format.test.ts, query-hooks.test.ts, api-client.test.ts) test in isolation, while integration-style route tests use renderWithProviders.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/helpers.tsx:18-35",
+        "frontend/src/__tests__/format.test.ts",
+        "frontend/src/__tests__/query-hooks.test.ts",
+        "frontend/src/__tests__/ui-components.test.tsx"
+      ],
+      "uncertainty": "None significant. Direct rendering is clearly the right approach for testing the provider itself."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes, suppress console.error for the 'useSession outside provider' test. The project already has an established pattern for this in ErrorBoundary.test.tsx: store original console.error, replace with vi.fn() in beforeEach, restore in afterEach. Use the same pattern, scoped to the describe block that contains the error-throwing test. Add a comment explaining the suppression as done in the existing test.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/ErrorBoundary.test.tsx:10-14"
+      ],
+      "uncertainty": "None. The pattern is established and appropriate."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes, explicitly test that isConfigured only checks accountId. The implementation at context.tsx:53 computes isConfigured as session.accountId.length > 0, completely ignoring agentId. Tests should cover: (1) empty accountId + empty agentId = false, (2) non-empty accountId + empty agentId = true, (3) empty accountId + non-empty agentId = false, (4) both non-empty = true. Case 3 is the critical edge case that documents the intentional accountId-only behavior.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/session/context.tsx:53"
+      ],
+      "uncertainty": "Whether the agentId-only-does-not-configure behavior is intentional or a bug. Testing it documents the current behavior either way, which is valuable."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Test both invalid JSON and valid JSON with missing fields. The loadSession function (context.tsx:11) uses nullish coalescing (parsed.accountId ?? '', parsed.agentId ?? '') which gracefully handles missing fields. Cover three cases: (1) completely invalid JSON string triggers the catch block and returns defaults, (2) valid JSON missing both fields returns defaults via ??, (3) valid JSON with partial fields (e.g. only accountId) returns the present field and defaults for the missing one. This is low-cost and documents important fallback behavior.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/session/context.tsx:6-17",
+        "frontend/src/features/session/context.tsx:11"
+      ],
+      "uncertainty": "Whether to also test non-object valid JSON (e.g. localStorage contains '42' or 'true'). This would cause parsed.accountId to be undefined and fall through to defaults, so it's implicitly covered by the missing-fields test."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "vi.spyOn(Storage.prototype, 'getItem'/'setItem') works with jsdom's real localStorage. For corrupt storage tests that need mockReturnValue, spy on getItem and mock the return. For normal flow tests, use real localStorage with clear() for isolation."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Direct SessionProvider rendering is appropriate. renderWithProviders wraps QueryClientProvider + SessionProvider + MemoryRouter (helpers.tsx:26-33), which adds unnecessary layers for testing the session context itself."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "File goes at frontend/src/__tests__/session.test.tsx. All 12 existing test files follow this flat structure in __tests__/."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "@testing-library/react ^16.1.0 includes renderHook. However, no existing tests in the project use renderHook — they all test hooks through component rendering. Using renderHook is still valid and cleaner for direct hook testing, but note this introduces a new pattern to the test suite."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "localStorage.clear() in beforeEach for isolation. Analytics.test.tsx:67 already uses this pattern. Combined with vi.restoreAllMocks() for any spies."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
