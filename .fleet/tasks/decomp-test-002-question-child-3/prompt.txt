@@ -1,36 +1,37 @@
-[Task decomp-test-002-question-child-3] PHASE 2: RESEARCH & DECISION
+[Task decomp-test-002-question-child-3] PHASE 3a: PLAN
 Title: Evidence propagation animation
 
-Read .fleet/tasks/decomp-test-002-question-child-3/questions.json for the questions to answer.
-Research each question in the codebase. Provide answers with confidence scores.
+Read .fleet/tasks/decomp-test-002-question-child-3/questions.json and .fleet/tasks/decomp-test-002-question-child-3/research.json
+for context on what was asked and answered.
 
-YOU MUST create .fleet/tasks/decomp-test-002-question-child-3/research.json with this structure:
+YOU MUST create .fleet/tasks/decomp-test-002-question-child-3/plan.json with this structure:
 {
-  "phase": "research",
-  "answers": [
-    { "question_id": "q1", "answer": "...", "confidence": 0.0-1.0, "evidence": ["file:line"], "uncertainty": "..." }
+  "phase": "plan",
+  "decisions": [
+    { "id": "d1", "decision": "...", "based_on": ["q1"], "alternatives_rejected": ["..."], "reversibility": "easy|medium|hard" }
   ],
-  "assumption_checks": [
-    { "assumption_id": "a1", "verdict": "CORRECT|WRONG|UNCERTAIN", "confidence": 0.0-1.0, "impact": "..." }
+  "steps": [
+    { "step": 1, "task": "...", "depends_on": [], "estimated_lines": <number>, "risk": "low|medium|high" }
   ],
 
   "decomposition_assessment": {
-    "lowest_confidence_answer": <0.0-1.0>,
-    "num_uncertain_answers": <count where confidence < 0.7>,
-    "research_gaps": ["questions that need deeper investigation"],
+    "total_steps": <count>,
+    "estimated_total_lines": <sum of step estimates>,
+    "high_risk_steps": <count where risk=high>,
+    "parallelizable_groups": [["step1", "step2"], ["step3"]],
     "decision": "PROCEED_ALONE | SPAWN_CHILDREN",
-    "decision_reason": "justify based on confidence levels and gaps"
+    "decision_reason": "justify based on scope and parallelization potential"
   },
 
   "spawn_children": <true if decision=SPAWN_CHILDREN>,
-  "children": [{ "id": "research-child-1", "title": "...", "description": "investigate: ..." }]
+  "children": [{ "id": "impl-child-1", "title": "...", "description": "implement steps: ..." }]
 }
 
 DECOMPOSITION DECISION RULES:
-- Any answer with confidence < 0.5 on a critical question → SPAWN_CHILDREN to investigate
-- 3+ answers with confidence < 0.7 → SPAWN_CHILDREN to reduce uncertainty
-- Research gaps that block implementation → SPAWN_CHILDREN
+- estimated_total_lines > 500 → SPAWN_CHILDREN (split by module)
+- high_risk_steps >= 2 → SPAWN_CHILDREN (isolate risky changes)
+- 2+ parallelizable_groups with no dependencies → SPAWN_CHILDREN
 - Otherwise → PROCEED_ALONE
 
-DO NOT STOP until research.json exists and contains answers to all questions.
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "research: decomp-test-002-question-child-3"
+DO NOT STOP until plan.json exists and contains at least one step.
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "plan: decomp-test-002-question-child-3"
