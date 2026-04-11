@@ -1,0 +1,76 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Add health loading state test: mock getHealth with never-resolving promise, assert 'Checking...' text and orange beacon via toHaveStyle",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/System.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Add health error state test (Error instance): mock getHealth with mockRejectedValue(new Error('Network error')), assert error.message text and red beacon",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/System.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Add health error state test (non-Error fallback): mock getHealth with mockRejectedValue('string error'), assert 'Connection failed' fallback text",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/System.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Add healthy beacon style test: verify green beacon with toHaveStyle for background and boxShadow glow when health returns ok",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/System.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Add markets loading state test: mock listMarkets with never-resolving promise, assert loading state and no Platform Stats",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/System.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Add platform stats formatCurrency integration test: volumes 500+1500=2000 → '2.0K', liquidity 1000+2000=3000 → '3.0K'",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/System.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Add CountCard color assertion test: verify active markets count card applies color var(--color-success)",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/System.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 8,
+      "task": "Add empty markets array test: all status counts render as 0, totals render as '0.00'",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/System.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 9,
+      "task": "Add API info section test: verify apiVersion '1.0.0' renders, route groups 'health' and 'markets' displayed with routes",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/System.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 10,
+      "task": "Run full test suite — all 14 tests pass (5 existing + 9 new)",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
