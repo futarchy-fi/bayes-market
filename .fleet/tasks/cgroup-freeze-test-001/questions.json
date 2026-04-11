@@ -1,0 +1,50 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should test_alpha.py and test_beta.py follow any specific module conventions from the existing backend files (e.g., imports, docstrings, __all__ exports)?",
+      "category": "codebase",
+      "why_it_matters": "Existing backend files like __init__.py may define patterns or exports that new files should conform to for consistency."
+    },
+    {
+      "id": "q2",
+      "question": "Are greet_alpha() and greet_beta() meant to be pure functions with no dependencies, or should they integrate with any existing backend infrastructure (e.g., server.py)?",
+      "category": "requirements",
+      "why_it_matters": "Determines whether the functions are standalone or need to register with the existing server/module system."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "greet_alpha() and greet_beta() are simple standalone functions that return string literals with no external dependencies",
+      "confidence": 0.95,
+      "if_wrong": "Would need to add imports or integrate with existing backend modules"
+    },
+    {
+      "id": "a2",
+      "assumption": "The files should be placed directly in backend/ (i.e., backend/test_alpha.py and backend/test_beta.py)",
+      "confidence": 0.95,
+      "if_wrong": "Might need a subdirectory or different location"
+    },
+    {
+      "id": "a3",
+      "assumption": "Return values are exactly the strings 'Hello Alpha' and 'Hello Beta' respectively",
+      "confidence": 0.99,
+      "if_wrong": "Would need to adjust the return string format"
+    }
+  ],
+  "spawn_children": true,
+  "children": [
+    {
+      "id": "child-alpha",
+      "title": "Create backend/test_alpha.py",
+      "description": "Create backend/test_alpha.py with a function greet_alpha() that returns 'Hello Alpha'"
+    },
+    {
+      "id": "child-beta",
+      "title": "Create backend/test_beta.py",
+      "description": "Create backend/test_beta.py with a function greet_beta() that returns 'Hello Beta'"
+    }
+  ]
+}
