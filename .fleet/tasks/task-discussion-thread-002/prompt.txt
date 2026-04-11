@@ -1,27 +1,32 @@
-[Task task-discussion-thread-002] PHASE 1: QUESTION GENERATION
+[Task task-discussion-thread-002] PHASE 2: RESEARCH & DECISION
 Title: Test DiscussionThread component
-Description: Create a comprehensive vitest test file for frontend/src/features/market/DiscussionThread.tsx. This component displays market comments and allows posting new comments. Test: (1) Loading state while comments fetch, (2) Error state when comments fail to load, (3) Empty state when no comments exist, (4) Rendering comment list with author, seq number, timestamp, body, (5) Comment count badge, (6) Read-only mode when market is resolved, (7) Unconfigured session prompts user to set account ID, (8) Comment composer form validation (empty body disabled), (9) Character count remaining display, (10) Submit posts comment and clears form on success, (11) Mutation error display. Use mocks for useMarketComments, usePostMarketComment, useSession. Follow patterns from frontend/src/__tests__/Analytics.test.tsx. Place test at frontend/src/__tests__/DiscussionThread.test.tsx.
-Repo: /home/kelvin/bayes-market
 
-Explore the codebase. Identify what you need to know before building.
+Read .fleet/tasks/task-discussion-thread-002/questions.json for the questions to answer.
+Research each question in the codebase. Provide answers with confidence scores.
 
-YOU MUST create .fleet/tasks/task-discussion-thread-002/questions.json with this structure:
+YOU MUST create .fleet/tasks/task-discussion-thread-002/research.json with this structure:
 {
-  "phase": "question",
-  "questions": [
-    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "...",
+      "confidence": 0.0-1.0,
+      "evidence": ["file:line", ...],
+      "uncertainty": "what you're not sure about"
+    }
   ],
-  "assumptions": [
-    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  "assumption_checks": [
+    { "assumption_id": "a1", "verdict": "CORRECT|WRONG|UNCERTAIN", "confidence": 0.0-1.0, "impact": "..." }
   ],
   "spawn_children": false,
   "children": []
 }
 
-DO NOT STOP until questions.json exists and contains at least one question.
+DO NOT STOP until research.json exists and contains answers to all questions.
 Verify: ls -la .fleet/tasks/task-discussion-thread-002/ to confirm the file was written.
 
-DECOMPOSITION: Set spawn_children=true only if sub-questions warrant their own
-full 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
+DECOMPOSITION: Set spawn_children=true for low-confidence answers (< 0.5) or
+complex questions needing their own research cycle.
 
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: task-discussion-thread-002"
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "research: task-discussion-thread-002"
