@@ -1,0 +1,89 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat 'tooltip display' as trade count <text> labels above bars, not hover tooltips — no tooltip logic exists in the component",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Skip tooltip tests entirely", "Implement tooltip feature first then test it"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Empty state test verifies current behavior: SVG renders with gridlines/axes but zero <rect> bar elements — no dedicated empty message exists",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Test for a dedicated empty state message", "Skip empty state test"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Test bar height proportionality via relative ratio comparison (volume ratio == height ratio) rather than exact pixel values",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Assert exact pixel heights coupled to layout constants"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Use plain render() from @testing-library/react — VolumeChart is purely presentational with no hooks, context, or state",
+      "based_on": ["q1", "q2", "q3"],
+      "alternatives_rejected": ["Use renderWithProviders wrapper"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Create a makeBucket() test factory inline at top of test file for constructing MarketAnalyticsVolumeBucket objects with sensible defaults",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Manually construct bucket objects in every test"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create test file frontend/src/__tests__/VolumeChart.test.tsx with imports (vitest, @testing-library/react, VolumeChart) and a makeBucket() helper that returns a MarketAnalyticsVolumeBucket with overridable defaults (volume, tradeCount, bucketStart, bucketEnd)",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Write 'renders SVG with data-testid' test: render VolumeChart with 1+ buckets, assert screen.getByTestId('volume-chart') exists and has role='img'",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Write 'renders correct number of bars' test: render with N buckets, assert container.querySelectorAll('rect').length === N",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Write 'bar heights are proportional to volume' test: render with buckets of volumes [100, 200, 50], parse rect height attributes, assert height ratios match volume ratios using toBeCloseTo",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Write 'displays trade count labels above bars' test: render with known tradeCount values, assert matching <text> elements contain the expected trade count strings",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Write 'empty state renders chart frame without bars' test: render with buckets=[], assert data-testid SVG present, zero <rect> elements, <line> elements still present for gridlines/axes",
+      "depends_on": [1]
+    },
+    {
+      "step": 7,
+      "task": "Write 'renders x-axis time labels' test: render with buckets, assert formatBucketRangeLabel output appears in <text> elements near the bottom of the chart",
+      "depends_on": [1]
+    },
+    {
+      "step": 8,
+      "task": "Write 'renders y-axis currency labels' test: render with known maxVolume, assert formatCurrency values appear in <text> elements for gridline labels (0, 50%, 100% of max)",
+      "depends_on": [1]
+    },
+    {
+      "step": 9,
+      "task": "Run vitest on the new test file, fix any failures, ensure all tests pass green",
+      "depends_on": [2, 3, 4, 5, 6, 7, 8]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
