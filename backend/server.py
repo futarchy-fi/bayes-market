@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import html
 import importlib.util
@@ -11,13 +12,14 @@ import json
 import math
 import os
 import re
+import struct
 import sys
 import threading
 import time
 from collections import deque
 from copy import deepcopy
 from datetime import datetime, timezone
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
 from typing import Any, NamedTuple
 from urllib.parse import parse_qs, quote, urlparse
@@ -60,6 +62,88 @@ if _LMSR_SPEC is None or _LMSR_SPEC.loader is None:
     raise RuntimeError(f"Unable to load LMSR module from {LMSR_MODULE_PATH}")
 lmsr = importlib.util.module_from_spec(_LMSR_SPEC)
 _LMSR_SPEC.loader.exec_module(lmsr)
+
+# ---------------------------------------------------------------------------
+# WebSocket helpers (RFC 6455, stdlib-only)
+# ---------------------------------------------------------------------------
+
+_WS_MAGIC = b"258EAFA5-E914-47DA-95CA-5AB5DC799B07"
+
+
+def ws_accept_key(client_key: str) -> str:
+    """Compute Sec-WebSocket-Accept from Sec-WebSocket-Key per RFC 6455."""
+    digest = hashlib.sha1(client_key.encode() + _WS_MAGIC).digest()  # noqa: S324
+    return base64.b64encode(digest).decode()
+
+
+def ws_read_frame(sock: Any) -> tuple[int, bytes] | None:
+    """Read one WebSocket frame, unmask the payload. Returns (opcode, data) or None on EOF."""
+    header = _recv_exact(sock, 2)
+    if header is None:
+        return None
+    opcode = header[0] & 0x0F
+    masked = bool(header[1] & 0x80)
+    length = header[1] & 0x7F
+    if length == 126:
+        raw = _recv_exact(sock, 2)
+        if raw is None:
+            return None
+        length = struct.unpack("!H", raw)[0]
+    elif length == 127:
+        raw = _recv_exact(sock, 8)
+        if raw is None:
+            return None
+        length = struct.unpack("!Q", raw)[0]
+    mask_key = b""
+    if masked:
+        mask_key = _recv_exact(sock, 4)
+        if mask_key is None:
+            return None
+    payload = _recv_exact(sock, length)
+    if payload is None:
+        return None
+    if masked:
+        payload = bytes(b ^ mask_key[i % 4] for i, b in enumerate(payload))
+    return opcode, payload
+
+
+def _recv_exact(sock: Any, n: int) -> bytes | None:
+    """Read exactly *n* bytes from *sock*, returning None on short read / error."""
+    buf = bytearray()
+    while len(buf) < n:
+        try:
+            chunk = sock.recv(n - len(buf))
+        except OSError:
+            return None
+        if not chunk:
+            return None
+        buf.extend(chunk)
+    return bytes(buf)
+
+
+def ws_send_text(sock: Any, text: str) -> None:
+    """Send an unmasked text frame over *sock*."""
+    payload = text.encode()
+    header = bytearray()
+    header.append(0x81)  # FIN + text opcode
+    length = len(payload)
+    if length < 126:
+        header.append(length)
+    elif length < 65536:
+        header.append(126)
+        header.extend(struct.pack("!H", length))
+    else:
+        header.append(127)
+        header.extend(struct.pack("!Q", length))
+    sock.sendall(bytes(header) + payload)
+
+
+def ws_send_close(sock: Any, code: int = 1000) -> None:
+    """Send a close frame with the given status code."""
+    payload = struct.pack("!H", code)
+    header = bytearray([0x88, len(payload)])
+    sock.sendall(bytes(header) + payload)
+
 
 INITIAL_MARKETS: dict[str, dict[str, Any]] = {
     "m1": {
@@ -191,6 +275,72 @@ ACCOUNT_EXPOSURE: dict[str, dict[str, Any]] = {}
 MARKET_ENGINE_STATS: dict[str, dict[str, Any]] = {}
 _RATE_LIMIT_WINDOWS: dict[str, deque[float]] = {}
 _RATE_LIMIT_LOCK = threading.Lock()
+
+# WebSocket connection registry: market_id → set of socket objects
+WS_CONNECTIONS: dict[str, set[Any]] = {}
+_WS_LOCK = threading.Lock()
+_WS_SEQ = 0
+
+
+def _next_ws_seq() -> int:
+    """Return a monotonically increasing WebSocket sequence number."""
+    global _WS_SEQ  # noqa: PLW0603
+    with _WS_LOCK:
+        _WS_SEQ += 1
+        return _WS_SEQ
+
+
+def ws_register(market_id: str, sock: Any) -> None:
+    """Register a WebSocket connection for a market."""
+    with _WS_LOCK:
+        WS_CONNECTIONS.setdefault(market_id, set()).add(sock)
+
+
+def ws_unregister(market_id: str, sock: Any) -> None:
+    """Unregister a WebSocket connection for a market."""
+    with _WS_LOCK:
+        sockets = WS_CONNECTIONS.get(market_id)
+        if sockets is not None:
+            sockets.discard(sock)
+            if not sockets:
+                del WS_CONNECTIONS[market_id]
+
+
+def ws_broadcast(market_id: str) -> None:
+    """Broadcast current market prices to all WebSocket subscribers."""
+    market = MARKETS.get(market_id)
+    if market is None:
+        return
+    with _WS_LOCK:
+        sockets = WS_CONNECTIONS.get(market_id)
+        if not sockets:
+            return
+        targets = list(sockets)
+    msg: dict[str, Any] = {
+        "marketId": market_id,
+        "status": market.get("status", "active"),
+        "marginals": dict(market.get("marginals", {})),
+        "seq": _next_ws_seq(),
+        "emittedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "approxFlag": False,
+    }
+    resolution = market.get("resolution")
+    if resolution is not None:
+        msg["resolution"] = resolution
+    res_probs = market.get("resolutionProbabilities")
+    if res_probs is not None:
+        msg["resolutionProbabilities"] = dict(res_probs)
+    payload = json.dumps(msg)
+    dead: list[Any] = []
+    for sock in targets:
+        try:
+            ws_send_text(sock, payload)
+        except OSError:
+            dead.append(sock)
+    for sock in dead:
+        ws_unregister(market_id, sock)
+
+
 ORDER_COUNTER = 0
 COMMAND_COUNTER = 0
 EVENT_COUNTER = 0
@@ -2756,6 +2906,7 @@ def create_probability_edit_order(
         previous_marginals = deepcopy(preview["previousMarginals"])
         updated_marginals = deepcopy(preview["newMarginals"])
         market["marginals"] = deepcopy(updated_marginals)
+        ws_broadcast(market_id)
         impact_score = round_risk_value(float(preview["impactScore"]))
 
     timestamp = utc_timestamp()
@@ -3445,6 +3596,7 @@ def transition_market_to_resolved(
     market["resolutionProbabilities"] = deepcopy(new_marginals)
     market["marginals"] = deepcopy(new_marginals)
     CONDITIONAL_MARGINALS.pop(market_id, None)
+    ws_broadcast(market_id)
 
     return {
         "market": deepcopy(market),
@@ -4388,9 +4540,79 @@ class BayesHandler(BaseHTTPRequestHandler):
         self.wfile.write(content)
         return True
 
+    def _handle_websocket(self, path: str) -> bool:
+        """Attempt WebSocket upgrade for /ws/markets/{id}/prices. Returns True if handled."""
+        ws_match = re.match(r"^/ws/markets/([^/]+)/prices$", path)
+        if ws_match is None:
+            return False
+        if (self.headers.get("Upgrade") or "").lower() != "websocket":
+            return False
+        client_key = self.headers.get("Sec-WebSocket-Key")
+        if not client_key:
+            self.send_error(400, "Missing Sec-WebSocket-Key")
+            return True
+
+        market_id = ws_match.group(1)
+
+        # Send 101 Switching Protocols
+        accept = ws_accept_key(client_key)
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", accept)
+        self.end_headers()
+
+        sock = self.request
+        ws_register(market_id, sock)
+        try:
+            # Send an initial price snapshot immediately upon connection
+            market = MARKETS.get(market_id)
+            if market is not None:
+                msg: dict[str, Any] = {
+                    "marketId": market_id,
+                    "status": market.get("status", "active"),
+                    "marginals": dict(market.get("marginals", {})),
+                    "seq": _next_ws_seq(),
+                    "emittedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "approxFlag": False,
+                }
+                resolution = market.get("resolution")
+                if resolution is not None:
+                    msg["resolution"] = resolution
+                res_probs = market.get("resolutionProbabilities")
+                if res_probs is not None:
+                    msg["resolutionProbabilities"] = dict(res_probs)
+                ws_send_text(sock, json.dumps(msg))
+
+            # Read loop: handle ping/pong/close, ignore data frames
+            while True:
+                frame = ws_read_frame(sock)
+                if frame is None:
+                    break
+                opcode, data = frame
+                if opcode == 0x8:  # close
+                    try:
+                        ws_send_close(sock)
+                    except OSError:
+                        pass
+                    break
+                if opcode == 0x9:  # ping → pong
+                    try:
+                        pong = bytearray([0x8A, len(data)]) + data
+                        sock.sendall(bytes(pong))
+                    except OSError:
+                        break
+        except OSError:
+            pass
+        finally:
+            ws_unregister(market_id, sock)
+        return True
+
     def do_GET(self) -> None:  # noqa: N802
         """Serve API routes first, fall back to static frontend files."""
         path = normalize_path(urlparse(self.path).path)
+        if self._handle_websocket(path):
+            return
         if path.startswith("/v1/") or path in PUBLIC_HEALTH_ROUTES:
             self.handle_api("GET")
             return
@@ -4423,7 +4645,7 @@ def parse_args() -> argparse.Namespace:
 
 def run_server(host: str = "127.0.0.1", port: int = 3205) -> None:
     """Start the HTTP server and block forever."""
-    HTTPServer((host, port), BayesHandler).serve_forever()
+    ThreadingHTTPServer((host, port), BayesHandler).serve_forever()
 
 
 def main() -> int:
