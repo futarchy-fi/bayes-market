@@ -1,0 +1,106 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The task description explicitly says 'default: 1000 units' for per-market max_position_size. The intent is to raise the default from 100 to 1000. The current global max_position_size=100.0 (server.py:213) will be replaced by a per-market field with a default of 1000. Existing tests that hardcode 100.0 (test_bayes_market_api.py:368, :4233) must be updated to 1000.0. The boundary test (test_event_trade_accepts_exact_max_position_boundary_without_widening_contract at line 4042) uses starting_net_size=99.5 and expected_net_size=100.0 — these will still pass since 100.0 < 1000.0, but the position_limit_exceeded test (line 4186) sets up a 99.0 position and tries to add 2.0 to exceed 100 — this test needs its values scaled up to test against 1000.",
+      "confidence": 0.9,
+      "evidence": [
+        "server.py:213 (max_position_size = 100.0)",
+        "original task prompt: 'default: 1000 units'",
+        "test_bayes_market_api.py:368 (assertEqual max_position_size 100.0)",
+        "test_bayes_market_api.py:4042-4090 (boundary test)",
+        "test_bayes_market_api.py:4186-4274 (limit exceeded test)"
+      ],
+      "uncertainty": "None significant. The task description is clear about 1000 as the default. Tests must be updated."
+    },
+    {
+      "question_id": "q2",
+      "answer": "The GET /v1/accounts/{id}/exposure endpoint already exists (server.py:1899-1914) and returns positions with per-position detail (marketId, outcomeId, netSize, absSize, lastTradePrice). It has a top-level maxPositionSize field (server.py:1885) that currently reflects the global value. The task says 'Add GET /v1/accounts/{id}/exposure endpoint showing total exposure' — since the endpoint exists, the task is describing desired end-state, not requesting creation from scratch. The key changes needed: (1) move maxPositionSize into each position object (since it's now per-market), or keep it at the top level as the default and add per-position overrides. The simplest approach: keep the response shape but change maxPositionSize to reflect the per-market value. Since positions are already per-market, we could add maxPositionSize to each position. For 'total exposure', we could add an aggregate field (totalExposure = sum of abs(netSize * lastTradePrice)) but this is not explicitly required — the existing position-level detail likely satisfies the requirement.",
+      "confidence": 0.8,
+      "evidence": [
+        "server.py:1882-1888 (serialize_account_exposure - top-level maxPositionSize)",
+        "server.py:1812-1828 (serialize_account_exposure_position - per-position fields)",
+        "server.py:1899-1914 (get_account_exposure handler)"
+      ],
+      "uncertainty": "Whether 'total exposure' means an aggregate computed field or just the existing position list. The existing response shape already 'shows' exposure via positions. Safest approach: keep existing shape, update maxPositionSize to be per-market (move into position objects or make it the default), and optionally add a totalExposure aggregate."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Per-market maxPositionSize should be set at market creation time via the POST /v1/markets body (server.py:2011-2092). The create_market function already accepts optional fields like liquidity with defaults. Adding maxPositionSize as an optional field (default 1000.0) follows the same pattern. It gets stored in the market dict (MARKETS[id]['maxPositionSize']) and serialized in market responses. The validation at server.py:4076-4093 would look up MARKETS[market_id].get('maxPositionSize', 1000.0) instead of the global constant.",
+      "confidence": 0.95,
+      "evidence": [
+        "server.py:2011-2092 (create_market function)",
+        "server.py:257 (MARKETS dict definition)",
+        "server.py:4076-4093 (position validation uses global max_position_size)"
+      ],
+      "uncertainty": "None. This is the most natural API design, following the existing pattern of optional market fields with defaults."
+    },
+    {
+      "question_id": "q4",
+      "answer": "The existing error shape (server.py:4076-4093) is already well-designed and meets the requirement. It returns 400 with code 'position_limit_exceeded', a clear message, and detailed context (accountId, marketId, outcomeId, side, requestedSize, currentNetSize, resultingNetSize, maxPositionSize). The only change needed: the maxPositionSize in the error details should reflect the per-market limit instead of the global constant. No changes to error format, status code, or field structure.",
+      "confidence": 0.98,
+      "evidence": [
+        "server.py:4076-4093 (full error response with all fields)",
+        "test_bayes_market_api.py:4220-4234 (test validates exact error shape)"
+      ],
+      "uncertainty": "None. The existing error shape is comprehensive and matches the task requirement exactly."
+    },
+    {
+      "question_id": "q5",
+      "answer": "The fallback for markets without explicit maxPositionSize should be 1000 as the task specifies ('default: 1000 units'). The global max_position_size constant (server.py:213) should be changed to 1000.0 to serve as the default. INITIAL_MARKETS (m1, m2, m3) do NOT currently have a maxPositionSize field. Two options: (a) leave them without it and they inherit the 1000 default, or (b) add explicit maxPositionSize to each. Option (a) is simpler and tests the fallback path. The existing tests at line 368 (assertEqual max_position_size 100.0) and line 4233 (maxPositionSize: 100.0 in error details) need updating to 1000.0. The boundary test at line 4042 uses positions of 99.5/100.0 which are well under 1000, so it will pass without changes but won't test the actual boundary — it should be updated to test near 1000.",
+      "confidence": 0.9,
+      "evidence": [
+        "server.py:213 (max_position_size = 100.0)",
+        "server.py:148-200 (INITIAL_MARKETS without maxPositionSize field)",
+        "test_bayes_market_api.py:368 (asserts 100.0)",
+        "test_bayes_market_api.py:4042-4090 (boundary test at 100.0)",
+        "test_bayes_market_api.py:4186-4274 (limit exceeded test at 100.0)"
+      ],
+      "uncertainty": "Whether seed markets should have explicit limits or rely on the default. Recommending: leave INITIAL_MARKETS without explicit maxPositionSize to test the default fallback path, and add per-market config tests for newly created markets."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Storing maxPositionSize in the market dict is the natural approach. MARKETS[id] is a plain dict (server.py:257) with arbitrary fields. create_market (server.py:2011-2092) builds a dict and stores it directly. Adding a field is trivial. The default of 1000.0 matches the task description."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "The endpoint exists and works. The main change is that maxPositionSize in the exposure response (server.py:1885) currently uses the global constant. With per-market limits, this field should be removed from the top level and added per-position, or kept as the default. The existing response shape with positions already constitutes 'showing total exposure'. No new aggregate computation is strictly required by the task, but could be added as a simple enhancement."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Minimal. The error shape at server.py:4076-4093 is already correct. Only the limit value source changes from global to per-market lookup."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "The global max_position_size should become 1000.0 as the default for the per-market system. Tests at lines 368 and 4186-4274 must be updated. The boundary test at line 4042 should be updated to test near 1000 instead of 100."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.92,
+      "impact": "Test coverage should include: (a) per-market limit enforcement (create market with custom limit, trade exceeding it), (b) default limit when market has no explicit config (use INITIAL_MARKETS which lack the field), (c) exposure endpoint reflects correct per-market maxPositionSize in positions, (d) 400 error includes correct per-market limit value. Existing tests provide good templates to adapt."
+    }
+  ],
+
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.8,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All 5 questions answered with confidence >= 0.8. No answer below 0.7 threshold. All 5 assumptions validated as CORRECT. The changes are localized (server.py global constant, market creation, position validation, exposure serialization, plus test updates). No architectural unknowns remain. The codebase patterns are clear and the task requirements align well with existing infrastructure."
+  },
+
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,62 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Update global max_position_size constant from 100.0 to 1000.0",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Add maxPositionSize as optional field in create_market: accept from body, validate if present, store in market dict",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Create helper function get_market_max_position_size(market_id) for per-market limit lookup with global fallback",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Update position validation to use get_market_max_position_size instead of global constant",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Move maxPositionSize from top-level exposure response into per-position objects via get_market_max_position_size",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Update existing tests: change 100.0 to 1000.0 defaults, update boundary test values, update exposure response assertions",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Add new tests: create market with custom maxPositionSize, inherit default, reject invalid, per-market limit exceeded, under limit succeeds, exposure shows per-market limit",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 8,
+      "task": "Run full test suite (261 tests), fix 3 regressions in exposure position assertions missing new maxPositionSize field",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}

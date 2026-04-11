@@ -1,0 +1,13 @@
+{
+  "phase": "validate",
+  "plan_adherence": 1.0,
+  "plan_adherence_notes": "All 8 plan steps executed exactly as specified. Step 1: global default raised 100→1000. Step 2: maxPositionSize accepted as optional field in POST /v1/markets with positive-number validation. Step 3: get_market_max_position_size helper created. Step 4: position validation updated to use per-market lookup. Step 5: maxPositionSize moved from top-level exposure response to per-position objects. Step 6: existing tests updated (boundary test 999.5/1000.0, limit exceeded test 999.0/1001.0). Step 7: 6 new tests added covering custom limits, default fallback, invalid values, per-market enforcement, and exposure endpoint. Step 8: all 261 tests pass.",
+  "research_quality": 0.95,
+  "question_completeness": 0.9,
+  "missed_questions": [
+    "Whether maxPositionSize should be updatable after market creation (no PATCH endpoint was discussed or added)",
+    "Whether maxPositionSize should appear in the market GET/list response serialization (it is stored but unclear if serialized in market responses)"
+  ],
+  "verdict": "approve",
+  "reason": "Implementation is complete and correct. All 8 plan steps were executed with full fidelity. The code changes are clean and minimal (~70 lines in server.py, ~150 lines in tests). The helper function provides a single source of truth for per-market limit lookup. Validation includes positive-number check on market creation. The exposure response correctly moved maxPositionSize from top-level to per-position. All 261 tests pass including 6 new tests covering custom limits, default fallback, invalid input, per-market enforcement, under-limit success, and exposure endpoint verification. The two missed questions are minor edge cases that don't affect the core feature."
+}

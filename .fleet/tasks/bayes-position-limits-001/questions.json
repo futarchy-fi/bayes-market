@@ -1,0 +1,85 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The task says default max_position_size should be 1000, but the existing global constant is 100.0 (server.py:160). Is the intent to raise the default from 100 to 1000, or keep existing behavior for current markets and only apply 1000 to new markets?",
+      "category": "requirements",
+      "why_it_matters": "Changing the default from 100 to 1000 is a 10x increase that could break existing tests (e.g. test_event_trade_accepts_exact_max_position_boundary_without_widening_contract uses 100.0 boundary). Need to understand if existing tests should be updated or preserved."
+    },
+    {
+      "id": "q2",
+      "question": "The GET /v1/accounts/{id}/exposure endpoint already exists (server.py:1745-1763) and returns positions with netSize, lastTradePrice, and maxPositionSize. Does 'total exposure' mean the current response shape, or should we add an aggregate field (e.g. totalExposure = sum of abs(netSize * price) across all positions)?",
+      "category": "requirements",
+      "why_it_matters": "The endpoint exists but may not compute aggregate exposure. The task description says 'showing total exposure' which could mean a new computed field vs the existing position-level detail."
+    },
+    {
+      "id": "q3",
+      "question": "Position size validation already exists at server.py:4988 using the global max_position_size. When making this per-market, should the per-market limit be set at market creation time via a 'maxPositionSize' field in the POST /v1/markets body, or configured separately?",
+      "category": "design",
+      "why_it_matters": "Determines the API contract for setting per-market limits. Adding it to market creation is simplest but needs to be stored in the MARKETS dict and serialized in market responses."
+    },
+    {
+      "id": "q4",
+      "question": "The existing position_limit_exceeded error returns 400, matching the task requirement. Should we keep the existing error shape (which includes accountId, marketId, outcomeId, side, requestedSize, currentNetSize, resultingNetSize, maxPositionSize) or change it?",
+      "category": "requirements",
+      "why_it_matters": "The error response already exists with good detail. If acceptable, no changes needed to the error format — only the limit lookup needs to change from global to per-market."
+    },
+    {
+      "id": "q5",
+      "question": "When a market has no explicit maxPositionSize configured, should the fallback be 1000 (as task says) or the current 100.0? And should INITIAL_MARKETS (m1, m2, m3) be updated with explicit per-market limits?",
+      "category": "design",
+      "why_it_matters": "INITIAL_MARKETS are hardcoded seed data. Existing tests rely on max_position_size=100.0. Need clarity on whether seed markets should get explicit limits or inherit the new default."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Per-market maxPositionSize will be stored as a field in the market dict (MARKETS[id]['maxPositionSize']), defaulting to 1000.0 when absent",
+      "confidence": 0.85,
+      "if_wrong": "Would need a separate config store or lookup table for position limits, adding complexity"
+    },
+    {
+      "id": "a2",
+      "assumption": "The existing GET /v1/accounts/{id}/exposure endpoint satisfies requirement (3) and just needs the maxPositionSize to reflect per-market limits rather than a global value",
+      "confidence": 0.7,
+      "if_wrong": "May need to add aggregate exposure calculation (sum of notional across positions) or restructure the response"
+    },
+    {
+      "id": "a3",
+      "assumption": "The existing position_limit_exceeded error at 400 status satisfies requirement (4) and needs only the limit source changed from global to per-market",
+      "confidence": 0.95,
+      "if_wrong": "Minimal impact — just error message or code tweaks"
+    },
+    {
+      "id": "a4",
+      "assumption": "The global max_position_size constant will be changed to 1000.0 to serve as the default, and existing tests will be updated accordingly",
+      "confidence": 0.75,
+      "if_wrong": "Need to maintain backward compatibility with 100.0 default while adding per-market override"
+    },
+    {
+      "id": "a5",
+      "assumption": "Tests should cover: (a) per-market limit enforcement, (b) default limit when market has no explicit config, (c) exposure endpoint reflects correct per-market maxPositionSize, (d) 400 error with correct details when limit exceeded",
+      "confidence": 0.9,
+      "if_wrong": "May need additional test scenarios for edge cases like limit changes on existing positions"
+    }
+  ],
+
+  "decomposition_assessment": {
+    "complexity_score": 2,
+    "complexity_reason": "Most infrastructure already exists: position tracking, validation, exposure endpoint, error handling. Changes are localized to ~3-4 spots in server.py (constant, market creation, validation lookup, serialization) plus test updates. Estimated ~100-150 lines of changes.",
+    "uncertainty_score": 2,
+    "uncertainty_reason": "The codebase patterns are clear and well-established. Main uncertainty is whether 'total exposure' means something beyond the existing endpoint and whether the default should change from 100 to 1000 (affecting existing tests).",
+    "independent_subproblems": [
+      "Add maxPositionSize field to market model and creation API",
+      "Update position validation to use per-market limit instead of global",
+      "Update exposure endpoint serialization to show per-market limit",
+      "Write tests for per-market limit enforcement"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity=2, uncertainty=2 — both well below thresholds. Changes are small, localized to one file (server.py) plus tests, and follow existing patterns. No architectural changes needed. The 4 sub-tasks are tightly coupled (they all touch the same market dict and validation flow), making parallel execution impractical."
+  },
+
+  "spawn_children": false,
+  "children": []
+}
