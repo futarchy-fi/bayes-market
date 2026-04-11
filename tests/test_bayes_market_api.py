@@ -2247,7 +2247,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["diagnostics"]["request_count"], 1)
         self.assertEqual(payload["diagnostics"]["error_count"], 0)
         self.assertEqual(payload["diagnostics"]["inference"]["count"], 1)
-        self.assertEqual(payload["diagnostics"]["cache"], {"hits": 0, "misses": 0, "hit_rate": 0.0})
+        self.assertEqual(payload["diagnostics"]["cache"], {"hits": 0, "misses": 1, "hit_rate": 0.0})
         self.assertIn("compile_time_ms", payload["diagnostics"])
         self.assertIn("memory_bytes", payload["diagnostics"])
         self.assertIn("last_updated", payload["diagnostics"])
@@ -2405,6 +2405,85 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.code, "method_not_allowed")
         self.assertEqual(error.details["method"], "POST")
         self.assertEqual(error.details["path"], "/v1/markets/m1/engine-stats")
+
+    def test_cache_invalidation_probability_edit_increments_cache_misses(self):
+        _, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_cache_a", "m1", "yes", 0.8),
+        )
+        self.assertEqual(status, 201)
+
+        stats, stats_status = server.route_request("GET", "/v1/markets/m1/engine-stats")
+        self.assertEqual(stats_status, 200)
+        self.assertIsNotNone(stats["engine"]["compile_id"])
+        self.assertIsNotNone(stats["engine"]["source_state_hash"])
+        self.assertEqual(stats["engine"]["source_state_hash"], server.market_replay_state_hash("m1"))
+        self.assertGreaterEqual(stats["diagnostics"]["cache"]["misses"], 1)
+
+    def test_cache_invalidation_duplicate_edit_increments_cache_hits(self):
+        # First edit — cache miss (new state).
+        server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_cache_b", "m1", "yes", 0.8),
+        )
+        first_stats, _ = server.route_request("GET", "/v1/markets/m1/engine-stats")
+        first_compile_id = first_stats["engine"]["compile_id"]
+        first_misses = first_stats["diagnostics"]["cache"]["misses"]
+
+        # Duplicate edit (same probability) — cache hit, compile_id unchanged.
+        server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_cache_b", "m1", "yes", 0.8),
+        )
+        second_stats, _ = server.route_request("GET", "/v1/markets/m1/engine-stats")
+        self.assertEqual(second_stats["engine"]["compile_id"], first_compile_id)
+        self.assertEqual(second_stats["diagnostics"]["cache"]["misses"], first_misses)
+        self.assertGreater(second_stats["diagnostics"]["cache"]["hits"], first_stats["diagnostics"]["cache"]["hits"])
+
+    def test_cache_invalidation_unconditional_edit_clears_conditional_marginals(self):
+        # Seed a conditional marginal.
+        context = [{"variableId": server.MARKETS["m2"]["variableId"], "outcomeId": "yes"}]
+        server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                **build_unconditional_probability_edit_body("acct_cache_c", "m1", "yes", 0.7),
+                "context": context,
+            },
+        )
+        self.assertIn("m1", server.CONDITIONAL_MARGINALS)
+
+        # Unconditional edit should clear conditional marginals.
+        server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_cache_c", "m1", "yes", 0.65),
+        )
+        self.assertNotIn("m1", server.CONDITIONAL_MARGINALS)
+
+    def test_cache_invalidation_event_trade_does_not_trigger_invalidation(self):
+        # First do a probability edit to establish compile state.
+        server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_cache_d", "m1", "yes", 0.8),
+        )
+        stats_before, _ = server.route_request("GET", "/v1/markets/m1/engine-stats")
+        misses_before = stats_before["diagnostics"]["cache"]["misses"]
+        hits_before = stats_before["diagnostics"]["cache"]["hits"]
+
+        # Event trade — should NOT change cache counters.
+        server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_cache_d", "m1", "yes", size=5.0),
+        )
+        stats_after, _ = server.route_request("GET", "/v1/markets/m1/engine-stats")
+        self.assertEqual(stats_after["diagnostics"]["cache"]["misses"], misses_before)
+        self.assertEqual(stats_after["diagnostics"]["cache"]["hits"], hits_before)
 
     def test_account_risk_requires_known_account(self):
         with self.assertRaises(server.ApiError) as ctx:
@@ -4736,7 +4815,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(stats_payload["diagnostics"]["request_count"], 1)
         self.assertEqual(stats_payload["diagnostics"]["error_count"], 0)
         self.assertEqual(stats_payload["diagnostics"]["inference"]["count"], 1)
-        self.assertEqual(stats_payload["diagnostics"]["cache"], {"hits": 0, "misses": 0, "hit_rate": 0.0})
+        self.assertGreaterEqual(stats_payload["diagnostics"]["cache"]["misses"], 1)
         self.assertIn("compile_time_ms", stats_payload["diagnostics"])
         self.assertIn("memory_bytes", stats_payload["diagnostics"])
         self.assertIn("last_updated", stats_payload["diagnostics"])

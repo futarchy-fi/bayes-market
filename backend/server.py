@@ -54,6 +54,7 @@ def _resolve_build_git_sha() -> str:
 from backend.inference import (
     CURRENT_MODEL_COMPILER,
     CURRENT_MODEL_QUERY_BACKEND,
+    CacheInvalidationManager,
     CompileResult,
     DEFAULT_ENGINE_CONFIG,
     EngineConfig,
@@ -237,6 +238,7 @@ _COMMENTS_LOCK = threading.RLock()
 ACCOUNT_RISK: dict[str, dict[str, Any]] = {}
 ACCOUNT_EXPOSURE: dict[str, dict[str, Any]] = {}
 MARKET_ENGINE_STATS: dict[str, dict[str, Any]] = {}
+CACHE_INVALIDATION_MANAGER = CacheInvalidationManager()
 _RATE_LIMIT_WINDOWS: dict[str, deque[float]] = {}
 _RATE_LIMIT_LOCK = threading.Lock()
 ORDER_COUNTER = 0
@@ -313,6 +315,7 @@ def reset_state() -> None:
     ACCOUNT_RISK.clear()
     ACCOUNT_EXPOSURE.clear()
     MARKET_ENGINE_STATS.clear()
+    CACHE_INVALIDATION_MANAGER.reset()
     reset_rate_limit_state()
     ORDER_COUNTER = 0
     COMMAND_COUNTER = 0
@@ -1102,8 +1105,21 @@ def build_market_compile_result(market_id: str, *, compile_time_ms: float | None
 
 
 def refresh_market_compile_snapshot(market_id: str, *, compile_time_ms: float | None = None) -> None:
-    """Refresh cached compile diagnostics for a market."""
+    """Refresh cached compile diagnostics for a market.
+
+    Uses the global CACHE_INVALIDATION_MANAGER to skip redundant recompilation
+    when the market's source state has not changed.
+    """
     state = ensure_market_engine_state(market_id)
+    new_hash = market_replay_state_hash(market_id)
+    result = CACHE_INVALIDATION_MANAGER.check(market_id, new_hash)
+
+    state["cache_hits"] = CACHE_INVALIDATION_MANAGER.cache_hits
+    state["cache_misses"] = CACHE_INVALIDATION_MANAGER.cache_misses
+
+    if not result.needs_recompile:
+        return
+
     compile_result = build_market_compile_result(market_id, compile_time_ms=compile_time_ms)
     state["compile_id"] = compile_result.compile_id
     state["compile_type"] = compile_result.compile_type
@@ -3535,6 +3551,7 @@ def create_probability_edit_order(
         previous_marginals = deepcopy(preview["previousMarginals"])
         updated_marginals = deepcopy(preview["newMarginals"])
         market["marginals"] = deepcopy(updated_marginals)
+        CONDITIONAL_MARGINALS.pop(market_id, None)
         impact_score = round_risk_value(float(preview["impactScore"]))
 
     timestamp = utc_timestamp()
