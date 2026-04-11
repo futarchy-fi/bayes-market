@@ -1003,6 +1003,7 @@ def service_index_payload() -> dict[str, Any]:
                 "GET /v1/markets/{id}/comments",
                 "POST /v1/markets/{id}/comments",
                 "/v1/markets/{id}/engine-stats",
+                "GET /v1/markets/{id}/analytics",
                 "POST /v1/markets/{id}/resolve",
             ],
             "orders": [
@@ -2264,6 +2265,112 @@ def parse_integer_query_param(
         )
 
     return value
+
+
+_VALID_ANALYTICS_INTERVALS = {"1h", "6h", "1d", "7d"}
+_INTERVAL_SECONDS = {"1h": 3600, "6h": 21600, "1d": 86400, "7d": 604800}
+
+
+def get_market_analytics(market_id: str, query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
+    """Return aggregated analytics for a market: volume, trade count, price history, top traders."""
+    if market_id not in MARKETS:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    interval_values = query.get("interval", ["1h"])
+    interval = interval_values[0] if interval_values else "1h"
+    if interval not in _VALID_ANALYTICS_INTERVALS:
+        raise ApiError(
+            400,
+            "invalid_interval",
+            f"interval must be one of: {', '.join(sorted(_VALID_ANALYTICS_INTERVALS))}",
+            {"parameter": "interval", "received": interval, "allowed": sorted(_VALID_ANALYTICS_INTERVALS)},
+        )
+
+    market = MARKETS[market_id]
+    total_volume = float(market.get("volume", 0.0))
+
+    market_orders = [
+        order for order in ORDERS.values()
+        if str(order.get("marketId")) == market_id
+    ]
+    trade_count = len(market_orders)
+
+    # Build price_history from events bucketed by interval
+    interval_seconds = _INTERVAL_SECONDS[interval]
+    with _EVENTS_LOCK:
+        market_events = [
+            event for event in EVENTS.values()
+            if str(event.get("marketId")) == market_id
+        ]
+    market_events.sort(key=lambda e: str(e.get("emittedAt", "")))
+
+    buckets: dict[str, dict[str, Any]] = {}
+    for event in market_events:
+        timestamp_str = str(event.get("emittedAt", ""))
+        if not timestamp_str:
+            continue
+        try:
+            from datetime import datetime as _dt, timezone as _tz
+            dt = _dt.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+            epoch = dt.timestamp()
+        except (ValueError, OSError):
+            continue
+        bucket_epoch = int(epoch // interval_seconds) * interval_seconds
+        bucket_key = _dt.fromtimestamp(bucket_epoch, tz=_tz.utc).isoformat().replace("+00:00", "Z")
+
+        # Extract marginals from event payload's marginalDelta or use order's newMarginals
+        marginals = None
+        payload = event.get("payload", {})
+        effects = payload.get("effects", {})
+        marginal_deltas = effects.get("marginalDelta", [])
+
+        # Find the corresponding order for full marginals snapshot
+        command_id = str(event.get("commandId", ""))
+        if command_id:
+            for order in ORDERS.values():
+                if str(order.get("commandId")) == command_id and "newMarginals" in order:
+                    marginals = dict(order["newMarginals"])
+                    break
+
+        if marginals is None:
+            # Fallback: use current market marginals if we can't find order
+            marginals = dict(market.get("marginals", {}))
+
+        buckets[bucket_key] = {"timestamp": bucket_key, "marginals": marginals}
+
+    price_history = sorted(buckets.values(), key=lambda b: b["timestamp"])
+
+    # Build top_traders from ORDERS grouped by account
+    trader_stats: dict[str, dict[str, Any]] = {}
+    for order in market_orders:
+        account_id = str(order.get("accountId", ""))
+        if not account_id:
+            continue
+        if account_id not in trader_stats:
+            trader_stats[account_id] = {"account_id": account_id, "volume": 0.0, "trade_count": 0}
+        # Use impactScore (cost) for probability edits, notional for event trades
+        cost = abs(float(order.get("impactScore", 0.0) or order.get("notional", 0.0)))
+        trader_stats[account_id]["volume"] += cost
+        trader_stats[account_id]["trade_count"] += 1
+
+    # Round volumes
+    for stats in trader_stats.values():
+        stats["volume"] = round(stats["volume"], 6)
+
+    top_traders = sorted(
+        trader_stats.values(),
+        key=lambda t: (-t["volume"], t["account_id"]),
+    )[:10]
+
+    return {
+        "market_id": market_id,
+        "total_volume": total_volume,
+        "trade_count": trade_count,
+        "price_history": price_history,
+        "top_traders": top_traders,
+        "interval": interval,
+        "meta": make_meta(),
+    }, 200
 
 
 def get_market_events(market_id: str, query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
@@ -4290,6 +4397,16 @@ def route_request(
                     {"method": method, "path": path},
                 )
             return get_market_engine_stats(market_id)
+
+        if len(parts) == 4 and parts[3] == "analytics":
+            if method != "GET":
+                raise ApiError(
+                    405,
+                    "method_not_allowed",
+                    f"{method} is not allowed for this resource",
+                    {"method": method, "path": path},
+                )
+            return get_market_analytics(market_id, parse_qs(parsed.query, keep_blank_values=True))
 
         if len(parts) == 4 and parts[3] == "events":
             if method != "GET":

@@ -85,6 +85,27 @@ export interface MarketPreviewResponse {
   meta: Meta;
 }
 
+export interface PriceHistoryEntry {
+  timestamp: string;
+  marginals: Record<string, number>;
+}
+
+export interface TopTrader {
+  account_id: string;
+  volume: number;
+  trade_count: number;
+}
+
+export interface MarketAnalyticsResponse {
+  market_id: string;
+  total_volume: number;
+  trade_count: number;
+  price_history: PriceHistoryEntry[];
+  top_traders: TopTrader[];
+  interval: string;
+  meta: Meta;
+}
+
 export interface MarketEvent {
   eventId: string;
   marketId: string;

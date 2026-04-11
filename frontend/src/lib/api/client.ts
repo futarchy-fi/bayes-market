@@ -5,6 +5,7 @@ import type {
   MarketEventsResponse,
   MarketCommentsResponse,
   EngineStatsResponse,
+  MarketAnalyticsResponse,
   AccountRiskResponse,
   AccountExposureResponse,
   OrderResponse,
@@ -193,6 +194,18 @@ export function getEngineStats(
 ): Promise<EngineStatsResponse> {
   return request<EngineStatsResponse>(
     `/v1/markets/${encodeURIComponent(marketId)}/engine-stats`,
+  );
+}
+
+export function getMarketAnalytics(
+  marketId: string,
+  interval?: string,
+): Promise<MarketAnalyticsResponse> {
+  const params = new URLSearchParams();
+  if (interval) params.set("interval", interval);
+  const qs = params.toString();
+  return request<MarketAnalyticsResponse>(
+    `/v1/markets/${encodeURIComponent(marketId)}/analytics${qs ? `?${qs}` : ""}`,
   );
 }
 
