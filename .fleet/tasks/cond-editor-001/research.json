@@ -1,0 +1,105 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "ContextRow should be tested within the ConditionalEditor test suite (integration-style). ContextRow is defined as a non-exported function inside ConditionalEditor.tsx (line 185), making it inaccessible for separate file testing. It cannot be imported independently. The TradingPanel test pattern demonstrates testing the full component tree. ContextRow behavior (market select, outcome select, remove button) should be exercised through the ConditionalEditor describe block, possibly in its own nested describe.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/trading/ConditionalEditor.tsx:185",
+        "frontend/src/__tests__/TradingPanel.test.tsx:1-204"
+      ],
+      "uncertainty": "None — ContextRow is a non-exported local function, so it must be tested through ConditionalEditor."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes, useMarket must be mocked in addition to useMarkets. The hooks module (hooks.ts) exports both. ContextRow calls useMarket(assignment.variableId, { enabled: !!assignment.variableId }) at line 196. The mock for the hooks module should export both useMarkets and useMarket as vi.fn(). useMarkets should return { data: { markets: MarketSummary[] } } for the list, and useMarket should return { data: { market: { outcomes: [...] } } } for each context market's outcomes. The mock needs to handle the conditional enabled flag.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/trading/ConditionalEditor.tsx:19",
+        "frontend/src/features/trading/ConditionalEditor.tsx:196-197",
+        "frontend/src/lib/query/hooks.ts:48-63"
+      ],
+      "uncertainty": "The exact return shape of useMarket — specifically whether it's { market: { outcomes } } or just { outcomes }. Line 197 shows `data?.market.outcomes` confirming it's nested under market."
+    },
+    {
+      "question_id": "q3",
+      "answer": "crypto.randomUUID() is available in the jsdom/vitest environment. Node.js 19+ includes crypto.randomUUID() globally, and vitest runs on Node. The TradingPanel test at line 163 asserts `call.payload.idempotencyKey` is defined without any crypto mock, confirming it works in this test env. No mock needed.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/__tests__/TradingPanel.test.tsx:163",
+        "frontend/src/features/trading/ConditionalEditor.tsx:66",
+        "frontend/vitest.config.ts:1-17"
+      ],
+      "uncertainty": "If the CI environment uses an older Node.js version (<19), this could fail. But TradingPanel tests pass in CI today, so this is safe."
+    },
+    {
+      "question_id": "q4",
+      "answer": "The mutation response shape is OrderResponse which includes { order: { orderId: string, ... } }. ConditionalEditor uses mutation.data.order.orderId at line 172. TradingPanel mocks this as { order: { orderId: 'order-abc-123' } } (line 183). Both components use the same useProbabilityEdit hook hitting the same API endpoint, so the response shape is identical.",
+      "confidence": 0.98,
+      "evidence": [
+        "frontend/src/features/trading/ConditionalEditor.tsx:172",
+        "frontend/src/__tests__/TradingPanel.test.tsx:183",
+        "frontend/src/lib/api/types.ts:274-288",
+        "frontend/src/lib/query/hooks.ts:145-155"
+      ],
+      "uncertainty": "None — both components use the same hook and access the same field."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes, the notation display should be tested. It's rendered at lines 80-86 as a <p> element. The notation format is: without context: 'Set P(OutcomeName) = XX.X%', with context: 'Set P(OutcomeName | variableId=outcomeId, ...) = XX.X%'. Note that context entries use raw variableId and outcomeId strings (not resolved names), because name resolution only happens inside ContextRow. Testing requires: (1) verify initial unconditional text, (2) add a context row, select a market and outcome, (3) verify the notation updates to include the condition. The notation uses formatProbability which formats as '(p*100).toFixed(1)%'.",
+      "confidence": 0.92,
+      "evidence": [
+        "frontend/src/features/trading/ConditionalEditor.tsx:80-86",
+        "frontend/src/lib/utils/format.ts:1-3"
+      ],
+      "uncertainty": "Whether to test intermediate states (e.g. context row added but market not yet selected — those entries are filtered out by the .filter(c => c.variableId && c.outcomeId) on line 82)."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Follow TradingPanel.test.tsx pattern exactly: vi.mock session context with importActual spread, vi.mock hooks module, use vi.mocked() for per-test control. Extend the hooks mock to include useMarkets and useMarket."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "useMarkets must be included in the vi.mock('@/lib/query/hooks') block. Return { data: { markets: [...] } } with MarketSummary[] fixtures including mix of active/inactive and the current market to verify filtering."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "useMarket must also be in the hooks mock. Line 196 calls useMarket(assignment.variableId, { enabled }). Return { data: { market: { outcomes: [...] } } }. The mock needs to handle being called with different variableIds per context row."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Use same fixture pattern as TradingPanel: { order: { orderId: 'order-xyz' } }. The OrderResponse type confirms this shape at types.ts:274-291."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "No crypto mock needed. TradingPanel.test.tsx already exercises this code path without mocking crypto, and its test passes (line 163 asserts idempotencyKey is defined)."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.92,
+      "impact": "Full test scope: (1) unconfigured guard, (2) form rendering with outcome select + slider, (3) add/remove context, (4) select market/outcome in context rows, (5) submit payload with context, (6) pending/success/error states, (7) notation display. This maps directly to the component's feature surface."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.88,
+      "impact": "The otherMarkets filtering (line 25-27: exclude current market.id, only active status) is testable by providing markets fixtures with mixed statuses and including the current market in the list. Verify only eligible markets appear in context row dropdowns."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
