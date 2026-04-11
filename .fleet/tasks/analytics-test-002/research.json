@@ -1,0 +1,94 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes, but with limited scope. AccountPnlSection should be tested for the empty-accountId state (showing 'Set your Account ID in the header...' message), which requires no special session mocking since SessionProvider defaults to accountId='' when localStorage is empty (jsdom default). Testing the data-populated state requires setting localStorage before render (localStorage.setItem('bayes-session', JSON.stringify({accountId:'test-account',agentId:''}))) and mocking getAccountPnl. This is feasible but adds moderate complexity. Recommend: test the no-accountId state as a baseline, and optionally add one test for the data-populated state.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/session/context.tsx:6-17",
+        "frontend/src/features/analytics/AccountPnlSection.tsx:29-33",
+        "frontend/src/__tests__/helpers.tsx:27",
+        "frontend/src/routes/Analytics.tsx:23"
+      ],
+      "uncertainty": "Not 100% sure if jsdom localStorage is reliably empty between tests or if setup.ts clears it."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes, URL search param synchronization should be tested. It is a core user-facing behavior: the selected market and interval persist to the URL so users can share/bookmark analytics views. The implementation uses useSearchParams with a useEffect that syncs state on changes (Analytics.tsx lines 37-58) and an updateParams function used by filters (lines 79-88). Testing is straightforward with renderWithProviders which already accepts initialEntries for MemoryRouter. Test approach: render with initialEntries=['/analytics?market=m1&interval=hour'], verify correct market/interval are selected; then change market via dropdown, verify URL updates. This covers the sync behavior without excessive complexity.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/routes/Analytics.tsx:26-58",
+        "frontend/src/routes/Analytics.tsx:79-88",
+        "frontend/src/__tests__/helpers.tsx:44"
+      ],
+      "uncertainty": "Verifying URL state changes in tests may require accessing the MemoryRouter's current location, which isn't directly exposed by renderWithProviders. May need to use window.location or a LocationDisplay helper component."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Charts do conditionally render based on data. PriceChart renders the line path only when points.length > 1 (line 150) and maps over points to render circles (line 160). VolumeChart maps over buckets to render bars (lines 96-155) and handles empty arrays gracefully (maxVolume defaults to 1 when empty, line 18). However, the parent Analytics.tsx only renders charts when analyticsQuery.data exists (lines 114-123), so the charts themselves won't even mount without data. Mock data should include at least 2-3 points per series and 2-3 volume buckets to trigger meaningful SVG rendering. Both charts have data-testid attributes ('price-chart' and 'volume-chart') on the SVG container, so basic presence assertions work with minimal data. Recommended mock shape: priceSeries with 2 series each having 3 points, volumeBuckets with 3 buckets.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/analytics/PriceChart.tsx:65,150,160",
+        "frontend/src/features/analytics/VolumeChart.tsx:18,49,96-155",
+        "frontend/src/routes/Analytics.tsx:114-123"
+      ],
+      "uncertainty": "Exact SVG element assertions may depend on chart dimensions and scaling calculations."
+    },
+    {
+      "question_id": "q4",
+      "answer": "The AnalyticsFilters market dropdown uses a native HTML <select> element (line 69) with data-testid='market-select' (line 71) and aria-label='Market' (line 70). It is a controlled component with value={selectedMarketId} and onChange firing onMarketChange. For testing, you can use either getByTestId('market-select') or getByRole('combobox', {name: 'Market'}) since native <select> has the combobox role. fireEvent.change is the correct interaction method, matching the MarketList.test.tsx pattern. Options are rendered from the markets array with market.title as the display label.",
+      "confidence": 0.98,
+      "evidence": [
+        "frontend/src/features/analytics/AnalyticsFilters.tsx:67-82",
+        "frontend/src/features/analytics/AnalyticsFilters.tsx:69-73"
+      ],
+      "uncertainty": "None - the implementation is clearly a native select element."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Test by verifying visual state changes (active button styling) rather than API re-invocation. The interval buttons in AnalyticsFilters have dynamic styling: the active button gets a distinct border and background color based on option === interval comparison (lines 88, 96-98). Clicking a button calls onIntervalChange which updates the parent's state and URL params, which in turn causes useMarketAnalytics to re-run (since interval is in the query key). Testing the button's active state after click is resilient and user-centric. Additionally, verify the button text ('Day'/'Hour') is present and clickable. Testing API re-invocation would require asserting on getMarketAnalytics mock calls with specific interval args, which couples to implementation. The visual approach is preferred here since the query key mechanism is tested implicitly by React Query's behavior.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/features/analytics/AnalyticsFilters.tsx:84-106",
+        "frontend/src/features/analytics/AnalyticsFilters.tsx:88,93,96-98",
+        "frontend/src/lib/query/hooks.ts:89-98"
+      ],
+      "uncertainty": "Testing inline styles for active state may be fragile. The buttons don't have data-testid attributes, so they must be queried by role('button') and name. Also, an alternative is to check that the getMarketAnalytics mock was called with the new interval arg, which is more direct."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The existing test pattern in MarketList.test.tsx uses vi.mock('@/lib/api/client') and then vi.mocked(api.listMarkets).mockResolvedValue(). This same pattern should be used for Analytics tests, mocking listMarkets, getMarketAnalytics, and getAccountPnl at the module level."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.7,
+      "impact": "renderWithProviders includes SessionProvider but does NOT allow passing custom session state. SessionProvider reads from localStorage, which defaults to empty in jsdom. To test AccountPnlSection with an accountId, you must set localStorage.setItem('bayes-session', JSON.stringify({accountId:'...',agentId:''})) before calling renderWithProviders. No need to extend the helper, but an extra setup step is required for accountId-dependent tests."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "MarketList.test.tsx uses exactly this pattern: one describe block, beforeEach with mock setup, individual it blocks for loading, error, data display, and interactions. The Analytics test should follow the same structure."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "PriceChart has data-testid='price-chart' (line 65) and VolumeChart has data-testid='volume-chart' (line 49). Both are on the SVG container element. Basic presence assertions (getByTestId) work without inspecting individual SVG path elements. However, PriceChart conditionally renders paths when points.length > 1, so mock data with 2+ points is still recommended for a meaningful render."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Analytics.tsx line 68 checks markets.length === 0 and renders 'No markets exist yet. Create a market before loading analytics.' with a Link to /markets/new. This is a distinct state from loading (lines 60-62) and error (lines 64-66), and the exact text can be asserted on."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
