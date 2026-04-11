@@ -1,0 +1,84 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Tests should render AnalyticsFilters in isolation (unit-style with direct props). The component is purely presentational — all state is managed by the parent via props (markets, selectedMarketId, interval, selectedMarket, onMarketChange, onIntervalChange). This matches the AnalyticsSummaryCards.test.tsx pattern of direct component rendering with props. The existing Analytics.test.tsx already covers integration-level behavior (API mocking, URL params, full page flow). Isolated tests will verify the component's prop/callback contract without duplicating that integration coverage. The only difference from AnalyticsSummaryCards.test.tsx is that renderWithProviders is needed instead of plain render() due to the Link dependency.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/analytics/AnalyticsFilters.tsx:8-15 (props interface — pure presentational, no internal state)",
+        "frontend/src/__tests__/AnalyticsSummaryCards.test.tsx:1-66 (precedent: analytics sub-component tested with direct props)",
+        "frontend/src/__tests__/Analytics.test.tsx:102-137 (integration tests already cover dropdown and interval toggle via full page)"
+      ],
+      "uncertainty": "None significant. The component has no hooks, no internal state, no API calls — it's a clear candidate for isolated unit tests."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes, AnalyticsFilters requires MemoryRouter wrapping because it imports and renders Link from react-router-dom (line 1, lines 52-56). The Link component is conditionally rendered when selectedMarket is provided. renderWithProviders from helpers.tsx should be used — it wraps with MemoryRouter, QueryClientProvider, and SessionProvider. This is the established pattern used across 8+ test files (Analytics.test.tsx, MarketDetail.test.tsx, MarketList.test.tsx, etc.). For test cases that don't provide a selectedMarket, the Link won't render, but using renderWithProviders consistently is simpler and matches project conventions.",
+      "confidence": 0.98,
+      "evidence": [
+        "frontend/src/features/analytics/AnalyticsFilters.tsx:1 (import { Link } from 'react-router-dom')",
+        "frontend/src/features/analytics/AnalyticsFilters.tsx:52-56 (conditional Link rendering when selectedMarket exists)",
+        "frontend/src/__tests__/helpers.tsx:17-34 (TestProviders wraps with MemoryRouter)",
+        "frontend/src/__tests__/helpers.tsx:36-51 (renderWithProviders function)"
+      ],
+      "uncertainty": "None. Link requires Router context — this is a hard React Router requirement."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes, tests should verify the 'Open Market' link renders with the correct href. The link points to /markets/${selectedMarket.id} (line 53) and is conditionally rendered only when selectedMarket is provided (line 52). This is a meaningful behavioral test: (1) it verifies correct conditional rendering (present with selectedMarket, absent without), (2) it verifies the href is constructed correctly from the market ID, and (3) it follows the pattern in Analytics.test.tsx line 90 where a link's href attribute is tested (screen.getByRole('link', { name: /Create a market/ }).toHaveAttribute('href', '/markets/new')). Additionally, tests should verify the market metadata (title, StatusBadge, liquidity, volume, expiration) renders when selectedMarket is provided, as these are distinct behavioral paths in the component.",
+      "confidence": 0.92,
+      "evidence": [
+        "frontend/src/features/analytics/AnalyticsFilters.tsx:52-56 (Link to /markets/${selectedMarket.id})",
+        "frontend/src/features/analytics/AnalyticsFilters.tsx:39-49 (conditional market metadata rendering)",
+        "frontend/src/__tests__/Analytics.test.tsx:90 (precedent: testing link href with getByRole + toHaveAttribute)"
+      ],
+      "uncertainty": "Whether to test the formatted values of liquidity/volume/expiration or just their presence. Since formatCurrency and timeUntil are tested elsewhere, presence is sufficient."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Use toHaveStyle({ borderColor: 'var(--color-primary)' }) for active state and toHaveStyle({ borderColor: 'var(--color-border)' }) for inactive state. This is the exact pattern used in Analytics.test.tsx lines 126, 130, 135. The component applies inline styles via a spread pattern (lines 94-98): ...intervalButtonStyle is the base, then borderColor, background, and color are conditionally set based on the 'active' boolean. Since these are inline styles (not CSS classes), toHaveStyle works reliably with jest-dom. For isolated tests, we control the interval prop directly, so we can test: (1) with interval='day', Day button has active style and Hour has inactive, (2) with interval='hour', Hour button has active style and Day has inactive. No waitFor needed since it's synchronous prop-driven rendering.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/analytics/AnalyticsFilters.tsx:94-98 (conditional inline style spread)",
+        "frontend/src/__tests__/Analytics.test.tsx:126 (toHaveStyle({ borderColor: 'var(--color-primary)' }))",
+        "frontend/src/__tests__/Analytics.test.tsx:130-135 (same pattern for toggle verification)"
+      ],
+      "uncertainty": "None. Inline styles are the most reliable target for toHaveStyle assertions, and this is an established project pattern."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Tests will use renderWithProviders with direct <AnalyticsFilters .../> rendering and vi.fn() callbacks. No API mocking needed."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "renderWithProviders provides MemoryRouter context required by the Link component. This is the standard pattern across the test suite."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.93,
+      "impact": "Follow AnalyticsSummaryCards.test.tsx structure (direct props, makeSummary-style helper) but swap render() for renderWithProviders() due to Link dependency. Use MarketSummary type for test data."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.90,
+      "impact": "Test scope covers: (1) rendering without selectedMarket (fallback text, no link/metadata), (2) rendering with selectedMarket (title, StatusBadge, metadata, Open Market link), (3) dropdown onChange firing onMarketChange with correct value, (4) interval button clicks firing onIntervalChange, (5) active/inactive button styling based on interval prop, (6) Open Market link href correctness. This covers the task's explicit requirements plus the conditional rendering paths."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Tests will not assert on exact formatted output from formatCurrency or timeUntil. Presence of the metadata spans is sufficient since those utilities have their own tests."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
