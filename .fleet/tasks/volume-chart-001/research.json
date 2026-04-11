@@ -1,0 +1,72 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Skip tooltip tests. VolumeChart.tsx has zero tooltip logic — no hover handlers, no tooltip components, no interactive behavior at all. It is a purely static SVG. The 'tooltip display' mentioned in the task almost certainly refers to the trade count labels rendered as <text> elements above each bar (lines 129-137: bucket.tradeCount displayed at position xCenter, y-8). Tests should verify these trade count <text> labels appear with correct values rather than testing nonexistent tooltip/hover behavior.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/analytics/VolumeChart.tsx:129-137",
+        "frontend/src/features/analytics/VolumeChart.tsx:1-184"
+      ],
+      "uncertainty": "Slight chance the task author intended a future tooltip feature, but implementing untested features is out of scope for a test-writing task."
+    },
+    {
+      "question_id": "q2",
+      "answer": "The empty state test should verify current behavior: when buckets=[], the SVG with data-testid='volume-chart' still renders, gridlines and axes are present, but no <rect> bar elements exist. There is no dedicated empty state message or fallback UI — the component simply renders an empty chart frame. The component handles this gracefully by setting maxVolume=1 (line 19) to prevent division by zero. No evidence of a planned empty state message exists anywhere in the codebase.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/analytics/VolumeChart.tsx:18-19",
+        "frontend/src/features/analytics/VolumeChart.tsx:55-94",
+        "frontend/src/features/analytics/VolumeChart.tsx:96-155"
+      ],
+      "uncertainty": "None significant — this is clearly the intended current behavior."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Use relative proportionality checks rather than exact pixel values. Since scaleNumber() is a pure linear mapping from [0, maxVolume] to [0, chartBottom-chartTop], bar heights are exactly proportional to volume. Test by rendering 2+ buckets with known volumes (e.g., 100 and 200) and asserting that the height ratio matches the volume ratio. This approach is resilient to layout constant changes (WIDTH, HEIGHT, MARGIN) while still being precise. Use parseFloat() on the SVG rect height attribute and compare ratios. The existing test suite (ProbabilityBar.test.tsx) uses similar attribute-based assertions on SVG/styled elements.",
+      "confidence": 0.92,
+      "evidence": [
+        "frontend/src/features/analytics/chartUtils.ts:17-30",
+        "frontend/src/features/analytics/VolumeChart.tsx:108-114",
+        "frontend/src/__tests__/ProbabilityBar.test.tsx:29-32",
+        "frontend/src/__tests__/chartUtils.test.ts:24-43"
+      ],
+      "uncertainty": "Floating point precision could cause minor issues, but toBeCloseTo or a small epsilon comparison handles this."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "VolumeChart uses zero React hooks, zero context, zero state. It is purely presentational — render() from @testing-library/react is sufficient. No need for renderWithProviders() or any provider wrappers."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The trade count <text> elements (lines 129-137) are the only 'tooltip-like' display in VolumeChart. Tests should verify these labels render with correct tradeCount values for each bucket."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.93,
+      "impact": "Tests should use Vitest + React Testing Library. No makeBucket() factory exists yet — will need to create a simple helper inline or at the top of the test file. Existing tests use container.querySelectorAll() for SVG elements (ProbabilityBar.test.tsx) and screen.getByTestId() for top-level assertions (Analytics.test.tsx:98). Follow these patterns."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "scaleNumber is a linear mapping: ratio = (value - domainMin) / (domainMax - domainMin). With domainMin=0, height is directly proportional to volume. Rendering buckets with volumes [100, 200] should yield height ratio of exactly 1:2. Use parseFloat on rect height attributes and compare with toBeCloseTo for safety."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "With buckets=[], the buckets.map() produces no <rect> elements but gridlines (lines 55-79) and axes (lines 81-94) still render. Test should assert: SVG present via data-testid, zero <rect> elements, and <line> elements still present."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

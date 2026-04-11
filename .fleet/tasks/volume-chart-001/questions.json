@@ -1,0 +1,57 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The task says to test 'tooltip display', but VolumeChart.tsx has no tooltip logic — it only renders trade count labels above bars. Should I skip tooltip tests, or is there a tooltip feature planned/missing that I should account for?",
+      "category": "requirements",
+      "why_it_matters": "Writing tests for nonexistent tooltip behavior would be wasted effort or would require implementing the feature first."
+    },
+    {
+      "id": "q2",
+      "question": "The task says to test 'empty state handling', but VolumeChart renders an SVG with gridlines and axes when buckets=[] — there is no explicit empty message or fallback UI. Should the empty state test simply verify no bars are rendered plus the gridlines still appear, or is a dedicated empty state planned?",
+      "category": "requirements",
+      "why_it_matters": "Determines whether the test validates current behavior (no bars, gridlines present) or an expected future empty state message."
+    },
+    {
+      "id": "q3",
+      "question": "For testing 'bar heights proportional to volume', the component computes bar height via scaleNumber(volume, 0, maxVolume, 0, chartBottom-chartTop). Should I verify the exact SVG rect height attributes on multiple bars to confirm proportionality, or is a relative comparison (bar A taller than bar B) sufficient?",
+      "category": "design",
+      "why_it_matters": "Exact attribute testing is more thorough but couples tests tightly to internal layout constants. Relative comparison is more resilient but less precise."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "VolumeChart is a pure presentational component that needs only render() (not renderWithProviders) since it has no routing, session, or query client dependencies.",
+      "confidence": 0.99,
+      "if_wrong": "Would need to wrap in providers, but the component imports show no hooks or context usage."
+    },
+    {
+      "id": "a2",
+      "assumption": "'Tooltip display' in the task description refers to the trade count labels rendered as <text> elements above each bar (bucket.tradeCount), since no actual tooltip/hover interaction exists.",
+      "confidence": 0.8,
+      "if_wrong": "Would need to either skip tooltip tests or implement tooltip functionality first."
+    },
+    {
+      "id": "a3",
+      "assumption": "Tests should follow the existing pattern: Vitest imports, React Testing Library render/screen, makeBucket()-style factory for test data, container.querySelectorAll for SVG element assertions.",
+      "confidence": 0.95,
+      "if_wrong": "Minor style adjustments to match a different convention."
+    },
+    {
+      "id": "a4",
+      "assumption": "Bar proportionality can be tested by rendering 2+ buckets with known volumes and asserting that SVG rect 'height' attributes are proportional (e.g., volume 100 gets twice the height of volume 50).",
+      "confidence": 0.9,
+      "if_wrong": "May need to account for floating point precision or use approximate matchers like toBeCloseTo."
+    },
+    {
+      "id": "a5",
+      "assumption": "Empty state test should verify that when buckets=[] the SVG still renders (via data-testid) but contains no <rect> bar elements.",
+      "confidence": 0.85,
+      "if_wrong": "If a dedicated empty state message is expected, would need to test for that text instead."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
