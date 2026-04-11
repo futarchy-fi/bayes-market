@@ -1,0 +1,32 @@
+[Task bayes-t548-v2-execute-t548-v2-r3-test-coverage] PHASE 2: RESEARCH & DECISION
+Title: Bounded-treewidth test coverage
+
+Read .fleet/tasks/bayes-t548-v2-execute-t548-v2-r3-test-coverage/questions.json for the questions to answer.
+Research each question in the codebase. Provide answers with confidence scores.
+
+Write your output to .fleet/tasks/bayes-t548-v2-execute-t548-v2-r3-test-coverage/research.json:
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "...",
+      "confidence": 0.0-1.0,
+      "evidence": ["file:line", ...],
+      "uncertainty": "what you're not sure about",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    { "assumption_id": "a1", "verdict": "CORRECT|WRONG|UNCERTAIN", "confidence": 0.0-1.0, "impact": "..." }
+  ],
+  "spawn_children": false,
+  "children": []
+}
+
+DECOMPOSITION: Set spawn_children=true if deeper investigation is needed.
+When to decompose: Low-confidence answers (< 0.5), complex questions requiring
+their own research cycle, or tangential investigations. Each child runs a FULL
+4-phase epistemic workflow. Child format: { "id": "...", "title": "...", "description": "..." }
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "research: bayes-t548-v2-execute-t548-v2-r3-test-coverage"
