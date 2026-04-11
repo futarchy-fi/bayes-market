@@ -1,0 +1,27 @@
+[Task decomp-test-002-question-child-1] PHASE 1: QUESTION GENERATION
+Title: D3.js force-directed network graph
+Description: Replace or extend BayesNetGraph.tsx with a D3.js force-directed layout. Add d3-force and d3-selection dependencies. Implement draggable nodes showing market title and probability bars, directed edges for conditional dependencies, clique overlays, zoom/pan, and responsive sizing. Preserve existing data flow from useMarket/useEngineStats hooks. Include node click callback for CPT editor integration.
+Repo: /home/kelvin/bayes-market
+
+Explore the codebase. Identify what you need to know before building.
+
+YOU MUST create .fleet/tasks/decomp-test-002-question-child-1/questions.json with this structure:
+{
+  "phase": "question",
+  "questions": [
+    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  ],
+  "assumptions": [
+    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  ],
+  "spawn_children": false,
+  "children": []
+}
+
+DO NOT STOP until questions.json exists and contains at least one question.
+Verify: ls -la .fleet/tasks/decomp-test-002-question-child-1/ to confirm the file was written.
+
+DECOMPOSITION: Set spawn_children=true only if sub-questions warrant their own
+full 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: decomp-test-002-question-child-1"
