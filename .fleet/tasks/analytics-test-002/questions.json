@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the test cover AccountPnlSection rendering, given it depends on session.accountId which requires mocking the SessionProvider context?",
+      "category": "requirements",
+      "why_it_matters": "AccountPnlSection has its own loading/error/data states and only renders when accountId is set. Testing it adds significant scope and requires understanding how to inject session state via renderWithProviders."
+    },
+    {
+      "id": "q2",
+      "question": "Should URL search param synchronization (market selection and interval persisting to URL) be tested, or just the visual rendering?",
+      "category": "requirements",
+      "why_it_matters": "The Analytics component uses useSearchParams to sync market and interval to the URL. Testing this requires MemoryRouter initial entries and inspecting URL state changes, which adds complexity but covers an important user-facing behavior."
+    },
+    {
+      "id": "q3",
+      "question": "What mock data shapes are needed for MarketAnalyticsResponse — specifically, do the SVG chart components (PriceChart, VolumeChart) require realistic data points to render meaningful elements, or do they render static structures regardless of data?",
+      "category": "codebase",
+      "why_it_matters": "If charts conditionally render SVG paths/bars based on data array length, the mock data must include at least some points/buckets. If they always render a container with data-testid, minimal mocks suffice."
+    },
+    {
+      "id": "q4",
+      "question": "Does the AnalyticsFilters market dropdown use a native <select> or a custom component, and what role/testid should be used to interact with it in tests?",
+      "category": "codebase",
+      "why_it_matters": "MarketList.test.tsx uses fireEvent.change with getByRole for interactions. The correct query method depends on whether AnalyticsFilters renders a native select (getByRole('combobox')) or a custom dropdown (getByTestId). The explorer found data-testid='market-select' which suggests a testid-based approach."
+    },
+    {
+      "id": "q5",
+      "question": "Should interval toggle (day/hour) button interactions be tested by verifying that useMarketAnalytics is re-called with the new interval, or by checking visual state changes (e.g., active button styling)?",
+      "category": "design",
+      "why_it_matters": "Testing API re-invocation verifies data flow correctness but couples tests to implementation. Testing visual state is more resilient but may miss data-fetch bugs. The MarketList pattern tends toward verifying API calls."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The test file should mock the api client module (vi.mock('@/lib/api/client')) and mock individual functions (listMarkets, getMarketAnalytics, getAccountPnl) rather than mocking the React Query hooks directly.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to mock useMarkets/useMarketAnalytics/useAccountPnl hooks instead, which changes the import structure and assertion patterns."
+    },
+    {
+      "id": "a2",
+      "assumption": "renderWithProviders already handles MemoryRouter, QueryClient, and SessionProvider setup, so no additional wrapper configuration is needed beyond passing route options.",
+      "confidence": 0.9,
+      "if_wrong": "May need to extend renderWithProviders or create a custom wrapper to inject session state (accountId) for AccountPnlSection tests."
+    },
+    {
+      "id": "a3",
+      "assumption": "The test should follow the same describe/it/beforeEach structure as MarketList.test.tsx: one describe block for the component, beforeEach to set up common mocks, and individual it blocks for loading, error, data display, and interaction states.",
+      "confidence": 0.95,
+      "if_wrong": "Minor structural adjustment needed but the overall approach remains the same."
+    },
+    {
+      "id": "a4",
+      "assumption": "Charts (PriceChart, VolumeChart) render containers with data-testid attributes that can be asserted on, without needing to inspect individual SVG path elements.",
+      "confidence": 0.8,
+      "if_wrong": "Tests would need to query for specific SVG elements or text content within chart containers, requiring more detailed mock data."
+    },
+    {
+      "id": "a5",
+      "assumption": "The empty state (no markets) renders a distinct message that can be asserted on, separate from the loading and error states.",
+      "confidence": 0.85,
+      "if_wrong": "Need to check the exact conditional rendering in Analytics.tsx to find what text/element appears when markets array is empty."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
