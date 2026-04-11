@@ -1,0 +1,85 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use plain `render()` from @testing-library/react. The component is purely presentational — it imports only a type (MarketAnalyticsSummary) and a pure function (formatCurrency). It uses no hooks, context, routing, or query libraries. The existing ui-components.test.tsx uses plain `render()` for similarly simple presentational components (ProbabilityBar, Spinner, StatusBadge). Only components that need QueryClient, SessionProvider, or MemoryRouter use renderWithProviders (e.g., Analytics.test.tsx, Portfolio.test.tsx).",
+      "confidence": 0.97,
+      "evidence": [
+        "frontend/src/features/analytics/AnalyticsSummaryCards.tsx:1-2",
+        "frontend/src/__tests__/ui-components.test.tsx:2",
+        "frontend/src/__tests__/ui-components.test.tsx:14-16",
+        "frontend/src/__tests__/helpers.tsx:17-34"
+      ],
+      "uncertainty": "None — the component source clearly has no provider dependencies."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Two separate strategies needed: (1) For numeric toLocaleString() on totalTrades and uniqueTraders — these are locale-dependent (e.g., '1,234' vs '1.234'). The safest approach is to compute the expected value using the same `.toLocaleString()` call in the test assertion, e.g., `expect(screen.getByText(summary.totalTrades.toLocaleString())).toBeInTheDocument()`. This makes tests pass regardless of locale. (2) For date toLocaleString() on lastUpdated — same approach: compute expected via `new Date(summary.lastUpdated).toLocaleString()` in the test. The existing test suite avoids this problem entirely because formatCurrency, formatProbability, formatRelativeTime all use hardcoded formatting (toFixed, string concatenation) — no locale-dependent Intl APIs. But AnalyticsSummaryCards directly calls `.toLocaleString()` on numbers and dates, so we must handle it.",
+      "confidence": 0.92,
+      "evidence": [
+        "frontend/src/features/analytics/AnalyticsSummaryCards.tsx:12",
+        "frontend/src/features/analytics/AnalyticsSummaryCards.tsx:22",
+        "frontend/src/features/analytics/AnalyticsSummaryCards.tsx:27",
+        "frontend/src/lib/utils/format.ts:5-9",
+        "frontend/src/__tests__/format.test.ts:10-14"
+      ],
+      "uncertainty": "The jsdom environment may behave differently from Node's native Intl — but using the same toLocaleString() call in expectations should be consistent within a single test run."
+    },
+    {
+      "question_id": "q3",
+      "answer": "formatCurrency is already independently tested in format.test.ts (lines 10-14) with cases for K suffix, M suffix, and small numbers. The component test should therefore test formatCurrency only through integration — verifying the rendered output shows the correctly formatted value. No need to duplicate the unit tests. However, the existing format.test.ts only has 3 cases and lacks edge cases like zero, negative numbers, and boundary values (exactly 1000, exactly 1M). Those could be added to format.test.ts separately if desired, but the task scope is the component test file only.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/format.test.ts:10-14",
+        "frontend/src/lib/utils/format.ts:5-9"
+      ],
+      "uncertainty": "Whether the task implicitly expects us to also extend format.test.ts — but the task says 'Add tests for AnalyticsSummaryCards component' which scopes to one file."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Practical edge cases to test beyond zero values: (1) Zero values — totalTrades=0, totalVolume=0, uniqueTraders=0. These are realistic when a market has no activity. (2) Large numbers — totalVolume in millions (triggers M suffix), totalTrades in thousands (tests toLocaleString thousands separator). (3) Boundary values for formatCurrency — volume of exactly 999.99 (below 1K), 1000 (at 1K boundary), 999999 (below 1M), 1000000 (at 1M boundary). (4) Fractional volume — e.g., 42.567 which formatCurrency formats to '42.57'. Negative numbers are theoretically possible but not meaningful in a prediction market context (trades/volume/traders are counts). An invalid/empty date string would cause 'Invalid Date' to render — worth testing if being thorough but not high priority.",
+      "confidence": 0.88,
+      "evidence": [
+        "frontend/src/features/analytics/AnalyticsSummaryCards.tsx:10-28",
+        "frontend/src/lib/utils/format.ts:5-9",
+        "frontend/src/lib/api/types.ts:180-186"
+      ],
+      "uncertainty": "Whether the task expects exhaustive edge cases or just 'zero values' as explicitly mentioned. Going with a pragmatic subset: zero values, large numbers (M range), and a typical case."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "No impact — plain render() is the right choice. Component imports only a type and a pure function."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "No impact — all 14 existing test files are in frontend/src/__tests__/. The new file should be at frontend/src/__tests__/AnalyticsSummaryCards.test.tsx."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "WRONG",
+      "confidence": 0.95,
+      "impact": "While vitest.config.ts has globals: true, every existing test file explicitly imports from 'vitest' (e.g., `import { describe, it, expect } from \"vitest\"`). We should follow the established convention and import explicitly."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No impact — formatCurrency is deterministic (uses toFixed, not Intl APIs), so the rendered output is predictable. No mocking needed."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.92,
+      "impact": "This is the right approach. Constructing expected values using the same `new Date(iso).toLocaleString()` call avoids hardcoding locale-specific strings. Same applies to number.toLocaleString() for totalTrades and uniqueTraders."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
