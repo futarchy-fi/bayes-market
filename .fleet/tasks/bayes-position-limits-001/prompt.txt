@@ -1,0 +1,39 @@
+[Task bayes-position-limits-001] PHASE 1: QUESTION GENERATION
+Title: Add position sizing and risk limits for traders
+Description: Prevent traders from taking outsized positions: (1) Add max_position_size config per market (default: 1000 units), (2) Validate position size on trade execution, (3) Add GET /v1/accounts/{id}/exposure endpoint showing total exposure, (4) Return 400 with clear error when limit exceeded, (5) Tests for limit enforcement and exposure calculation
+Repo: /home/kelvin/bayes-market
+
+Explore the codebase. Identify what you need to know before building.
+
+YOU MUST create .fleet/tasks/bayes-position-limits-001/questions.json with this structure:
+{
+  "phase": "question",
+  "questions": [
+    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  ],
+  "assumptions": [
+    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  ],
+
+  "decomposition_assessment": {
+    "complexity_score": <1-5>,
+    "complexity_reason": "why this score - consider: lines of code, number of files, architectural changes needed",
+    "uncertainty_score": <1-5>,
+    "uncertainty_reason": "what you don't know - consider: unfamiliar APIs, unclear requirements, risky changes",
+    "independent_subproblems": ["list clearly separable sub-tasks that could run in parallel"],
+    "decision": "PROCEED_ALONE | SPAWN_CHILDREN",
+    "decision_reason": "justify based on scores and subproblems"
+  },
+
+  "spawn_children": <true if decision=SPAWN_CHILDREN>,
+  "children": [{ "id": "child-1", "title": "...", "description": "..." }]
+}
+
+DECOMPOSITION DECISION RULES:
+- complexity >= 4 AND 2+ independent subproblems → SPAWN_CHILDREN
+- uncertainty >= 4 AND questions span multiple domains → SPAWN_CHILDREN
+- Task requires changes to 5+ files across different modules → SPAWN_CHILDREN
+- Otherwise → PROCEED_ALONE
+
+DO NOT STOP until questions.json exists and contains at least one question.
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: bayes-position-limits-001"
