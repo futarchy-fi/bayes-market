@@ -1,0 +1,82 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Mock at the hook level (useSession, useAccountRisk, useMarkets) following the established codebase pattern",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["API client level mocking (vi.mock('@/lib/api/client')) — fragile for state testing, doesn't match codebase conventions"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Refactor existing unconfigured-session test to use hook-level mocking for consistency",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Leave existing test with api-client mocking — creates confusing dual-strategy in one file"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Test health status colors by asserting inline style.color values on rendered elements",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Only test text content — misses the color requirement", "Add data-testid attributes — changes component code beyond test scope"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Use new Date(timestamp).toLocaleString() in assertions to match rendered output, following AnalyticsSummaryCards pattern",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Only check 'Last updated' presence — less thorough", "Mock toLocaleString — unnecessary complexity"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Refactor existing test: replace vi.mock('@/lib/api/client') with hook-level mocks (vi.mock('@/lib/query/hooks') + vi.mock('@/features/session/context')). Set useSession to return { isConfigured: false, session: { accountId: '', agentId: '' } }. Verify existing assertion still passes.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add loading state test: set useSession isConfigured=true, useAccountRisk returns { isLoading: true, data: undefined, error: null }. Assert LoadingPage renders (look for loading indicator).",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add error state test: set useAccountRisk returns { isLoading: false, data: undefined, error: new Error('fail') }. Assert 'Account not found or no positions yet.' message renders.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Add configured session with full data test: mock useAccountRisk with complete risk data (capacityIndicators with status='healthy', minAssets with markets array) and useMarkets with matching market data. Assert: heading 'Portfolio' renders, MetricCard values render (Limit, Available, Consumed, Utilization percentage, Health status text, Min Asset Overall).",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Add health color tests: three sub-cases for healthy/warning/critical. For each, set cap.status to the value and assert the Health MetricCard value element has style.color equal to 'var(--color-success)'/'var(--color-warning)'/'var(--color-danger)' respectively.",
+      "depends_on": [4]
+    },
+    {
+      "step": 6,
+      "task": "Add timestamp test: set risk.updatedAt to a known ISO string, assert screen contains 'Last updated' followed by new Date(knownTimestamp).toLocaleString().",
+      "depends_on": [4]
+    },
+    {
+      "step": 7,
+      "task": "Add per-market positions table test: mock minAssets.markets with 2 entries, mock useMarkets with matching market titles. Assert table headers render (Market, Min Asset, Utilization, Trades), market links render as <a> with correct href ('/markets/{id}') and market title text, numeric values are formatted correctly.",
+      "depends_on": [4]
+    },
+    {
+      "step": 8,
+      "task": "Add empty positions test: set minAssets.markets to [], assert 'No positions.' text renders.",
+      "depends_on": [4]
+    },
+    {
+      "step": 9,
+      "task": "Run vitest on Portfolio.test.tsx to confirm all tests pass. Fix any failures.",
+      "depends_on": [2, 3, 4, 5, 6, 7, 8]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
