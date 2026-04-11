@@ -1,0 +1,94 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use hybrid mock approach: mock useMarket, useProbabilityEdit, useSession at module level; wrap in real AssumptionProvider with Seeder pattern for assumption toggle tests",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Fully mocking useAssumptions — would only verify mock calls, not real context toggle logic",
+        "Using real providers for everything — useMarket and useProbabilityEdit depend on react-query and API calls, too complex to wire up"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Test exact mutation payload shape including conditional variableId logic (isTargetMarket branch), with two test cases: marketId === targetMarket.id and marketId !== targetMarket.id",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Only asserting mutation.mutate was called — misses the conditional variableId logic on line 52 which is the most important behavioral branch"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Include mutation success/error/pending message rendering tests",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Excluding them — trivial to add and the TradingPanel.test.tsx precedent validates this pattern"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Use fireEvent for all interactions, consistent with all 14+ existing test files in the codebase",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "@testing-library/user-event — not used anywhere in the codebase, would require new dependency"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "crypto.randomUUID() is irrelevant since useProbabilityEdit is mocked — no polyfill needed",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Adding a vi.stubGlobal polyfill — unnecessary since mocking useProbabilityEdit means handleSubmitEdit never actually runs"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Two market fixtures: 'otherMarket' (marketId !== targetMarket.id, shows Assume buttons) and 'targetMarket' used as both marketId and targetMarket (hides Assume buttons, uses targetMarket.variableId for edits)",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Single fixture — cannot test both code paths for isTargetMarket conditional"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create frontend/src/__tests__/VariableRow.test.tsx with module-level mocks (useMarket, useProbabilityEdit, useSession), fixture data (targetMarket, otherMarket, configuredSession, unconfiguredSession), defaultMutationState helper, and renderVariableRow helper that wraps in AssumptionProvider with Seeder pattern",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Write rendering tests: returns null when useMarket has no data; renders market title and outcomes with probabilities; renders '(current)' label for target market; does not render '(current)' for non-target market",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Write assumption toggle tests (non-target market only): Assume button renders for each outcome; clicking Assume adds assumption and shows 'ASSUMED: outcomeId' badge and '✓ Assumed' button text; clicking again removes assumption; Assume button does NOT render when marketId === targetMarket.id",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Write edit flow tests: Edit button renders when session is configured; Edit button hidden when not configured; clicking Edit shows slider and Set/Cancel buttons; changing slider updates displayed probability; clicking Set calls mutation.mutate with correct payload (accountId, variableId, target, context, session); verify conditional variableId: uses targetMarket.variableId when isTargetMarket, uses m.variableId otherwise; clicking Cancel hides slider",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Write mutation feedback tests: Set button shows '…' and is disabled when isPending; success message renders 'Edit accepted: {orderId}'; error message renders error.message for Error instances; error message renders 'Edit failed' for non-Error",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Run vitest on VariableRow.test.tsx to verify all tests pass, fix any failures",
+      "depends_on": [2, 3, 4, 5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
