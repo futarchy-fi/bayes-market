@@ -5,6 +5,7 @@ import type {
   ProbabilityEditPayload,
   EventTradePayload,
   CommentPayload,
+  MarketCommentsResponse,
   Session,
   MarketListFilters,
 } from "@/lib/api/types";
@@ -26,6 +27,23 @@ export const queryKeys = {
   health: () => ["health"] as const,
   serviceIndex: () => ["service-index"] as const,
 };
+
+function createEmptyMarketCommentsResponse(marketId: string): MarketCommentsResponse {
+  return {
+    marketId,
+    comments: [],
+    pagination: {
+      fromSeq: 0,
+      limit: 0,
+      returned: 0,
+      nextFromSeq: null,
+    },
+    meta: {
+      apiVersion: "unknown",
+      timestamp: "1970-01-01T00:00:00.000Z",
+    },
+  };
+}
 
 export function useMarkets(filters: MarketListFilters = {}) {
   return useQuery({
@@ -54,7 +72,9 @@ export function useMarketEvents(marketId: string) {
 export function useMarketComments(marketId: string) {
   return useQuery({
     queryKey: queryKeys.marketComments(marketId),
-    queryFn: () => api.getMarketComments(marketId),
+    // Normalize missing mocks or empty responses into the same empty-thread UI state.
+    queryFn: async () =>
+      (await api.getMarketComments(marketId)) ?? createEmptyMarketCommentsResponse(marketId),
   });
 }
 

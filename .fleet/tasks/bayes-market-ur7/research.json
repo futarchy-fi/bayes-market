@@ -1,0 +1,145 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Treat the acceptance boundary as the full frontend Vitest suite exposed by the checked-in `test` script, not a targeted subset. `frontend/package.json` defines `test` as `vitest run`, CI executes that full script from `frontend/`, and prior artifacts only used targeted Vitest selectors when a task was explicitly scoped to named files.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/package.json:6",
+        "frontend/package.json:10",
+        ".github/workflows/ci.yml:38",
+        ".github/workflows/ci.yml:41",
+        ".fleet/tasks/bayes-market-qg9/validation.json:4",
+        ".fleet/tasks/bayes-market-ur7/questions.json:6"
+      ],
+      "uncertainty": "The task brief does not literally say 'all frontend tests'; this is inferred from the script name, CI behavior, and prior targeted-task precedent.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Use the CI baseline as canonical: Node 22 with pnpm installed globally. That is the only runtime the repo pins for frontend verification, and the worktree has no local Node or pnpm version file beyond the standalone frontend package and lockfile.",
+      "confidence": 0.82,
+      "evidence": [
+        ".github/workflows/ci.yml:30",
+        ".github/workflows/ci.yml:33",
+        ".github/workflows/ci.yml:35",
+        ".github/workflows/ci.yml:38",
+        "frontend/package.json:1",
+        "frontend/pnpm-lock.yaml:1"
+      ],
+      "uncertainty": "CI does not pin a pnpm version, only that pnpm is installed globally, so the exact pnpm major is still implicit.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "For this task, the strict success condition should be `pnpm --dir frontend install` followed by a passing `pnpm --dir frontend test`. `pnpm --dir frontend build` is still a useful CI-parity check, but repo precedent shows inherited build failures being reported separately when the task itself is about frontend test verification rather than full frontend health.",
+      "confidence": 0.77,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ur7/questions.json:18",
+        ".github/workflows/ci.yml:38",
+        ".github/workflows/ci.yml:41",
+        ".github/workflows/ci.yml:45",
+        ".fleet/tasks/bayes-market-b0i/validation.json:4",
+        ".fleet/tasks/bayes-market-b0i/validation.json:12"
+      ],
+      "uncertainty": "If the task is later reinterpreted as full CI parity rather than test-suite verification, `pnpm build` would become mandatory.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "The frontend tests should run self-contained in the worktree without starting a backend. Vitest is configured for `jsdom`; the shared test wrapper provides React Query and `MemoryRouter`; route/component tests mock `@/lib/api/client`; and the API client test stubs `fetch`. The `/v1` and `/healthz` proxy only appears in the Vite dev-server config.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/vitest.config.ts:13",
+        "frontend/vitest.config.ts:14",
+        "frontend/src/__tests__/helpers.tsx:1",
+        "frontend/src/__tests__/helpers.tsx:25",
+        "frontend/src/__tests__/helpers.tsx:27",
+        "frontend/src/__tests__/MarketList.test.tsx:7",
+        "frontend/src/__tests__/System.test.tsx:12",
+        "frontend/src/__tests__/api-client.test.ts:13",
+        "frontend/vite.config.ts:14",
+        "frontend/vite.config.ts:16"
+      ],
+      "uncertainty": "This answer is about the currently checked-in suite; future unmocked tests could add extra setup requirements.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "If `pnpm install` rewrites tracked frontend artifacts such as `frontend/pnpm-lock.yaml`, treat that as environment drift to report, not as intended output of this validation task. The task is framed as setup verification, the frontend lockfile is checked in, and CI installs dependencies only to run verification commands rather than to update dependency state.",
+      "confidence": 0.74,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ur7/questions.json:30",
+        ".fleet/tasks/bayes-market-ur7/questions.json:32",
+        "frontend/pnpm-lock.yaml:1",
+        ".github/workflows/ci.yml:38",
+        ".github/workflows/ci.yml:41"
+      ],
+      "uncertainty": "The repo does not explicitly say 'never commit lockfile drift' for this task, so this is inferred from scope and the checked-in lockfile convention.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "Document a passing run with the exact command(s) executed, a per-test-file result list, and the overall Vitest summary/count. Individual `it(...)` names are not necessary unless a file fails or someone explicitly asks for case-level output. That matches the repo's validation style, which records suite-level counts, while still satisfying the brief's requirement to document which tests were run.",
+      "confidence": 0.71,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ur7/questions.json:36",
+        ".fleet/tasks/bayes-market-ur7/questions.json:38",
+        ".fleet/tasks/bayes-market-b0i/validation.json:4",
+        ".fleet/tasks/test-epistemic-001/validation.json:12",
+        "frontend/package.json:10"
+      ],
+      "uncertainty": "There is no explicit repo-wide reporting schema for frontend verification, so the per-file layer is a pragmatic inference rather than a written rule.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q7",
+      "answer": "If `pnpm test` still fails after a clean install, the expected outcome is a documented reproduction of the worktree/setup failure first, not automatic open-ended debugging of inherited frontend breakages. Repo precedent records failed verification as a validation outcome, and inherited failures outside the task diff were later tracked separately rather than absorbed into the task scope.",
+      "confidence": 0.85,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ur7/questions.json:42",
+        ".fleet/tasks/bayes-market-ur7/questions.json:44",
+        ".fleet/tasks/bayes-market-qg9/validation.json:4",
+        ".fleet/tasks/bayes-market-b0i/validation.json:4",
+        ".fleet/tasks/bayes-market-b0i/validation.json:12"
+      ],
+      "uncertainty": "If the failure is clearly introduced by the task's own changes rather than inherited state, the execution phase should fix it instead of only reporting it.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Later execution should run from this temporary worktree and scope dependency install/test commands to `frontend/`; using another checkout would defeat the point of worktree verification."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.94,
+      "impact": "The default verification command should be the full `pnpm test` script, with targeted Vitest selectors reserved for narrower diagnostics after the suite result is known."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No backend startup should be part of the default recipe; if the suite fails, it is reasonable to treat that as a frontend/worktree problem unless a new unmocked test proves otherwise."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.82,
+      "impact": "Node 22 should be used as the baseline for the execution phase, and unexpected install drift should be treated as possible pnpm-version mismatch before assuming broken app code."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.71,
+      "impact": "The execution report should capture commands, per-file outcomes, and the Vitest summary, without expanding into individual test-case inventories unless failures make that necessary."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

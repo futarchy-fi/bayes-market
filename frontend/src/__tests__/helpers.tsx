@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { SessionProvider } from "@/features/session/context";
+import { routerFuture } from "@/app/routerFuture";
 import { render, type RenderOptions } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 
@@ -24,7 +25,9 @@ function TestProviders({
   return (
     <QueryClientProvider client={qc}>
       <SessionProvider>
-        <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
+        <MemoryRouter future={routerFuture} initialEntries={initialEntries}>
+          {children}
+        </MemoryRouter>
       </SessionProvider>
     </QueryClientProvider>
   );
