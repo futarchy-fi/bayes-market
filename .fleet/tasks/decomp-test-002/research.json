@@ -1,0 +1,157 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "ForceDirectedGraph.tsx already exists as a separate D3-based component alongside BayesNetGraph.tsx. They coexist — BayesNetGraph uses a pure-math circular layout with no D3, while ForceDirectedGraph uses d3-force with drag, zoom, and node click handlers. Neither is currently wired into the main app routes (only imported in tests). The task should integrate ForceDirectedGraph into the app rather than replacing BayesNetGraph — both can coexist as alternative views.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:39-60 (circular layout, no D3)",
+        "frontend/src/features/graph/ForceDirectedGraph.tsx:21-25 (onNodeClick prop)",
+        "frontend/src/features/graph/useForceGraph.ts:44-147 (d3-force simulation wrapper)",
+        "frontend/src/__tests__/BayesNetGraph.test.tsx:4 (only test file imports BayesNetGraph)"
+      ],
+      "uncertainty": "Neither component is currently integrated into the app router. The exact UX for switching views is not defined."
+    },
+    {
+      "question_id": "q2",
+      "answer": "CptPanel.tsx (297 lines) ALREADY EXISTS with a full matrix-style CPT editor. It renders a table with parent variables as row headers and outcomes as columns, supports inline cell editing via range sliders, has draft management (useDraftEdits hook with asterisk markers for unsaved changes), and batch commit functionality that uses the existing useProbabilityEdit mutation. 'Interactive node editing' concretely means wiring ForceDirectedGraph's onNodeClick to open CptPanel for the clicked market.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/trading/CptPanel.tsx:1-297 (full CPT editor)",
+        "frontend/src/features/history/useDraftEdits.ts:11-89 (draft management with undo)",
+        "frontend/src/lib/query/hooks.ts:90-96 (useCpt query hook)",
+        "frontend/src/lib/api/client.ts:159-165 (GET /v1/markets/{id}/cpt)",
+        "frontend/src/lib/api/types.ts:350-370 (CptResponse, CptParent, CptEntry types)"
+      ],
+      "uncertainty": "None — the CPT editor is fully implemented with drafts, batch commit, and undo support."
+    },
+    {
+      "question_id": "q3",
+      "answer": "The backend uses junction tree exact inference and returns ONLY final marginals via synchronous HTTP REST. query_marginals() returns MarginalQueryResult with marginals dict, runtime_ms, cache_hit — no intermediate steps. There is NO WebSocket, SSE, or streaming infrastructure. useAnimationPropagation.ts ALREADY EXISTS with BFS-based frontend simulation of propagation, using staggered layer timing (150ms/hop, max 1500ms), CSS keyframes (evidence-pulse, propagation-arrive, edge-flow), and SVG filters for glow effects.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/inference/current_model.py:458-487 (query_marginals returns final dict only)",
+        "backend/inference/contracts.py:72-87 (MarginalQueryResult — no intermediate fields)",
+        "backend/inference/config.py:38-45 (junction_tree exact inference)",
+        "frontend/src/features/graph/useAnimationPropagation.ts:26-58 (BFS layer propagation)",
+        "frontend/src/features/graph/useAnimationPropagation.ts:5-6 (HOP_DELAY=150ms, MAX_DURATION=1500ms)",
+        "frontend/src/features/graph/BayesNetGraph.tsx:453-471 (CSS keyframe animations)"
+      ],
+      "uncertainty": "None — backend is confirmed synchronous-only and frontend animation already exists."
+    },
+    {
+      "question_id": "q4",
+      "answer": "A custom versioned JSON schema (NetworkExportSchema) ALREADY EXISTS and is fully implemented. It includes version number, exportedAt timestamp, metadata (counts), nodes (with positions), edges (typed as 'clique' or 'conditional'), and cliques. Export uses buildNetworkExport() + downloadJson() with Blob/ObjectURL. Import uses readAndValidateFile() with custom type guards for validation. No external schema library needed.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/graph/networkExportSchema.ts:1-36 (NetworkExportSchema interface, version=1)",
+        "frontend/src/features/graph/networkExport.ts:19-73 (buildNetworkExport + downloadJson)",
+        "frontend/src/features/graph/networkImport.ts:1-107 (validateNetworkExport + readAndValidateFile)",
+        "frontend/src/features/graph/networkImport.ts:11-43 (custom type guards)"
+      ],
+      "uncertainty": "None — export/import is fully implemented with schema validation."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Undo/redo ALREADY EXISTS tracking local state only. HistoryContext provides a command pattern with push/undo/redo/clear, capped at 50 commands. Four command types are implemented: AssumptionAddCommand, AssumptionRemoveCommand, AssumptionClearAllCommand, ProbabilityEditCommand (for drafts). Keyboard shortcuts (Ctrl+Z, Ctrl+Shift+Z/Ctrl+Y) are wired via useUndoRedoKeyboard. UndoRedoToolbar renders undo/redo buttons with status text and tooltips. Server mutations are NOT reversible.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/history/HistoryContext.tsx:1-116 (HistoryProvider, HISTORY_CAP=50)",
+        "frontend/src/features/history/commands.ts:1-143 (Command interface + 4 implementations)",
+        "frontend/src/features/history/useUndoRedoKeyboard.ts:1-47 (Ctrl+Z/Ctrl+Shift+Z)",
+        "frontend/src/features/history/UndoRedoToolbar.tsx:1-66 (toolbar UI)",
+        "frontend/src/features/history/useDraftEdits.ts:46-64 (drafts integrate with history)"
+      ],
+      "uncertainty": "None — undo/redo is fully implemented for local state."
+    },
+    {
+      "question_id": "q6",
+      "answer": "D3.js modular packages are ALREADY installed as dependencies: d3-drag@^3.0.0, d3-force@^3.0.0, d3-selection@^3.0.0, d3-zoom@^3.0.0 (plus all @types/ counterparts). ForceDirectedGraph.tsx and useForceGraph.ts actively use them. The dependency philosophy has already shifted to include D3 modules — this is a non-issue.",
+      "confidence": 1.0,
+      "evidence": [
+        "frontend/package.json:14-38 (d3-drag, d3-force, d3-selection, d3-zoom listed)",
+        "frontend/src/features/graph/useForceGraph.ts:1-3 (imports d3-force, d3-selection, d3-drag, d3-zoom)",
+        "frontend/src/features/graph/ForceDirectedGraph.tsx (uses D3 force layout)"
+      ],
+      "uncertainty": "None — D3 is already a project dependency."
+    },
+    {
+      "question_id": "q7",
+      "answer": "Animation uses a hybrid approach ALREADY IMPLEMENTED: JavaScript setTimeout-based orchestration in useAnimationPropagation.ts for staggered BFS layer timing, CSS @keyframes for visual effects (evidence-pulse 0.8s infinite, propagation-arrive 0.3s, edge-flow 0.4s), SVG filters for glow/shadow effects, and CSS transitions on probability bars (width 0.3s ease). No animation library is used or needed. The pattern is: JS manages which nodes/edges are in which animation state, CSS handles the actual visual transitions.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/graph/useAnimationPropagation.ts:64-169 (setTimeout orchestration)",
+        "frontend/src/features/graph/BayesNetGraph.tsx:453-471 (CSS keyframes)",
+        "frontend/src/features/graph/BayesNetGraph.tsx:437-452 (SVG filters)",
+        "frontend/src/components/ui/ProbabilityBar.tsx:38 (CSS transition)",
+        "frontend/package.json (no framer-motion or react-spring)"
+      ],
+      "uncertainty": "None — animation approach is established and working."
+    },
+    {
+      "question_id": "q8",
+      "answer": "Networks are expected to be small to medium (under 50 nodes). Backend config has max_treewidth=8, which naturally constrains practical network complexity. The circular layout scales radius as Math.max(120, n*40), and the force graph uses collision radius 50 with link distance 120 — both tuned for small networks. No test fixtures or production data suggest large networks. SVG rendering is sufficient for this scale; no canvas/WebWorker optimization needed.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/inference/config.py:19 (max_treewidth=8)",
+        "frontend/src/features/graph/BayesNetGraph.tsx:46 (radius = Math.max(120, n*40))",
+        "frontend/src/features/graph/useForceGraph.ts:67-70 (force params tuned for small graphs)"
+      ],
+      "uncertainty": "No production dataset size data available. Confidence based on backend constraints and UI tuning parameters suggesting small networks are the design target."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "WRONG",
+      "confidence": 0.95,
+      "impact": "ForceDirectedGraph already exists as a separate component. The two graph components already coexist. No replacement needed — the task is about integrating ForceDirectedGraph into the app routes, potentially with a view switcher. This actually REDUCES scope since the D3 graph already exists."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "CptPanel.tsx already provides a full matrix CPT editor with draft management and batch commit. The task reduces to wiring onNodeClick → open CptPanel. Minimal new component work needed."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "useAnimationPropagation.ts already implements BFS-based frontend simulation. Backend confirmed to return only final marginals with no streaming. Animation architecture is settled and implemented."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "NetworkExportSchema already exists as a versioned JSON format with full export/import implementation including validation. No new schema design needed."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "HistoryContext with command pattern already tracks local state only (assumptions + probability drafts). Keyboard shortcuts and toolbar already wired. No server-side undo needed or planned."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Backend max_treewidth=8 and UI parameters confirm small network expectations. No performance optimization needed for force simulation."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "React Query + Context (Session, Assumption, History) already handle all state including undo/redo with command pattern. No need for Zustand/Redux."
+    }
+  ],
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.85,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All 8 questions answered with confidence >= 0.85. Zero uncertain answers (all above 0.7 threshold). Critical finding: most features described in the task ALREADY EXIST in the codebase (ForceDirectedGraph, CptPanel, useAnimationPropagation, NetworkExportSchema, HistoryContext with undo/redo). The remaining work is primarily integration — wiring existing components together and adding them to the app router. This dramatically reduces complexity from the initial estimate. No research gaps remain. PROCEED_ALONE is appropriate since all questions are resolved and the implementation path is clear."
+  },
+  "spawn_children": false,
+  "children": []
+}
