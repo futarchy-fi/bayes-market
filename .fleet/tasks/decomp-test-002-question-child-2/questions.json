@@ -1,0 +1,87 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Where should the CPT panel render — as a new section within MarketDetail.tsx, as a sibling to the existing AssumptionPanel/TradingPanel, or as a floating overlay anchored to the clicked SVG node?",
+      "category": "design",
+      "why_it_matters": "MarketDetail.tsx currently renders all panels inline on one scrollable page with no modal system. A floating overlay near the graph node would require new positioning logic and portal rendering, while an inline panel would follow existing patterns but lose the direct visual link to the clicked node."
+    },
+    {
+      "id": "q2",
+      "question": "BayesNetGraph nodes currently have no click handlers. Should the panel open when clicking a node in the existing BayesNetGraph SVG, and if so, should it open for any node or only the focused market's node?",
+      "category": "requirements",
+      "why_it_matters": "The graph shows multiple markets as SVG rects. Clicking a non-focus node could mean navigating to that market's detail page, opening a CPT panel inline, or opening a lightweight popover. This affects whether we need cross-market data fetching and how the graph component's props change."
+    },
+    {
+      "id": "q3",
+      "question": "The backend stores conditional marginals in CONDITIONAL_MARGINALS as {marketId: {contextKey: {outcomeId: probability}}}. Is there an existing API endpoint to fetch the full CPT for a given variable, or do we need to query marginals repeatedly with different context combinations?",
+      "category": "codebase",
+      "why_it_matters": "If there's no bulk CPT endpoint, displaying a full conditional probability table requires either N API calls (one per parent configuration) or a new backend endpoint. This fundamentally shapes whether the panel can show a complete CPT or only the currently-conditioned marginals."
+    },
+    {
+      "id": "q4",
+      "question": "When editing conditional probabilities, should changes to P(X|parent=a) automatically adjust P(X|parent=b) to maintain consistency, or does the backend inference engine handle normalization?",
+      "category": "requirements",
+      "why_it_matters": "The existing ConditionalEditor and VariableRow send individual probability edits via useProbabilityEdit. If the UI must enforce that rows sum to 1.0 across outcomes for each conditioning context, the component needs local state tracking all values simultaneously rather than independent per-outcome edits."
+    },
+    {
+      "id": "q5",
+      "question": "How are a node's conditional parents determined on the frontend? The graph edges are rendered in BayesNetGraph but I need to confirm: does the Market type or a related API response include a list of parent variable IDs, or must they be derived from the graph edges?",
+      "category": "codebase",
+      "why_it_matters": "To show 'conditional dependencies' in the CPT panel, we need to know which variables condition this node. If this isn't in the Market response, we'd need to either parse graph edge data or add a new API call, which affects the component's data dependencies."
+    },
+    {
+      "id": "q6",
+      "question": "Should the CPT panel support editing unconditional (marginal) probabilities as well, or only conditional probabilities? The VariableRow component already handles marginal edits inline.",
+      "category": "requirements",
+      "why_it_matters": "If the CPT panel duplicates VariableRow's marginal editing capability, we risk UX confusion with two edit surfaces for the same data. If it only shows conditionals, nodes without parents would have an empty or disabled panel. Need clarity on whether this replaces or supplements existing editors."
+    },
+    {
+      "id": "q7",
+      "question": "The ProbabilityEditPayload constrains probability between 0.01 and 0.99. Does 'must sum to 1.0' validation apply per-outcome within a single context row, or across all outcomes for a given conditioning configuration?",
+      "category": "requirements",
+      "why_it_matters": "Validation logic depends on whether the user edits one outcome at a time (like the existing slider) or all outcomes in a row simultaneously (like a table). A table view with multiple editable cells needs coordinated validation; a single-slider approach needs only range checking."
+    },
+    {
+      "id": "q8",
+      "question": "What data does the graph's edge list carry — specifically, do edges include directionality (parent → child) and are they accessible as props or only computed internally within BayesNetGraph?",
+      "category": "codebase",
+      "why_it_matters": "The CPT panel needs to know which variables are parents vs children. If edges are computed inside BayesNetGraph without being exposed, we'd need to refactor the graph component or duplicate the edge computation logic."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The CPT panel should follow existing inline-panel patterns (rendered as a React component in the page flow) rather than introducing a new modal/dialog system.",
+      "confidence": 0.85,
+      "if_wrong": "Would need to add a modal/overlay system, portal rendering, and click-outside-to-close behavior — none of which exist in the current codebase."
+    },
+    {
+      "id": "a2",
+      "assumption": "The useProbabilityEdit hook's existing ProbabilityEditPayload format (single outcome + context array) is sufficient — no new API endpoints are needed for CPT edits.",
+      "confidence": 0.7,
+      "if_wrong": "Would need a new backend endpoint for bulk CPT updates (setting all conditional probabilities at once), plus a new mutation hook or payload type."
+    },
+    {
+      "id": "a3",
+      "assumption": "The 'must sum to 1.0' validation means all outcome probabilities within a single conditioning context must sum to 1.0, and the frontend should enforce this before submission.",
+      "confidence": 0.8,
+      "if_wrong": "If the backend normalizes automatically, frontend validation would be advisory only and simpler to implement."
+    },
+    {
+      "id": "a4",
+      "assumption": "Graph edges are derived from CONDITIONAL_MARGINALS on the backend and returned as part of the market or graph API response, providing parent-child directionality.",
+      "confidence": 0.6,
+      "if_wrong": "Would need to either add edge/dependency data to the API response or compute dependencies from the junction tree clique structure on the frontend."
+    },
+    {
+      "id": "a5",
+      "assumption": "The panel should open for the currently-viewed market's node only (the focusMarketId), not for arbitrary nodes in the graph.",
+      "confidence": 0.55,
+      "if_wrong": "Would need to handle multi-market data fetching, cross-market navigation, and a more complex open/close state management system."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

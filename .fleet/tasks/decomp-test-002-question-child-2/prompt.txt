@@ -1,0 +1,27 @@
+[Task decomp-test-002-question-child-2] PHASE 1: QUESTION GENERATION
+Title: Interactive CPT viewer/editor panel
+Description: Create a CPT (Conditional Probability Table) panel component that opens when a graph node is clicked. Display the node's current marginal probabilities and conditional dependencies. Allow inline editing of probability values with validation (must sum to 1.0). Integrate with existing useProbabilityEdit mutation hook for persistence. Support both unconditional and conditional probability views. Follow existing inline-styling patterns with CSS custom properties.
+Repo: /home/kelvin/bayes-market
+
+Explore the codebase. Identify what you need to know before building.
+
+YOU MUST create .fleet/tasks/decomp-test-002-question-child-2/questions.json with this structure:
+{
+  "phase": "question",
+  "questions": [
+    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  ],
+  "assumptions": [
+    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  ],
+  "spawn_children": false,
+  "children": []
+}
+
+DO NOT STOP until questions.json exists and contains at least one question.
+Verify: ls -la .fleet/tasks/decomp-test-002-question-child-2/ to confirm the file was written.
+
+DECOMPOSITION: Set spawn_children=true only if sub-questions warrant their own
+full 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: decomp-test-002-question-child-2"
