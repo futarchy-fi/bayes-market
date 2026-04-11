@@ -1,0 +1,113 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Create backend/inference/junction_tree.py as a new file alongside current_model.py. Both implement the same protocol contracts. No modification to current_model.py.",
+      "based_on": ["q1", "q6"],
+      "alternatives_rejected": [
+        "Modifying current_model.py to add junction tree logic — violates single-responsibility and risks breaking existing tests",
+        "Creating a separate sub-package (backend/inference/junction_tree/) — overkill for a skeleton with one implementation file"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Implement InferenceCompiler and InferenceQueryBackend protocols as-is. The compile_market method will accept a market_id but internally compile the full network when a graph structure is provided via a separate compile_network method. This keeps protocol compatibility while exposing the natural network-scoped API as an additional method.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Defining new protocol extensions in contracts.py — changes scope from 'one new file' to 'contracts extension + new file', higher blast radius",
+        "Only implementing per-market compile_market with no network-level method — makes the junction tree compiler useless for its actual purpose"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Add a max_treewidth parameter (default 15) to JunctionTreeCompiler. During compilation, if computed treewidth exceeds the bound, set exact_eligible=False with an explanatory eligibility_reason. This follows the pattern of CurrentModelCompileArtifact which already has junction_tree_width and exact_eligible fields.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Raising InferenceCompileError on exceeded treewidth — too aggressive; downstream tasks (T555) need the artifact to decide on fallback",
+        "No bound at all — contradicts the 'bounded-treewidth' module name"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Define JunctionTreeCompileArtifact as a frozen dataclass with typed fields: cliques (tuple of CliqueSummary), separator_sets (tuple of frozensets), elimination_ordering (tuple of str), message_schedule (tuple of tuples for directed edges), and potential_tables as Optional[Mapping] starting as None. This captures the full junction tree topology while deferring potential table population to implementation tasks.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Storing only cliques with no separators or schedule — insufficient for message-passing implementation",
+        "Using numpy ndarrays for potential tables — adds external dependency inconsistent with pure-Python codebase"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Use existing context: Mapping[str, str] | None for hard evidence in query methods. Do not add soft evidence parameters. The interface naturally extends later since Mapping is a protocol type.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Adding soft_evidence parameter now — T549/T550 handle soft-evidence paths, premature in skeleton",
+        "Replacing context with a new Evidence dataclass — breaks protocol compatibility"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "No server.py wiring. The skeleton module is independently importable and testable. Server dispatch between current model and junction tree backends is a separate integration task.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Wiring into compile_market_for_inference now — increases blast radius, risk of breaking existing server tests"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d7",
+      "decision": "Include a placeholder _triangulate method in JunctionTreeCompiler that raises InferenceUnsupportedQueryError. The compile_network method accepts an optional elimination_ordering parameter; if not provided, it calls _triangulate (which raises until implemented). This makes the boundary explicit.",
+      "based_on": ["q7"],
+      "alternatives_rejected": [
+        "Always requiring pre-computed elimination ordering — makes the compiler unusable standalone",
+        "Implementing a real min-fill or min-degree heuristic in the skeleton — premature optimization, belongs in a child task"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d8",
+      "decision": "Define graph input as lightweight TypedDicts (VariableNode, DirectedEdge, BayesianNetworkGraph) for JSON-serializable network structure. Place these in junction_tree.py, not in contracts.py. Move to contracts.py only if other modules need them.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Using a formal Graph dataclass in contracts.py — premature shared dependency; only junction_tree.py needs it now",
+        "Using raw dicts with no typing — loses IDE support and documentation value"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create backend/inference/junction_tree.py with graph input TypedDicts (VariableNode with id/outcomes, DirectedEdge with parent/child, BayesianNetworkGraph with variables/edges/cpts), JunctionTreeCompileArtifact frozen dataclass (market_id, variable_ids, cliques, separator_sets, elimination_ordering, message_schedule, potential_tables, junction_tree_width, exact_eligible, eligibility_reason, source_state_hash, compile_id, compile_type, memory_bytes), and a to_compile_result() method matching CurrentModelCompileArtifact's pattern.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Implement JunctionTreeCompiler class with: (a) max_treewidth parameter (default 15), (b) compile_market protocol method that raises InferenceUnsupportedQueryError('junction tree compilation requires compile_network, not compile_market'), (c) compile_network method accepting BayesianNetworkGraph and optional elimination_ordering that builds the JunctionTreeCompileArtifact skeleton (clique topology only, no potentials), (d) _triangulate placeholder that raises InferenceUnsupportedQueryError, (e) _check_treewidth that sets exact_eligible based on max_treewidth bound.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Implement JunctionTreeQueryBackend class with: (a) query_marginals that validates the artifact, checks exact_eligible, and raises InferenceUnsupportedQueryError('junction tree message passing not yet implemented'), (b) query_atomic_event with same validation and placeholder raise. Both should follow CurrentModelQueryBackend's validation pattern using a _require_junction_tree_artifact helper.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Add module-level constants and singletons: JUNCTION_TREE_EXACT_ELIGIBILITY_REASON, JUNCTION_TREE_COMPILER (JunctionTreeCompiler instance), JUNCTION_TREE_QUERY_BACKEND (JunctionTreeQueryBackend instance). Export all public names from backend/inference/__init__.py following the existing pattern.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Write tests in backend/inference/tests/test_junction_tree.py: (a) JunctionTreeCompileArtifact construction and to_compile_result round-trip, (b) compile_market raises InferenceUnsupportedQueryError, (c) compile_network with a simple 3-node chain graph produces correct clique structure, (d) query_marginals and query_atomic_event raise InferenceUnsupportedQueryError on placeholder, (e) treewidth bound check sets exact_eligible=False when exceeded, (f) imports from __init__.py work correctly.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
