@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should formatTimestampLabel and formatBucketRangeLabel tests pin a specific timezone (e.g. via TZ env var) to avoid locale-dependent failures in CI vs local dev?",
+      "category": "design",
+      "why_it_matters": "These functions use toLocaleDateString/toLocaleTimeString which produce different output depending on the runtime's timezone and locale. Tests will be flaky without a deterministic approach."
+    },
+    {
+      "id": "q2",
+      "question": "No vitest.config.ts exists — the vite.config.ts has the @ path alias but no test block. Should the test file import via relative paths or should we add a test config with resolve.alias?",
+      "category": "codebase",
+      "why_it_matters": "The existing tests use @/ imports (e.g. format.test.ts imports from @/lib/utils/format). If vitest resolves these through vite.config.ts automatically, we can do the same; otherwise the new test will fail to resolve imports."
+    },
+    {
+      "id": "q3",
+      "question": "formatSignedCurrency delegates to formatCurrency from @/lib/utils/format. Should we mock formatCurrency to isolate the unit, or test the composed behavior directly (matching existing test style)?",
+      "category": "design",
+      "why_it_matters": "The existing format.test.ts tests formatCurrency directly without mocks. Using the same approach for formatSignedCurrency means tests double-cover formatCurrency logic, but matches the repo convention of no mocks for pure functions."
+    },
+    {
+      "id": "q4",
+      "question": "getOutcomeColor uses nullish coalescing (?? '#818cf8') after index-modulo lookup. With noUncheckedIndexedAccess enabled in tsconfig, the return type includes undefined — should tests specifically verify the fallback path (negative indices, NaN)?",
+      "category": "requirements",
+      "why_it_matters": "The ?? fallback only activates if OUTCOME_COLORS[index % length] returns undefined, which in practice only happens with NaN % length = NaN. Testing this edge case validates the defensive coding."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Vitest resolves the @/ path alias from vite.config.ts automatically (since existing tests like format.test.ts already use @/ imports successfully)",
+      "confidence": 0.95,
+      "if_wrong": "Need to add a vitest.config.ts with resolve.alias or use relative imports in the test file"
+    },
+    {
+      "id": "a2",
+      "assumption": "Tests should follow the existing convention: vitest imports (describe/it/expect), @/ path aliases, concise one-liner assertions where possible, describe blocks per function",
+      "confidence": 0.98,
+      "if_wrong": "Would need to restructure tests to match a different convention"
+    },
+    {
+      "id": "a3",
+      "assumption": "For locale-dependent functions (formatTimestampLabel, formatBucketRangeLabel), we can test structural properties (contains expected substrings, correct format pattern) rather than exact string matches to avoid timezone/locale flakiness",
+      "confidence": 0.85,
+      "if_wrong": "May need to set TZ=UTC and mock locale, or use regex-based assertions"
+    },
+    {
+      "id": "a4",
+      "assumption": "No mocking is needed — all six functions are pure (or locale-dependent but deterministic for a given environment) and have no external dependencies beyond formatCurrency which is itself pure",
+      "confidence": 0.95,
+      "if_wrong": "Would need vi.mock() for formatCurrency in formatSignedCurrency tests"
+    },
+    {
+      "id": "a5",
+      "assumption": "The test file should be placed at frontend/src/__tests__/chartUtils.test.ts matching the existing flat test directory structure",
+      "confidence": 0.99,
+      "if_wrong": "Task description explicitly specifies this path"
+    },
+    {
+      "id": "a6",
+      "assumption": "OUTCOME_COLORS array has 6 entries, so index wrapping tests should verify indices 0-5 return distinct colors and index 6 wraps to index 0's color",
+      "confidence": 1.0,
+      "if_wrong": "Would need to adjust test expectations if array size differs"
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
