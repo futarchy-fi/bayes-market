@@ -174,6 +174,7 @@ MARKET_SERVICE_INDEX_ROUTES = (
     "GET /v1/markets/{id}/comments",
     "POST /v1/markets/{id}/comments",
     "/v1/markets/{id}/engine-stats",
+    "GET /v1/markets/{id}/cpt",
     "POST /v1/markets/{id}/close",
     "POST /v1/markets/{id}/reopen",
     "POST /v1/markets/{id}/resolve",
@@ -1146,6 +1147,74 @@ def get_market_engine_stats(market_id: str) -> tuple[dict[str, Any], int]:
             "cliques": deepcopy(cliques),
         },
         "diagnostics": diagnostics,
+        "meta": make_meta(),
+    }, 200
+
+
+def get_market_cpt(market_id: str) -> tuple[dict[str, Any], int]:
+    """Return the conditional probability table for a market."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    outcomes = deepcopy(market["outcomes"])
+    conditional_marginals = CONDITIONAL_MARGINALS.get(market_id, {})
+
+    # Build the list of parent variable IDs from the context keys.
+    parent_variable_ids: list[str] = []
+    if conditional_marginals:
+        seen_vars: set[str] = set()
+        for context_key in conditional_marginals:
+            for assignment in context_key.split("|"):
+                var_id = assignment.split("=", 1)[0]
+                if var_id and var_id not in seen_vars:
+                    seen_vars.add(var_id)
+                    parent_variable_ids.append(var_id)
+
+    # Resolve parent variable names from market data.
+    parents: list[dict[str, Any]] = []
+    for var_id in parent_variable_ids:
+        parent_market = None
+        for m in MARKETS.values():
+            if m.get("variableId") == var_id:
+                parent_market = m
+                break
+        parent_outcomes = deepcopy(parent_market["outcomes"]) if parent_market else []
+        parents.append({
+            "variableId": var_id,
+            "marketId": parent_market["id"] if parent_market else None,
+            "title": parent_market["title"] if parent_market else var_id,
+            "outcomes": parent_outcomes,
+        })
+
+    # Build CPT entries: one per context key.
+    entries: list[dict[str, Any]] = []
+    if conditional_marginals:
+        for context_key, marginals in conditional_marginals.items():
+            context = []
+            for assignment in context_key.split("|"):
+                parts = assignment.split("=", 1)
+                if len(parts) == 2:
+                    context.append({"variableId": parts[0], "outcomeId": parts[1]})
+            entries.append({
+                "contextKey": context_key,
+                "context": context,
+                "marginals": deepcopy(marginals),
+            })
+    else:
+        # No parents — single-row CPT with the base marginals.
+        entries.append({
+            "contextKey": "",
+            "context": [],
+            "marginals": deepcopy(market["marginals"]),
+        })
+
+    return {
+        "marketId": market_id,
+        "variableId": market["variableId"],
+        "outcomes": outcomes,
+        "parents": parents,
+        "entries": entries,
         "meta": make_meta(),
     }, 200
 
@@ -5253,6 +5322,16 @@ def route_request(
                     {"method": method, "path": path},
                 )
             return get_market_engine_stats(market_id)
+
+        if len(parts) == 4 and parts[3] == "cpt":
+            if method != "GET":
+                raise ApiError(
+                    405,
+                    "method_not_allowed",
+                    f"{method} is not allowed for this resource",
+                    {"method": method, "path": path},
+                )
+            return get_market_cpt(market_id)
 
         if len(parts) == 4 and parts[3] == "analytics":
             if method != "GET":

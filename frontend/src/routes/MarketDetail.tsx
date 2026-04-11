@@ -13,6 +13,7 @@ import { JunctionTreePanel } from "@/features/graph/JunctionTreePanel";
 import { DiscussionThread } from "@/features/market/DiscussionThread";
 import { ResolveMarketPanel } from "@/features/market/ResolveMarketPanel";
 import { EventTradePanel } from "@/features/trading/EventTradePanel";
+import { CptPanel } from "@/features/trading/CptPanel";
 import type { MarketEvent } from "@/lib/api/types";
 
 export default function MarketDetail() {
@@ -54,6 +55,8 @@ export default function MarketDetail() {
           <AssumptionPanel market={m} />
         </AssumptionProvider>
       )}
+
+      <CptPanel market={m} />
 
       <EventTradePanel market={m} />
 
