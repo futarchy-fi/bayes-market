@@ -1,0 +1,82 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The backend already has SSE (Server-Sent Events) endpoints at /v1/markets/{id}/stream and /v1/accounts/{id}/risk/stream. Should we use these existing SSE endpoints (EventSource API) instead of adding WebSocket infrastructure, or does the task specifically require WebSocket protocol?",
+      "category": "requirements",
+      "why_it_matters": "SSE infrastructure is already built and tested on the backend. Adding WebSocket would require new backend code (ws library, upgrade handling, connection management) duplicating what SSE already provides. Using SSE means only frontend work is needed."
+    },
+    {
+      "id": "q2",
+      "question": "Which SSE event types should drive UI updates? The backend streams market_snapshot, terminal_event, and market_marginals for markets, plus risk_snapshot and risk_update for accounts. Should we subscribe to all of these or only market_marginals for price changes?",
+      "category": "requirements",
+      "why_it_matters": "Subscribing to all event types means more complex state management but richer real-time UX. Subscribing only to marginals is simpler but misses status changes and trade events."
+    },
+    {
+      "id": "q3",
+      "question": "Should the real-time connection fully replace the current React Query polling (refetchInterval: 5000ms), or should SSE updates supplement polling as an optimistic layer with polling as fallback?",
+      "category": "design",
+      "why_it_matters": "Replacing polling entirely is cleaner but requires robust reconnection logic. Keeping polling as fallback is more resilient but means maintaining two data paths."
+    },
+    {
+      "id": "q4",
+      "question": "Should price updates include visual feedback (flash/highlight animation) when a probability changes in real-time, or just silently update the displayed values?",
+      "category": "requirements",
+      "why_it_matters": "Visual feedback makes real-time updates obvious to users but adds UI complexity. Silent updates are simpler but users may not notice changes."
+    },
+    {
+      "id": "q5",
+      "question": "Which views need real-time updates? MarketDetail page only, or also MarketList (all markets overview), Analytics/PriceChart, and Portfolio views?",
+      "category": "requirements",
+      "why_it_matters": "MarketDetail is the most impactful and simplest scope. Expanding to MarketList means potentially many concurrent SSE connections. Analytics/charts need different update logic (appending data points vs replacing state)."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "We should use the existing SSE backend endpoints rather than adding WebSocket protocol support, since SSE is already implemented and sufficient for server-to-client price push.",
+      "confidence": 0.85,
+      "if_wrong": "Would need to add a WebSocket library to the Python backend (e.g. websockets), implement upgrade handling, duplicate the subscriber/publisher logic, and use the browser WebSocket API instead of EventSource on the frontend."
+    },
+    {
+      "id": "a2",
+      "assumption": "The frontend should use a custom React hook wrapping EventSource that integrates with the existing React Query cache, invalidating/updating cached market data when SSE events arrive.",
+      "confidence": 0.9,
+      "if_wrong": "Would need a separate state management layer (e.g. Zustand or Redux) alongside React Query, increasing complexity."
+    },
+    {
+      "id": "a3",
+      "assumption": "The initial scope is MarketDetail page only - subscribing to /v1/markets/{id}/stream when viewing a specific market and updating marginals + events in real-time.",
+      "confidence": 0.7,
+      "if_wrong": "If MarketList also needs real-time updates, we'd need a connection manager to handle multiple concurrent SSE streams or a single aggregate endpoint."
+    },
+    {
+      "id": "a4",
+      "assumption": "SSE reconnection can be handled by the browser's native EventSource auto-reconnect behavior, with the fromSeq query parameter for message replay on reconnect.",
+      "confidence": 0.8,
+      "if_wrong": "Would need custom reconnection logic with exponential backoff and manual EventSource recreation."
+    },
+    {
+      "id": "a5",
+      "assumption": "Polling can be reduced (e.g. 30s fallback) rather than eliminated entirely, keeping React Query as the source of truth with SSE updates feeding into the cache.",
+      "confidence": 0.75,
+      "if_wrong": "If polling must be fully removed, the SSE hook becomes the sole data source and needs more robust error handling and initial data loading."
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 2,
+    "complexity_reason": "Backend SSE infrastructure already exists. Work is primarily frontend: one custom hook for EventSource, integration with React Query cache, and updating 1-2 components. Estimated ~3-4 files changed, ~150-250 lines of new code.",
+    "uncertainty_score": 2,
+    "uncertainty_reason": "The SSE backend is already built and documented. EventSource API is well-understood. Main uncertainty is whether task literally requires WebSocket vs SSE, and exact scope of which views get real-time updates.",
+    "independent_subproblems": [
+      "Create useMarketStream hook wrapping EventSource with React Query cache integration",
+      "Wire hook into MarketDetail page and update probability display components",
+      "Add visual feedback (optional flash animation) for price changes"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity 2 and uncertainty 2 are both low. The backend work is done, so this is a focused frontend task touching 3-4 files. All subproblems are closely coupled (hook -> integration -> UI) and share state, making parallel execution impractical."
+  },
+  "spawn_children": false,
+  "children": []
+}
