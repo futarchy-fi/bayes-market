@@ -1,32 +1,26 @@
-[Task pnl-section-001] PHASE 2: RESEARCH & DECISION
+[Task pnl-section-001] PHASE 3a: PLAN
 Title: Add tests for AccountPnlSection component
 
-Read .fleet/tasks/pnl-section-001/questions.json for the questions to answer.
-Research each question in the codebase. Provide answers with confidence scores.
+Read .fleet/tasks/pnl-section-001/questions.json and .fleet/tasks/pnl-section-001/research.json
+for context on what was asked and answered.
 
-YOU MUST create .fleet/tasks/pnl-section-001/research.json with this structure:
+YOU MUST create .fleet/tasks/pnl-section-001/plan.json with this structure:
 {
-  "phase": "research",
-  "answers": [
-    {
-      "question_id": "q1",
-      "answer": "...",
-      "confidence": 0.0-1.0,
-      "evidence": ["file:line", ...],
-      "uncertainty": "what you're not sure about"
-    }
+  "phase": "plan",
+  "decisions": [
+    { "id": "d1", "decision": "...", "based_on": ["q1"], "alternatives_rejected": ["..."], "reversibility": "easy|medium|hard" }
   ],
-  "assumption_checks": [
-    { "assumption_id": "a1", "verdict": "CORRECT|WRONG|UNCERTAIN", "confidence": 0.0-1.0, "impact": "..." }
+  "steps": [
+    { "step": 1, "task": "...", "depends_on": [] }
   ],
   "spawn_children": false,
   "children": []
 }
 
-DO NOT STOP until research.json exists and contains answers to all questions.
+DO NOT STOP until plan.json exists and contains at least one step.
 Verify: ls -la .fleet/tasks/pnl-section-001/ to confirm the file was written.
 
-DECOMPOSITION: Set spawn_children=true for low-confidence answers (< 0.5) or
-complex questions needing their own research cycle.
+DECOMPOSITION: Set spawn_children=true for independent sub-tasks that warrant
+their own 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
 
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "research: pnl-section-001"
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "plan: pnl-section-001"

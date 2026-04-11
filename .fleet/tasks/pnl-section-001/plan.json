@@ -1,0 +1,104 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use plain render() from @testing-library/react without any providers (no MemoryRouter, no QueryClientProvider)",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["renderWithProviders helper — unnecessary since component is pure presentational with no hooks or context"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use real formatCurrency/formatSignedCurrency utilities without mocking, assert exact formatted output strings",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["vi.mock() the formatters — adds complexity, couples to mock setup, diverges from AnalyticsSummaryCards.test.tsx pattern"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Include test case for selectedMarketId not matching any position, asserting the fallback 'No recorded exposure in the selected market yet.' text renders",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Skip this case — it's a real user-visible state that deserves coverage"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Test toneForValue color logic via toHaveStyle() assertions on rendered elements, checking CSS variable strings (e.g. 'var(--color-success)')",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Only test text content — misses key UX feature of color-coded P&L values"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Place test file at frontend/src/__tests__/AccountPnlSection.test.tsx following existing convention",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Co-located __tests__ directory next to component — not the pattern used in this project"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create test file frontend/src/__tests__/AccountPnlSection.test.tsx with imports (vitest, testing-library, component, format utilities, types) and a factory function makeAccountPnlData() that produces valid AccountPnlResponse test data with 2-3 positions including positive, negative, and zero P&L values",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Write test: 'shows empty state when no accountId is set' — render with accountId='' and assert 'Set your Account ID in the header' text is visible",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Write test: 'shows loading state when isLoading is true' — render with accountId set and isLoading=true, assert LoadingPage spinner renders (query for role or known spinner element)",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Write test: 'shows error message when error is truthy' — render with error=new Error('fail') and isLoading=false, assert 'Unable to load account P&L right now' text is visible",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Write test: 'renders all PnL metric cards with correct formatted values' — render with full data, assert labels (Cost Basis, Marked Value, Realized P&L, Unrealized P&L, Net P&L) and their formatted values appear",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Write test: 'applies correct color tones for positive/negative/zero P&L values' — render with data containing positive realizedPnl, negative unrealizedPnl, zero netPnl; use toHaveStyle to check color properties on metric value elements",
+      "depends_on": [1]
+    },
+    {
+      "step": 7,
+      "task": "Write test: 'renders selected market detail card when selectedMarketId matches a position' — render with selectedMarketId matching one position, assert the market title, status badge, and formatted metric values appear in the detail card",
+      "depends_on": [1]
+    },
+    {
+      "step": 8,
+      "task": "Write test: 'shows fallback message when selectedMarketId does not match any position' — render with selectedMarketId='nonexistent', assert 'No recorded exposure in the selected market yet.' is visible",
+      "depends_on": [1]
+    },
+    {
+      "step": 9,
+      "task": "Write test: 'renders positions table with all positions' — render with data containing multiple positions, assert each position's marketTitle and formatted values appear in the table",
+      "depends_on": [1]
+    },
+    {
+      "step": 10,
+      "task": "Write test: 'highlights the selected market row in the positions table' — render with selectedMarketId matching a position, assert the matching row has the highlight background style",
+      "depends_on": [1]
+    },
+    {
+      "step": 11,
+      "task": "Write test: 'shows empty positions message when positions array is empty' — render with data that has empty positions array, assert 'No marked positions yet.' text is visible",
+      "depends_on": [1]
+    },
+    {
+      "step": 12,
+      "task": "Run vitest on the new test file to verify all tests pass, fix any issues",
+      "depends_on": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
