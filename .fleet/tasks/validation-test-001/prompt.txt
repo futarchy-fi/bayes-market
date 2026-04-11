@@ -1,30 +1,27 @@
-[Task validation-test-001] PHASE 3b: IMPLEMENT
+[Task validation-test-001] PHASE 4: VALIDATE
 Title: Create a simple hello.txt file
 
-Read your plan at .fleet/tasks/validation-test-001/plan.json.
+Review the work done in this branch. Check:
+1. Did execution follow the plan? (read plan.json, check the diff)
+2. Did the plan follow from the research? (read research.json)
+3. Were there obvious gaps in questions? (read questions.json)
+4. Run tests if available.
 
-YOU MUST IMPLEMENT the plan completely. This is the critical execution phase.
-
-For EACH step in plan.json, you MUST:
-1. Announce: "=== Step N: {task description} ==="
-2. Execute the step — create/modify the actual source files
-3. Verify it worked (check file exists, run code, test passes)
-4. Announce: "=== Step N complete ===" before moving to next
-
-DO NOT STOP until ALL steps are executed and verified.
-DO NOT just read the plan — you must CREATE the files it specifies.
-
-DEPENDENCIES: Fresh worktree — install before testing:
-  - Node: pnpm install or npm install
-  - Python: pip install -r requirements.txt
-
-After all steps are complete, write .fleet/tasks/validation-test-001/implementation.json:
+YOU MUST create .fleet/tasks/validation-test-001/validation.json with this structure:
 {
-  "phase": "implement",
-  "steps_completed": [
-    { "step": 1, "task": "...", "files_created": ["..."], "files_modified": ["..."], "verified": true }
-  ],
-  "all_steps_done": true
+  "phase": "validate",
+  "plan_adherence": 0.0-1.0,
+  "plan_adherence_notes": "...",
+  "research_quality": 0.0-1.0,
+  "question_completeness": 0.0-1.0,
+  "missed_questions": ["..."],
+  "verdict": "approve|changes_requested|reject",
+  "reason": "..."
 }
 
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "execute: validation-test-001"
+DO NOT STOP until validation.json exists with a verdict.
+Verify: ls -la .fleet/tasks/validation-test-001/ to confirm the file was written.
+
+SCOPE: Write ONLY to .fleet/tasks/ files. Do NOT modify production code.
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "validate: validation-test-001"
