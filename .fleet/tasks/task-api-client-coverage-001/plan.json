@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use actual code endpoints (e.g. /v1/markets/{id}/orders/probability-edit) not the task description endpoints which are wrong",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Use task description endpoints verbatim"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use minimal response stubs matching the existing test pattern — just enough fields to prove the function was called and returned data",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Full type-conformant response fixtures"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Two tests per paginated function (no-params and with-params) following the getMarketAnalytics precedent",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["One test per function"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Verify X-Bayes-Agent-Id header is set from session.agentId for all session-bearing POST functions",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Only verify URL and HTTP method, skip header assertion"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Test createMarket both with and without session to cover the optional session POST path",
+      "based_on": ["q5"],
+      "alternatives_rejected": ["Single test for createMarket"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add imports for all 10 uncovered functions to api-client.test.ts: createMarket, getMarketEvents, getMarketComments, getEngineStats, submitProbabilityEdit, resolveMarket, getHealth, getServiceIndex, submitEventTrade, submitMarketComment",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add tests for simple GET functions: getEngineStats → /v1/markets/{id}/engine-stats, getHealth → /health, getServiceIndex → /",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add tests for GET functions with optional pagination: getMarketEvents (no params → /v1/markets/{id}/events, with params → ?fromSeq=5&limit=10), getMarketComments (no params → /v1/markets/{id}/comments, with params → ?fromSeq=0&limit=20)",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Add tests for createMarket POST with optional session: (1) without session — verify POST method, URL /v1/markets, body, Content-Type header; (2) with session — also verify X-Bayes-Agent-Id header",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Add tests for POST functions with required session: submitProbabilityEdit → /v1/markets/{id}/orders/probability-edit, resolveMarket → /v1/markets/{id}/resolve, submitEventTrade → /v1/markets/{id}/orders/event-trade, submitMarketComment → /v1/markets/{id}/comments. Each test verifies method, URL, JSON body, Content-Type, and X-Bayes-Agent-Id header",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Run vitest to verify all existing + new tests pass. Fix any failures.",
+      "depends_on": [2, 3, 4, 5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
