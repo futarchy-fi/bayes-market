@@ -1,0 +1,93 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "'Probability input' should be interpreted as testing the outcome selector dropdown that displays marginal probabilities (e.g., 'Yes @ 65.0%'). EventTradePanel has NO probability slider or input field — it only has a side toggle (buy/sell) and an outcome <select> dropdown where each option displays the marginal probability. TradingPanel has a slider for editing probability; EventTradePanel only displays probabilities in the dropdown options and as a 'Price: X%' label. The test should cover selecting an outcome and verifying the displayed price, not a slider interaction.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/trading/EventTradePanel.tsx:77-91 (outcome selector with marginal display)",
+        "frontend/src/features/trading/EventTradePanel.tsx:93-96 (Price label display)",
+        "frontend/src/features/trading/EventTradePanel.tsx:42 (currentPrice calculation from marginals)"
+      ],
+      "uncertainty": "Only uncertainty is whether the task description was referring to a different component entirely, but since it says 'EventTradePanel' explicitly, this interpretation is correct."
+    },
+    {
+      "question_id": "q2",
+      "answer": "crypto.randomUUID() works natively in the test environment without mocking. The existing TradingPanel.test.tsx (line 163) and ConditionalEditor.test.tsx (line 331) both assert `idempotencyKey` is defined without mocking crypto, confirming vitest/jsdom on modern Node.js supports it. The test should follow the same pattern: assert `call.payload.idempotencyKey` is defined (toBeDefined()) without mocking crypto. No polyfill or mock is needed.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/TradingPanel.test.tsx:163 (expect(call.payload.idempotencyKey).toBeDefined())",
+        "frontend/src/features/trading/EventTradePanel.tsx:59 (crypto.randomUUID() usage)"
+      ],
+      "uncertainty": "None — the pattern is established and proven in multiple test files."
+    },
+    {
+      "question_id": "q3",
+      "answer": "TradeReceipt is an internal component defined inline within EventTradePanel.tsx (not exported). Testing its color-coding logic should be done through integration with the parent. When the mutation succeeds, the test should verify TradeReceipt renders with the correct values. Testing distinct impactScore thresholds (>0.5 danger, >0.2 warning, <=0.2 muted) with separate fixtures adds valuable coverage for risk-display behavior and is worth the 2-3 extra test cases. The impactColor logic uses inline style with CSS variables, so tests should check the rendered impact percentage text and optionally the style.color property on the impact element.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/features/trading/EventTradePanel.tsx:6-29 (TradeReceipt definition with impactScore thresholds)",
+        "frontend/src/features/trading/EventTradePanel.tsx:7-8 (impactColor conditional: >0.5 danger, >0.2 warning, else muted)",
+        "frontend/src/features/trading/EventTradePanel.tsx:106-109 (TradeReceipt rendered on mutation.isSuccess)"
+      ],
+      "uncertainty": "Testing inline CSS variables (var(--color-danger)) in jsdom may require checking the raw style string rather than computed color values, since jsdom doesn't resolve CSS variables. May need to assert on the style.color property directly."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Both early-return-null conditions should be tested. EventTradePanel returns null for (1) market.status !== 'active' (line 38) and (2) !isConfigured (line 39). Unlike TradingPanel which shows 'Set your Account ID' for unconfigured sessions, EventTradePanel renders nothing in both cases. Tests should use container.firstChild or queryByText to verify nothing is rendered. Testing both guard clauses is lightweight (2 small tests) and ensures both protective conditions work. The 'session integration' aspect of the task maps to testing the unconfigured session guard.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/trading/EventTradePanel.tsx:38 (if market.status !== 'active' return null)",
+        "frontend/src/features/trading/EventTradePanel.tsx:39 (if !isConfigured return null)",
+        "frontend/src/__tests__/TradingPanel.test.tsx:104-110 (TradingPanel shows 'Set your Account ID' for unconfigured)"
+      ],
+      "uncertainty": "None — the component code is clear about both conditions."
+    },
+    {
+      "question_id": "q5",
+      "answer": "The test should assert the exact formula structure. The formula is the core semantic payload of event trading — it encodes what is being traded. The structure is: formula: [[{ variableId: market.id, outcomeId: selectedOutcome, negated: false }]]. Since this is a nested array of objects with specific field names, asserting the exact structure catches construction bugs (wrong nesting, missing fields, wrong boolean). The TradingPanel test asserts exact payload structure (target.kind, target.outcomeId, target.probability), so asserting formula structure follows the same convention. Use toEqual for deep matching on the formula array.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/trading/EventTradePanel.tsx:48-56 (mutation.mutate payload with formula structure)",
+        "frontend/src/__tests__/TradingPanel.test.tsx:156-164 (TradingPanel test asserts exact payload fields)",
+        "frontend/src/lib/api/types.ts:324-329 (EventTradePayload type with formula: Array<Array<{...}>>)"
+      ],
+      "uncertainty": "The formula structure is currently simple (single conjunction with one literal). If it becomes more complex in the future, exact assertions would be more brittle — but for now it's the right choice."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The test file should follow the exact same pattern: mock useSession at module level, mock useEventTrade (instead of useProbabilityEdit), use vi.mocked, create defaultMutationState helper, use renderWithProviders from ./helpers. The only difference is mocking useEventTrade instead of useProbabilityEdit."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The Market type is the same for both components. The mockMarket fixture from TradingPanel.test.tsx includes all fields EventTradePanel uses: id, status, outcomes, marginals. It can be reused as-is. EventTradePanel also uses market.id as variableId in the formula, which maps to market.id (not market.variableId)."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Confirmed by reading the component. EventTradePanel has no slider input. The 'probability input' refers to the outcome selector dropdown which displays marginal probabilities in each option label and shows a Price label when an outcome is selected."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Confirmed by existing test patterns. TradingPanel.test.tsx and ConditionalEditor.test.tsx both use crypto.randomUUID() without mocking, and assert idempotencyKey with toBeDefined(). No polyfill or mock needed."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "The test scope is appropriate. Recommended test cases: (1) null render for inactive market, (2) null render for unconfigured session, (3) rendering form elements (Quick Trade heading, side toggle, outcome selector, trade button), (4) buy/sell toggle interaction, (5) outcome selection with price display, (6) trade submission with correct payload including exact formula structure, (7) pending state (Submitting text, disabled button), (8) success with TradeReceipt showing orderId and asset delta values, (9) error display. Optionally add 2-3 TradeReceipt color threshold tests for impactScore variations."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
