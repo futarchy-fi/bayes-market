@@ -1,0 +1,95 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the export capture the full network (all markets + all conditional edges + clique data) or only a single market's perspective? The BayesNetGraph shows the entire network but is rendered on a per-market page.",
+      "category": "requirements",
+      "why_it_matters": "Determines the scope of the JSON schema — whole-network export vs single-market export are very different data shapes and UI placements."
+    },
+    {
+      "id": "q2",
+      "question": "Where do conditional edges come from? BayesNetGraph receives them as a prop (`conditionalEdges`) but MarketDetail passes none — are edges stored server-side or only exist transiently in the UI?",
+      "category": "codebase",
+      "why_it_matters": "If edges are only transient/derived, the export must reconstruct them from server data or they won't appear in the export. This affects what API calls are needed during export."
+    },
+    {
+      "id": "q3",
+      "question": "Node layout positions are computed dynamically via `layoutNodes()` (circular arrangement). Should we export computed positions or let the importer re-layout? If exporting positions, users who manually rearrange nodes (future feature) would preserve their layout.",
+      "category": "design",
+      "why_it_matters": "Currently there's no drag-to-reposition, so exporting computed positions adds schema complexity with no current user benefit. But the task description says to include layout positions."
+    },
+    {
+      "id": "q4",
+      "question": "On import, should the system create markets on the server (POST /v1/markets) or just load a visual-only representation? Creating real markets requires the backend to accept them and the user needs a configured session.",
+      "category": "requirements",
+      "why_it_matters": "This is the fundamental question of import scope. A visual-only import is simple; actually creating server-side markets is complex and may not even be supported by the API for bulk creation with pre-set probabilities."
+    },
+    {
+      "id": "q5",
+      "question": "Where exactly should the export/import buttons go? The BayesNetGraph panel header has a title and stats line. The MarketDetail page has no dedicated toolbar. Should buttons go in the graph panel header, or should we create a new toolbar component?",
+      "category": "design",
+      "why_it_matters": "The task says 'graph toolbar area' but no toolbar exists today. We need to either add buttons to the existing header row in BayesNetGraph or create a new toolbar div."
+    },
+    {
+      "id": "q6",
+      "question": "What schema validation approach should be used on import? Options: runtime validation with a hand-written validator, a library like zod/ajv, or simple type guards. The project currently has no schema validation library.",
+      "category": "design",
+      "why_it_matters": "Adding a new dependency (zod/ajv) vs hand-rolling validation affects bundle size, maintenance, and reliability of error messages."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Export captures the entire network state (all markets, edges, cliques) rather than a single market.",
+      "confidence": 0.8,
+      "if_wrong": "Schema would be scoped to a single market's data and the UI button placement might change."
+    },
+    {
+      "id": "a2",
+      "assumption": "Import is visual/read-only — it loads a snapshot for viewing, not for creating real server-side markets.",
+      "confidence": 0.5,
+      "if_wrong": "Would need to implement bulk market creation via API, handle authentication, and deal with conflicts/errors for each market."
+    },
+    {
+      "id": "a3",
+      "assumption": "Buttons will be added to the existing BayesNetGraph panel header (the flex row with title and stats) rather than creating a separate toolbar component.",
+      "confidence": 0.75,
+      "if_wrong": "Would need a new toolbar component with its own styling, which is more work but cleaner separation."
+    },
+    {
+      "id": "a4",
+      "assumption": "Hand-rolled TypeScript validation is sufficient for the JSON schema (no need for zod/ajv dependency).",
+      "confidence": 0.7,
+      "if_wrong": "Would need to add a schema validation dependency and configure it."
+    },
+    {
+      "id": "a5",
+      "assumption": "Layout positions will be included in the export as the task description requests, even though they're currently computed dynamically.",
+      "confidence": 0.85,
+      "if_wrong": "Could simplify the schema by omitting positions, but the task explicitly mentions layout positions."
+    },
+    {
+      "id": "a6",
+      "assumption": "Conditional edges are derived from engine stats or conditional edits and need to be fetched from the API during export.",
+      "confidence": 0.6,
+      "if_wrong": "If edges come from a different source, the export logic would need to be adjusted."
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 3,
+    "complexity_reason": "Moderate complexity: ~3-4 files to create/modify (JSON schema type, export logic, import logic + UI, BayesNetGraph toolbar). No architectural changes needed — it's additive. Estimated ~200-300 lines of new code. All frontend-only changes.",
+    "uncertainty_score": 3,
+    "uncertainty_reason": "Key uncertainties around import behavior (visual-only vs server-side creation) and where conditional edges come from. However, the export side is straightforward — serialize what's already fetched. The design decisions are contained within the frontend graph feature.",
+    "independent_subproblems": [
+      "Design and implement JSON schema types for network export format",
+      "Implement export logic (serialize network state + trigger download)",
+      "Implement import logic (file upload UI + parse/validate JSON + load network)",
+      "Add toolbar buttons to BayesNetGraph panel"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity 3 and uncertainty 3 — both below the threshold of 4. While there are 4 logical sub-tasks, they're tightly coupled (schema types feed into both export and import, toolbar buttons trigger export/import) and touch only 3-4 files in the same frontend feature module. Splitting into children would add coordination overhead without meaningful parallelism benefit."
+  },
+  "spawn_children": false,
+  "children": []
+}
