@@ -1,0 +1,82 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Wrap handle_market_resolution's core logic (normalize through resolve+response, lines 4252-4311) inside get_market_write_lock(market_id) to fix the TOCTOU race condition on status checks",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Leave without lock — violates codebase pattern and allows double-resolution race",
+        "Lock only around resolve_market_command call — would leave status check unprotected, same TOCTOU"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Add market['resolvedAt'] = resolved_at in transition_market_to_resolved after line 3718, persisting the resolution timestamp on the market object",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Leave resolvedAt only in the event response — makes filtering/sorting resolved markets impossible without scanning events"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Treat existing settlement logic (risk capacity release + exposure cleanup) as the complete payout mechanism; no new P&L ledger system needed",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Build explicit per-position realized P&L entries — unnecessary since LMSR capacity release IS the payout, and assetDelta already reports the net effect"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Add 2 targeted tests: (1) verify resolvedAt is present on the market object after resolution, (2) verify resolution happy path still works with the write lock in place. Existing 38 tests cover all other required scenarios.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Rewrite all resolution tests from scratch — wasteful since 38 existing tests already cover happy path, invalid payouts, double-resolution, auth, idempotency, and settlement"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add write lock to handle_market_resolution: wrap lines 4252-4311 (from normalize_market_resolution_payload through the return statement) in `with get_market_write_lock(market_id):`, matching the pattern used by handle_probability_edit (line 4063), handle_comment_post (line 3995), and handle_event_trade (line 4155)",
+      "depends_on": [],
+      "estimated_lines": 5,
+      "risk": "low"
+    },
+    {
+      "step": 2,
+      "task": "Add resolvedAt to market object: insert `market['resolvedAt'] = resolved_at` in transition_market_to_resolved after line 3718 (after setting marginals, before popping CONDITIONAL_MARGINALS)",
+      "depends_on": [],
+      "estimated_lines": 1,
+      "risk": "low"
+    },
+    {
+      "step": 3,
+      "task": "Add test asserting resolvedAt field is present on the market object in the resolution response, and verify its value is a valid ISO timestamp",
+      "depends_on": [2],
+      "estimated_lines": 15,
+      "risk": "low"
+    },
+    {
+      "step": 4,
+      "task": "Run the full existing resolution test suite to confirm write lock change and resolvedAt addition don't break any of the 38 existing tests",
+      "depends_on": [1, 2, 3],
+      "estimated_lines": 0,
+      "risk": "low"
+    }
+  ],
+  "decomposition_assessment": {
+    "total_steps": 4,
+    "estimated_total_lines": 21,
+    "high_risk_steps": 0,
+    "parallelizable_groups": [["step1", "step2"], ["step3"], ["step4"]],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Total estimated ~21 lines across 2 files (server.py + test file). Zero high-risk steps. All changes are small, well-understood modifications to existing code with clear patterns to follow. Steps 1 and 2 are independent edits to different functions in the same file. No module boundaries to split across children."
+  },
+  "spawn_children": false,
+  "children": []
+}
