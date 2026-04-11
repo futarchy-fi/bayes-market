@@ -358,3 +358,11 @@ if (!valParsed || valParsed.verdict !== "approve") {
 
 **Key learning:** Task queue mismatch causes workflows to hang at WorkflowTaskScheduled. Worker listens on `fleet-tasks`, not `fleet-bead`. Always verify task queue matches worker config.
 
+
+### [2026-04-11] Progressive decomposition gap identified
+
+**Current state:** epistemicExecutor spawn_children uses simple `{id, title, description}` — no dependency tracking, no validation criteria.
+
+**Gap:** 4-step protocol (deps → descs → validations → review) would add: deps field for child-to-child dependencies, validation_criteria per child, review phase before committing to spawn.
+
+---
