@@ -1,0 +1,107 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Integration test through the real AssumptionBar child. AssumptionBar takes zero props — it reads entirely from useAssumptions() context. No existing test in the project mocks child components (grep for vi.mock.*VariableRow|AssumptionBar returned zero hits). The project pattern (MarketDetail.test.tsx, TradingPanel.test.tsx) is integration-style: render the real component tree and mock at the hook/API boundary instead. Testing 'clear all' through the real AssumptionBar is the natural fit.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/assumptions/AssumptionBar.tsx:3 — takes no props, uses useAssumptions()",
+        "frontend/src/features/assumptions/AssumptionBar.tsx:27-29 — clearAll button calls context.clearAll()",
+        "frontend/src/__tests__/MarketDetail.test.tsx:7 — mocks api client, not child components",
+        "frontend/src/__tests__/TradingPanel.test.tsx:23-25 — mocks hooks, not child components",
+        "grep: no vi.mock for VariableRow, AssumptionBar, or AssumptionPanel anywhere in codebase"
+      ],
+      "uncertainty": "None significant — the pattern is consistent across all existing tests."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Both lists are part of AssumptionPanel's rendering, but they serve different purposes. The VariableRow list (sortedIds.map) is the primary content showing each active market with assume/edit controls. The AssumptionBar shows active assumption tags (GIVEN: labels) with remove/clear-all. For testing 'rendering assumption list', the most important assertions are: (1) correct number of VariableRows rendered in correct order (current market first), and (2) AssumptionBar reflecting current assumptions from context. Both should be tested.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/features/assumptions/AssumptionPanel.tsx:40-42 — sortedIds.map renders VariableRows",
+        "frontend/src/features/assumptions/AssumptionPanel.tsx:37 — AssumptionBar rendered unconditionally",
+        "frontend/src/features/assumptions/AssumptionBar.tsx:6 — returns null if no assumptions",
+        "frontend/src/features/assumptions/AssumptionPanel.tsx:19-22 — sorting logic: current market first"
+      ],
+      "uncertainty": "The task prompt says 'assumption list' which could mean just the assumption tags in AssumptionBar, but testing both is safer."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Empty state covers two distinct conditional renders: (a) No assumptions set — status text shows 'Showing marginal probabilities' (line 35) and AssumptionBar returns null (line 6 of AssumptionBar.tsx). (b) Single active market or fewer — shows 'Create more markets to use assumptions' message (lines 45-49). A third state (no markets at all) would mean allMarkets is empty, sortedIds still contains market.id, and activeMarkets.length would be 0 (triggering the helper message). Testing states (a) and (b) covers the meaningful branches; (c) is a subset of (b).",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/assumptions/AssumptionPanel.tsx:33-35 — ternary on assumptions.length for status text",
+        "frontend/src/features/assumptions/AssumptionPanel.tsx:45-49 — activeMarkets.length <= 1 conditional",
+        "frontend/src/features/assumptions/AssumptionBar.tsx:6 — returns null when assumptions empty",
+        "frontend/src/features/assumptions/AssumptionPanel.tsx:16 — allMarkets derived from useMarkets data"
+      ],
+      "uncertainty": "None — both conditional branches are clearly visible in the source."
+    },
+    {
+      "question_id": "q4",
+      "answer": "VariableRow should be mocked. While the project doesn't mock child components elsewhere, VariableRow has exceptionally heavy internal dependencies: useMarket(marketId) per row (separate API call), useSession(), useProbabilityEdit(), and useAssumptions() with mutation operations. Without mocking, every test would need mock API responses for each VariableRow's market fetch plus session/mutation setup. This couples tests to VariableRow internals and makes them fragile. Mock VariableRow to isolate AssumptionPanel's own logic: sorting, filtering, conditional rendering, and context integration. This is a pragmatic exception to the project's integration pattern.",
+      "confidence": 0.8,
+      "evidence": [
+        "frontend/src/features/assumptions/VariableRow.tsx:15 — useMarket(marketId) per row",
+        "frontend/src/features/assumptions/VariableRow.tsx:16 — useSession()",
+        "frontend/src/features/assumptions/VariableRow.tsx:17 — useAssumptions()",
+        "frontend/src/features/assumptions/VariableRow.tsx:18 — useProbabilityEdit(targetMarket.id)",
+        "frontend/src/__tests__/TradingPanel.test.tsx:23-25 — hooks mocked at module level as precedent"
+      ],
+      "uncertainty": "Alternative: mock at the API client level (like MarketDetail.test.tsx) and let VariableRow render real. This is viable but significantly increases test complexity and couples to VariableRow internals. Mocking VariableRow is the cleaner tradeoff."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Wrap with AssumptionProvider locally in the test file. This is consistent with the existing pattern in AssumptionContext.test.tsx (line 7) which uses a local wrapper. Only one route (MarketDetail) uses AssumptionProvider, so adding it to the shared helper would impose it on all tests unnecessarily. A local wrapper keeps changes scoped and avoids modifying shared infrastructure for a single feature's tests.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/helpers.tsx:26-33 — current providers: QueryClient, Session, MemoryRouter",
+        "frontend/src/__tests__/AssumptionContext.test.tsx:6-8 — local wrapper pattern already used",
+        "frontend/src/routes/MarketDetail.tsx:53-55 — only route using AssumptionProvider",
+        "frontend/src/features/assumptions/AssumptionContext.tsx:65 — throws if used outside provider"
+      ],
+      "uncertainty": "If more components start needing AssumptionProvider in tests, the shared helper should be extended later. For now, local is correct."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Integration-style tests through real AssumptionBar confirmed. No child component mocking exists in the project. AssumptionBar takes no props — it's purely context-driven, making integration the natural approach."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.8,
+      "impact": "VariableRow should be mocked via vi.mock. It has 4 internal hooks (useMarket, useSession, useAssumptions, useProbabilityEdit) that would require extensive setup. This is a pragmatic exception — the alternative (mocking the API client for each row) is viable but much more complex."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Mock useMarkets at the module level (vi.mock('@/lib/query/hooks')). TradingPanel.test.tsx demonstrates this exact pattern for useProbabilityEdit. This gives clean control over the markets list without needing to mock the API client and wait for React Query to process."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Both empty states confirmed in source: (a) no assumptions → 'Showing marginal probabilities' text, (b) activeMarkets.length <= 1 → 'Create more markets' message. Both are distinct conditional branches that should be tested."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Local AssumptionProvider wrapper confirmed as the right approach. Matches AssumptionContext.test.tsx pattern. Only 1 route uses AssumptionProvider. No shared helper modification needed."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Context integration means reading assumptions array for count/text and having AssumptionBar reflect current state. Additionally, 'clear all' triggers clearAll() from context, which IS a mutation worth testing through the integration. The assumption is correct but slightly narrow — we should also test the clearAll interaction path."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
