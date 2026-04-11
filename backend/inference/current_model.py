@@ -152,6 +152,19 @@ def _normalize_conditional_marginals(
     return normalized
 
 
+def _parse_context_key_variable_ids(context_key: str) -> list[str]:
+    """Extract variable ids from a serialized context-state key."""
+    if not context_key:
+        return []
+
+    variable_ids: list[str] = []
+    for assignment in context_key.split("|"):
+        variable_id, separator, _outcome_id = assignment.partition("=")
+        if separator and variable_id:
+            variable_ids.append(variable_id)
+    return variable_ids
+
+
 def _build_singleton_cliques(market_id: str, variable_id: str, outcome_count: int) -> tuple[CliqueSummary, ...]:
     return (
         CliqueSummary(
@@ -161,6 +174,39 @@ def _build_singleton_cliques(market_id: str, variable_id: str, outcome_count: in
             states=outcome_count,
         ),
     )
+
+
+def _build_cliques(
+    market_id: str,
+    variable_id: str,
+    outcome_count: int,
+    conditional_marginals: Mapping[str, Mapping[str, float]],
+    market_outcomes_by_variable: Mapping[str, int],
+) -> tuple[CliqueSummary, ...]:
+    """Build clique summaries from a market's variable and its conditional contexts."""
+    raw_cliques: set[tuple[str, ...]] = {(variable_id,)}
+
+    for context_key in conditional_marginals:
+        context_variable_ids = _parse_context_key_variable_ids(context_key)
+        clique_nodes = {variable_id, *context_variable_ids}
+        raw_cliques.add(tuple(sorted(clique_nodes)))
+
+    cliques: list[CliqueSummary] = []
+    for index, nodes in enumerate(sorted(raw_cliques), start=1):
+        state_count = 1
+        for node_id in nodes:
+            node_outcomes = market_outcomes_by_variable.get(node_id, outcome_count if node_id == variable_id else 1)
+            state_count *= max(node_outcomes, 1)
+        cliques.append(
+            CliqueSummary(
+                id=f"{market_id}-c{index}",
+                nodes=nodes,
+                size=len(nodes),
+                states=state_count,
+            )
+        )
+
+    return tuple(cliques)
 
 
 def _estimate_memory_bytes(cliques: tuple[CliqueSummary, ...]) -> int:
@@ -313,12 +359,14 @@ class CurrentModelCompiler:
 
     compile_type: str = DEFAULT_ENGINE_CONFIG.compile_type
     eligibility_reason: str = CURRENT_MODEL_EXACT_ELIGIBILITY_REASON
+    max_treewidth: int = DEFAULT_ENGINE_CONFIG.max_treewidth
 
     def compile_artifact(
         self,
         *,
         market_snapshot: Mapping[str, Any],
         conditional_marginals: Mapping[str, Mapping[str, float]] | None = None,
+        market_outcomes_by_variable: Mapping[str, int] | None = None,
     ) -> CurrentModelCompileArtifact:
         """Normalize a market snapshot into a frozen current-model artifact."""
         normalized_market = _require_mapping(market_snapshot, field="market")
@@ -342,8 +390,25 @@ class CurrentModelCompiler:
         except (TypeError, ValueError) as exc:
             raise _compile_error("Unable to freeze compile snapshot state", field="sourceStateInputs") from exc
 
-        cliques = _build_singleton_cliques(market_id, variable_id, len(outcome_ids))
+        outcome_count = len(outcome_ids)
+        if normalized_conditionals and market_outcomes_by_variable is not None:
+            cliques = _build_cliques(
+                market_id, variable_id, outcome_count,
+                normalized_conditionals, market_outcomes_by_variable,
+            )
+        else:
+            cliques = _build_singleton_cliques(market_id, variable_id, outcome_count)
+
+        max_clique_size = max(c.size for c in cliques)
+        junction_tree_width = max(0, max_clique_size - 1)
         memory_bytes = _estimate_memory_bytes(cliques)
+
+        if junction_tree_width > self.max_treewidth:
+            exact_eligible = False
+            eligibility_reason = "treewidth_exceeds_bound"
+        else:
+            exact_eligible = True
+            eligibility_reason = self.eligibility_reason
 
         return CurrentModelCompileArtifact(
             market_id=market_id,
@@ -356,9 +421,9 @@ class CurrentModelCompiler:
             compile_id=_compile_id_from_hash(source_state_hash),
             compile_type=self.compile_type,
             cliques=cliques,
-            junction_tree_width=0,
-            exact_eligible=True,
-            eligibility_reason=self.eligibility_reason,
+            junction_tree_width=junction_tree_width,
+            exact_eligible=exact_eligible,
+            eligibility_reason=eligibility_reason,
             memory_bytes=memory_bytes,
         )
 
@@ -367,6 +432,7 @@ class CurrentModelCompiler:
         *,
         market_snapshot: Mapping[str, Any],
         conditional_marginals: Mapping[str, Mapping[str, float]] | None = None,
+        market_outcomes_by_variable: Mapping[str, int] | None = None,
         compile_time_ms: float = 0.0,
         last_updated: str,
     ) -> CompileResult:
@@ -374,6 +440,7 @@ class CurrentModelCompiler:
         artifact = self.compile_artifact(
             market_snapshot=market_snapshot,
             conditional_marginals=conditional_marginals,
+            market_outcomes_by_variable=market_outcomes_by_variable,
         )
         return artifact.to_compile_result(
             compile_time_ms=round(float(compile_time_ms), 3),
@@ -483,11 +550,13 @@ def compile_current_market_artifact(
     *,
     market_snapshot: Mapping[str, Any],
     conditional_marginals: Mapping[str, Mapping[str, float]] | None = None,
+    market_outcomes_by_variable: Mapping[str, int] | None = None,
 ) -> CurrentModelCompileArtifact:
     """Compile a market snapshot into a current-model artifact."""
     return CURRENT_MODEL_COMPILER.compile_artifact(
         market_snapshot=market_snapshot,
         conditional_marginals=conditional_marginals,
+        market_outcomes_by_variable=market_outcomes_by_variable,
     )
 
 
@@ -495,11 +564,13 @@ def compile_current_model_artifact(
     *,
     market_snapshot: Mapping[str, Any],
     conditional_marginals: Mapping[str, Mapping[str, float]] | None = None,
+    market_outcomes_by_variable: Mapping[str, int] | None = None,
 ) -> CurrentModelCompileArtifact:
     """Alias for compiling a market snapshot into a current-model artifact."""
     return compile_current_market_artifact(
         market_snapshot=market_snapshot,
         conditional_marginals=conditional_marginals,
+        market_outcomes_by_variable=market_outcomes_by_variable,
     )
 
 
@@ -507,6 +578,7 @@ def compile_current_market_result(
     *,
     market_snapshot: Mapping[str, Any],
     conditional_marginals: Mapping[str, Mapping[str, float]] | None = None,
+    market_outcomes_by_variable: Mapping[str, int] | None = None,
     compile_time_ms: float = 0.0,
     last_updated: str,
 ) -> CompileResult:
@@ -514,6 +586,7 @@ def compile_current_market_result(
     return CURRENT_MODEL_COMPILER.compile_result(
         market_snapshot=market_snapshot,
         conditional_marginals=conditional_marginals,
+        market_outcomes_by_variable=market_outcomes_by_variable,
         compile_time_ms=compile_time_ms,
         last_updated=last_updated,
     )
@@ -523,6 +596,7 @@ def compile_current_model_result(
     *,
     market_snapshot: Mapping[str, Any],
     conditional_marginals: Mapping[str, Mapping[str, float]] | None = None,
+    market_outcomes_by_variable: Mapping[str, int] | None = None,
     compile_time_ms: float = 0.0,
     last_updated: str,
 ) -> CompileResult:
@@ -530,6 +604,7 @@ def compile_current_model_result(
     return compile_current_market_result(
         market_snapshot=market_snapshot,
         conditional_marginals=conditional_marginals,
+        market_outcomes_by_variable=market_outcomes_by_variable,
         compile_time_ms=compile_time_ms,
         last_updated=last_updated,
     )
