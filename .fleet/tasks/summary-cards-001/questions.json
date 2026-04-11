@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the test use `render()` directly or `renderWithProviders()`? The component is pure presentational with no hooks, routing, or query usage, so plain `render()` should suffice.",
+      "category": "design",
+      "why_it_matters": "Using renderWithProviders adds unnecessary wrapping if the component has no provider dependencies. Keeping tests minimal makes them faster and easier to maintain."
+    },
+    {
+      "id": "q2",
+      "question": "How should we handle locale-dependent formatting in tests? `toLocaleString()` and `new Date().toLocaleString()` produce different output depending on the test environment's locale.",
+      "category": "design",
+      "why_it_matters": "Tests that assert exact formatted strings (e.g., '1,234' vs '1.234') will be fragile across environments. We need a strategy: either mock toLocaleString, assert partial matches, or accept the CI locale."
+    },
+    {
+      "id": "q3",
+      "question": "Should formatCurrency be tested independently or only through the component test? It has clear edge cases (values < 1000, >= 1000, >= 1M) that affect the rendered output.",
+      "category": "design",
+      "why_it_matters": "The task says to test 'formatting of numbers'. Testing formatCurrency through the component covers integration, but dedicated unit tests for the utility would be more precise. The task scope is the component test file only."
+    },
+    {
+      "id": "q4",
+      "question": "What edge cases beyond zero values should be tested? Candidates: negative numbers, very large numbers (billions), fractional volumes, empty/invalid date strings.",
+      "category": "requirements",
+      "why_it_matters": "The task mentions 'edge cases like zero values' but doesn't enumerate all cases. Negative trades or volumes may not be possible in practice, but the component doesn't guard against them."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Plain `render()` from @testing-library/react is sufficient since the component has no context/provider dependencies.",
+      "confidence": 0.95,
+      "if_wrong": "We'd need to switch to renderWithProviders, but the component source shows no hooks, useQuery, useNavigate, or context usage."
+    },
+    {
+      "id": "a2",
+      "assumption": "The test file should go at frontend/src/__tests__/AnalyticsSummaryCards.test.tsx, matching the existing test file location pattern.",
+      "confidence": 0.95,
+      "if_wrong": "We'd need to place it elsewhere, but all existing tests are in src/__tests__/."
+    },
+    {
+      "id": "a3",
+      "assumption": "We should use vitest globals (describe, it, expect) without explicit imports, since vitest.config.ts has globals: true.",
+      "confidence": 0.9,
+      "if_wrong": "Existing tests do import from vitest explicitly, so we should follow that convention even if globals are available."
+    },
+    {
+      "id": "a4",
+      "assumption": "formatCurrency does not need to be mocked — we should test the component's actual rendered output including the formatted currency values.",
+      "confidence": 0.85,
+      "if_wrong": "If tests become brittle due to formatting changes, we'd need to mock formatCurrency and test it separately."
+    },
+    {
+      "id": "a5",
+      "assumption": "For date formatting assertions, we should construct the expected value using the same `new Date(iso).toLocaleString()` call rather than hardcoding a locale-specific string.",
+      "confidence": 0.9,
+      "if_wrong": "If the test environment has unstable locale behavior, we'd need to mock Date.prototype.toLocaleString."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

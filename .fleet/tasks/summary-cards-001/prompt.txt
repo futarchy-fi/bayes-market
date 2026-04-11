@@ -1,0 +1,27 @@
+[Task summary-cards-001] PHASE 1: QUESTION GENERATION
+Title: Add tests for AnalyticsSummaryCards component
+Description: Create frontend/src/__tests__/AnalyticsSummaryCards.test.tsx with tests for frontend/src/features/analytics/AnalyticsSummaryCards.tsx. Test rendering of summary cards with mock data, formatting of numbers, and handling of edge cases like zero values.
+Repo: /home/kelvin/bayes-market
+
+Explore the codebase. Identify what you need to know before building.
+
+YOU MUST create .fleet/tasks/summary-cards-001/questions.json with this structure:
+{
+  "phase": "question",
+  "questions": [
+    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  ],
+  "assumptions": [
+    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  ],
+  "spawn_children": false,
+  "children": []
+}
+
+DO NOT STOP until questions.json exists and contains at least one question.
+Verify: ls -la .fleet/tasks/summary-cards-001/ to confirm the file was written.
+
+DECOMPOSITION: Set spawn_children=true only if sub-questions warrant their own
+full 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: summary-cards-001"
