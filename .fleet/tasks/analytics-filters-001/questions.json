@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the test render AnalyticsFilters in isolation (unit-style with direct props) or through the full Analytics page route (integration-style like Analytics.test.tsx)?",
+      "category": "design",
+      "why_it_matters": "The task says to create AnalyticsFilters.test.tsx, implying isolated unit tests. But the existing Analytics.test.tsx already covers market selection and interval toggle via integration. Isolated tests would test the component's prop/callback contract directly without mocking API calls."
+    },
+    {
+      "id": "q2",
+      "question": "Does AnalyticsFilters need MemoryRouter wrapping since it uses react-router-dom's Link component internally?",
+      "category": "codebase",
+      "why_it_matters": "The component imports Link from react-router-dom (line 1) and renders it conditionally when selectedMarket is provided. Tests will crash without a Router context. Need to decide whether to use renderWithProviders (which includes MemoryRouter) or a minimal wrapper."
+    },
+    {
+      "id": "q3",
+      "question": "Should tests verify the 'Open Market' link renders with the correct href when a selectedMarket is provided?",
+      "category": "requirements",
+      "why_it_matters": "The task description mentions market selection dropdown, interval toggle, and callback handling. But the component also conditionally renders an 'Open Market' link, StatusBadge, and market metadata (liquidity, volume, expires). Testing these would provide fuller coverage."
+    },
+    {
+      "id": "q4",
+      "question": "What test pattern should be used for verifying the active/inactive visual state of interval buttons?",
+      "category": "design",
+      "why_it_matters": "The existing Analytics.test.tsx uses toHaveStyle({ borderColor: 'var(--color-primary)' }) to check active state. For isolated tests, we can verify the same inline style approach, but need to confirm this pattern works reliably with the conditional style object spread on lines 94-98."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Tests should render AnalyticsFilters in isolation with direct props and vi.fn() callbacks, not through the full Analytics page",
+      "confidence": 0.9,
+      "if_wrong": "Would need to mock API calls and render via the Analytics route component instead, duplicating Analytics.test.tsx patterns"
+    },
+    {
+      "id": "a2",
+      "assumption": "renderWithProviders from helpers.tsx should be used since the component uses Link from react-router-dom",
+      "confidence": 0.95,
+      "if_wrong": "Would need a custom minimal MemoryRouter wrapper, but renderWithProviders already provides this and is the established pattern"
+    },
+    {
+      "id": "a3",
+      "assumption": "The test file should follow the same patterns as AnalyticsSummaryCards.test.tsx (direct component rendering with props) but with renderWithProviders for Router context",
+      "confidence": 0.9,
+      "if_wrong": "Would need a different test structure, but AnalyticsSummaryCards.test.tsx is the closest precedent for testing an analytics sub-component"
+    },
+    {
+      "id": "a4",
+      "assumption": "Tests should cover: rendering with/without selectedMarket, dropdown onChange calling onMarketChange, interval button clicks calling onIntervalChange, active button styling, and the Open Market link href",
+      "confidence": 0.85,
+      "if_wrong": "Scope may be too broad or too narrow; the task description explicitly lists market selection dropdown, interval toggle buttons, and proper callback handling as the required tests"
+    },
+    {
+      "id": "a5",
+      "assumption": "No need to test formatCurrency or timeUntil utility functions since they are tested elsewhere and are implementation details of the display",
+      "confidence": 0.95,
+      "if_wrong": "Would need to import and verify formatted output, but these are unit-tested utilities and the component test should focus on behavior"
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
