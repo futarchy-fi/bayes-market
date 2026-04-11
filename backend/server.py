@@ -29,6 +29,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from backend.inference import (
+    COMPILE_RESULT_CACHE,
     CURRENT_MODEL_COMPILER,
     CURRENT_MODEL_QUERY_BACKEND,
     CompileResult,
@@ -37,6 +38,7 @@ from backend.inference import (
     InferenceCompileError,
     InferenceQueryError,
     InferenceUnsupportedQueryError,
+    canonical_json_hash,
 )
 
 FORMULA_SCHEMA_MODULE_PATH = Path(__file__).with_name("formula_schema.py")
@@ -263,6 +265,7 @@ def reset_state() -> None:
     ACCOUNT_RISK.clear()
     ACCOUNT_EXPOSURE.clear()
     MARKET_ENGINE_STATS.clear()
+    COMPILE_RESULT_CACHE.invalidate_all()
     reset_rate_limit_state()
     ORDER_COUNTER = 0
     COMMAND_COUNTER = 0
@@ -921,19 +924,40 @@ def raise_inference_adapter_error(market_id: str, operation: str, exc: Exception
     ) from exc
 
 
+def _compute_market_source_state_hash(market_id: str) -> str:
+    """Compute the canonical source-state hash for a market's current state."""
+    market = MARKETS.get(market_id)
+    if market is None:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+    source_state_inputs = {
+        "market": deepcopy(dict(market)),
+        "conditionalMarginals": deepcopy(dict(CONDITIONAL_MARGINALS.get(market_id, {}))),
+    }
+    return canonical_json_hash(source_state_inputs)
+
+
 def compile_market_for_inference(
     market_id: str,
     *,
     compile_time_ms: float = 0.0,
     last_updated: str | None = None,
 ) -> CompileResult:
-    """Compile a market snapshot for inference queries."""
+    """Compile a market snapshot for inference queries, using cache when possible."""
     market = MARKETS.get(market_id)
     if market is None:
         raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
 
+    source_state_hash = _compute_market_source_state_hash(market_id)
+    state = ensure_market_engine_state(market_id)
+
+    cached = COMPILE_RESULT_CACHE.get(market_id, source_state_hash)
+    if cached is not None:
+        state["cache_hits"] += 1
+        return cached
+
+    state["cache_misses"] += 1
     try:
-        return CURRENT_MODEL_COMPILER.compile_result(
+        result = CURRENT_MODEL_COMPILER.compile_result(
             market_snapshot=deepcopy(market),
             conditional_marginals=deepcopy(CONDITIONAL_MARGINALS.get(market_id, {})),
             compile_time_ms=round(float(compile_time_ms), 3),
@@ -941,6 +965,10 @@ def compile_market_for_inference(
         )
     except InferenceCompileError as exc:
         raise_inference_adapter_error(market_id, "compile_market", exc)
+        return None  # unreachable, but satisfies type checker
+
+    COMPILE_RESULT_CACHE.put(market_id, result)
+    return result
 
 
 def context_mapping_from_assignments(context: list[dict[str, str]]) -> dict[str, str]:
@@ -1054,7 +1082,8 @@ def build_market_compile_result(market_id: str, *, compile_time_ms: float | None
 
 
 def refresh_market_compile_snapshot(market_id: str, *, compile_time_ms: float | None = None) -> None:
-    """Refresh cached compile diagnostics for a market."""
+    """Invalidate cache and refresh compile diagnostics for a market."""
+    COMPILE_RESULT_CACHE.invalidate(market_id)
     state = ensure_market_engine_state(market_id)
     compile_result = build_market_compile_result(market_id, compile_time_ms=compile_time_ms)
     state["compile_id"] = compile_result.compile_id

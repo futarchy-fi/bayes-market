@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the marginals cache live inside the inference module (e.g. CurrentModelQueryBackend in current_model.py) or in the server adapter layer (server.py where refresh_market_compile_snapshot already lives)? The task description says 'inference module' but the invalidation trigger points (ProbabilityEdit, resolution) are wired in server.py.",
+      "category": "design",
+      "why_it_matters": "This determines the module boundary for the cache. Putting it in the inference module keeps the server thin but requires the module to accept invalidation signals. Putting it in the server keeps invalidation co-located with triggers but couples cache logic to the HTTP layer."
+    },
+    {
+      "id": "q2",
+      "question": "What exactly should be cached? Currently every query_market_marginals_for_inference call recompiles from scratch via compile_market_for_inference. Should we cache (a) the CompileResult/artifact per market, (b) the MarginalQueryResult per (market, context) pair, or (c) both?",
+      "category": "requirements",
+      "why_it_matters": "Caching only compile artifacts avoids redundant compilation but still requires query execution. Caching query results adds a second cache layer with its own invalidation semantics. The scope of 'junction-tree marginals cache' in the task title is ambiguous."
+    },
+    {
+      "id": "q3",
+      "question": "Should cache invalidation be hash-based (compare source_state_hash on query, serve cached if match) or event-based (explicitly invalidate/clear cache entries when mutations occur)? The codebase already computes canonical_json_hash for source state.",
+      "category": "design",
+      "why_it_matters": "Hash-based is simpler and naturally correct (stale data impossible) but requires hashing on every query. Event-based is faster at query time but requires every mutation path to remember to invalidate, which is a correctness risk."
+    },
+    {
+      "id": "q4",
+      "question": "The task says 'invalidated for affected variables.' In the current model each market has one variable, but conditional_marginals introduce cross-market context variables (e.g. market A's conditionals reference market B's variable). When market B's marginals change, should market A's cached conditionals also be invalidated?",
+      "category": "requirements",
+      "why_it_matters": "Cross-market invalidation is significantly more complex than per-market invalidation. It requires tracking a dependency graph of which markets' caches depend on which other markets' state. Getting this wrong means stale conditional probabilities."
+    },
+    {
+      "id": "q5",
+      "question": "Should EventTrade trigger cache invalidation? The T553 freeze document explicitly states 'EventTrade does not mutate market marginals in this stub' and does not trigger refresh_market_compile_snapshot. But the task description says 'when trades occur.' Is the task expecting us to add EventTrade as an invalidation trigger, or just document that it doesn't need one?",
+      "category": "requirements",
+      "why_it_matters": "Adding EventTrade as an invalidation trigger would contradict the T553 freeze decision. If EventTrade will eventually mutate marginals (e.g. via AMM), the invalidation hook should be designed for it now even if not wired yet."
+    },
+    {
+      "id": "q6",
+      "question": "The MARKET_ENGINE_STATS dict already has cache_hits and cache_misses counters (initialized to 0) but they are never incremented anywhere. Should the new cache logic update these counters, and should they be exposed through the existing GET /v1/markets/{id}/engine-stats endpoint?",
+      "category": "codebase",
+      "why_it_matters": "These counters are already part of the engine stats contract (T571). If the cache logic doesn't update them, the counters remain dead code. If it does, we need to ensure the semantics match the T571 contract freeze expectations."
+    },
+    {
+      "id": "q7",
+      "question": "cache_hit=False is hardcoded in both query_marginals and query_atomic_event in CurrentModelQueryBackend. Should the cache make these return cache_hit=True when serving from cache, or is cache_hit a contract-level concept that stays False for the current model and only becomes True for a future multi-variable junction-tree backend?",
+      "category": "design",
+      "why_it_matters": "If cache_hit is meant to reflect actual caching behavior, it should change. If it's a protocol-level marker for 'this result came from a previously-computed junction tree propagation' vs 'freshly computed', it has different semantics than a simple HTTP-style cache hit."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The cache should be per-market and in-memory (not persisted to disk), matching the existing MARKET_ENGINE_STATS pattern of process-local state.",
+      "confidence": 0.9,
+      "if_wrong": "Would need to design a persistence layer (e.g. SQLite, Redis) and handle process restart cache warming, significantly expanding scope."
+    },
+    {
+      "id": "a2",
+      "assumption": "Market resolution (POST /v1/markets/{id}/resolve returning 201) should also trigger cache invalidation, since it already calls refresh_market_compile_snapshot.",
+      "confidence": 0.85,
+      "if_wrong": "Resolution might need different handling (e.g. cache removal rather than invalidation) since a resolved market shouldn't be queried further."
+    },
+    {
+      "id": "a3",
+      "assumption": "No public /v1/cache/* endpoints should be added. The T553 freeze explicitly rules these out. Cache invalidation is purely internal.",
+      "confidence": 0.95,
+      "if_wrong": "Would contradict the T553 boundary freeze document and require re-opening that design decision."
+    },
+    {
+      "id": "a4",
+      "assumption": "The cache eviction strategy should be invalidate-on-write (no TTL, no LRU size limit), since the number of markets is bounded and each market has at most a few cached entries.",
+      "confidence": 0.8,
+      "if_wrong": "If the system needs to handle thousands of markets with many conditional contexts each, an unbounded cache could cause memory pressure and would need LRU or size-based eviction."
+    },
+    {
+      "id": "a5",
+      "assumption": "Cross-market conditional marginal invalidation (q4) is out of scope for T553 and belongs to T554's dependency-tracked propagation work.",
+      "confidence": 0.7,
+      "if_wrong": "Would need to build a variable-to-market dependency index and implement transitive invalidation, which is a substantial addition to scope."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
