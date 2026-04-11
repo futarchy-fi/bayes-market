@@ -40,7 +40,7 @@ Pick ONE at a time. These test the system with real work:
 - [x] Clean up old worktrees: `git worktree list` and remove stale ones — checked 2026-04-11, only base worktrees exist
 - [x] Review LEARNINGS.md, extract patterns into prompts or workflow code — reviewed 2026-04-11, patterns well-documented
 - [x] Check for stuck workflows: `temporal workflow list --query 'ExecutionStatus="Running"'` >30min same phase — checked 2026-04-11, none stuck
-- [ ] Compact any crew sessions approaching context limit
+- [-] Compact any crew sessions approaching context limit — 9 cao sessions exist (oldest Apr 8), requires manual session access to check context usage
 
 ## Done
 - [x] cgroup freeze/thaw for mid-phase decomposition (`v2-interruptible-cgroup-2026-04-10`)
