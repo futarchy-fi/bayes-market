@@ -1,0 +1,22 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    { "step": 1, "task": "Create test file with mock setup: vi.mock session context, vi.mock hooks (useProbabilityEdit, useMarkets, useMarket)", "files_created": ["frontend/src/__tests__/ConditionalEditor.test.tsx"], "files_modified": [], "verified": true },
+    { "step": 2, "task": "Define fixtures: mockMarket, configuredSession, unconfiguredSession, mockOtherMarkets, mockContextMarketOutcomes, defaultMutationState, defaultQueryState", "files_created": [], "files_modified": ["frontend/src/__tests__/ConditionalEditor.test.tsx"], "verified": true },
+    { "step": 3, "task": "Write beforeEach: vi.clearAllMocks, set default returns for all mocked hooks", "files_created": [], "files_modified": ["frontend/src/__tests__/ConditionalEditor.test.tsx"], "verified": true },
+    { "step": 4, "task": "Test: shows setup message when session is not configured", "files_created": [], "files_modified": ["frontend/src/__tests__/ConditionalEditor.test.tsx"], "verified": true },
+    { "step": 5, "task": "Test: renders form with outcome select, probability slider, and submit button", "files_created": [], "files_modified": ["frontend/src/__tests__/ConditionalEditor.test.tsx"], "verified": true },
+    { "step": 6, "task": "Test: shows unconditional notation without context", "files_created": [], "files_modified": ["frontend/src/__tests__/ConditionalEditor.test.tsx"], "verified": true },
+    { "step": 7, "task": "Test: Add condition button adds a context row + disabled when no other markets", "files_created": [], "files_modified": ["frontend/src/__tests__/ConditionalEditor.test.tsx"], "verified": true },
+    { "step": 8, "task": "Test: context row market select shows only other active markets", "files_created": [], "files_modified": ["frontend/src/__tests__/ConditionalEditor.test.tsx"], "verified": true },
+    { "step": 9, "task": "Test: selecting a market in context row populates outcome dropdown", "files_created": [], "files_modified": ["frontend/src/__tests__/ConditionalEditor.test.tsx"], "verified": true },
+    { "step": 10, "task": "Test: remove button removes a context row", "files_created": [], "files_modified": ["frontend/src/__tests__/ConditionalEditor.test.tsx"], "verified": true },
+    { "step": 11, "task": "Test: notation updates when conditions are added", "files_created": [], "files_modified": ["frontend/src/__tests__/ConditionalEditor.test.tsx"], "verified": true },
+    { "step": 12, "task": "Test: submits correct payload with context conditions", "files_created": [], "files_modified": ["frontend/src/__tests__/ConditionalEditor.test.tsx"], "verified": true },
+    { "step": 13, "task": "Test: submit button shows conditional text and pending state", "files_created": [], "files_modified": ["frontend/src/__tests__/ConditionalEditor.test.tsx"], "verified": true },
+    { "step": 14, "task": "Test: shows success message with conditional prefix", "files_created": [], "files_modified": ["frontend/src/__tests__/ConditionalEditor.test.tsx"], "verified": true },
+    { "step": 15, "task": "Test: shows error message when mutation fails", "files_created": [], "files_modified": ["frontend/src/__tests__/ConditionalEditor.test.tsx"], "verified": true },
+    { "step": 16, "task": "Run vitest — all 13 tests pass", "files_created": [], "files_modified": [], "verified": true }
+  ],
+  "all_steps_done": true
+}
