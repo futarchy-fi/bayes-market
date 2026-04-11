@@ -1,0 +1,121 @@
+{
+  "phase": "research",
+  "note": "Analysis phase failed (no questions.json generated). Questions were self-derived from task title 'Bounded-treewidth test coverage'.",
+  "answers": [
+    {
+      "question_id": "q1",
+      "question": "What bounded-treewidth logic exists in the codebase and where?",
+      "answer": "The bounded-treewidth logic lives in backend/inference/current_model.py. CurrentModelCompiler.compile_artifact() (lines 364-428) computes junction_tree_width = max(0, max_clique_size - 1) at line 403 and compares it against self.max_treewidth (default 8 from EngineConfig) at line 406. If exceeded, exact_eligible is set to False and eligibility_reason to 'treewidth_exceeds_bound'. The EngineConfig dataclass in backend/inference/config.py (line 18) defines max_treewidth=8 with validation that it must be non-negative. CurrentModelCompileArtifact (lines 298-335) stores junction_tree_width and validates it >= 0.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/inference/current_model.py:402-411",
+        "backend/inference/current_model.py:312",
+        "backend/inference/current_model.py:331-332",
+        "backend/inference/config.py:18",
+        "backend/inference/config.py:33-34",
+        "backend/inference/current_model.py:356-362"
+      ],
+      "uncertainty": "None - code is clear and self-contained",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "question": "What is the current test coverage for bounded-treewidth functionality?",
+      "answer": "Test coverage is minimal. There is exactly ONE test that checks junction_tree_width: test_current_model_compiler_builds_truthful_singleton_artifact (line 190) verifies junction_tree_width==0 and exact_eligible==True for a simple singleton market. There is ONE test for ineligible artifacts: test_current_model_query_backend_rejects_ineligible_artifacts (line 378) but it uses eligibility_reason='approximate_only', NOT 'treewidth_exceeds_bound'. No tests exist for: (1) treewidth exceeding the bound, (2) custom max_treewidth values on CurrentModelCompiler, (3) multi-variable cliques that produce junction_tree_width > 0, (4) EngineConfig.max_treewidth validation (negative values), (5) CurrentModelCompileArtifact.junction_tree_width validation, (6) boundary conditions (treewidth exactly at limit vs one over).",
+      "confidence": 0.97,
+      "evidence": [
+        "tests/test_bayes_market_inference_module.py:190-192",
+        "tests/test_bayes_market_inference_module.py:378-389",
+        "tests/test_bayes_market_inference_module.py:151-198"
+      ],
+      "uncertainty": "There may be indirect coverage through integration tests in test_bayes_market_api.py, but grep shows only junction_tree_width==0 assertions there",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "question": "What specific test gaps exist for bounded-treewidth?",
+      "answer": "Six concrete test gaps: (1) No test triggers treewidth_exceeds_bound - need a multi-context conditional_marginals scenario with market_outcomes_by_variable that creates cliques with size > max_treewidth+1. (2) No test uses CurrentModelCompiler with a custom max_treewidth (e.g., max_treewidth=0 or max_treewidth=1 to easily trigger the bound). (3) No test for _build_cliques with multiple context variables creating multi-node cliques. (4) No validation test for negative junction_tree_width on CurrentModelCompileArtifact. (5) No validation test for negative max_treewidth on EngineConfig. (6) No boundary test: treewidth exactly equal to max_treewidth should be eligible, treewidth = max_treewidth+1 should be ineligible.",
+      "confidence": 0.95,
+      "evidence": [
+        "tests/test_bayes_market_inference_module.py:full file scan",
+        "backend/inference/current_model.py:406-411",
+        "backend/inference/current_model.py:179-209",
+        "backend/inference/config.py:33-34",
+        "backend/inference/current_model.py:331-332"
+      ],
+      "uncertainty": "Not sure if there are other test files I haven't found that cover some of these",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "question": "How can tests trigger multi-variable cliques for treewidth > 0?",
+      "answer": "The _build_cliques function (line 179) is called when conditional_marginals is non-empty AND market_outcomes_by_variable is not None (line 394). It builds cliques by parsing context keys: each conditional key like 'varA=yes|varB=no' creates a clique containing {variable_id, varA, varB}. To get junction_tree_width > 0, need clique with size >= 2 (which gives width >= 1). To exceed default max_treewidth=8, need a clique with 10+ nodes (9 context variables in one key). Alternatively, use CurrentModelCompiler(max_treewidth=0) to make ANY multi-node clique exceed the bound. The simplest approach for testing: create a compiler with max_treewidth=0 or max_treewidth=1 and pass conditional_marginals with at least one context variable plus market_outcomes_by_variable.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/inference/current_model.py:179-209",
+        "backend/inference/current_model.py:394-400",
+        "backend/inference/current_model.py:402-411",
+        "backend/inference/current_model.py:156-165"
+      ],
+      "uncertainty": "Need to verify that _parse_context_key_variable_ids correctly parses multi-pipe keys",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "question": "What test framework, patterns, and imports are used?",
+      "answer": "The test file uses Python unittest (unittest.TestCase). The inference module test (test_bayes_market_inference_module.py) imports from backend.inference and dynamically loads backend/server.py via importlib. Test fixtures use server.MARKETS (deepcopy), server.reset_state() in setUp. The build_compile_result helper method constructs CompileResult via CURRENT_MODEL_COMPILER. Tests use self.assertEqual, self.assertTrue, self.assertRaises, and dataclasses.replace for creating modified artifacts. CurrentModelCompiler is imported and can be instantiated with custom max_treewidth. compile_current_market_artifact is the function under test for compilation.",
+      "confidence": 0.99,
+      "evidence": [
+        "tests/test_bayes_market_inference_module.py:0-26",
+        "tests/test_bayes_market_inference_module.py:38-52",
+        "tests/test_bayes_market_inference_module.py:247-248"
+      ],
+      "uncertainty": "None",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "question": "What does the _estimate_memory_bytes function compute and is it tested?",
+      "answer": "_estimate_memory_bytes (line 212-216) sums states*32 + size*64 for each clique. It is indirectly tested: test_current_model_compiler_builds_truthful_singleton_artifact asserts memory_bytes==128 (line 193), which corresponds to a singleton clique with states=2, size=1: 2*32 + 1*64 = 128. However, there is no test for multi-clique memory estimation.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/inference/current_model.py:212-216",
+        "tests/test_bayes_market_inference_module.py:193"
+      ],
+      "uncertainty": "The memory_bytes=128 assertion implicitly tests _estimate_memory_bytes for the singleton case",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "assumption": "The treewidth_exceeds_bound path is untested",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Core gap - the primary bounded-treewidth feature has zero test coverage for the case where treewidth actually exceeds the bound"
+    },
+    {
+      "assumption_id": "a2",
+      "assumption": "Multi-variable cliques can be tested by passing conditional_marginals with context keys containing multiple variables along with market_outcomes_by_variable",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "This is the mechanism to create test scenarios with junction_tree_width > 0"
+    },
+    {
+      "assumption_id": "a3",
+      "assumption": "CurrentModelCompiler can be instantiated with custom max_treewidth for testing",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Enables easy boundary testing without needing to create extremely large cliques"
+    },
+    {
+      "assumption_id": "a4",
+      "assumption": "EngineConfig and CurrentModelCompileArtifact validation for negative max_treewidth/junction_tree_width is untested",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Validation edge cases are missing but lower priority than the main treewidth-exceeds-bound path"
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

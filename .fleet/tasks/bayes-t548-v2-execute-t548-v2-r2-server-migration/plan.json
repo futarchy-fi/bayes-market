@@ -1,0 +1,51 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Build market_outcomes_by_variable inline in compile_market_for_inference by parsing CONDITIONAL_MARGINALS context keys and looking up outcome counts via find_market_by_variable_id, then pass the mapping to CURRENT_MODEL_COMPILER.compile_result()",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Creating a separate top-level helper function — unnecessary indirection for ~10 lines of inline logic",
+        "Building the mapping in build_market_compile_result instead — compile_market_for_inference is the right level since it has access to all data"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Delete all four dead server.py helper functions (parse_context_key_variable_ids, clique_state_count, build_market_cliques, estimate_market_engine_memory_bytes) in one step since they form a dependency chain with zero external callers",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Keeping functions as deprecated stubs — adds confusion, they're already unreachable",
+        "Deleting incrementally across multiple commits — unnecessary since no callers exist"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "No changes to inference module __init__.py exports or server.py imports — both are already correct from the r1 task",
+      "based_on": ["q5", "q6"],
+      "alternatives_rejected": [],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Update compile_market_for_inference (server.py:975-994) to build a market_outcomes_by_variable dict by: (a) getting conditional_marginals for the market, (b) for each context_key, splitting on '|' and '=' to extract variable_ids, (c) for each unique variable_id, calling find_market_by_variable_id and counting outcomes, (d) passing market_outcomes_by_variable=mapping to CURRENT_MODEL_COMPILER.compile_result()",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Delete the four dead functions from server.py: parse_context_key_variable_ids (lines 1043-1053), clique_state_count (lines 1056-1063), build_market_cliques (lines 1066-1082), and estimate_market_engine_memory_bytes (lines 1085-1096)",
+      "depends_on": []
+    },
+    {
+      "step": 3,
+      "task": "Run the existing test suite to verify no regressions — focus on inference compilation tests and server market compile tests",
+      "depends_on": [1, 2]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

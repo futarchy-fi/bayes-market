@@ -1,0 +1,109 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Move multi-variable clique building from server.py into the inference module compiler so conditional-context-derived cliques are part of the compiled artifact, not synthetic server helpers",
+      "based_on": ["codebase_analysis"],
+      "alternatives_rejected": [
+        "Leave synthetic clique building in server.py — duplicates inference-concern logic and prevents the compiler from computing true treewidth",
+        "Build a fully general tree decomposition algorithm — out of scope for skeleton; current model only has conditional-context-implied interactions, not arbitrary factor graphs"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Compute actual junction tree width from multi-variable cliques in the compiler and expose it in the compile artifact, replacing the hardcoded width=0",
+      "based_on": ["codebase_analysis"],
+      "alternatives_rejected": [
+        "Keep width=0 for all markets — misleads observability and prevents eligibility gating",
+        "Compute width lazily on query — compile-time width is needed for eligibility determination before any query is issued"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Add a max_treewidth bound to EngineConfig and use it to determine exact_eligible in the compiler. Markets exceeding the bound are marked ineligible with a descriptive reason.",
+      "based_on": ["codebase_analysis"],
+      "alternatives_rejected": [
+        "Hardcode the treewidth limit — makes testing and future configuration changes harder",
+        "Skip eligibility checking entirely — the existing exact_eligible field and eligibility_reason already exist but are always true; this is the right time to make them meaningful"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Remove duplicated server.py helpers (build_market_cliques, clique_state_count, parse_context_key_variable_ids, estimate_market_engine_memory_bytes) after migrating their logic into the inference module",
+      "based_on": ["codebase_analysis"],
+      "alternatives_rejected": [
+        "Keep both server and inference versions — duplication leads to divergence and defeats the extraction goal of T548"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Pass conditional_marginals and market outcome metadata into the compiler so it can build context-aware cliques without reaching into server globals",
+      "based_on": ["codebase_analysis"],
+      "alternatives_rejected": [
+        "Have the compiler read MARKETS and CONDITIONAL_MARGINALS globals directly — violates the compile boundary; compiler should be a pure function of its inputs",
+        "Add a market-state provider protocol — over-abstraction for this skeleton phase"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Extend CurrentModelCompiler.compile_artifact to accept an optional market_outcomes_by_variable parameter (mapping variable_id -> outcome_count) and build multi-variable cliques from conditional_marginals context keys instead of only singleton cliques. Compute junction_tree_width as max(clique_size - 1) across all cliques.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add max_treewidth field to EngineConfig (default: a reasonable bound like 8) and wire it into the compiler so that artifacts with junction_tree_width > max_treewidth have exact_eligible=False with eligibility_reason='treewidth_exceeds_bound'.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add context-key parsing and clique-state-count computation to the inference module (either in current_model.py or a new helpers file) so the compiler can derive multi-variable cliques without depending on server.py helpers.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Update compile_market_for_inference in server.py to pass the new market_outcomes_by_variable data to the compiler and remove the now-redundant build_market_cliques, clique_state_count, parse_context_key_variable_ids, and estimate_market_engine_memory_bytes helpers from server.py.",
+      "depends_on": [1, 2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Update __init__.py exports and any downstream imports (server.py, tests) to reflect the new inference module surface.",
+      "depends_on": [4]
+    },
+    {
+      "step": 6,
+      "task": "Add unit tests for: multi-variable clique building from conditional contexts, treewidth computation, bounded-treewidth eligibility gating (both eligible and ineligible cases), and context-key parsing.",
+      "depends_on": [1, 2, 3]
+    },
+    {
+      "step": 7,
+      "task": "Run full test suite (python3 -m unittest discover -s tests -p 'test_bayes_market*.py') and verify all 363+ tests pass with no regressions.",
+      "depends_on": [4, 5, 6]
+    }
+  ],
+  "spawn_children": true,
+  "children": [
+    {
+      "id": "t548-v2-r1-multi-variable-cliques",
+      "title": "Multi-variable clique building and treewidth computation",
+      "description": "Extend CurrentModelCompiler to build multi-variable cliques from conditional_marginals context keys, compute junction_tree_width as max(clique_size - 1), and add bounded-treewidth eligibility checking via max_treewidth in EngineConfig. Covers steps 1-3."
+    },
+    {
+      "id": "t548-v2-r2-server-migration",
+      "title": "Migrate server synthetic helpers to inference module",
+      "description": "Update compile_market_for_inference in server.py to pass market outcome metadata to the compiler. Remove build_market_cliques, clique_state_count, parse_context_key_variable_ids, and estimate_market_engine_memory_bytes from server.py. Update exports and imports. Covers steps 4-5."
+    },
+    {
+      "id": "t548-v2-r3-test-coverage",
+      "title": "Bounded-treewidth test coverage",
+      "description": "Add unit tests for multi-variable clique building, treewidth computation, eligibility gating, and context-key parsing. Verify full test suite passes with no regressions. Covers steps 6-7."
+    }
+  ]
+}
