@@ -21,6 +21,7 @@ from .current_model import (
     compile_current_model_artifact,
     compile_current_model_result,
 )
+from .cache_invalidation import CacheInvalidationManager, InvalidationResult
 from .errors import (
     InferenceCompileError,
     InferenceError,
@@ -30,6 +31,7 @@ from .errors import (
 
 __all__ = [
     "AtomicEventQueryResult",
+    "CacheInvalidationManager",
     "CURRENT_MODEL_COMPILER",
     "CURRENT_MODEL_QUERY_BACKEND",
     "CURRENT_MODEL_EXACT_ELIGIBILITY_REASON",
@@ -46,6 +48,7 @@ __all__ = [
     "InferenceQueryBackend",
     "InferenceQueryError",
     "InferenceUnsupportedQueryError",
+    "InvalidationResult",
     "MarginalQueryResult",
     "compile_current_market_artifact",
     "compile_current_market_result",
