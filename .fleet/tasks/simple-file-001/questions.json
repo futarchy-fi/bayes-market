@@ -1,0 +1,57 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should greeting.ts live at frontend/src/lib/greeting.ts (as specified) or at frontend/src/lib/utils/greeting.ts (matching the existing convention where utility functions like format.ts live in lib/utils/)?",
+      "category": "codebase",
+      "why_it_matters": "The task specifies frontend/src/lib/greeting.ts but existing utility files are in frontend/src/lib/utils/. Placing it at the wrong path could break consistency or conflict with the task spec."
+    },
+    {
+      "id": "q2",
+      "question": "Should the test import use the @/ path alias (e.g., import from '@/lib/greeting') matching the existing test convention, or a relative path?",
+      "category": "codebase",
+      "why_it_matters": "Existing tests use the @/ path alias mapped to ./src/*. Using the wrong import style would be inconsistent with codebase conventions."
+    },
+    {
+      "id": "q3",
+      "question": "Should the test import describe/it/expect from 'vitest' explicitly (matching format.test.ts convention) even though vitest globals are enabled?",
+      "category": "codebase",
+      "why_it_matters": "Vitest globals are enabled in config, but existing tests still explicitly import from 'vitest'. Following the existing pattern ensures consistency."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The file should be placed exactly at frontend/src/lib/greeting.ts as the task description specifies, not in lib/utils/.",
+      "confidence": 0.85,
+      "if_wrong": "Would need to move the file to frontend/src/lib/utils/greeting.ts to match existing conventions."
+    },
+    {
+      "id": "a2",
+      "assumption": "The function signature is greet(name: string): string returning the template literal `Hello, ${name}!` with no edge case handling needed.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to add null/empty string handling or different formatting."
+    },
+    {
+      "id": "a3",
+      "assumption": "The test file should use Vitest (the project's testing framework) with explicit imports from 'vitest', matching the existing test pattern in format.test.ts.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to adjust test setup or imports."
+    },
+    {
+      "id": "a4",
+      "assumption": "The function should be a named export (export function greet), not a default export, matching existing lib conventions.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to change to default export."
+    },
+    {
+      "id": "a5",
+      "assumption": "The test should cover at least basic cases: normal name input and potentially empty string, matching the straightforward testing style in format.test.ts.",
+      "confidence": 0.9,
+      "if_wrong": "May need more exhaustive test cases or different assertion patterns."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
