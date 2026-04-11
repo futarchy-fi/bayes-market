@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { screen, waitFor, fireEvent } from "@testing-library/react";
 import { renderWithProviders } from "./helpers";
@@ -68,6 +69,44 @@ vi.mock("@/features/graph/useForceGraph", () => ({
       flushPositions: vi.fn(),
     }),
   ),
+}));
+
+vi.mock("@/features/history/HistoryContext", () => ({
+  HistoryProvider: ({ children }: { children: React.ReactNode }) => children,
+  useHistory: () => ({
+    push: vi.fn(),
+    undo: vi.fn(),
+    redo: vi.fn(),
+    clear: vi.fn(),
+    canUndo: false,
+    canRedo: false,
+    undoStack: [],
+    redoStack: [],
+  }),
+  useOptionalHistory: () => null,
+}));
+
+vi.mock("@/features/history/useDraftEdits", () => ({
+  useDraftEdits: () => ({
+    stageDraft: vi.fn(),
+    getDraft: () => undefined,
+    clearDrafts: vi.fn(),
+    hasDrafts: false,
+    allDrafts: () => [],
+    drafts: new Map(),
+  }),
+}));
+
+vi.mock("@/features/history/useUndoRedoKeyboard", () => ({
+  useUndoRedoKeyboard: vi.fn(),
+}));
+
+vi.mock("@/features/history/UndoRedoToolbar", () => ({
+  UndoRedoToolbar: () => null,
+}));
+
+vi.mock("@/features/graph/ForceDirectedGraph", () => ({
+  ForceDirectedGraph: () => null,
 }));
 
 vi.mock("@/lib/query/hooks", () => ({

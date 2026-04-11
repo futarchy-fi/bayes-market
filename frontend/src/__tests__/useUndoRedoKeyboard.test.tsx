@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { HistoryProvider, useHistory } from "@/features/history/HistoryContext";
 import { useUndoRedoKeyboard, isEditableElement } from "@/features/history/useUndoRedoKeyboard";

@@ -3,7 +3,7 @@
   "steps_completed": [
     {
       "step": 1,
-      "task": "Create Command interface and types: Command<T> with execute(), undo(), description. Concrete types: AssumptionAddCommand, AssumptionRemoveCommand, AssumptionClearAllCommand, ProbabilityEditCommand with DraftEdit interface.",
+      "task": "Create Command interface and types: Command with execute(), undo(), description. Concrete types: AssumptionAddCommand, AssumptionRemoveCommand, AssumptionClearAllCommand, ProbabilityEditCommand with DraftEdit interface.",
       "files_created": ["frontend/src/features/history/commands.ts"],
       "files_modified": [],
       "verified": true
@@ -24,14 +24,14 @@
     },
     {
       "step": 4,
-      "task": "Implement probability edit draft buffer: useDraftEdits() hook stages edits locally with undo/redo via ProbabilityEditCommand. CptPanel updated to use draft flow with stageDraft/commitDrafts pattern.",
+      "task": "Implement probability edit draft buffer: useDraftEdits() hook stages edits locally with undo/redo via ProbabilityEditCommand. CptPanel updated to use draft flow with stageDraft/commitDrafts pattern and visual draft indicators.",
       "files_created": ["frontend/src/features/history/useDraftEdits.ts"],
       "files_modified": ["frontend/src/features/trading/CptPanel.tsx"],
       "verified": true
     },
     {
       "step": 5,
-      "task": "Wire HistoryProvider into MarketDetail: active markets wrapped in HistoryProvider > AssumptionProvider. All trading panels (AssumptionPanel, CptPanel, EventTradePanel, graph) inside provider scope.",
+      "task": "Wire HistoryProvider into MarketDetail: active markets wrapped in HistoryProvider > AssumptionProvider. All trading panels (AssumptionPanel, CptPanel, EventTradePanel, graph) inside provider scope. Non-active markets get unwrapped rendering.",
       "files_created": [],
       "files_modified": ["frontend/src/routes/MarketDetail.tsx"],
       "verified": true
@@ -52,7 +52,7 @@
     },
     {
       "step": 8,
-      "task": "Add tests: HistoryContext reducer tests (13), command execute/undo tests (12), useDraftEdits integration tests (8), keyboard shortcut tests (14), AssumptionContext tests (16). All 63 tests pass.",
+      "task": "Add tests: HistoryContext reducer tests (13), command execute/undo tests (12), useDraftEdits integration tests (8), keyboard shortcut tests (14). Total 47 new tests all passing. Fixed MarketDetail tests with history/ForceDirectedGraph mocks.",
       "files_created": [
         "frontend/src/__tests__/HistoryContext.test.tsx",
         "frontend/src/__tests__/commands.test.ts",
