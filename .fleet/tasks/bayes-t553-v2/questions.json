@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should EventTrade acceptance trigger cache invalidation now, or remain side-effect-free as documented in the freeze decision? The task description says 'when trades occur' but the architecture freeze doc explicitly says EventTrade does not rebuild compiled state because it doesn't mutate marginals.",
+      "category": "requirements",
+      "why_it_matters": "This is the central ambiguity. If EventTrade should now invalidate, it changes the narrow invalidation boundary that the freeze doc explicitly preserves. If not, the task scope is limited to hardening the existing ProbabilityEdit/resolve/close/reopen invalidation paths."
+    },
+    {
+      "id": "q2",
+      "question": "What does 'affected variables' mean in the context of invalidation? Currently each market is independent (singleton cliques, junction_tree_width=0). Should invalidation be scoped per-market only, or should it support cross-market variable dependencies (multi-variable cliques)?",
+      "category": "design",
+      "why_it_matters": "The current model uses singleton cliques for independent markets. If 'affected variables' implies multi-market dependency tracking, that's a significant scope expansion into T554 territory (incremental compile hooks with dependency tracking)."
+    },
+    {
+      "id": "q3",
+      "question": "Should CONDITIONAL_MARGINALS be selectively invalidated (only affected context keys) when a ProbabilityEdit changes a market's marginals, or is the current behavior of accumulating conditional slices without cleanup acceptable?",
+      "category": "design",
+      "why_it_matters": "Currently CONDITIONAL_MARGINALS grows unboundedly - new context keys are added but stale ones are never removed (except on resolution which clears all). If a ProbabilityEdit changes the unconditional marginals, previously cached conditional marginals may be stale."
+    },
+    {
+      "id": "q4",
+      "question": "Should the cache invalidation logic live in the inference module (backend/inference/) or remain in server.py where refresh_market_compile_snapshot currently lives?",
+      "category": "design",
+      "why_it_matters": "The task says 'add cache invalidation logic to the inference module' but the current invalidation trigger (refresh_market_compile_snapshot) is in server.py. Moving it to the inference module means either the inference module needs to know about MARKETS/CONDITIONAL_MARGINALS globals, or we need a proper abstraction boundary."
+    },
+    {
+      "id": "q5",
+      "question": "Should source_state_hash comparison be used to skip redundant recompilation when the market state hasn't actually changed? Currently refresh_market_compile_snapshot always rebuilds regardless of whether the hash changed.",
+      "category": "design",
+      "why_it_matters": "The compile artifact already computes source_state_hash. Comparing old vs new hash before recompiling would be a natural cache invalidation optimization - only invalidate when state actually changed. This would make cache_hits/cache_misses counters meaningful."
+    },
+    {
+      "id": "q6",
+      "question": "What test coverage is expected? Should we add tests to test_bayes_market_inference_module.py (unit-level invalidation logic) or test_bayes_market_api.py (integration-level via HTTP), or both?",
+      "category": "requirements",
+      "why_it_matters": "The historical T553 branch had a dedicated test_cache_invalidation.py. The current test suite has 354 tests across 4 files. The choice affects where new invalidation assertions go and how granular the testing is."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The invalidation scope stays market-scoped (per-market) and does not introduce cross-market dependency tracking, which belongs to T554.",
+      "confidence": 0.9,
+      "if_wrong": "Would need to implement a dependency graph between markets and propagate invalidation across related markets - significantly larger scope."
+    },
+    {
+      "id": "a2",
+      "assumption": "EventTrade remains side-effect-free for cache invalidation purposes, consistent with the freeze doc. 'Trades' in the task description refers to ProbabilityEdit trades that mutate marginals.",
+      "confidence": 0.85,
+      "if_wrong": "Would need to add refresh_market_compile_snapshot call to the event-trade route handler, plus tests verifying EventTrade triggers recompilation."
+    },
+    {
+      "id": "a3",
+      "assumption": "The invalidation logic should be added to the inference module (backend/inference/) as a new component, with server.py calling into it rather than implementing invalidation inline.",
+      "confidence": 0.8,
+      "if_wrong": "If it stays in server.py, the task is simpler but the inference module doesn't own its cache lifecycle."
+    },
+    {
+      "id": "a4",
+      "assumption": "No new public API endpoints are needed. The existing GET /v1/markets/{id}/engine-stats remains the only public observability surface, per the freeze decision.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to add new routes and update service_index_payload, which contradicts the freeze doc."
+    },
+    {
+      "id": "a5",
+      "assumption": "CONDITIONAL_MARGINALS for a market should be cleared when that market's unconditional marginals change (ProbabilityEdit without context), since cached conditionals may reference stale base probabilities.",
+      "confidence": 0.7,
+      "if_wrong": "If conditional marginals should persist across unconditional changes, the invalidation logic is simpler but may serve stale data."
+    },
+    {
+      "id": "a6",
+      "assumption": "The source_state_hash on compile artifacts should be used to detect no-op mutations and skip redundant recompilation (hash-based invalidation).",
+      "confidence": 0.75,
+      "if_wrong": "Always recompiling is simpler and the current approach - but misses an obvious optimization the data model already supports."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
