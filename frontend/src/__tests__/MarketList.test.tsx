@@ -37,7 +37,7 @@ const defaultMarkets: MarketSummary[] = [
 ];
 
 const activeMarkets: MarketSummary[] = [
-  defaultMarkets[0],
+  defaultMarkets[0]!,
   {
     id: "m3",
     title: "Election turnout > 60%",
