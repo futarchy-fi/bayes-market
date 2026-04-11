@@ -35,6 +35,7 @@ vi.mock("@/lib/query/hooks", () => ({
   useMarketAnalytics: vi.fn(),
   useAnalytics: vi.fn(),
   useProbabilityEdit: vi.fn(),
+  useCpt: vi.fn(),
 }));
 
 import { useSession } from "@/features/session/context";
@@ -49,6 +50,7 @@ import {
   useResolveMarket,
   useEventTrade,
   useProbabilityEdit,
+  useCpt,
 } from "@/lib/query/hooks";
 
 const mockUseSession = vi.mocked(useSession);
@@ -62,6 +64,7 @@ const mockUseEngineStats = vi.mocked(useEngineStats);
 const mockUseResolveMarket = vi.mocked(useResolveMarket);
 const mockUseEventTrade = vi.mocked(useEventTrade);
 const mockUseProbabilityEdit = vi.mocked(useProbabilityEdit);
+const mockUseCpt = vi.mocked(useCpt);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -204,6 +207,7 @@ beforeEach(() => {
   mockUseEventTrade.mockReturnValue(defaultMutationState() as any);
   mockUsePostMarketComment.mockReturnValue(defaultMutationState() as any);
   mockUseProbabilityEdit.mockReturnValue(defaultMutationState() as any);
+  mockUseCpt.mockReturnValue(defaultQueryState(undefined) as any);
 });
 
 afterEach(() => {
