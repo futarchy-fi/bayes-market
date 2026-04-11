@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The 'clear all' button lives in AssumptionBar, not AssumptionPanel directly. Should the test exercise it as an integration test through the rendered AssumptionBar child, or should AssumptionBar be mocked and 'clear all' tested separately?",
+      "category": "design",
+      "why_it_matters": "Determines whether we mock child components or do integration-style rendering. Mocking simplifies tests but misses integration bugs; integration tests are more realistic but couple to child component internals."
+    },
+    {
+      "id": "q2",
+      "question": "What does 'rendering assumption list' mean — the VariableRow list (active markets), the assumption tags shown in AssumptionBar, or both?",
+      "category": "requirements",
+      "why_it_matters": "The component renders two distinct lists: sorted VariableRows for each active market, and assumption tags via AssumptionBar. The test scope changes depending on which is meant."
+    },
+    {
+      "id": "q3",
+      "question": "What constitutes 'empty state'? Possible meanings: (a) no assumptions set (shows 'Showing marginal probabilities'), (b) only one active market (shows the 'Create more markets' message), (c) no markets at all, or (d) all of these.",
+      "category": "requirements",
+      "why_it_matters": "AssumptionPanel has multiple conditional renders — the status text changes with assumptions, and a helper message appears when activeMarkets.length <= 1. Each is a distinct empty state worth testing."
+    },
+    {
+      "id": "q4",
+      "question": "Should VariableRow be mocked in these tests? It likely makes its own API calls (useMarket per row), which would require additional mocking and make the tests more about VariableRow than AssumptionPanel.",
+      "category": "design",
+      "why_it_matters": "If not mocked, every test needs mock data for each VariableRow's internal queries, increasing complexity and coupling. If mocked, tests focus purely on AssumptionPanel's own logic (sorting, filtering, conditional rendering)."
+    },
+    {
+      "id": "q5",
+      "question": "The existing renderWithProviders helper does not include AssumptionProvider. Should I extend the shared helper to support it, or wrap with AssumptionProvider locally in this test file?",
+      "category": "design",
+      "why_it_matters": "Extending the shared helper benefits future tests but changes shared infrastructure. A local wrapper keeps changes scoped to this test file."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "We should do integration-style tests (not mock AssumptionBar) so we can test the 'clear all' flow through the real component tree, since the task explicitly asks for it.",
+      "confidence": 0.75,
+      "if_wrong": "Would need to mock AssumptionBar and test 'clear all' in a separate AssumptionBar.test.tsx instead."
+    },
+    {
+      "id": "a2",
+      "assumption": "VariableRow should be mocked (vi.mock) to isolate AssumptionPanel tests from VariableRow's internal API calls and rendering logic.",
+      "confidence": 0.7,
+      "if_wrong": "Would need to mock the full market detail API for each VariableRow, making tests much more complex and brittle."
+    },
+    {
+      "id": "a3",
+      "assumption": "useMarkets should be mocked at the module level (vi.mock('@/lib/query/hooks')) to control the markets list returned to AssumptionPanel.",
+      "confidence": 0.85,
+      "if_wrong": "Would need to mock the API client instead and rely on React Query to process the mock data, adding unnecessary complexity."
+    },
+    {
+      "id": "a4",
+      "assumption": "'Empty state' covers both: (a) no assumptions (status text shows 'marginal probabilities') and (b) single active market (shows 'Create more markets' message).",
+      "confidence": 0.8,
+      "if_wrong": "Might only need to test one of these states, or might also need a 'no markets at all' state."
+    },
+    {
+      "id": "a5",
+      "assumption": "AssumptionProvider should be wrapped locally in the test file rather than modifying the shared renderWithProviders helper.",
+      "confidence": 0.8,
+      "if_wrong": "Would need to modify frontend/src/__tests__/helpers.tsx to add AssumptionProvider, which affects all tests using the helper."
+    },
+    {
+      "id": "a6",
+      "assumption": "'Integration with AssumptionContext' means testing that the component correctly reads from and responds to AssumptionContext state — showing assumption count, conditional text, and the AssumptionBar reflecting current assumptions.",
+      "confidence": 0.9,
+      "if_wrong": "Might also need to test mutations (addAssumption, removeAssumption) triggered from within the panel, which would require user interaction tests."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
