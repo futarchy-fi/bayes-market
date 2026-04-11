@@ -1,0 +1,27 @@
+[Task task-bayes-net-graph-001] PHASE 1: QUESTION GENERATION
+Title: Test BayesNetGraph component
+Description: Create a comprehensive vitest test file for frontend/src/features/graph/BayesNetGraph.tsx. This is an SVG component rendering a Bayesian network visualization with market nodes, conditional edges, and junction tree cliques. Test: (1) Loading state shows "Loading network...", (2) Empty state shows "No markets to visualize.", (3) Renders market nodes in circle layout when markets exist, (4) Shows stats bar with variable count, (5) Shows edge count when conditionalEdges prop provided, (6) Shows clique count when engine stats have cliques, (7) Shows JT width from engine stats, (8) Focus market gets highlighted border (focusMarketId prop), (9) Active/resolved status dots render with correct colors, (10) Legend items appear based on state (Active, Resolved, conditional dependency, clique), (11) Nodes with market detail show probability bars. Mock useMarkets, useMarket, useEngineStats from @/lib/query/hooks. Use SVG selectors where needed. Follow patterns from existing tests. Place test at frontend/src/__tests__/BayesNetGraph.test.tsx.
+Repo: /home/kelvin/bayes-market
+
+Explore the codebase. Identify what you need to know before building.
+
+YOU MUST create .fleet/tasks/task-bayes-net-graph-001/questions.json with this structure:
+{
+  "phase": "question",
+  "questions": [
+    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  ],
+  "assumptions": [
+    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  ],
+  "spawn_children": false,
+  "children": []
+}
+
+DO NOT STOP until questions.json exists and contains at least one question.
+Verify: ls -la .fleet/tasks/task-bayes-net-graph-001/ to confirm the file was written.
+
+DECOMPOSITION: Set spawn_children=true only if sub-questions warrant their own
+full 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: task-bayes-net-graph-001"

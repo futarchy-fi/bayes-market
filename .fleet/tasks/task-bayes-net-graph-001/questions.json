@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should we mock `@/lib/query/hooks` (useMarkets, useMarket, useEngineStats) at the module level like VariableRow.test.tsx and ConditionalEditor.test.tsx do, or mock `@/lib/api/client` and let hooks run through QueryClient like MarketDetail.test.tsx?",
+      "category": "design",
+      "why_it_matters": "The component uses 3 hooks: useMarkets (top-level), useEngineStats (top-level), and useMarket (per-node via NodeWithDetail). Mocking hooks directly is simpler and avoids N async queries for each rendered node. The existing tests that mock `@/lib/query/hooks` directly (VariableRow, TradingPanel, AssumptionPanel, etc.) are closer to this component's usage pattern since NodeWithDetail calls useMarket per-node."
+    },
+    {
+      "id": "q2",
+      "question": "How should we handle SVG text content assertions? The component renders text inside <text> SVG elements, and screen.getByText usually works for SVG text, but should we prefer data-testid attributes for more robust querying?",
+      "category": "design",
+      "why_it_matters": "The component uses <text> elements inside <svg> for node titles, probability labels, and clique labels. Testing Library's getByText works with SVG text elements in jsdom, but some queries (like finding specific nodes) may need more targeted selectors. The existing tests don't add data-testid attributes to the source component, so we should avoid modifying the component."
+    },
+    {
+      "id": "q3",
+      "question": "The NodeWithDetail sub-component calls useMarket(node.id) for each market node. When mocking useMarket, should we return distinct data per market ID, or use a single generic return value?",
+      "category": "design",
+      "why_it_matters": "Test cases 11 (probability bars) and 3 (renders market nodes) need useMarket to return data with outcomes and marginals. If we test with 2+ markets, each NodeWithDetail calls useMarket with a different ID. We need the mock to handle multiple calls — either with a single return value applied to all, or with mockImplementation that switches on the ID argument."
+    },
+    {
+      "id": "q4",
+      "question": "The formatProbability utility is imported by the component. Should we mock it or let it run with its real implementation?",
+      "category": "design",
+      "why_it_matters": "The probability bar text uses formatProbability(p). If we let it run with the real implementation, our assertions need to match its exact output format. Since it's a pure function with no side effects, using the real implementation is simpler and tests the integration more faithfully."
+    },
+    {
+      "id": "q5",
+      "question": "The CliqueOverlay sub-component returns null when memberNodes.length < 2. Should tests explicitly verify this edge case, or is it sufficient to test that cliques with 2+ shared nodes render?",
+      "category": "requirements",
+      "why_it_matters": "Test case 6 asks to verify clique count display in stats bar, but the SVG rendering of CliqueOverlay has an edge case where single-node cliques are silently dropped. Testing both the stats bar text and the actual SVG overlay rendering would be more thorough."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "We should mock `@/lib/query/hooks` at the module level (not the API client), following the pattern in VariableRow.test.tsx, TradingPanel.test.tsx, and 5 other similar test files.",
+      "confidence": 0.95,
+      "if_wrong": "We'd need to mock @/lib/api/client and wrap with QueryClient, requiring waitFor for all assertions and handling N concurrent useMarket queries."
+    },
+    {
+      "id": "a2",
+      "assumption": "screen.getByText and queryByText will work for SVG <text> elements in jsdom, so we don't need to add data-testid attributes to the component source.",
+      "confidence": 0.9,
+      "if_wrong": "We'd need to use container.querySelector with SVG selectors or add data-testid attributes to the component, which modifies production code."
+    },
+    {
+      "id": "a3",
+      "assumption": "We should use the real formatProbability function (not mocked) since it's a pure utility with no external dependencies.",
+      "confidence": 0.95,
+      "if_wrong": "We'd need to mock @/lib/utils/format and assert against mock return values, adding complexity for no benefit."
+    },
+    {
+      "id": "a4",
+      "assumption": "The test file should be placed at frontend/src/__tests__/BayesNetGraph.test.tsx as specified in the task description.",
+      "confidence": 1.0,
+      "if_wrong": "N/A — the location is explicitly specified in the task."
+    },
+    {
+      "id": "a5",
+      "assumption": "useMarket mock can use a single mockReturnValue for all calls (same structure, different data not needed per-node) for most tests, with mockImplementation used only when testing probability bars for specific node content.",
+      "confidence": 0.85,
+      "if_wrong": "We might need mockImplementation with per-ID switching for all tests to avoid confusing test output or false positives."
+    },
+    {
+      "id": "a6",
+      "assumption": "We do NOT need to modify the BayesNetGraph.tsx component — all tests can be written against the existing component API using text queries and SVG structure.",
+      "confidence": 0.9,
+      "if_wrong": "Some assertions (e.g., finding the focus node's stroke-width) may require container.querySelector on SVG attributes, which is fine since existing tests use similar patterns."
+    },
+    {
+      "id": "a7",
+      "assumption": "The legend items ('Active', 'Resolved', 'Conditional dependency', 'Junction tree clique') can be found via getByText/queryByText since they render as <span> elements in a regular <div>, not inside SVG.",
+      "confidence": 0.95,
+      "if_wrong": "Minor — would just need different selectors."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
