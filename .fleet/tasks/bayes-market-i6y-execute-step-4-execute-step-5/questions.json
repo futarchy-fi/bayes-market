@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This branch still ships the older four-field `/v1/accounts/{id}/positions` serializer and no replay-backed `unrealizedPnl` seam. Should step 5 therefore be treated as production-plus-validation on this branch, landing or rebasing the missing step-3 replay/P&L prerequisite before rerunning tests, or is there an authoritative branch that already contains that prerequisite?",
+      "category": "requirements",
+      "why_it_matters": "The answer determines whether this leaf is allowed to change `backend/server.py` and tests, or whether it should only execute an already-landed regression slice elsewhere."
+    },
+    {
+      "id": "q2",
+      "question": "What exact `tests/test_bayes_market_api.py` selector should count as the targeted step-5 gate: only `BayesMarketExposureProjectionTests`, or that class plus `BayesMarketApiUnitTests::test_root_route_returns_service_index` because the touched `/positions` regressions also include service-index discoverability?",
+      "category": "codebase",
+      "why_it_matters": "The current `/positions` contract is split between the projection test class and the root service-index assertion, so the execution step needs one repeatable focused command."
+    },
+    {
+      "id": "q3",
+      "question": "What concrete behavior should count as the missing step-3 replay/P&L prerequisite being present: the additive five-field `/positions` row `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` plus deterministic replay of filled `EventTrade` orders by `(filledAt, id)` for weighted-average accumulation, partial-close survivors, and sign-flip survivors?",
+      "category": "design",
+      "why_it_matters": "Without a crisp definition of the prerequisite seam, step 5 cannot tell whether the branch is ready for the new exact P&L assertions or still missing core production behavior."
+    },
+    {
+      "id": "q4",
+      "question": "For the representative P&L coverage, is getter-level verification inside `BayesMarketExposureProjectionTests` plus the existing route-parity `/positions` baseline sufficient, or must the targeted rerun also include direct route or HTTP reads after each weighted-average, partial-close, and sign-flip scenario?",
+      "category": "requirements",
+      "why_it_matters": "This decides whether the step-5 test slice stays narrowly focused on deterministic backend seams or expands into broader transport-level coverage."
+    },
+    {
+      "id": "q5",
+      "question": "What baseline and scope boundary should the final pre-commit audit use once the focused tests pass: diff against `ff/Tbayes-market-i6y-execute-step-4` or another parent, with required product changes limited to `backend/server.py` and `tests/test_bayes_market_api.py` plus this task's `.fleet` artifact?",
+      "category": "requirements",
+      "why_it_matters": "The audit is only meaningful if it compares against the right pre-implementation state and knows which file changes are expected versus scope creep."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The current branch already contains the additive `/v1/accounts/{id}/positions` route, service-index entry, and baseline route-parity or 404/405 tests, but it still serializes the old four-field row and lacks replay-backed `unrealizedPnl` production logic.",
+      "confidence": 0.99,
+      "if_wrong": "The question set would misdiagnose the blocker, and step 5 might only need a rerun or might require broader route work than expected."
+    },
+    {
+      "id": "a2",
+      "assumption": "Earlier `i6y` execute-step validations correctly show that the step-3 replay/P&L prerequisite and the representative exact-P&L regressions never landed in product code on this line of history.",
+      "confidence": 0.97,
+      "if_wrong": "Step 5 could be a pure validation leaf, and the prerequisite question would be overstated."
+    },
+    {
+      "id": "a3",
+      "assumption": "The relevant implementation and test scope for this step remains concentrated in `backend/server.py` and `tests/test_bayes_market_api.py`, with no current evidence that frontend or docs changes are required to complete the backend regression gate.",
+      "confidence": 0.96,
+      "if_wrong": "The final audit would need to widen to additional files and the current scope question would be incomplete."
+    },
+    {
+      "id": "a4",
+      "assumption": "No child task is needed because the branch ancestry, existing `/positions` tests, current serializer state, and missing replay/P&L seam are all visible in this checkout.",
+      "confidence": 0.99,
+      "if_wrong": "A child investigation would be needed before planning the execution or choosing the correct baseline."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,128 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Extend the existing `BayesMarketExposureProjectionTests.test_get_account_positions_raises_404_for_missing_or_fully_pruned_projection` seam rather than splitting the new variants into separate top-level tests. The codebase already keeps the analogous `/exposure` lifecycle in one grouped negative test, the current `/positions` seam lives beside it in the same projection class, and the step-4 plan says to extend projection-level `/positions` negative coverage rather than reorganize ownership. Adding more `subTest(...)` branches in that method keeps the projection-local `404` lifecycle in one canonical place.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:62",
+        "tests/test_bayes_market_api.py:4322",
+        "tests/test_bayes_market_api.py:4732",
+        "tests/test_bayes_market_api.py:4836"
+      ],
+      "uncertainty": "A reviewer could still prefer two smaller tests for readability if the subtest matrix grows further, but the current codebase pattern and step wording favor extending the existing grouped seam.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "One accepted `ProbabilityEdit` fixture is sufficient. In this checkout, that is already the concrete 'risk-only / probability-edit-only' path: accepted `ProbabilityEdit` orders flow into `sync_account_risk_state(order)`, accepted `EventTrade` orders flow into `sync_account_exposure_state(order)`, and the existing exposure regression proves a successful `ProbabilityEdit` leaves the account present in `ACCOUNT_RISK` and absent from `ACCOUNT_EXPOSURE`. There is no separate non-`ProbabilityEdit` risk writer that would justify a second logically distinct `404` case here.",
+      "confidence": 0.96,
+      "evidence": [
+        "backend/server.py:1563",
+        "backend/server.py:3784",
+        "backend/server.py:3882",
+        "tests/test_bayes_market_api.py:1138",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:25"
+      ],
+      "uncertainty": "The only ambiguity is wording: someone could read 'risk-only' and 'probability-edit-only' as two labels worth spelling out separately, but the implemented state transitions collapse them into the same fixture shape.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Create the fixture through an accepted `POST /v1/markets/{id}/orders/probability-edit`, then assert the negative read at `server.get_account_positions(...)`. The read assertion can stay projection-level while still using a real write to prove the named account state. That matches the existing exposure precedent, where a public `ProbabilityEdit` is used to materialize `/risk` without creating `/exposure`. Direct `ACCOUNT_RISK` seeding would hit the same missing-document branch mechanically, but it would be a weaker proof of the probability-edit-only scenario the task text calls out.",
+      "confidence": 0.91,
+      "evidence": [
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3-execute-step-2/plan.json:15",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-3-execute-step-2/plan.json:62",
+        "backend/server.py:3784",
+        "tests/test_bayes_market_api.py:1138"
+      ],
+      "uncertainty": "Because this step is explicitly projection-level, direct seeding would still be mechanically acceptable if the team wanted the narrowest possible unit fixture. The checked-in precedent favors the real write-backed setup instead.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Pin the two observable getter branches, not two flavors of missing-document history. `get_account_positions(account_id)` raises `404 account_not_found` immediately when `ACCOUNT_EXPOSURE.get(account_id)` is missing, and otherwise raises the same `404` when `serialize_account_positions(account)` yields no surviving rows. A naturally pruned account whose document was physically removed is indistinguishable from any other missing-document case at this seam, so the existing missing-account case or the new probability-edit-only case already covers that branch. The extra step-2 value is the stale-document fixture whose remaining rows round to zero or serialize away.",
+      "confidence": 0.93,
+      "evidence": [
+        "backend/server.py:1666",
+        "backend/server.py:1732",
+        "backend/server.py:1381",
+        "backend/server.py:1439",
+        "tests/test_bayes_market_api.py:4836",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:62"
+      ],
+      "uncertainty": "If a reviewer wants to prove the cleanup helper itself rather than just the getter contract, an additional physically-pruned fixture would be defensible, but it is redundant for the getter's two actual `404` branches.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Keep these new `404` regressions at the direct getter seam only. The current success baseline already checks `server.route_request(\"GET\", ...)` parity for `/positions`, the router branch is a one-line GET delegation to `get_account_positions(account_id)`, and the existing negative projection test is direct-getter-only. Repeating route parity for each new empty-account variant would mostly duplicate dispatch coverage instead of extending the projection-local contract named by this step.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:6",
+        "backend/server.py:4022",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4836"
+      ],
+      "uncertainty": "A tiny extra route-level `404` assertion would be harmless if a reviewer wants stricter co-location, but it is not the clearest gap in the current codebase.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "Freezing the `ApiError` contract is sufficient for this step. `get_account_positions(...)` only looks up `ACCOUNT_EXPOSURE`, serializes rows, and returns or raises; it has no mutation path. The existing `/positions` and `/exposure` getter tests also stop at the `404 account_not_found` contract, while this repo uses full domain-state immutability assertions mainly for write previews and rejected mutations. Adding side-effect-free assertions here would be optional hardening, not part of the established read-model contract.",
+      "confidence": 0.89,
+      "evidence": [
+        "backend/server.py:1666",
+        "backend/server.py:1732",
+        "tests/test_bayes_market_api.py:116",
+        "tests/test_bayes_market_api.py:4105",
+        "tests/test_bayes_market_api.py:4732",
+        "tests/test_bayes_market_api.py:4836"
+      ],
+      "uncertainty": "A maintainer could still choose to add a cheap snapshot assertion for defense-in-depth, but the current getter seam and surrounding test patterns do not require it.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Keep ownership in `BayesMarketExposureProjectionTests` and extend the existing grouped `/positions` negative seam instead of creating a competing contract layer."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Preserve projection-local `/positions` semantics: missing `ACCOUNT_EXPOSURE` documents and serialize-empty documents both stay `404 account_not_found`."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Use accepted `ProbabilityEdit` writes as the canonical risk-only fixture because they create `ACCOUNT_RISK` state without creating live `ACCOUNT_EXPOSURE` rows."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "A stale `ACCOUNT_EXPOSURE` document with rounded-zero or malformed survivors already exercises the serialize-away `404` branch for `/positions`."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "This step can stay projection-level in `tests/test_bayes_market_api.py`; no threaded HTTP or broader integration expansion is required to close the named gap."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed because the relevant read paths, fixture precedents, and scope decisions are all visible in this worktree."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

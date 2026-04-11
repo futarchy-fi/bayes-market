@@ -1,0 +1,117 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Treat the current state as a blocked scope review that would validate as a reject if evaluated now, not as a wait-for-another-merge state. The parent step-5 plan expects this line to land replay-backed `/positions` changes in `backend/server.py` and `tests/test_bayes_market_api.py` before step 4 reviews the diff, and the sibling step-5 validations already reject the same no-product-diff condition rather than waiting for an external prerequisite branch. With the code still on the legacy four-field `/positions` contract, there is no product delta for step 4 to audit yet.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:47",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:60",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:75",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-1/validation.json:4",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-2/validation.json:4",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-3/validation.json:4",
+        "backend/server.py:1651",
+        "tests/test_bayes_market_api.py:4767"
+      ],
+      "uncertainty": "A ref outside the local `ff/Tbayes-market-i6y*` namespace could in theory already contain the missing product change, but nothing in this checkout's branch history or task artifacts points to one.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Interpret 'only this task's `.fleet` files' as leaf-local attribution: only `.fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-4/*` should count as newly introduced by this leaf. The already merged `.fleet/tasks/bayes-market-i6y-execute-step-5/*` and `...execute-step-1..3/*` paths are inherited context from the parent step-5 history and should be normalized out when deciding what this leaf added. Keep `ff/Tbayes-market-i6y-execute-step-4..HEAD` as the broad product-file scope gate, but use a narrower parent-step diff when attributing `.fleet` additions.",
+      "confidence": 0.92,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:47",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:75",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-1/validation.json:4",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-2/validation.json:4",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-3/validation.json:4"
+      ],
+      "uncertainty": "The plan wording does not say 'normalize inherited artifacts out' explicitly; that conclusion comes from the merge-based branch history and the existing validation pattern.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Preserve two pieces of evidence in the review artifact: a concrete `git diff --name-status` inventory for the audited range, and a short patch-level explanation saying what changed inside `backend/server.py` and `tests/test_bayes_market_api.py` and why those hunks stay on the `/positions` contract seam. A `--stat` summary alone is too weak. The repository's successful validation artifacts record both scope and semantics in prose, so step 4 should keep the explicit path inventory plus a brief semantic explanation.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:75",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-5/validation.json:4",
+        "backend/server.py:1651",
+        "backend/server.py:1737",
+        "tests/test_bayes_market_api.py:4767"
+      ],
+      "uncertainty": "There is no schema field that forces a raw diff inventory format, so the exact presentation can vary as long as the artifact preserves both the file list and the seam-level explanation.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "A path-only allowlist is not sufficient. If `backend/server.py` and `tests/test_bayes_market_api.py` appear in the final diff, the review should also confirm that the touched hunks stay limited to the `/v1/accounts/{id}/positions` serializer, replay/P&L helper, and router seam in `backend/server.py`, plus the focused `BayesMarketExposureProjectionTests` and root-route discoverability assertions in `tests/test_bayes_market_api.py`. Unrelated changes inside those same large files should still count as scope creep.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:60",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:65",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:75",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-2-execute-step-5/validation.json:4",
+        "backend/server.py:1611",
+        "backend/server.py:1737",
+        "backend/server.py:4010",
+        "tests/test_bayes_market_api.py:570",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4896"
+      ],
+      "uncertainty": "A tiny adjacent refactor could still be acceptable if it is clearly required to support the `/positions` seam, but broad unrelated behavior changes should not be absorbed under the file allowlist.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Use `ff/Tbayes-market-i6y-execute-step-4..HEAD` as the final scope gate, but not as the only attribution baseline. In this merge-based step-5 line, that broad range includes inherited child-task history, so it is the right check for out-of-scope product files but not enough to prove which surviving additions came from this leaf. Pair it with a second attribution diff such as `ff/Tbayes-market-i6y-execute-step-5..HEAD` or the leaf's direct merge-base versus `HEAD` to isolate what this branch actually introduced.",
+      "confidence": 0.97,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:47",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:75",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-2/validation.json:4",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-3/validation.json:4"
+      ],
+      "uncertainty": "If the parent step-5 branch advances again before landing, the exact attribution comparison should stay anchored to this leaf's direct parent or merge-base rather than to any later moving ref.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The current broad diff is carrying merged step-5 artifact history and still contains no `backend/server.py` or `tests/test_bayes_market_api.py` edits, so there is no product change for this leaf to audit yet."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The intended product allowlist remains backend-only: `backend/server.py` for the `/positions` seam and `tests/test_bayes_market_api.py` for the focused regression coverage."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "The phrase about 'only this task's `.fleet` files' should be read as leaf-local attribution, so inherited step-5 parent and sibling artifacts should be normalized out instead of being treated as scope violations from this leaf."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "This branch should stop at recording the review decision in `.fleet`, not reopen `backend/server.py` or `tests/test_bayes_market_api.py`, because this leaf is the research decision step for the scope audit."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "No child investigation is necessary. The ancestry, current diff shape, task-plan intent, and live `/positions` seam are all visible locally."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

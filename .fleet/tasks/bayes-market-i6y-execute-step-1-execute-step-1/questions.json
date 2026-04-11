@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "How should the root service index advertise `/v1/accounts/{id}/positions`: should it use the same bare-path style as the existing account routes, and should it be appended after `/v1/accounts/{id}/exposure` so the ordered `routes.accounts` contract stays `[risk, exposure, positions]`?",
+      "category": "requirements",
+      "why_it_matters": "The account routes are currently emitted directly from `ACCOUNT_SERVICE_INDEX_ROUTES`, and the root index tests freeze the exact observable list rather than treating it as an unordered set."
+    },
+    {
+      "id": "q2",
+      "question": "Should the new `/v1/accounts/{id}/positions` path be recognized inside the existing matched-account branch in `route_request(...)` so it inherits the same GET-only handling and `405 method_not_allowed` contract as `/risk` and `/exposure`?",
+      "category": "requirements",
+      "why_it_matters": "Changing how the dispatcher matches or rejects methods would create a public-contract exception inside the account-read surface instead of extending the established behavior."
+    },
+    {
+      "id": "q3",
+      "question": "What exact account envelope should `get_account_positions(account_id)` establish in this seam-plumbing step: must it already return the standard `{ \"account\": { \"id\": ..., \"positions\": ... }, \"meta\": ... }` shape, or is any part of the `account.positions` payload intentionally deferred to the later serializer phase?",
+      "category": "design",
+      "why_it_matters": "This decides whether step 1 only introduces the new entrypoint seam or also freezes the outer public response shape that downstream tests will anchor."
+    },
+    {
+      "id": "q4",
+      "question": "What should count as an existing account for `get_account_positions(account_id)`: only an account present in the live `ACCOUNT_EXPOSURE` projection with at least one surviving non-zero row, or any account that exists in another read model such as `ACCOUNT_RISK`?",
+      "category": "requirements",
+      "why_it_matters": "The repository has no standalone account registry, so this choice determines whether `/positions` mirrors `/exposure`'s projection-local `404 account_not_found` lifecycle or introduces new cross-read-model logic."
+    },
+    {
+      "id": "q5",
+      "question": "Is this child step intentionally limited to `backend/server.py` seam wiring only, leaving the detailed positions-row serializer and the broader HTTP regression expansion for later phases?",
+      "category": "codebase",
+      "why_it_matters": "The parent plan splits route-surface plumbing from serializer and regression work, and the implementation scope changes materially depending on whether this step must stay minimal or absorb follow-on work early."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new `/v1/accounts/{id}/positions` route is additive beside `/risk` and `/exposure`, not an in-place replacement for the existing exposure read.",
+      "confidence": 0.98,
+      "if_wrong": "The task would expand from a small backend seam extension into a coordinated API and frontend migration."
+    },
+    {
+      "id": "a2",
+      "assumption": "The only existing source of live per-outcome holdings is `ACCOUNT_EXPOSURE`; there is no separate `ACCOUNT_POSITIONS` store or historical position read model to reuse.",
+      "confidence": 0.99,
+      "if_wrong": "Implementing `get_account_positions(...)` on top of exposure state would mirror the wrong data source and could miss a more authoritative projection."
+    },
+    {
+      "id": "a3",
+      "assumption": "The service index should keep the current account-route formatting and ordering conventions, which means advertising `/v1/accounts/{id}/positions` as a bare path after `/v1/accounts/{id}/exposure`.",
+      "confidence": 0.95,
+      "if_wrong": "The root discovery payload would need a different format or ordering rule than the current account-read surface uses."
+    },
+    {
+      "id": "a4",
+      "assumption": "Once the account path matches, `/positions` should reject non-GET methods with the same structured `405 method_not_allowed` payload used by `/risk` and `/exposure`.",
+      "confidence": 0.97,
+      "if_wrong": "The new route would become a behavioral exception inside the shared account dispatcher and require bespoke method-handling logic."
+    },
+    {
+      "id": "a5",
+      "assumption": "This child step is supposed to stay focused on route-surface plumbing in `backend/server.py`, with detailed row serialization and fuller regression coverage deferred to later phases.",
+      "confidence": 0.9,
+      "if_wrong": "The implementation for this step would need to absorb serializer design and test expansion earlier than the current staged plan implies."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

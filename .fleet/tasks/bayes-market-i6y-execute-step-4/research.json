@@ -1,0 +1,154 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The premise is stale. This checkout already exposes `/v1/accounts/{id}/positions` in the account route tuple, service index, router, getter, and baseline tests. What is still missing is the step-3 replay/P&L production seam: the checked-in step-3 validation says `backend/server.py` still has only the minimal positions serializer with no replay helper seam or `unrealizedPnl`. So step 4 can treat service-index/basic GET/404/405 coverage as already-landed baseline, but any new P&L regressions still require either simultaneous production backfill or the missing step-3 branch first.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:127",
+        "backend/server.py:828",
+        "backend/server.py:1732",
+        "backend/server.py:4008",
+        "tests/test_bayes_market_api.py:570",
+        "tests/test_bayes_market_api.py:4767",
+        ".fleet/tasks/bayes-market-i6y/plan.json:64",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/validation.json:4"
+      ],
+      "uncertainty": "The tree shows what is present and what is missing, but it does not say whether this execution leaf is allowed to mix the missing replay/P&L production work into a nominally step-4 commit.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Current scope evidence points to direct-route/unit and projection-level regressions, not threaded HTTP or full integration mirroring. `/positions` is currently covered in the root service-index test and in `BayesMarketExposureProjectionTests` for GET parity, ordering, 404s, and 405. The concurrency and integration classes still only define and test risk/exposure paths, and the prior in-repo step research also placed the new replay/P&L cases in `BayesMarketExposureProjectionTests` with only light route-parity smoke.",
+      "confidence": 0.96,
+      "evidence": [
+        "tests/test_bayes_market_api.py:570",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4836",
+        "tests/test_bayes_market_api.py:4873",
+        "tests/test_bayes_market_api.py:5892",
+        "tests/test_bayes_market_api.py:5955",
+        "tests/test_bayes_market_api.py:6035",
+        "tests/test_bayes_market_api.py:6994",
+        "tests/test_bayes_market_api.py:8453",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/research.json:20"
+      ],
+      "uncertainty": "A later parity sweep could still add one or two HTTP-level `/positions` tests for symmetry with `/exposure`, but nothing in the current branch makes them part of the required minimum for this step.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Freeze the exact ordered public payloads and keep `meta` dynamic. The root-route regression already treats `routes.accounts` as an exact ordered list, and the `/positions` success test asserts the full `account` payload exactly while only checking `meta.timestamp` separately. That is the prevailing contract style for account read-model regressions in this file; looser membership assertions would weaken an already-frozen public surface.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:850",
+        "tests/test_bayes_market_api.py:578",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4813",
+        "tests/test_bayes_market_api.py:4815",
+        "tests/test_bayes_market_api.py:4834"
+      ],
+      "uncertainty": "This would only change if the repo were doing a broader service-index contract rewrite, and there is no evidence of that in this checkout.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. `/positions` should mirror `/exposure` for projection-local emptiness: missing accounts, probability-edit/risk-only accounts with no `ACCOUNT_EXPOSURE` document, and fully pruned live-position accounts should all resolve as `404 account_not_found`. `get_account_positions(...)` reads only `ACCOUNT_EXPOSURE` and 404s when the account is absent or serializes to no live rows; the existing exposure regression shows a probability-edit-only account living in `ACCOUNT_RISK` but not `ACCOUNT_EXPOSURE`.",
+      "confidence": 0.96,
+      "evidence": [
+        "backend/server.py:1711",
+        "backend/server.py:1732",
+        "backend/server.py:1738",
+        "tests/test_bayes_market_api.py:1138",
+        "tests/test_bayes_market_api.py:1151",
+        "tests/test_bayes_market_api.py:1152",
+        "tests/test_bayes_market_api.py:4836",
+        ".fleet/tasks/bayes-market-i6y/plan.json:15"
+      ],
+      "uncertainty": "There is not yet a dedicated `/positions` regression for the risk-only account case, but the server implementation uses the same projection-local liveness gate.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Both, but in different places. The shipped public contract already freezes visible wire order as lexical `(marketId, outcomeId)` via the serializer and exact `/positions` tests. Separately, the i6y step-3/step-4 plan explicitly introduces deterministic replay order `(filledAt, id)` because multi-fill, partial-close, and sign-flip P&L math depends on fill chronology. So step 4 should preserve exact lexical wire ordering and add a targeted replay-order regression for the new P&L seam.",
+      "confidence": 0.94,
+      "evidence": [
+        "backend/server.py:1666",
+        "backend/server.py:1680",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4818",
+        ".fleet/tasks/bayes-market-i6y/plan.json:15",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:88"
+      ],
+      "uncertainty": "Current product code does not yet contain a replay helper, so the replay-order half of this answer is documented in checked-in task artifacts rather than already enforced in `backend/server.py`.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "Patch `query_market_atomic_probability_for_inference(...)` to fixed marks and assert exact `unrealizedPnl` values. The step-3 plan states that explicitly, and that approach matches the suite's broader habit of patching helper seams when a regression is meant to isolate one behavior from unrelated subsystems. Relying on live fixture-market probabilities would couple these regressions to inference behavior instead of replay math.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:3484",
+        "tests/test_bayes_market_api.py:2522",
+        "tests/test_bayes_market_api.py:2534",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:60",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/research.json:92"
+      ],
+      "uncertainty": "One later end-to-end assertion on unpatched fixture prices could still be useful, but it is not the stable seam for the representative P&L regressions described in this step.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q7",
+      "answer": "Not exclusively through POSTs. The codebase already mixes black-box writes and direct state seeding: survivor semantics are exercised through accepted `POST /orders/event-trade` writes, while projection/read-model tests seed `ACCOUNT_EXPOSURE` directly. For the new work, use accepted EventTrade writes for representative accumulation, partial-close, and sign-flip cases, and reserve direct `ORDERS` or `ACCOUNT_EXPOSURE` seeding for cases the public write path cannot naturally express, especially out-of-order replay and missing-history/pruned fixtures.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:3474",
+        "backend/server.py:3508",
+        "tests/test_bayes_market_api.py:4537",
+        "tests/test_bayes_market_api.py:4577",
+        "tests/test_bayes_market_api.py:4614",
+        "tests/test_bayes_market_api.py:4767",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:73",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/research.json:72"
+      ],
+      "uncertainty": "The only gray area is test readability: the branch supports both fixture styles, so the remaining choice is how many direct-seeding cases are worth keeping before setup becomes noisy.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "WRONG",
+      "confidence": 0.98,
+      "impact": "Do not spend this leaf re-adding the `/positions` route, service-index entry, or basic getter; those are already present. The only still-missing prerequisite from steps 1-3 is the replay/P&L production seam if the requested P&L regressions are expected to pass."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.78,
+      "impact": "The additive `{account, meta}` envelope beside `/exposure` is already supported by the code and plan, but the current serializer still lacks `unrealizedPnl`. Freezing that full row shape implies simultaneous production backfill, not just tests."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Use projection-local 404 semantics for missing, risk-only, and fully pruned accounts; returning `200` with an empty collection would contradict the current getter implementation and the established exposure lifecycle."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Representative P&L tests should patch the mark seam so failures isolate replay math and serialization logic rather than drifting with inference fixtures."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child investigation is needed. The relevant behavior and prior decisions are already visible in `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in i6y task artifacts."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,112 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Freeze the helper as a read-time utility that takes `account_id` plus one stored `ACCOUNT_EXPOSURE` row and resolves the slice only from that row's own `marketId` and `outcomeId`. Do not try to recover identifiers from the enclosing `marketId|outcomeId` composite key or from a pre-serialized positions payload when the row is malformed. The current read models already treat row fields as authoritative, skip malformed rows, and keep storage-key normalization in separate mutation-oriented helpers.",
+      "confidence": 0.96,
+      "evidence": [
+        "backend/server.py:1231",
+        "backend/server.py:1295",
+        "backend/server.py:1614",
+        "backend/server.py:1666",
+        "tests/test_bayes_market_api.py:4767",
+        ".fleet/tasks/bayes-market-i6y-execute-step-2/research.json:33"
+      ],
+      "uncertainty": "There is no already-landed replay helper yet, so the exact helper signature is still being inferred from the existing read-path conventions rather than copied from implemented code.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Replay candidates should be limited to `ORDERS` rows where `type == \"EventTrade\"`, `status == \"filled\"`, `accountId` matches the target account, and the order resolves to the same `(marketId, outcomeId)` slice. Nothing broader is supported by the current stores: `ORDERS` also contains filled `ProbabilityEdit` rows, but only accepted EventTrade orders feed `ACCOUNT_EXPOSURE`.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:1366",
+        "backend/server.py:2691",
+        "backend/server.py:3474",
+        "backend/server.py:3881",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:27",
+        ".fleet/tasks/bayes-market-i6y/plan.json:36"
+      ],
+      "uncertainty": "This would need revisiting only if a future order type also starts mutating `ACCOUNT_EXPOSURE`; the current checkout has no such type.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Use the same precedence as `sync_account_exposure_state(...)`: treat `targetMarketId` and `targetOutcomeId` as authoritative when present, then fall back to `marketId` plus `payload.formula[0][0].outcomeId`. Accepted EventTrade orders already persist the target fields, and the fallback remains necessary only for manually seeded or legacy-shaped fixtures.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:1368",
+        "backend/server.py:2478",
+        "backend/server.py:3481",
+        "backend/server.py:3496",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:27"
+      ],
+      "uncertainty": "No material uncertainty. The current write path and the step-3 plan both freeze this precedence explicitly.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "The helper should guarantee ascending `(filledAt, id)` replay order. If an otherwise matching order is missing either `filledAt` or `id`, treat it as unreplayable and skip it instead of failing the whole read. That keeps replay deterministic without widening the liveness contract, and it aligns with the later step's explicit missing-history fallback for live rows whose usable EventTrade history is incomplete.",
+      "confidence": 0.89,
+      "evidence": [
+        "backend/server.py:3474",
+        "backend/server.py:3488",
+        "backend/server.py:3503",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:16",
+        ".fleet/tasks/bayes-market-i6y-execute-step-2/research.json:33"
+      ],
+      "uncertainty": "Ascending `(filledAt, id)` is explicit, but the exact skip-on-missing-field rule is inferred from the plan's 'no replayable history -> keep the row' decision and the repo's broader read-path habit of skipping malformed data rather than throwing.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "If the live exposure row resolves cleanly but no replayable EventTrade fills are found, this helper layer should return an empty ordered list and leave the fallback to the later serializer/P&L step. It should not raise and should not mark the row unusable by itself. `/positions` is still projection-local on `ACCOUNT_EXPOSURE`, and the step-3 plan already freezes the later behavior as `unrealizedPnl: 0.0` for live rows with no replayable history.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:1732",
+        "tests/test_bayes_market_api.py:4767",
+        ".fleet/tasks/bayes-market-i6y/plan.json:15",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:16",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:82"
+      ],
+      "uncertainty": "The exact fallback value is frozen in the step-3 plan rather than already implemented in `server.py`, but the no-error/keep-row behavior is consistent with the current live-position contract.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep the helper projection-local: resolve replay only for rows that are already live in `ACCOUNT_EXPOSURE`, not by reconstructing an account's open positions from `ORDERS`."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No schema change is needed for slice resolution. Accepted EventTrade orders already carry `accountId`, `type`, `status`, `targetMarketId`, `targetOutcomeId`, `marketId`, `payload.formula`, `filledAt`, and `id`."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Malformed exposure rows should stay non-replayable and be skipped by read-time normalization. The new helper should not reverse-engineer identifiers from storage-only artifacts."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Empty or unreplayable history should flow forward as an empty match set so later `/positions` logic can keep the existing liveness contract and apply the planned `unrealizedPnl: 0.0` fallback."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "No child task is needed. The relevant behavior is concentrated in `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `bayes-market-i6y` task artifacts."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

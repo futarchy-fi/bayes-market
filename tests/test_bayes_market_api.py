@@ -576,7 +576,10 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertIn("routes", payload)
         self.assertEqual(payload["routes"]["health"], ["/health", "/healthz", "/v1/health"])
-        self.assertEqual(payload["routes"]["accounts"], ["/v1/accounts/{id}/risk", "/v1/accounts/{id}/exposure"])
+        self.assertEqual(
+            payload["routes"]["accounts"],
+            ["/v1/accounts/{id}/risk", "/v1/accounts/{id}/exposure", "/v1/accounts/{id}/positions"],
+        )
         self.assertIn("/v1/markets/{id}/meta", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/events", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/engine-stats", payload["routes"]["markets"])
@@ -4699,7 +4702,7 @@ class BayesMarketExposureProjectionTests(unittest.TestCase):
             },
         )
 
-    def test_get_account_exposure_serializes_lexically_sorted_positions_and_account_timestamp(self):
+    def test_get_account_exposure_serializes_lexically_sorted_positions_and_skips_malformed_rows(self):
         account_id = "acct_exposure_view"
         account_timestamp = "2026-04-09T12:30:00Z"
         server.ACCOUNT_EXPOSURE[account_id] = {
@@ -4732,6 +4735,12 @@ class BayesMarketExposureProjectionTests(unittest.TestCase):
                     "updatedAt": "2026-04-09T11:00:00Z",
                     "lastOrderId": "ord_1",
                     "lastCommandId": "cmd_1",
+                },
+                "broken": {
+                    "marketId": "m3",
+                    "netSize": 4.0,
+                    "lastTradePrice": 0.9,
+                    "updatedAt": "2026-04-09T07:00:00Z",
                 },
             },
         }
@@ -4808,6 +4817,145 @@ class BayesMarketExposureProjectionTests(unittest.TestCase):
             self.assertEqual(error.status, 404)
             self.assertEqual(error.code, "account_not_found")
             self.assertEqual(error.details, {"accountId": "acct_zero_only"})
+
+    def test_get_account_positions_serializes_minimal_lexically_sorted_live_rows_and_route_parity(self):
+        account_id = "acct_positions_view"
+        server.ACCOUNT_EXPOSURE[account_id] = {
+            "accountId": account_id,
+            "updatedAt": "2026-04-09T12:30:00Z",
+            "positions": {
+                "m2|yes": {
+                    "marketId": "m2",
+                    "outcomeId": "yes",
+                    "netSize": -3.4567894,
+                    "lastTradePrice": 0.2500004,
+                    "updatedAt": "2026-04-09T09:00:00Z",
+                    "lastOrderId": "ord_2",
+                    "lastCommandId": "cmd_2",
+                },
+                "m1|yes": {
+                    "marketId": "m1",
+                    "outcomeId": "yes",
+                    "netSize": 0.0000004,
+                    "lastTradePrice": 0.65,
+                    "updatedAt": "2026-04-09T08:00:00Z",
+                    "lastOrderId": "ord_zero",
+                    "lastCommandId": "cmd_zero",
+                },
+                "m1|no": {
+                    "marketId": "m1",
+                    "outcomeId": "no",
+                    "netSize": 1.2345678,
+                    "lastTradePrice": 0.3499996,
+                    "updatedAt": "2026-04-09T11:00:00Z",
+                    "lastOrderId": "ord_1",
+                    "lastCommandId": "cmd_1",
+                },
+                "broken": {
+                    "marketId": "m3",
+                    "netSize": 4.0,
+                    "lastTradePrice": 0.9,
+                },
+            },
+        }
+
+        payload, status = server.get_account_positions(account_id)
+        route_payload, route_status = server.route_request("GET", f"/v1/accounts/{account_id}/positions")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(route_status, 200)
+        self.assertEqual(route_payload["account"], payload["account"])
+        self.assertEqual(
+            payload["account"],
+            {
+                "id": account_id,
+                "positions": [
+                    {
+                        "marketId": "m1",
+                        "outcomeId": "no",
+                        "netSize": 1.234568,
+                        "lastTradePrice": 0.35,
+                    },
+                    {
+                        "marketId": "m2",
+                        "outcomeId": "yes",
+                        "netSize": -3.456789,
+                        "lastTradePrice": 0.25,
+                    },
+                ],
+            },
+        )
+        self.assertIn("timestamp", payload["meta"])
+
+    def test_get_account_positions_raises_404_for_missing_or_fully_pruned_projection(self):
+        with self.subTest("missing account"):
+            with self.assertRaises(server.ApiError) as ctx:
+                server.get_account_positions("acct_missing_positions")
+
+            error = ctx.exception
+            self.assertEqual(error.status, 404)
+            self.assertEqual(error.code, "account_not_found")
+            self.assertEqual(error.details, {"accountId": "acct_missing_positions"})
+
+        with self.subTest("probability-edit-only account has no positions projection"):
+            server.reset_state()
+            account_id = "acct_positions_risk_only"
+            write_payload, write_status = server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/probability-edit",
+                build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
+            )
+
+            self.assertEqual(write_status, 201)
+            self.assertEqual(write_payload["result"]["status"], "accepted")
+            self.assertIn(account_id, server.ACCOUNT_RISK)
+            self.assertNotIn(account_id, server.ACCOUNT_EXPOSURE)
+
+            with self.assertRaises(server.ApiError) as ctx:
+                server.get_account_positions(account_id)
+
+            error = ctx.exception
+            self.assertEqual(error.status, 404)
+            self.assertEqual(error.code, "account_not_found")
+            self.assertEqual(error.details, {"accountId": account_id})
+
+        with self.subTest("only zero or malformed rows"):
+            server.reset_state()
+            server.ACCOUNT_EXPOSURE["acct_positions_zero_only"] = {
+                "accountId": "acct_positions_zero_only",
+                "updatedAt": "2026-04-09T12:30:00Z",
+                "positions": {
+                    "m1|yes": {
+                        "marketId": "m1",
+                        "outcomeId": "yes",
+                        "netSize": 0.0000004,
+                        "lastTradePrice": 0.65,
+                    },
+                    "broken": {
+                        "marketId": "m2",
+                        "netSize": 3.0,
+                        "lastTradePrice": 0.4,
+                    },
+                },
+            }
+
+            with self.assertRaises(server.ApiError) as ctx:
+                server.get_account_positions("acct_positions_zero_only")
+
+            error = ctx.exception
+            self.assertEqual(error.status, 404)
+            self.assertEqual(error.code, "account_not_found")
+            self.assertEqual(error.details, {"accountId": "acct_positions_zero_only"})
+
+    def test_account_positions_route_is_method_not_allowed_for_post(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", "/v1/accounts/acct_http/positions", {})
+
+        error = ctx.exception
+        self.assertEqual(error.status, 405)
+        self.assertEqual(error.code, "method_not_allowed")
+        self.assertEqual(error.details["method"], "POST")
+        self.assertEqual(error.details["path"], "/v1/accounts/acct_http/positions")
 
     def test_settle_market_account_exposure_prunes_resolved_market_rows_and_updates_survivors(self):
         timestamp = "2026-04-10T00:00:00Z"

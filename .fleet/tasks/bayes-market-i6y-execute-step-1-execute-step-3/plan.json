@@ -1,0 +1,76 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Implement `get_account_positions(account_id)` as a dedicated account getter beside `get_account_exposure(...)` and `get_account_risk(...)`, returning the standard `{ \"account\": { \"id\": account_id, \"positions\": ... }, \"meta\": make_meta() }` envelope with the rows placed directly at `account.positions`.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Return a temporary top-level `positions` payload and defer the account envelope until later.",
+        "Wrap the rows in another nested object such as `account.positions.positions`.",
+        "Reuse `get_account_exposure(...)` directly instead of giving `/positions` its own entrypoint."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Use `ACCOUNT_EXPOSURE` as the only existence and liveness gate for this getter so it matches `/exposure`: raise `404 account_not_found` when the account is missing from that projection or when live-row filtering leaves no surviving positions.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Treat raw membership in `ACCOUNT_EXPOSURE` as sufficient even when every row rounds to zero.",
+        "Return `200` with an empty positions list for missing or fully pruned accounts.",
+        "Introduce cross-read-model existence checks against risk state in this phase."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Add a minimal positions-row serializer/helper instead of reusing `serialize_account_exposure_positions(account)`, preserving live-row filtering and deterministic lexical ordering while deliberately avoiding exposure-only fields such as `absSize`, `updatedAt`, `lastOrderId`, and `lastCommandId`.",
+      "based_on": ["q1", "q3", "q4"],
+      "alternatives_rejected": [
+        "Expose the richer `/exposure` row contract under `account.positions` for this seam-only phase.",
+        "Use a placeholder or non-list value at `account.positions` rather than serializing live rows now."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep the regression boundary at the direct getter seam in `tests/test_bayes_market_api.py`, covering the happy path and the missing-or-pruned `404` behavior now and leaving route-dispatch coverage for the later `/positions` routing step.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Wait for route-level tests even though `route_request(...)` does not recognize `/positions` in this checkout yet.",
+        "Skip tests in this phase and rely on later integrated coverage."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit the existing account getter and serializer seams in `backend/server.py` so the new `get_account_positions(account_id)` function mirrors the current account-response envelope, error shape, and exposure-style liveness rules without taking on the later route-wiring work.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add a minimal positions serialization helper in `backend/server.py` on top of `ACCOUNT_EXPOSURE` that filters out rounded-zero rows, skips malformed entries, and returns the surviving rows in deterministic lexical `(marketId, outcomeId)` order with only the intentionally minimal fields for this phase.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Implement `get_account_positions(account_id)` beside the existing account getters, have it call the new minimal serializer, return `{ \"account\": { \"id\": account_id, \"positions\": ... }, \"meta\": make_meta() }`, and raise `ApiError(404, \"account_not_found\", ...)` when `ACCOUNT_EXPOSURE` is missing or the serialized live rows are empty.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Add direct getter regressions in `tests/test_bayes_market_api.py` for a successful minimally serialized positions payload with deterministic ordering and for the missing-account and fully-pruned-account `404 account_not_found` cases.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Run the targeted backend tests covering the new getter seam, review the diff to confirm the phase stays scoped to the dedicated getter plus its minimal serializer/tests, and commit the plan-backed implementation once the checks pass.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

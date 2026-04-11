@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact response envelope should `GET /v1/accounts/{id}/positions` return: should it follow the existing account-read-model pattern like `{ \"account\": { \"id\": ..., \"positions\": [...] }, \"meta\": ... }`, or is a different wrapper expected?",
+      "category": "requirements",
+      "why_it_matters": "The task only freezes the row fields (`marketId`, `outcomeId`, `netSize`, `lastTradePrice`, `unrealizedPnl`). The branch already has `/risk` and `/exposure` with specific envelopes, and tests need one precise contract."
+    },
+    {
+      "id": "q2",
+      "question": "Is `/v1/accounts/{id}/positions` intended to be additive beside the existing `/v1/accounts/{id}/exposure`, or should it replace that route and drive a frontend/client migration?",
+      "category": "requirements",
+      "why_it_matters": "This checkout already exposes `/exposure` in the backend, service index, API client, React Query hooks, and Portfolio UI. Scope changes substantially depending on whether `/positions` is a new read model, an alias, or a replacement."
+    },
+    {
+      "id": "q3",
+      "question": "What accounting rule should define `unrealizedPnl` for a netted EventTrade position after multiple fills and partial close-outs: average-cost, FIFO/LIFO, signed cash-flow replay, or a simpler mark against `lastTradePrice`?",
+      "category": "design",
+      "why_it_matters": "This branch has live exposure state but no existing account P&L projection. `netSize` plus `lastTradePrice` is not enough to derive a unique unrealized P&L once a position has been built across different fill prices."
+    },
+    {
+      "id": "q4",
+      "question": "What should count as an 'open position' for this route: only live EventTrade rows that still exist in `ACCOUNT_EXPOSURE`, and should accounts with no open rows return `404 account_not_found` like `/exposure` or `200` with an empty list?",
+      "category": "requirements",
+      "why_it_matters": "Current exposure semantics prune zero-net rows, remove resolved markets from the live projection, and return 404 once the projection is empty. The new route could either inherit that lifecycle or intentionally change it."
+    },
+    {
+      "id": "q5",
+      "question": "What deterministic ordering should the returned positions use: backend lexical `(marketId, outcomeId)` order like `/exposure`, or recency order such as newest position update first?",
+      "category": "design",
+      "why_it_matters": "The current backend serializer sorts lexically, while the Portfolio UI re-sorts live holdings by `updatedAt` descending. If `/positions` becomes a public contract, tests and UI behavior need one fixed ordering rule."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The implementation boundary for this task is primarily `backend/server.py` plus `tests/test_bayes_market_api.py`, because that is where the router and existing account read models (`/risk`, `/exposure`) already live.",
+      "confidence": 0.99,
+      "if_wrong": "The real owner could be another service layer or a different entrypoint, and changing this in-memory backend would not satisfy the task."
+    },
+    {
+      "id": "a2",
+      "assumption": "The requested positions are EventTrade-only open outcome holdings, not probability-edit exposure, because the current branch only materializes live per-outcome account positions in `ACCOUNT_EXPOSURE` and the requested fields line up with that model.",
+      "confidence": 0.96,
+      "if_wrong": "The task would require inventing a broader cross-product 'position' concept that spans other order types and likely cannot be delivered as a small additive route."
+    },
+    {
+      "id": "a3",
+      "assumption": "The safest small-scope interpretation is that `/v1/accounts/{id}/positions` is additive and backend-first, not an immediate replacement of `/exposure` across the frontend.",
+      "confidence": 0.8,
+      "if_wrong": "The work expands into service-index changes, TypeScript type/client updates, query-hook changes, and Portfolio/UI test updates."
+    },
+    {
+      "id": "a4",
+      "assumption": "Resolved markets should not appear in the new route, because the existing live exposure projection already prunes them during market resolution and the task explicitly says 'open positions'.",
+      "confidence": 0.95,
+      "if_wrong": "The route would need a different persistence/replay path than `ACCOUNT_EXPOSURE`, potentially including historical orders from markets that are no longer live."
+    },
+    {
+      "id": "a5",
+      "assumption": "If `unrealizedPnl` is implemented correctly, it will need replay of accepted EventTrade orders against current market probabilities rather than a naive calculation from stored `netSize` and `lastTradePrice` alone.",
+      "confidence": 0.89,
+      "if_wrong": "A cheaper approximation may be acceptable, but the endpoint would then report a different notion of P&L than a true mark-to-market value for multi-fill positions."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

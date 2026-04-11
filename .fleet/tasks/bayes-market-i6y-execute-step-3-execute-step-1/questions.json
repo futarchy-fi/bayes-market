@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact caller/input contract should the new helper freeze: should it take `account_id` plus one stored `ACCOUNT_EXPOSURE` row and derive the slice only from that row's `marketId`/`outcomeId`, or should it also attempt recovery from the enclosing composite key or pre-serialized position payload when rows are malformed?",
+      "category": "design",
+      "why_it_matters": "The live position serializers already skip malformed or zero rows, while `ACCOUNT_EXPOSURE` stores the account id outside the row and uses a separate `marketId|outcomeId` storage key. The helper boundary needs one clear normalization rule before replay filtering is added."
+    },
+    {
+      "id": "q2",
+      "question": "Which exact `ORDERS` rows should count as replay candidates for one live slice: only entries with `type == \"EventTrade\"`, `status == \"filled\"`, and matching `accountId`, or is any broader or narrower historical scan expected?",
+      "category": "requirements",
+      "why_it_matters": "`ORDERS` is a shared store for multiple order types, and only some of them drive `ACCOUNT_EXPOSURE`. The helper needs one frozen filter boundary so later replay math does not ingest unrelated records."
+    },
+    {
+      "id": "q3",
+      "question": "When an EventTrade order matches a live `(marketId, outcomeId)` row, which identifier fields should be authoritative: `targetMarketId` and `targetOutcomeId` first with fallback to `marketId` plus `payload.formula[0][0].outcomeId`, mirroring `sync_account_exposure_state(...)`, or some other precedence?",
+      "category": "codebase",
+      "why_it_matters": "Accepted EventTrade orders duplicate slice identifiers across several fields. The helper must resolve those duplicates the same way the write path does or replay can diverge from the stored exposure projection."
+    },
+    {
+      "id": "q4",
+      "question": "What deterministic replay ordering should the helper guarantee for the matched fills: ascending `(filledAt, id)`, and if a candidate row is missing one of those fields, should it be skipped as unreplayable rather than failing the whole read?",
+      "category": "design",
+      "why_it_matters": "Average-cost replay is order-sensitive, `ORDERS` is stored in a plain dict, and tests often seed order fixtures manually. The helper needs an explicit tie-break and malformed-row policy before later basis logic can rely on it."
+    },
+    {
+      "id": "q5",
+      "question": "If a live exposure row resolves cleanly but no replayable EventTrade fills are found, should this helper layer return an empty ordered list and leave missing-history fallback to the later serializer and P&L step, or is it expected to raise an error or mark the row unusable immediately?",
+      "category": "requirements",
+      "why_it_matters": "This leaf step stops at slice resolution and order collection, but the current `/positions` and `/exposure` surfaces already tolerate directly seeded live rows. Freezing the no-history behavior keeps this helper aligned with the later additive P&L rollout."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new helpers are read-time only and operate on rows that are already live in `ACCOUNT_EXPOSURE`; they do not rebuild open positions from `ORDERS` alone.",
+      "confidence": 0.99,
+      "if_wrong": "The step would need a broader account-history reconstruction path instead of a narrow per-row helper."
+    },
+    {
+      "id": "a2",
+      "assumption": "One EventTrade order already carries enough metadata to resolve a slice without schema changes: `accountId`, `type`, `status`, `targetMarketId`, `targetOutcomeId`, `marketId`, `payload.formula`, `filledAt`, and `id`.",
+      "confidence": 0.98,
+      "if_wrong": "The task would need write-path or persistence changes before a reliable replay helper could be added."
+    },
+    {
+      "id": "a3",
+      "assumption": "The helper should stay aligned with existing row-normalization behavior and treat malformed exposure rows as non-replayable rather than trying to reverse-engineer identifiers from storage-only artifacts.",
+      "confidence": 0.9,
+      "if_wrong": "The implementation would need extra recovery logic from composite keys or alternative row shapes that current serializers do not use."
+    },
+    {
+      "id": "a4",
+      "assumption": "No-history or unreplayable-history cases should flow forward as an empty match set, so later steps can keep the existing liveness contract and apply a `unrealizedPnl: 0.0` fallback.",
+      "confidence": 0.86,
+      "if_wrong": "The helper would need to raise or annotate hard replay failures, which would change the later positions-read behavior."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child subtask is needed because the relevant behavior is concentrated in `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `bayes-market-i6y` task artifacts.",
+      "confidence": 0.97,
+      "if_wrong": "A separate child investigation would be needed before the helper boundary could be scoped safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

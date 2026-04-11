@@ -1,0 +1,84 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat the already-landed service-index and baseline `/v1/accounts/{id}/positions` assertions as the starting point, and extend coverage in `tests/test_bayes_market_api.py` instead of duplicating the route in threaded HTTP or integration classes for this step.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Re-add route or service-index coverage that is already present in the current checkout.",
+        "Mirror the new regressions across concurrency and integration classes before the unit/projection layer is complete."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep `/positions` regressions strict on the public contract by asserting exact ordered `routes.accounts` and exact ordered `account.positions` rows while treating `meta` as dynamic, and add a focused replay-order regression for deterministic `(filledAt, id)` chronology because chronology affects P&L outcomes independently of wire ordering.",
+      "based_on": ["q3", "q5"],
+      "alternatives_rejected": [
+        "Use loose membership assertions for service-index or positions payloads.",
+        "Test only lexical wire ordering and leave replay chronology implicit."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Mirror `/exposure` projection-local lifecycle semantics for `/positions`, so missing accounts, risk-only or probability-edit-only accounts with no live `ACCOUNT_EXPOSURE` document, and fully pruned accounts all stay `404 account_not_found`.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Return `200` with an empty `positions` list for risk-only or fully pruned accounts.",
+        "Differentiate missing, risk-only, and pruned accounts with separate status codes."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Add representative P&L regressions by patching `query_market_atomic_probability_for_inference(...)` to fixed marks and asserting exact `unrealizedPnl` for multi-fill accumulation, partial close survivors, and sign-flip survivors, while acknowledging those assertions require the step-3 replay/P&L production seam to be present.",
+      "based_on": ["q1", "q5", "q6"],
+      "alternatives_rejected": [
+        "Assert only relative P&L behavior against live inference outputs.",
+        "Delay all exact P&L coverage until a later integration-only sweep."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Prefer accepted EventTrade writes for realistic accumulation and offset scenarios, and reserve direct `ORDERS` or `ACCOUNT_EXPOSURE` seeding for fixtures that the public write path cannot express cleanly, especially deterministic replay-order and missing-history or pruned-account cases.",
+      "based_on": ["q7"],
+      "alternatives_rejected": [
+        "Force every regression through public POSTs even when the setup becomes opaque.",
+        "Seed all cases directly and give up black-box route realism."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit the existing `/positions` assertions in `tests/test_bayes_market_api.py` and update them to remain the canonical baseline for exact service-index ordering, exact ordered success payloads, and dynamic `meta` handling once `unrealizedPnl` is available on the wire.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Extend projection-level `/positions` negative coverage to pin `404 account_not_found` for missing accounts, risk-only or probability-edit-only accounts with no live `ACCOUNT_EXPOSURE` document, and fully pruned accounts whose surviving rows round to zero or serialize away.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add focused deterministic-order regressions around the positions read path, using direct `ORDERS` and `ACCOUNT_EXPOSURE` seeding where needed to prove stable replay order by `(filledAt, id)` and stable wire order by lexical `(marketId, outcomeId)`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Add representative `/positions` P&L regressions built mostly from accepted EventTrade writes, patching `query_market_atomic_probability_for_inference(...)` to fixed marks and asserting exact `unrealizedPnl` for multi-fill weighted-average accumulation, partial close survivors, and sign-flip survivors.",
+      "depends_on": [1, 3]
+    },
+    {
+      "step": 5,
+      "task": "Run the targeted `tests/test_bayes_market_api.py` slice covering the touched `/positions` regressions, and if the current branch still lacks the step-3 replay/P&L production seam, land or rebase onto that prerequisite before expecting the new exact P&L assertions to pass.",
+      "depends_on": [2, 3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

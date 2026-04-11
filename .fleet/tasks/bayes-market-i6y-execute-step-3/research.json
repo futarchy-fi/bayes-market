@@ -1,0 +1,149 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Freeze replay order as ascending `(filledAt, id)`. `filledAt` is the execution timestamp already used by exposure sync, but it is not sufficient by itself because `ORDERS` is just a dict and current order builders stamp `createdAt` and `filledAt` to the same timestamp. `id` is the only always-present unique sequence token on EventTrade orders, and generated order ids increase monotonically within a process run. So matching fills should be replayed by `filledAt` ascending, then `id` ascending, without relying on dict insertion order.",
+      "confidence": 0.84,
+      "evidence": [
+        "backend/server.py:272",
+        "backend/server.py:1369",
+        "backend/server.py:1371",
+        "backend/server.py:3488",
+        "backend/server.py:3502",
+        "backend/server.py:3503",
+        "backend/server.py:3508"
+      ],
+      "uncertainty": "If manually seeded orders reuse the same timestamp and use arbitrary ids, there is no stronger in-tree sequence field to recover a more 'real' chronology; `id` is the best deterministic tie-breaker available.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Keep serializing the live `ACCOUNT_EXPOSURE` row and fall back to `unrealizedPnl: 0.0` when no matching filled EventTrade history can be replayed. The `/positions` read model is still projection-local on `ACCOUNT_EXPOSURE`, current tests already seed live rows directly with no `ORDERS` dependency, and this step is supposed to be additive to that contract. Missing history means cost basis is unknown, but it does not make the row non-live or malformed, so skipping the row or failing the request would change existing liveness semantics.",
+      "confidence": 0.72,
+      "evidence": [
+        "backend/server.py:1651",
+        "backend/server.py:1666",
+        "backend/server.py:1732",
+        "backend/server.py:1738",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4808",
+        ".fleet/tasks/bayes-market-i6y/plan.json:15",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/questions.json:55"
+      ],
+      "uncertainty": "The repo does not explicitly freeze `0.0` as the fallback number. What is frozen more clearly is that live-position existence comes from `ACCOUNT_EXPOSURE`, not from replay completeness.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q3",
+      "answer": "For a zero-crossing partial offset, realize the closed quantity against the prior signed average cost, then reset the surviving opposite-sign remainder's basis to the crossing fill price. That is the standard consequence of signed average-cost accounting, and it matches the codebase's survivor semantics: after a sign flip the live row keeps only the new signed `netSize` and advances its last-trade metadata to the crossing trade. Carrying the old basis through the sign flip would mix closed exposure with a newly opened opposite-side remainder.",
+      "confidence": 0.66,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y/plan.json:36",
+        ".fleet/tasks/bayes-market-i6y/plan.json:37",
+        "backend/server.py:1381",
+        "backend/server.py:1388",
+        "backend/server.py:1390",
+        "tests/test_bayes_market_api.py:4614",
+        "tests/test_bayes_market_api.py:4630"
+      ],
+      "uncertainty": "No existing code or test names the basis-reset rule explicitly; this answer is inferred from the signed-average-cost plan language and the existing sign-flip survivor behavior.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q4",
+      "answer": "Use account-perspective signed P&L: `unrealizedPnl = (mark - averageCost) * netSize`, where buys are positive `netSize` and sells/shorts are negative `netSize`. The route exposes one signed `netSize` scalar and no separate side field, and EventTrade netting already encodes buys as positive and sells as negative. This formula therefore makes profitable shorts positive when the mark falls below basis and losing shorts negative when the mark rises above basis.",
+      "confidence": 0.81,
+      "evidence": [
+        "backend/server.py:1324",
+        "backend/server.py:1327",
+        "backend/server.py:1329",
+        "backend/server.py:1657",
+        "backend/server.py:1661",
+        ".fleet/tasks/bayes-market-i6y/plan.json:37",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/questions.json:23"
+      ],
+      "uncertainty": "The current repo has not yet shipped a P&L field, so this is an inferred extension of the existing signed-net-size convention rather than a previously asserted wire contract.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Replay only filled EventTrade orders for the live slice. Filter `ORDERS` to rows where `type == \"EventTrade\"`, `status == \"filled\"`, `accountId` matches, and the row resolves to the live position via `targetMarketId` plus `targetOutcomeId`, falling back to `marketId` and `payload.formula[0][0].outcomeId` when needed. Keep `ACCOUNT_EXPOSURE` as the sole source of which positions are currently open; do not rebuild open rows from `ORDERS` alone. That matches both the EventTrade order shape and the exposure-sync path, while excluding ProbabilityEdit orders that also live in `ORDERS` but never drive `ACCOUNT_EXPOSURE`.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:1366",
+        "backend/server.py:1369",
+        "backend/server.py:1370",
+        "backend/server.py:1712",
+        "backend/server.py:1732",
+        "backend/server.py:2691",
+        "backend/server.py:2693",
+        "backend/server.py:2698",
+        "backend/server.py:3487",
+        "backend/server.py:3489",
+        "backend/server.py:3494",
+        "backend/server.py:3496",
+        "backend/server.py:3497",
+        "backend/server.py:3881",
+        "backend/server.py:3882",
+        ".fleet/tasks/bayes-market-i6y/plan.json:15",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/questions.json:49"
+      ],
+      "uncertainty": "This would need revisiting only if the backend later adds another order type that mutates `ACCOUNT_EXPOSURE`, which the current checkout does not do.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "Patch `query_market_atomic_probability_for_inference(...)` in the representative P&L regressions. That helper is the dedicated seam for the current mark, and the existing suite already uses helper-level patching to isolate focused behavior from unrelated subsystems. Using a deterministic patched mark keeps the multi-fill, partial-close, and sign-flip assertions about replay math, while existing EventTrade and inference tests already cover the real fixture-market pricing path separately.",
+      "confidence": 0.89,
+      "evidence": [
+        "backend/server.py:972",
+        "backend/server.py:978",
+        "backend/server.py:980",
+        "backend/server.py:3484",
+        "tests/test_bayes_market_api.py:2522",
+        "tests/test_bayes_market_api.py:2534",
+        "tests/test_bayes_market_api.py:4212",
+        "tests/test_bayes_market_api.py:4231",
+        "tests/test_bayes_market_api.py:4258",
+        "tests/test_bayes_market_api.py:4574"
+      ],
+      "uncertainty": "It would still be reasonable to keep one higher-level integration assertion on real fixture marks, but the representative P&L regressions themselves are cleaner if they patch the mark seam.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 3 should keep `ACCOUNT_EXPOSURE` as the liveness gate and replay `ORDERS` only for rows that are already live, preserving the existing projection-local 404 semantics."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The replay helper can stay limited to filled `EventTrade` orders. `ProbabilityEdit` orders also live in `ORDERS`, but they feed `ACCOUNT_RISK`, not `ACCOUNT_EXPOSURE`."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The implementation can remain additive to the current `/positions` contract: same `{account, meta}` envelope, same lexical `(marketId, outcomeId)` ordering, same 404-on-empty lifecycle, plus one computed `unrealizedPnl` field per row."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Cost basis should be a read-time helper over `ORDERS`; there is no need to widen `ACCOUNT_EXPOSURE` rows or add persisted realized/unrealized P&L fields."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.91,
+      "impact": "No child investigation is required. The relevant contract and implementation seams are concentrated in `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `bayes-market-i6y` task artifacts."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

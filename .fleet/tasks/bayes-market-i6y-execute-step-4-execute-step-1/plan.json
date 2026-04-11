@@ -1,0 +1,84 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep the existing root-route assertion and the three `/positions` projection tests in `tests/test_bayes_market_api.py` as the canonical contract seams, and widen those tests in place instead of introducing a new baseline test.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Consolidate the coverage into a brand-new canonical `/positions` baseline test.",
+        "Spread equivalent baseline assertions into other test classes before updating the existing owners."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep `test_root_route_returns_service_index` strict on exact ordered `routes.accounts` equality so the service index continues to freeze `/risk`, `/exposure`, then `/positions` in that public order.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Relax the root assertion to only check that `/positions` is present somewhere in `routes.accounts`.",
+        "Treat account-route ordering as an internal detail that can drift without test coverage."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep `test_get_account_positions_serializes_minimal_lexically_sorted_live_rows_and_route_parity` as the exact ordered success baseline by preserving route parity, lexical `(marketId, outcomeId)` row ordering, and malformed or rounded-zero pruning, then extend its frozen row shape additively to include `unrealizedPnl` once that field is actually serialized on the wire.",
+      "based_on": ["q3", "q5"],
+      "alternatives_rejected": [
+        "Add a second success-path baseline just for `unrealizedPnl`.",
+        "Loosen the payload assertion so only selected fields or unordered membership are checked."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Treat response `meta` as dynamic in both the root service-index baseline and the `/positions` success baseline by asserting stable invariants such as timestamp presence and UTC formatting instead of exact full-object equality.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Patch time and compare the complete `meta` object exactly.",
+        "Ignore `meta` entirely in the refreshed canonical baseline tests."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Keep this step green on the current branch by landing the stricter five-field `/positions` success assertion only alongside, or after rebasing onto, the missing step-3 replay/P&L production seam that exposes `unrealizedPnl`.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Intentionally stage a failing five-field baseline before production supports `unrealizedPnl`.",
+        "Permanently keep the older four-field payload as the canonical post-P&L contract."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit `test_root_route_returns_service_index` and the three `/positions` projection tests against `service_index_payload()` and `serialize_account_positions()` so the exact contract-owner assertions and current branch prerequisite are explicit before editing.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Refresh the root service-index baseline to keep exact ordered `routes.accounts` equality while converting `meta` checks to stable invariant assertions instead of exact object equality.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Update the canonical `/positions` success test to preserve route parity, exact ordered surviving rows, and dynamic `meta` handling, extending the frozen row shape to include `unrealizedPnl` only when the step-3 production seam is present.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Keep the existing 404 and 405 `/positions` tests as the baseline lifecycle and method guardrails, adjusting them only as needed to remain consistent with the refreshed canonical success contract.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Run the targeted `tests/test_bayes_market_api.py` `/positions` slice and confirm the updated baseline passes on the current checkout or after rebasing the missing replay/P&L prerequisite that exposes `unrealizedPnl`.",
+      "depends_on": [2, 3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

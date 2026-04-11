@@ -1,0 +1,85 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Expose replayed `averageCost` as a positive execution-price basis and keep side encoded only in signed `netSize`, so long and short survivors share the later `(mark - averageCost) * netSize` P&L formula without negating basis for shorts.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Return a sign-bearing `averageCost` for short survivors.",
+        "Infer side from the basis sign instead of signed `netSize`."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Round replay math at every fill transition with the existing six-decimal helpers: normalize each fill's `size` and `price`, derive a rounded signed delta from `side`, round the updated survivor `netSize`, coerce `-0.0` to `0.0`, and immediately round any recomputed weighted `averageCost`.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Delay all rounding until the final accumulator result.",
+        "Round only `netSize` and leave intermediate `averageCost` values unnormalized."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Treat any ordered replay fill with malformed accumulator inputs such as missing or invalid `side`, `size`, or `price` as a whole-slice no-usable-history outcome, returning a zeroed accumulator with `historyFound` false instead of skipping the bad fill or raising from the read path.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Skip malformed fills and continue replay from the remaining history.",
+        "Raise an exception and fail `/positions` for the entire account."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Implement the accumulator as a signed-position state machine over the pre-ordered fills: same-side fills recompute weighted average cost, smaller opposite-side fills preserve the prior basis on the surviving remainder, exact offsets zero both `netSize` and `averageCost`, and larger opposite-side fills reset the flipped survivor's basis to the crossing fill price.",
+      "based_on": ["q1", "q2", "q4"],
+      "alternatives_rejected": [
+        "Infer cost basis from `lastTradePrice` alone.",
+        "Carry the pre-flip basis through a sign change.",
+        "Switch to FIFO or LIFO lot accounting for the read model."
+      ],
+      "reversibility": "hard"
+    },
+    {
+      "id": "d5",
+      "decision": "Keep the helper boundary narrow: it should consume the ordered fills from step 1 and return replay-derived `netSize`, `averageCost`, and `historyFound`, while leaving live-row reconciliation and mismatch fallback policy to the later `/positions` integration step.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Have the accumulator read `ACCOUNT_EXPOSURE` directly and reconcile itself against the live row.",
+        "Make the accumulator responsible for deciding wire-level fallback P&L on replay/live mismatches."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add a small replay-accumulator helper in `backend/server.py` adjacent to the ordered-fill utilities from step 1, defining a zeroed result shape and consuming the already matched fill list instead of re-scanning `ORDERS`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Normalize and validate each ordered fill for accumulator math by reading `side`, `size`, and `price`, converting the fill into a rounded signed delta, and aborting the slice to the zeroed no-history result if any selected fill is unusable.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Implement the signed replay state transitions for empty-start accumulation, same-side weighted-average growth, partial offsets that preserve basis, exact closes that flat the slice, and sign flips that reset basis to the crossing fill price, updating rounded survivor state after every applied fill.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Extend `tests/test_bayes_market_api.py` with focused regressions for long and short same-side accumulation, partial closes, exact full closes, sign-flip survivors, and malformed-fill downgrade behavior so the helper contract is pinned before the `/positions` wiring step.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Run the targeted backend tests that cover the new accumulator seam and adjacent positions replay behavior, then commit the task artifact updates once the plan file is in place.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

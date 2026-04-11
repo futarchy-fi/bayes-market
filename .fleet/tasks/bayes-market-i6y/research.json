@@ -1,0 +1,112 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use the standard `{account, meta}` account-read envelope and place the rows directly at `account.positions`: `{ \"account\": { \"id\": \"...\", \"positions\": [...] }, \"meta\": ... }`. Both existing account reads return `{\"account\": {\"id\": ..., <read-model>: ...}, \"meta\": ...}`, and this task only freezes row fields, not any route-level scalars analogous to `maxPositionSize` or `updatedAt`. Adding another wrapper like `account.positions.positions` or a top-level `positions` object would introduce contract surface with no backing evidence in the current checkout.",
+      "confidence": 0.73,
+      "evidence": [
+        "backend/server.py:1667",
+        "backend/server.py:1699",
+        ".fleet/tasks/bayes-market-i6y/questions.json:8",
+        ".fleet/tasks/bayes-market-eu0-v2-execute-step-1/questions.json:50"
+      ],
+      "uncertainty": "The repo does not explicitly freeze `/positions` yet. If product wants route-level metadata later, a nested object could still be introduced, but there is no current evidence for it.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Treat `/v1/accounts/{id}/positions` as additive beside `/exposure`, not as a replacement in this step. The current checkout exposes `/exposure` in the backend route table and root service index, and the frontend API client, query keys, and Portfolio route all consume that contract directly. There is no in-tree migration artifact that deprecates `/exposure`; replacing it would expand scope into backend plus TypeScript/client/hook/UI churn.",
+      "confidence": 0.89,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y/questions.json:14",
+        "backend/server.py:127",
+        "backend/server.py:3931",
+        "tests/test_bayes_market_api.py:578",
+        "frontend/src/lib/api/client.ts:169",
+        "frontend/src/lib/query/hooks.ts:21",
+        "frontend/src/routes/Portfolio.tsx:25"
+      ],
+      "uncertainty": "Product could later add an alias or deprecation path after `/positions` exists, but nothing in the current codebase schedules that migration.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The codebase does not already freeze a P&L accounting rule, but the most codebase-consistent definition is average-cost replay of accepted EventTrade fills for each `(accountId, marketId, outcomeId)` slice, then mark the surviving net position to the current atomic probability. `ACCOUNT_EXPOSURE` stores only one netted live row plus `lastTradePrice`, which is not enough to derive unique unrealized P&L after partial close-outs; accepted EventTrade `ORDERS` preserve `side`, `size`, `price`, and `filledAt`; and current mark data is available via `query_market_atomic_probability_for_inference(...)`. FIFO/LIFO would introduce lot-accounting semantics that the current netted projection does not expose, while pure signed cash-flow replay yields total mark-to-market P&L rather than a unique unrealized-only number.",
+      "confidence": 0.64,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y/questions.json:20",
+        "backend/server.py:1365",
+        "backend/server.py:1387",
+        "backend/server.py:971",
+        "backend/server.py:3397",
+        "tests/test_bayes_market_api.py:4574",
+        "tests/test_bayes_market_api.py:4611",
+        ".fleet/tasks/bayes-market-m80/research.json:20"
+      ],
+      "uncertainty": "This is an inference, not a frozen contract. If product wants lot-based realized/unrealized splits or wants `unrealizedPnl` to really mean total mark-to-market P&L, the rule needs an explicit contract decision.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q4",
+      "answer": "An 'open position' should mean a surviving live EventTrade row in `ACCOUNT_EXPOSURE`. The current projection deletes a row when net size rounds to zero, removes resolved-market rows during settlement, and drops the whole account document once no live rows remain; `get_account_exposure(...)` then returns `404 account_not_found` for missing or fully pruned projections. The new `/positions` route should inherit that same lifecycle rather than return `200` with an empty list.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:1380",
+        "backend/server.py:1403",
+        "backend/server.py:1655",
+        "tests/test_bayes_market_api.py:1126",
+        "tests/test_bayes_market_api.py:3012",
+        "tests/test_bayes_market_api.py:4733"
+      ],
+      "uncertainty": "This only changes if product intentionally wants `/positions` to diverge from `/exposure` empty-state semantics.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Use backend lexical `(marketId, outcomeId)` order as the public contract. The existing exposure serializer sorts that way and tests freeze it, while the Portfolio UI applies its own recency sort after fetching. `/positions` should stay lexically ordered on the wire and let clients opt into recency ordering locally.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:1628",
+        "tests/test_bayes_market_api.py:4648",
+        "frontend/src/routes/Portfolio.tsx:53"
+      ],
+      "uncertainty": "Clients may still choose a different presentation order, but the backend contract is most stable if it remains deterministic and lexical.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.96,
+      "impact": "Current router, serializer/getter seams, and account-route regressions are centered in `backend/server.py` and `tests/test_bayes_market_api.py`; only a replacement-style rollout would force broader frontend edits."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Scope can stay on EventTrade holdings backed by `ACCOUNT_EXPOSURE`; probability-edit state remains in `ACCOUNT_RISK` and LMSR slices, not per-outcome open-position rows."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.86,
+      "impact": "Implementation can land as a backend-first additive read model. Treating `/positions` as a replacement would expand into service-index, client, query, and portfolio migration work."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The new route can reuse the existing live-projection lifecycle and market-resolution pruning rules instead of inventing historical-position persistence."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Computing a truthful `unrealizedPnl` needs extra derivation over accepted orders plus current mark data; serializing `ACCOUNT_EXPOSURE` alone is not enough."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

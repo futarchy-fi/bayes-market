@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What git baseline should this sanity-check compare against to decide whether the leaf stayed route-surface-only: the pre-dispatch parent state that still lacked `/v1/accounts/{id}/positions`, or the current merged HEAD where the implementation diff collapses to zero?",
+      "category": "requirements",
+      "why_it_matters": "This branch already sits on merged implementation history. Without one explicit comparison point, the audit can either miss serializer/test scope creep entirely or over-attribute unrelated inherited history."
+    },
+    {
+      "id": "q2",
+      "question": "For this child step, is the acceptable product-file diff boundary strictly `backend/server.py` route-surface plumbing, with any simultaneous edits to `tests/test_bayes_market_api.py` treated as out of scope even though the root service-index assertion eventually needs to move?",
+      "category": "requirements",
+      "why_it_matters": "The execution commit that added `/positions` changed both `backend/server.py` and `tests/test_bayes_market_api.py`. The leaf needs a clear rule for whether test additions belong here or must stay deferred with the later backend-regression phase."
+    },
+    {
+      "id": "q3",
+      "question": "Does the dedicated `get_account_positions(account_id)` entrypoint count as acceptable route plumbing only if it remains a thin `{account, meta}` seam, or may this leaf also introduce `serialize_account_position(...)` and `serialize_account_positions(...)` even though the parent plan assigns row-shaping to the later serializer phase?",
+      "category": "design",
+      "why_it_matters": "The current `backend/server.py` diff does more than register and dispatch the route: it adds new row-filtering, lexical ordering, and minimal public-shape helpers. The scope review needs to know whether those helpers are prerequisites or scope creep."
+    },
+    {
+      "id": "q4",
+      "question": "When checking that the dispatcher contract stays consistent across account reads, which behaviors are non-negotiable invariants for `/positions`: the shared matched-account branch, GET-only `405 method_not_allowed`, the standard `{account, meta}` envelope, and projection-local `404 account_not_found` semantics inherited from `ACCOUNT_EXPOSURE`?",
+      "category": "requirements",
+      "why_it_matters": "The sanity-check is specifically about contract consistency, but that phrase covers several observable behaviors. The review needs to know exactly which ones must remain identical to `/risk` and `/exposure` versus which details belong to later phases."
+    },
+    {
+      "id": "q5",
+      "question": "Should broader `/positions` regression expansion remain explicitly deferred here, meaning this leaf should avoid owning direct getter happy-path/404 assertions and route-level method tests, or is it acceptable to keep the already-landed coverage so long as no threaded HTTP/client work is added?",
+      "category": "codebase",
+      "why_it_matters": "The parent plan splits route plumbing from later regression expansion, but the current branch already includes new service-index and `/positions` tests. The leaf needs one rule for whether to preserve, trim, or ignore those additions during the final scope check."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The meaningful audit baseline is the pre-step-4 parent state that still lacked `/positions` dispatch, because comparing only against the current merged branch head would hide the actual route-surface change set.",
+      "confidence": 0.95,
+      "if_wrong": "The later review could use the wrong diff target and either miss real scope drift or report a misleading empty audit."
+    },
+    {
+      "id": "a2",
+      "assumption": "This leaf is intended to keep product-file scope centered on `backend/server.py`, with broader backend regression edits in `tests/test_bayes_market_api.py` deferred to the parent step that owns formal `/positions` coverage.",
+      "confidence": 0.88,
+      "if_wrong": "The plan for this leaf would be too strict, and retaining or adding tests here would be acceptable rather than scope creep."
+    },
+    {
+      "id": "a3",
+      "assumption": "A dedicated `get_account_positions(account_id)` function is part of the allowed route-surface seam, but the new `serialize_account_position(...)` and `serialize_account_positions(...)` helpers are the most likely place where this branch has already stepped into the later serializer phase.",
+      "confidence": 0.84,
+      "if_wrong": "The current `backend/server.py` helper additions are legitimate prerequisites of the route-plumbing step and should not be treated as overreach."
+    },
+    {
+      "id": "a4",
+      "assumption": "Contract consistency for `/positions` should mean inheriting the same matched-account routing, GET-only `405` behavior, `{account, meta}` envelope, and exposure-backed `404 account_not_found` lifecycle already used by the other account reads.",
+      "confidence": 0.97,
+      "if_wrong": "The scope check would need to tolerate an intentional behavioral divergence inside the shared account-read surface, which the current plans do not indicate."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child subtasks are needed because the relevant production seams, prior task artifacts, and git history needed for the scope audit are all available locally in this worktree.",
+      "confidence": 0.99,
+      "if_wrong": "A separate child exploration task would be needed before the leaf could determine the correct baseline or scope boundary."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

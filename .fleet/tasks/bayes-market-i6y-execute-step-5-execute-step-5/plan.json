@@ -1,0 +1,90 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat this leaf as implementation-plus-execution rather than artifact-only because the replay-backed `/v1/accounts/{id}/positions` `unrealizedPnl` seam is still missing on this branch and must be backfilled before a final execution commit is legitimate.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Assume another authoritative ref already contains the validated implementation and reduce this leaf to staging artifacts only.",
+        "Create a final execution commit without changing `backend/server.py` and `tests/test_bayes_market_api.py`."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Require a fresh rerun of `python3 -m pytest -v --tb=short tests/test_bayes_market_api.py::BayesMarketApiUnitTests::test_root_route_returns_service_index tests/test_bayes_market_api.py::BayesMarketExposureProjectionTests` in this checkout as the canonical focused gate before staging the final execution commit.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Reuse an earlier validation run because the touched files appear unchanged.",
+        "Drop the service-index assertion and rerun only `BayesMarketExposureProjectionTests`."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Use `git diff ff/Tbayes-market-i6y-execute-step-4..HEAD` as the primary contract-consistency review and `git diff ff/Tbayes-market-i6y-execute-step-5..HEAD` as the secondary leaf-attribution check, with the final staged diff limited to `backend/server.py`, `tests/test_bayes_market_api.py`, `.fleet/tasks/bayes-market-i6y-execute-step-5/execution.json`, and this leaf's `.fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-5/*` files.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Use only the step-5 parent baseline and skip the broader step-4 contract audit.",
+        "Use only the step-4 baseline and skip the leaf-local attribution proof.",
+        "Allow unrelated file changes to ride along with the final execution commit."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Create the missing parent artifact `.fleet/tasks/bayes-market-i6y-execute-step-5/execution.json` as part of completion so the final commit records the fresh pytest gate and scope-review proof for the parent step instead of leaving execute evidence only in leaf-local metadata.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Commit only `.fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-5/*` metadata and leave the parent execute record absent.",
+        "Defer the parent execution artifact to a later follow-up leaf."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Record explicit worktree and staged-index checks before committing by inspecting `git status --short`, `git diff --name-only`, staging with `git add -A`, and then verifying `git diff --cached --name-only` contains only the allowed implementation and task-artifact paths.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Rely on a single clean-tree check after staging.",
+        "Skip staged-index verification once the diff review and pytest gate pass."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Backfill the missing replay-backed `/v1/accounts/{id}/positions` implementation in `backend/server.py` and extend `tests/test_bayes_market_api.py` so the five-field `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` contract and the representative weighted-average, partial-close, sign-flip, and fallback behaviors are frozen in `BayesMarketExposureProjectionTests`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Run `python3 -m pytest -v --tb=short tests/test_bayes_market_api.py::BayesMarketApiUnitTests::test_root_route_returns_service_index tests/test_bayes_market_api.py::BayesMarketExposureProjectionTests` in this checkout and iterate on the backend/test changes until the focused gate passes cleanly.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Review `git diff ff/Tbayes-market-i6y-execute-step-4..HEAD` for the primary contract-consistency audit and `git diff ff/Tbayes-market-i6y-execute-step-5..HEAD` for leaf-local attribution, confirming both the path set and the relevant hunks stay confined to the `/positions` replay/P&L seam and the allowed task artifacts.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Write `.fleet/tasks/bayes-market-i6y-execute-step-5/execution.json` with the fresh focused-pytest evidence and the approved dual-diff scope review, then keep this leaf's `.fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-5/*` artifacts aligned with the completed execution record.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Inspect the live worktree with `git status --short` and `git diff --name-only`, stage the final change set with `git add -A`, and verify via `git diff --cached --name-only` that only the allowed implementation files and task artifacts are queued for commit.",
+      "depends_on": [4]
+    },
+    {
+      "step": 6,
+      "task": "Create the final execution commit only after the fresh pytest gate, the primary and secondary diff reviews, and the staged-index verification all succeed.",
+      "depends_on": [5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

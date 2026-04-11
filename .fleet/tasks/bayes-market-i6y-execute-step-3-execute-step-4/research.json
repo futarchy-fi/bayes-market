@@ -1,0 +1,145 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Update the existing `get_account_positions(...)` baseline test in place so it freezes the new row shape with `unrealizedPnl`, then add the replay-focused regressions alongside it in `BayesMarketExposureProjectionTests`. The current baseline test already owns lexical ordering and getter-versus-route parity for `/positions`, and the step-3 artifacts describe the P&L field as an additive extension of that existing contract rather than a separate read model. A separate P&L-only cluster would duplicate the route-shape seam that already exists.",
+      "confidence": 0.96,
+      "evidence": [
+        "tests/test_bayes_market_api.py:4322",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4808",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/research.json:129",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:82",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:88"
+      ],
+      "uncertainty": "A small local helper method or comment block could still be added for readability, but the coverage seam itself should stay in the existing positions baseline plus additive regressions.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Use a mix. Put deterministic ordering and replay-math coverage primarily in `BayesMarketExposureProjectionTests` at the helper/getter level, where the suite already seeds `ACCOUNT_EXPOSURE`, exercises projection helpers directly, and asserts `/positions` getter behavior. Then keep route-level assertions as serialization smoke by extending the existing route-parity test and using a small number of representative `route_request(\"GET\", \"/v1/accounts/{id}/positions\")` checks. Driving every weighted-average and sign-flip case purely through the router would add setup noise without improving the math proof materially.",
+      "confidence": 0.95,
+      "evidence": [
+        "tests/test_bayes_market_api.py:4322",
+        "tests/test_bayes_market_api.py:4411",
+        "tests/test_bayes_market_api.py:4651",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4809",
+        "tests/test_bayes_market_api.py:6037",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/questions.json:12"
+      ],
+      "uncertainty": "If the implementation lands substantial new standalone replay helpers in `backend/server.py`, one or two helper-specific tests may sit even closer to those functions, but the primary home is still this projection test class.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Explicitly seed `ORDERS` out of insertion order, including same-`filledAt` ties, for the deterministic-ordering regression. The normal EventTrade write path creates and inserts orders in acceptance order, stamps `createdAt` and `filledAt` from the same `utc_timestamp()` call, and uses a plain dict for storage. That path is unlikely to hit the unstable edge this step is meant to pin, so a direct fixture is the correct way to prove the `(filledAt, id)` replay sort seam.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:272",
+        "backend/server.py:276",
+        "backend/server.py:3486",
+        "backend/server.py:3487",
+        "backend/server.py:3502",
+        "backend/server.py:3503",
+        "backend/server.py:3508",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/questions.json:18"
+      ],
+      "uncertainty": "The only caveat is that the fixture should keep realistic order rows so it proves sorting rather than malformed-row handling.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Assert both outcomes: the directly seeded live row should still serialize with `unrealizedPnl: 0.0`, and the test should also prove `query_market_atomic_probability_for_inference(...)` is not called when there is no usable replay history. The fallback value is the public contract, but the suite already uses internal call assertions to pin short-circuit behavior on replay-sensitive paths, and a scalar `0.0` assertion alone could miss an accidental mark query that happens to return a harmless fixture price.",
+      "confidence": 0.92,
+      "evidence": [
+        "tests/test_bayes_market_api.py:4456",
+        "tests/test_bayes_market_api.py:4482",
+        "tests/test_bayes_market_api.py:2508",
+        "tests/test_bayes_market_api.py:2522",
+        "tests/test_bayes_market_api.py:2534",
+        "tests/test_bayes_market_api.py:4212",
+        "tests/test_bayes_market_api.py:4231",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:16",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:83"
+      ],
+      "uncertainty": "The public API does not expose whether the mark helper was called, so this is a stronger-than-contract assertion; it is still consistent with the repo's current regression style.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Prefer accepted EventTrade POSTs for the representative weighted-average, partial-close, and sign-flip survivor cases, and reserve direct `ORDERS` seeding for cases the write path does not naturally create, especially deterministic ordering and missing-history fallback. The accepted write path gives canonical order shape, exposure syncing, and rounding for free, and this test class already uses it for partial-offset and sign-flip survivor coverage. If the weighted-average case needs multiple mark prices, patch `query_market_atomic_probability_for_inference(...)` with a per-fill `side_effect` while still creating the fills through the public EventTrade path.",
+      "confidence": 0.94,
+      "evidence": [
+        "backend/server.py:1366",
+        "backend/server.py:1388",
+        "backend/server.py:1390",
+        "backend/server.py:3484",
+        "backend/server.py:3494",
+        "backend/server.py:3497",
+        "backend/server.py:3499",
+        "tests/test_bayes_market_api.py:4537",
+        "tests/test_bayes_market_api.py:4577",
+        "tests/test_bayes_market_api.py:4614",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:88"
+      ],
+      "uncertainty": "Direct seeding is still acceptable for a narrowly isolated replay-helper test, but it should not be the default for the representative survivor scenarios.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "Do both in the representative P&L regressions: assert the computed `unrealizedPnl` values and verify the patched `query_market_atomic_probability_for_inference(...)` arguments. The mark helper's entire contract is the `(market_id, outcome_id)` slice, so argument checks are the best proof that each live row is priced from the intended market/outcome rather than coincidentally producing the right scalar from the wrong slice. For single-row cases, `assert_called_once_with(...)` is ideal; for multi-row cases, verify the set of calls without over-constraining call order unless ordering is itself the point of the test.",
+      "confidence": 0.91,
+      "evidence": [
+        "backend/server.py:972",
+        "backend/server.py:978",
+        "backend/server.py:980",
+        "backend/server.py:982",
+        "backend/server.py:3484",
+        "tests/test_bayes_market_api.py:2522",
+        "tests/test_bayes_market_api.py:2534",
+        "tests/test_bayes_market_api.py:4212",
+        "tests/test_bayes_market_api.py:4231",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:60"
+      ],
+      "uncertainty": "The current code does not yet contain the new read-time mark loop, so the exact multi-row call order is still an implementation detail and should not be frozen unless a test specifically targets that order.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "This leaf can stay focused on replay and P&L regressions because the service-index entry, getter, route parity, and `404` lifecycle for `/v1/accounts/{id}/positions` are already present in the checkout."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The new coverage should stay in `tests/test_bayes_market_api.py`, centered on `BayesMarketExposureProjectionTests`, which already owns exposure helpers, positions getter coverage, and route parity for this read model."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "At least one regression should use direct state seeding because accepted EventTrade writes alone do not reliably create out-of-order `ORDERS` insertion or same-timestamp ties for the deterministic replay seam."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Mark-sensitive P&L regressions should patch `query_market_atomic_probability_for_inference(...)` so failures isolate replay and serializer behavior from unrelated inference changes, while still allowing explicit call-argument assertions."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "No child task is needed. The remaining decisions are local to `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `bayes-market-i6y` task artifacts already available in this worktree."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

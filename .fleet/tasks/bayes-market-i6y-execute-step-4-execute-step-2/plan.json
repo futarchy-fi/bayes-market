@@ -1,0 +1,69 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Extend the existing `BayesMarketExposureProjectionTests.test_get_account_positions_raises_404_for_missing_or_fully_pruned_projection` seam with additional `subTest(...)` branches instead of splitting this projection-local `404` contract across new top-level tests.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Create separate top-level tests for missing-account, probability-edit-only, and serialize-away `/positions` failures.",
+        "Move the negative coverage to a broader routing or integration layer before the projection seam is complete."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Represent the new risk-only or probability-edit-only account with one accepted `POST /v1/markets/{id}/orders/probability-edit` fixture, then assert `server.get_account_positions(account_id)` still raises `404 account_not_found` because the write populates `ACCOUNT_RISK` without creating a live `ACCOUNT_EXPOSURE` document.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Seed `ACCOUNT_RISK` directly for a narrower but less representative fixture.",
+        "Invent a second distinct risk-only regression even though ProbabilityEdit is the concrete writer for that state in this checkout."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Cover the getter's two observable `404` branches only: missing `ACCOUNT_EXPOSURE` documents and stale account documents whose surviving rows round to zero or serialize away, while leaving physically pruned accounts implicit in the existing missing-document branch and keeping the scope at the direct getter seam.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Add a separate physically pruned-account fixture even though it is indistinguishable from any other missing-document read at this seam.",
+        "Duplicate the new negative matrix through `route_request(\"GET\", ...)` even though the route already delegates to the same getter."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Freeze the structured `ApiError` contract only for this step and treat backend edits as contingency work, because the researched gap is missing negative coverage rather than a known mutation or projection bug.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Add side-effect snapshot assertions for `ACCOUNT_RISK` or stale `ACCOUNT_EXPOSURE` documents in this coverage pass.",
+        "Plan an immediate `backend/server.py` change before the focused test slice proves one is needed."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit the existing `/positions` negative seam and adjacent ProbabilityEdit helper usage in `tests/test_bayes_market_api.py` so the new coverage lands in the current grouped projection test without disturbing the established `/risk` and `/exposure` precedents.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Edit `test_get_account_positions_raises_404_for_missing_or_fully_pruned_projection` in `tests/test_bayes_market_api.py` to keep the missing-account subtest, add a real ProbabilityEdit-backed risk-only or probability-edit-only subtest, and preserve the stale `ACCOUNT_EXPOSURE` zero-or-malformed-row subtest so both getter-level `404 account_not_found` branches stay pinned in one place.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Run the focused Bayes market test slice that covers the touched `/positions` seam and the adjacent risk-only ProbabilityEdit precedent, confirming the new regression passes without extra route-parity duplication and without backend changes.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Only if the focused slice reveals an actual projection defect, apply the smallest `backend/server.py` fix needed to preserve `404 account_not_found` for missing-document and serialize-empty `/positions` reads, then rerun the targeted tests before final staging.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact execution ordering should the EventTrade replay helper freeze when rebuilding cost basis for one live `(accountId, marketId, outcomeId)` slice: is `filledAt` ascending sufficient, and if two fills share the same timestamp or `ORDERS` is manually seeded out of insertion order, what secondary tie-breaker should be used?",
+      "category": "design",
+      "why_it_matters": "Signed average-cost replay is order-sensitive once fills arrive at different prices or a later trade crosses through zero. The current backend stores orders in a plain dict and tests often seed state directly, so deterministic ordering needs to be explicit before the helper can be trusted."
+    },
+    {
+      "id": "q2",
+      "question": "When a live `ACCOUNT_EXPOSURE` row exists but `ORDERS` has no matching filled EventTrade history for that `(accountId, marketId, outcomeId)` slice, should `/v1/accounts/{id}/positions` still serialize the row with a fallback `unrealizedPnl` (for example `0.0`), skip the row as unreadable, or fail the request?",
+      "category": "requirements",
+      "why_it_matters": "The current positions and exposure tests sometimes seed `ACCOUNT_EXPOSURE` directly without corresponding `ORDERS`. Adding read-time replay changes those fixtures unless there is a defined fallback for live rows whose history is missing or incomplete."
+    },
+    {
+      "id": "q3",
+      "question": "For a partial offset that crosses zero, should the helper realize the closed quantity against the prior signed average cost and then reset the surviving opposite-sign remainder's basis to the crossing fill price, or is some other basis-carry rule expected for sign-flip survivors?",
+      "category": "design",
+      "why_it_matters": "The parent plan already points to signed average-cost accounting, but the exact sign-flip transition rule is not frozen by the current code. That one detail directly changes `unrealizedPnl` after over-offsetting sells or buys."
+    },
+    {
+      "id": "q4",
+      "question": "What scalar sign convention should the wire-level `unrealizedPnl` field use for short positions: should it always be from the account's perspective, such as `(mark - averageCost) * netSize`, or is a different long/short formula expected?",
+      "category": "requirements",
+      "why_it_matters": "The route returns one signed P&L number with no separate `side` field beyond the sign of `netSize`. The implementation needs one precise convention so that negative-net positions report gains and losses consistently when the current mark moves."
+    },
+    {
+      "id": "q5",
+      "question": "Which exact order rows should the replay helper scan for each live position: only `ORDERS` entries with `type == \"EventTrade\"` and `status == \"filled\"` that match the row via `accountId` plus `targetMarketId`/`targetOutcomeId` (falling back to `marketId` and the payload literal), while continuing to use `ACCOUNT_EXPOSURE` as the sole source of which positions are considered open?",
+      "category": "codebase",
+      "why_it_matters": "The backend stores multiple order types and the EventTrade write path duplicates identifiers across `marketId`, `targetMarketId`, `targetOutcomeId`, and `payload.formula`. The helper needs one exact filter contract so it neither misses valid fills nor drags unrelated orders into the replay."
+    },
+    {
+      "id": "q6",
+      "question": "For the representative P&L regressions, should tests patch `query_market_atomic_probability_for_inference(...)` to deterministic marks and isolate only the replay math, or should they rely on the real fixture-market inference probabilities and assert against those live values?",
+      "category": "codebase",
+      "why_it_matters": "This step adds a new dependency on the inference query path to every live position read. The tests need a clear seam so they can distinguish bugs in replay math from bugs or incidental changes in the inference backend."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The route will keep using `ACCOUNT_EXPOSURE` as the liveness gate and only replay `ORDERS` for rows that are already live, rather than rebuilding account positions from full historical order history alone.",
+      "confidence": 0.99,
+      "if_wrong": "The helper would need a broader account-history reconstruction path and the existing projection-local 404 semantics for `/positions` could no longer be reused."
+    },
+    {
+      "id": "a2",
+      "assumption": "Read-time P&L should be derived only from accepted filled `EventTrade` orders; ProbabilityEdit, CommentPost, and ResolveMarket records in `ORDERS` are irrelevant to this helper.",
+      "confidence": 0.98,
+      "if_wrong": "The replay filter would be too narrow and the helper would need cross-order-type logic that is not implied by the current EventTrade-only exposure model."
+    },
+    {
+      "id": "a3",
+      "assumption": "Step 3 is additive to the existing `/positions` contract: the `{account, meta}` envelope, lexical `(marketId, outcomeId)` ordering, and 404-on-empty lifecycle stay as they are, while each row gains computed `unrealizedPnl`.",
+      "confidence": 0.98,
+      "if_wrong": "The implementation would need to reopen route-shape and serializer decisions that earlier `i6y` steps already froze."
+    },
+    {
+      "id": "a4",
+      "assumption": "Cost basis remains a read-time derivation from `ORDERS`; this step is not supposed to persist new average-cost or realized-P&L fields into `ACCOUNT_EXPOSURE`.",
+      "confidence": 0.96,
+      "if_wrong": "The task becomes a write-path projection change rather than a read-time helper, which materially expands scope and migration risk."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child subtasks are needed because the relevant implementation and contract owners are concentrated in `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in `bayes-market-i6y` task artifacts.",
+      "confidence": 0.95,
+      "if_wrong": "A follow-on child task would be needed to audit another hidden owner before the replay helper can be implemented safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

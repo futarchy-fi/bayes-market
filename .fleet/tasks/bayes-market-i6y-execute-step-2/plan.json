@@ -1,0 +1,69 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Implement `/positions` as a dedicated minimal projection over `ACCOUNT_EXPOSURE` that emits only `marketId`, `outcomeId`, `netSize`, and `lastTradePrice`, instead of reusing the richer `/exposure` row shape.",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Reuse `serialize_account_exposure_position(...)` and strip extra fields afterward.",
+        "Expose `/positions` as an alias of the full `/exposure` row contract."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use `round_exposure_value(...)` to normalize `netSize` before checking for zero so rounded-away residual positions are pruned under the same canonical rule as `/exposure`.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Compare the stored float to zero without normalization.",
+        "Introduce a separate epsilon rule that only `/positions` uses."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Make the row serializer tolerant of malformed `ACCOUNT_EXPOSURE` rows by skipping entries missing `marketId` or `outcomeId`, then sort surviving rows lexically by `(marketId, outcomeId)` for deterministic output.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Fail the entire response when one stored row is malformed.",
+        "Preserve insertion order from the backing dictionary."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Preserve the existing projection-local lifecycle in `get_account_positions(account_id)` by raising `404 account_not_found` both when the account has no `ACCOUNT_EXPOSURE` entry and when serialization prunes every row.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Return `200` with an empty `positions` list after pruning.",
+        "Consult a separate account registry to distinguish missing accounts from empty projections."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add `serialize_account_position(...)` in `backend/server.py` to project one stored exposure row into the minimal `/positions` shape, reusing `round_exposure_value(...)`, returning `None` for rounded-zero rows, and skipping rows missing `marketId` or `outcomeId`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add `serialize_account_positions(...)` in `backend/server.py` to iterate over `ACCOUNT_EXPOSURE` position rows, drop `None` results from the row serializer, and sort the surviving rows lexically by `(marketId, outcomeId)`.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Update `get_account_positions(account_id)` in `backend/server.py` to read from `ACCOUNT_EXPOSURE`, raise the existing `404 account_not_found` when the account is missing or when the serialized positions list is empty, and otherwise return `account.id` plus the minimal `positions` array.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Add or update backend tests in `tests/test_bayes_market_api.py` to cover route parity, minimal field projection, rounded-zero pruning, malformed-row skipping, lexical `(marketId, outcomeId)` ordering, and the preserved 404-on-empty lifecycle for `/positions`.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

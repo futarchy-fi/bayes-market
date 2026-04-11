@@ -1,0 +1,16 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.0,
+  "plan_adherence_notes": "Execution did not follow the plan. Relative to `ff/Tbayes-market-i6y-execute-step-4`, the branch diff contains only `.fleet/tasks/bayes-market-i6y-execute-step-4-execute-step-5/{questions,research,plan}.json`; there are no edits to `backend/server.py` or `tests/test_bayes_market_api.py`. The current code still serves the legacy four-field `/positions` serializer from `serialize_account_position(...)`, the existing `BayesMarketExposureProjectionTests` still freeze that minimal contract, and repository search finds no `unrealizedPnl` seam or exact-P&L assertions. I ran `python3 -m pytest -v --tb=short tests/test_bayes_market_api.py::BayesMarketApiUnitTests::test_root_route_returns_service_index tests/test_bayes_market_api.py::BayesMarketExposureProjectionTests`, which passed with 15 tests, but that only confirms the old baseline remains green.",
+  "research_quality": 0.96,
+  "question_completeness": 0.88,
+  "missed_questions": [
+    "What exact rounding contract should `unrealizedPnl` use in the wire format, and should replayed average-cost / mark math round only the final scalar or intermediate values as well?",
+    "If `query_market_atomic_probability_for_inference(...)` cannot produce a mark for an otherwise live row, should `/positions` fail, omit the row, or fall back to `0.0` / `lastTradePrice`?",
+    "If replayed filled `EventTrade` history disagrees with the surviving live `ACCOUNT_EXPOSURE` row on net size or sign, which source is authoritative for `/positions`?"
+  ],
+  "verdict": "reject",
+  "reason": "Reject. The plan follows the research, but the branch never executes either the prerequisite replay/P&L production seam or the new exact-P&L `/positions` regressions. The focused pytest slice passes only because the branch is still on the legacy four-field contract, so this work is not approvable until the missing prerequisite is landed or the branch is rebased onto it.",
+  "spawn_children": false,
+  "children": []
+}

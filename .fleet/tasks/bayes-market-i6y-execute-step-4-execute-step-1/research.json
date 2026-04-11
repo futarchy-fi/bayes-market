@@ -1,0 +1,116 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Keep the existing seams as the canonical `/positions` contract sentinels: `test_root_route_returns_service_index` plus the three `/positions` projection tests should be widened in place, not consolidated into a new baseline test. The current checkout already uses those tests to freeze discoverability, exact success payload parity, 404 lifecycle, and 405 behavior, and the checked-in step-4 plan explicitly says to treat those already-landed assertions as the starting point.",
+      "confidence": 0.99,
+      "evidence": [
+        "tests/test_bayes_market_api.py:570",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4836",
+        "tests/test_bayes_market_api.py:4873",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:58"
+      ],
+      "uncertainty": "A later cleanup could rename or regroup the tests, but nothing in the current code or i6y plans calls for a separate canonical baseline seam.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Keep `test_root_route_returns_service_index` on exact ordered equality for `routes.accounts`. The implementation already exposes the account routes as the ordered tuple `[\"/v1/accounts/{id}/risk\", \"/v1/accounts/{id}/exposure\", \"/v1/accounts/{id}/positions\"]`, the root test already freezes that order, and the step-4 plan explicitly calls for exact service-index ordering rather than a looser presence check.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:127",
+        "backend/server.py:850",
+        "tests/test_bayes_market_api.py:578",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:16"
+      ],
+      "uncertainty": "This would only change if the service index were deliberately redefined so account-route order stopped being part of the public contract; there is no evidence of that here.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. Once `unrealizedPnl` is actually available on the wire, `test_get_account_positions_serializes_minimal_lexically_sorted_live_rows_and_route_parity` should become the exact canonical success baseline by freezing the ordered five-field rows `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` while still excluding malformed and rounded-zero rows. That preserves the current exact `account` assertion, lexical wire ordering, and pruned-row behavior, and only extends the row contract additively.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:1651",
+        "backend/server.py:1666",
+        "backend/server.py:1680",
+        "tests/test_bayes_market_api.py:4815",
+        ".fleet/tasks/bayes-market-i6y/plan.json:27",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-5/plan.json:25"
+      ],
+      "uncertainty": "The current checkout still ships the older four-field serializer, so this answer describes the intended post-prerequisite contract rather than today's passing branch state.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Treat `meta` as dynamic and assert only stable invariants, not full-object equality. `make_meta()` injects a runtime timestamp, both the root service index and `get_account_positions()` call it, and the current `/positions` success test already follows that pattern by asserting the exact `account` payload while only checking `meta.timestamp` separately. The refreshed root baseline should mirror that style by checking presence and basic UTC shape instead of patching time.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:548",
+        "backend/server.py:852",
+        "backend/server.py:1749",
+        "tests/test_bayes_market_api.py:4834",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:16"
+      ],
+      "uncertainty": "If the suite later adopts a broader time-patching convention for response builders, this could change, but there is no current in-tree precedent for exact `meta` equality here.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "This leaf should stay green until the step-3 replay/P&L prerequisite is present; it should not intentionally stage a failing five-field `/positions` baseline ahead of production. The current branch still serializes the older four-field row, the most recent step-3 validation explicitly rejected the missing `unrealizedPnl` implementation, and the step-4 plan says to land or rebase onto that prerequisite before expecting the new exact P&L assertions to pass. So the canonical target is the five-field baseline, but only after the missing production seam is rebased or landed first.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:1658",
+        "tests/test_bayes_market_api.py:4818",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:78",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-5/validation.json:4",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-5/plan.json:6"
+      ],
+      "uncertainty": "If this execution leaf were explicitly allowed to bundle the missing production implementation in the same commit, the five-field assertions could land together with it; the current evidence only supports not landing the stricter baseline ahead of that prerequisite.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Step 1 should update those four tests in place and avoid creating a second competing `/positions` contract baseline."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Canonical success assertions should keep lexical `(marketId, outcomeId)` wire ordering and continue excluding malformed or rounded-zero rows."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "When P&L lands, `/positions` should extend by one `unrealizedPnl` field rather than widening to the richer `/exposure` row shape."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Baseline assertions should keep `meta` invariant-based, such as timestamp presence and format, instead of exact object equality."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Exact five-field `/positions` success assertions depend on landing or rebasing the missing replay/P&L seam before they can be the live passing baseline."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "No child investigation is needed; the relevant contract owners and prior decisions are already local to `backend/server.py`, `tests/test_bayes_market_api.py`, and the checked-in i6y task artifacts."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

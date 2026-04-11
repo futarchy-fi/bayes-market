@@ -1,0 +1,141 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Do not assume the missing step-3 replay and `unrealizedPnl` seam will arrive from some guaranteed rebase. The current checkout already has the additive `/positions` route and baseline route/service-index coverage, but it still serializes the old four-field row and lacks the replay-backed P&L production seam. For this leaf, the codebase points to production-plus-tests: either land/rebase onto that prerequisite first or bundle the missing production backfill with the new representative P&L regressions.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:1651",
+        "tests/test_bayes_market_api.py:4767",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-5/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-5/validation.json:4",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:78"
+      ],
+      "uncertainty": "Process-wise, the prerequisite could still arrive via rebase instead of being bundled here. The codebase only shows that tests-only scope is not sufficient while the production seam is absent.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Keep the representative P&L cases in `BayesMarketExposureProjectionTests` and assert them primarily at the direct getter or projection seam. The existing `/positions` baseline already proves getter-versus-route parity, and the router branch is only a thin GET delegation, so one baseline or representative route smoke is enough; every replay-math scenario does not need its own HTTP read.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:4010",
+        "tests/test_bayes_market_api.py:4322",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4808",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:15",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-5/plan.json:35"
+      ],
+      "uncertainty": "Adding one extra route-level smoke would still fit the current style, but the checked-in plans do not support requiring route-level reads for every survivor case.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. The representative weighted-average, partial-close survivor, and sign-flip survivor fixtures should be built mostly through accepted `POST /v1/markets/{id}/orders/event-trade` writes, because that path gives canonical rounding, filled order shape, mark-at-fill pricing, and exposure syncing. Direct `ORDERS` or `ACCOUNT_EXPOSURE` seeding should stay as the fallback for setups the public write path cannot express cleanly, especially deterministic replay-order or missing-history fixtures.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:3476",
+        "backend/server.py:3486",
+        "backend/server.py:3510",
+        "backend/server.py:3883",
+        "backend/server.py:3884",
+        "tests/test_bayes_market_api.py:4537",
+        "tests/test_bayes_market_api.py:4577",
+        "tests/test_bayes_market_api.py:4614",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:45",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:45"
+      ],
+      "uncertainty": "The weighted-average case may still need patched mark values or direct seeding in a narrow helper-only regression, but the representative survivor scenarios are clearly meant to default to accepted EventTrade writes.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Do not overload each representative P&L regression with full ordered-payload equality. Keep the exact five-field row shape and lexical `/positions` ordering frozen in the existing baseline success test, and let the new representative survivor cases focus on exact `unrealizedPnl` plus targeted replay checks such as mark-query arguments or survivor-specific invariants. The checked-in step plans consistently split baseline public-contract ownership from additive replay/P&L regressions.",
+      "confidence": 0.94,
+      "evidence": [
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4815",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:16",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/plan.json:36",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:56",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:68"
+      ],
+      "uncertainty": "A reviewer could still choose to add one fuller row assertion in a survivor case for readability, but the codebase evidence points to keeping full payload/order freezing in the canonical baseline rather than duplicating it in every P&L scenario.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes. The partial-close and sign-flip survivor regressions should include explicit companion assertions for the surviving signed `netSize`; exact `unrealizedPnl` alone is not enough. In this codebase, live `ACCOUNT_EXPOSURE` remains the authoritative wire source for `netSize`, replay/live size mismatch is already treated as a pricing downgrade condition rather than something to smooth over, and the existing exposure-sync tests already freeze the partial-offset survivor as `8.5` and the sign-flip survivor as `-6.0` as separate invariants.",
+      "confidence": 0.84,
+      "evidence": [
+        "backend/server.py:1737",
+        "tests/test_bayes_market_api.py:4577",
+        "tests/test_bayes_market_api.py:4614",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/plan.json:16",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4-execute-step-3/plan.json:36"
+      ],
+      "uncertainty": "The checked-in plans talk more explicitly about exact `unrealizedPnl` than about companion net-size assertions, so the need to assert signed survivor size is inferred from the live-row authority seam and the existing survivor-netting tests rather than from one verbatim requirement line.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "Yes. The sign-flip survivor regression should assume the opposite-sign remainder resets basis to the crossing fill price and then computes account-perspective `unrealizedPnl` with `(mark - averageCost) * netSize`, with profitable shorts showing positive P&L when the mark is below basis. That convention is already frozen in the step-3 replay plan: `averageCost` stays a positive execution-price basis, direction lives in signed `netSize`, and zero-crossing offsets reset the survivor basis instead of carrying the old basis through.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:1324",
+        "backend/server.py:1327",
+        "backend/server.py:1329",
+        "backend/server.py:3486",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:39",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3/plan.json:50",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-2/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-2/plan.json:36",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-2/research.json:6"
+      ],
+      "uncertainty": "The production seam is not implemented in this checkout yet, so this answer is grounded in the checked-in `i6y` replay/P&L plans and the current signed-net-size write semantics rather than an already-shipped wire assertion.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Do not reopen `/positions` route plumbing here. The service-index entry, additive route, baseline success test, and missing-or-pruned `404` lifecycle are already present, so this leaf can stay focused on the representative replay/P&L layer."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Treat the missing step-3 replay helper and `unrealizedPnl` production seam in `backend/server.py` as the real blocker. That is the missing prerequisite for exact P&L regressions, not the `/positions` route itself."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Keep ownership in `BayesMarketExposureProjectionTests`, with route coverage limited to the existing baseline parity seam or one representative smoke rather than duplicating every scenario through HTTP."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Build the representative survivor scenarios mostly from accepted EventTrade writes, and reserve direct `ORDERS` or `ACCOUNT_EXPOSURE` seeding for deterministic replay-order, missing-history, or similarly artificial fixtures."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Patch `query_market_atomic_probability_for_inference(...)` to fixed marks so the new regressions isolate replay and P&L math instead of depending on live inference outputs."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Once the replay seam exists, keep the public survivor row contract as the additive five-field `/positions` shape `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` in lexical wire order, with `meta` still treated as dynamic."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,74 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat `ACCOUNT_SERVICE_INDEX_ROUTES` as the authoritative account discovery contract because `service_index_payload()` emits `routes.accounts` from that tuple verbatim; therefore the new `/v1/accounts/{id}/positions` entry must use the same bare-path format and be appended after `/v1/accounts/{id}/exposure` to preserve the frozen ordered list.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Advertise the new account route with an inline method prefix such as `GET /v1/accounts/{id}/positions`.",
+        "Insert `/v1/accounts/{id}/positions` earlier in the tuple and change the current observable `routes.accounts` ordering."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Mirror the existing account getter envelope by adding a dedicated `get_account_positions(account_id)` beside `get_account_risk(...)` and `get_account_exposure(...)` that returns `{ \"account\": { \"id\": account_id, \"positions\": ... }, \"meta\": make_meta() }`, while deferring the detailed row serializer itself to the later serializer phase.",
+      "based_on": ["q3", "q5"],
+      "alternatives_rejected": [
+        "Return a temporary top-level `positions` payload and add the `account` wrapper later.",
+        "Alias the new route directly to `get_account_exposure(...)` instead of giving it its own account-scoped entrypoint."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep account existence semantics aligned with the current exposure read seam by sourcing `get_account_positions(account_id)` from `ACCOUNT_EXPOSURE` and preserving the same `404 account_not_found` lifecycle when the account is absent from that projection or has no surviving live rows.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Treat any account present in `ACCOUNT_RISK` as known for `/positions`.",
+        "Return `200` with an empty positions payload for accounts whose live exposure rows were fully pruned."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d4",
+      "decision": "Extend the existing matched-account branch in `route_request(...)` instead of adding a separate special-case route so `/positions` inherits the same path matching, GET-only handling, and structured `405 method_not_allowed` response already shared by `/risk` and `/exposure`.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Add a standalone `/v1/accounts/{id}/positions` branch with bespoke method handling.",
+        "Allow unsupported methods on the new account path to fall through to a generic 404 path."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit `ACCOUNT_SERVICE_INDEX_ROUTES` together with `service_index_payload()` to capture the current account discovery contract exactly: bare-path formatting only, tuple-backed emission into `routes.accounts`, and the observable route ordering that must become `[risk, exposure, positions]` once the new path is added.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Audit `get_account_exposure(...)` and `get_account_risk(...)` to pin the shared account response conventions the new entrypoint must mirror: a dedicated getter per resource, the `{account, meta}` envelope, account id nested under `account.id`, route-specific payload nested at `account.<resource>`, and projection-scoped `account_not_found` handling where applicable.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Audit the `/v1/accounts/{id}/...` branch inside `route_request(...)` to record the exact dispatcher contract for matched account paths: suffix-based routing, a shared GET-only guard that returns `405 method_not_allowed`, and direct dispatch to the route-specific getter once the method is valid.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Translate the audited conventions into the concrete implementation constraints for the later `/v1/accounts/{id}/positions` seam in `backend/server.py`: extend `ACCOUNT_SERVICE_INDEX_ROUTES`, add `get_account_positions(account_id)` with the standard envelope and exposure-backed existence checks, and broaden the existing matched-account suffix set to include `positions` without altering current `/risk` or `/exposure` behavior.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Sanity-check that this child task remains limited to `backend/server.py` seam alignment only, leaving the detailed `account.positions` row serializer and broader HTTP regression expansion to the later planned phases.",
+      "depends_on": [4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
