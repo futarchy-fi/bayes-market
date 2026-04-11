@@ -1,0 +1,76 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use the real AssumptionProvider with the Seeder pattern, matching AssumptionPanel.test.tsx. The Seeder is a hidden button component that calls addAssumption for each assumption when clicked, allowing pre-population of state before assertions. renderWithProviders from helpers.tsx does NOT include AssumptionProvider — it's wrapped locally per test file. This is the established pattern across the repo and tests real integration between AssumptionBar and AssumptionContext.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/AssumptionPanel.test.tsx:97-137 (Seeder pattern definition)",
+        "frontend/src/__tests__/AssumptionPanel.test.tsx:108-115 (local AssumptionProvider Wrapper)",
+        "frontend/src/__tests__/helpers.tsx:36-51 (renderWithProviders does NOT include AssumptionProvider)",
+        "frontend/src/__tests__/AssumptionContext.test.tsx (also uses AssumptionProvider directly)"
+      ],
+      "uncertainty": "None significant. The pattern is clearly established."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Write comprehensive standalone tests for AssumptionBar, even where they overlap with AssumptionPanel.test.tsx. The existing tests in AssumptionPanel.test.tsx (lines 216-275) cover: GIVEN label rendering, hidden when empty, clear all, and individual remove. However, a dedicated AssumptionBar.test.tsx should be self-contained and test the component in isolation (without AssumptionPanel wrapping). The new tests should cover: (1) rendering assumption text in 'label = outcomeId' format, (2) remove button click with aria-label verification, (3) clear all button, (4) hidden when empty, (5) GIVEN: label, (6) multiple assumptions rendering, and (7) structural styling (flex layout, tag structure). Some overlap is acceptable because the new tests exercise AssumptionBar directly, not through AssumptionPanel.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/__tests__/AssumptionPanel.test.tsx:216-226 (GIVEN label test)",
+        "frontend/src/__tests__/AssumptionPanel.test.tsx:228-232 (hidden when empty)",
+        "frontend/src/__tests__/AssumptionPanel.test.tsx:234-253 (clear all)",
+        "frontend/src/__tests__/AssumptionPanel.test.tsx:255-275 (individual remove)",
+        "frontend/src/features/assumptions/AssumptionBar.tsx (component renders 'label = outcomeId' format)"
+      ],
+      "uncertainty": "The task explicitly asks for these behaviors, so overlap seems intentional. However, there's a judgment call about how much duplication is worthwhile — the new tests test AssumptionBar directly rather than through AssumptionPanel."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Focus on structural DOM output and semantic properties rather than exact CSS color values. Specifically: (1) verify the bar container renders with display:flex, (2) verify tag text content is in 'label = outcomeId' format, (3) verify tag close buttons have correct aria-label 'Remove assumption {label}', (4) verify the 'GIVEN:' label text, (5) verify 'Clear all' button exists. Avoid asserting exact color values (rgba(59, 130, 246, 0.08), #fff, etc.) as these are purely visual and brittle. The inline styles use CSS variables (--color-primary, --radius-md) which would be undefined in test environments anyway. Structural assertions (flex layout, element presence, text content) provide meaningful coverage without coupling to design tokens.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/assumptions/AssumptionBar.tsx:34-42 (barStyle uses CSS variables and rgba colors)",
+        "frontend/src/features/assumptions/AssumptionBar.tsx:44-54 (tagStyle uses --color-primary CSS variable)",
+        "frontend/src/features/assumptions/AssumptionBar.tsx:66-74 (clearBtnStyle uses --color-primary)",
+        "frontend/src/__tests__/AssumptionPanel.test.tsx:216-275 (existing tests check text/aria, not styles)"
+      ],
+      "uncertainty": "The task says 'styling' which could be interpreted as wanting CSS value assertions. But given that existing tests don't assert inline style values and the component uses CSS variables that won't resolve in jsdom, structural assertions are the right call."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Use the Seeder + AssumptionProvider pattern. renderWithProviders provides QueryClient/Session/Router but NOT AssumptionProvider, so we wrap locally. Copy the Seeder pattern from AssumptionPanel.test.tsx."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Write comprehensive standalone tests. Some overlap with AssumptionPanel.test.tsx is acceptable because: (a) the task explicitly requests these behaviors, (b) direct component tests are more focused than testing through a parent, (c) unit tests should be self-contained."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Test structural DOM output (element presence, text content, aria-labels, flex layout) rather than exact CSS color values. Existing tests in AssumptionPanel.test.tsx follow this pattern — they check text/aria, not style values."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Use renderWithProviders from helpers.tsx as base, then wrap with local AssumptionProvider + Seeder, exactly matching AssumptionPanel.test.tsx pattern."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Place test at frontend/src/__tests__/AssumptionBar.test.tsx. All 26 existing test files use the flat __tests__ directory with ComponentName.test.tsx naming convention."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
