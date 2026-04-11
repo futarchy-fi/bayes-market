@@ -1,0 +1,52 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Place greeting.ts at frontend/src/lib/greeting.ts as specified in the task, not in lib/utils/",
+      "based_on": ["q1", "a1"],
+      "alternatives_rejected": ["frontend/src/lib/utils/greeting.ts — matches existing convention but contradicts task spec"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use @/ path alias in test imports to match existing test conventions",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Relative imports — inconsistent with existing tests"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Explicitly import describe/it/expect from 'vitest' to match format.test.ts pattern",
+      "based_on": ["q3", "a3"],
+      "alternatives_rejected": ["Relying on vitest globals — would work but breaks consistency with existing tests"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Use named export (export function greet) matching existing lib conventions",
+      "based_on": ["a4"],
+      "alternatives_rejected": ["Default export"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create frontend/src/lib/greeting.ts with exported greet(name: string): string function returning `Hello, ${name}!`",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Create frontend/src/lib/greeting.test.ts with vitest tests covering basic name input",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Run vitest to confirm tests pass",
+      "depends_on": [2]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
