@@ -1,0 +1,27 @@
+[Task decomp-test-002-question-child-5] PHASE 1: QUESTION GENERATION
+Title: Undo/redo system for graph edits
+Description: Implement an undo/redo system tracking local graph editing operations: node position changes, CPT probability edits (before server submission), evidence toggle, and layout changes. Use a command pattern with an action history stack. Create a React context (HistoryContext) providing undo(), redo(), canUndo, canRedo. Add keyboard shortcuts (Ctrl+Z / Ctrl+Shift+Z). Add undo/redo buttons in the graph toolbar. Scope to local state only — server mutations are not reversible.
+Repo: /home/kelvin/bayes-market
+
+Explore the codebase. Identify what you need to know before building.
+
+YOU MUST create .fleet/tasks/decomp-test-002-question-child-5/questions.json with this structure:
+{
+  "phase": "question",
+  "questions": [
+    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  ],
+  "assumptions": [
+    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  ],
+  "spawn_children": false,
+  "children": []
+}
+
+DO NOT STOP until questions.json exists and contains at least one question.
+Verify: ls -la .fleet/tasks/decomp-test-002-question-child-5/ to confirm the file was written.
+
+DECOMPOSITION: Set spawn_children=true only if sub-questions warrant their own
+full 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: decomp-test-002-question-child-5"
