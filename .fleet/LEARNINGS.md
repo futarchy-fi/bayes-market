@@ -352,9 +352,9 @@ if (!valParsed || valParsed.verdict !== "approve") {
 - task-market-detail-coverage-001: MarketDetail.test.tsx expanded (108→446 lines, +8 tests)
 
 **Session stats:**
-- Frontend tests: 304 → 386 (+82 tests)
-- Total: 749 tests (386 frontend + 363 backend)
-- All 8 workflows completed successfully with auto-merge
+- Frontend tests: 304 → 397 (+93 tests)
+- Total: 760 tests (397 frontend + 363 backend)
+- All 9 workflows completed successfully with auto-merge
 
 **Key learning:** Task queue mismatch causes workflows to hang at WorkflowTaskScheduled. Worker listens on `fleet-tasks`, not `fleet-bead`. Always verify task queue matches worker config.
 
