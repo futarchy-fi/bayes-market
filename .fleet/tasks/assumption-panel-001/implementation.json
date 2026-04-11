@@ -1,0 +1,83 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Create test file with imports, vi.mock for VariableRow and useMarkets, and renderPanel helper with AssumptionProvider",
+      "files_created": ["frontend/src/__tests__/AssumptionPanel.test.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Write test: renders heading and marginal probabilities status when no assumptions",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/AssumptionPanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Write test: renders correct status text when assumptions are set (singular and plural)",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/AssumptionPanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Write test: renders VariableRow for each active market with current market first",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/AssumptionPanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Write test: shows create-more-markets message when only one active market",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/AssumptionPanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Write test: hides create-more-markets message when multiple active markets",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/AssumptionPanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Write test: AssumptionBar shows assumption tags with GIVEN label",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/AssumptionPanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 8,
+      "task": "Write test: AssumptionBar hidden when no assumptions",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/AssumptionPanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 9,
+      "task": "Write test: clear all button removes all assumptions",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/AssumptionPanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 10,
+      "task": "Write test: remove individual assumption via tag close button",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/AssumptionPanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 11,
+      "task": "Run vitest on AssumptionPanel.test.tsx, fix failures, confirm all 10 tests pass",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
