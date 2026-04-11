@@ -779,7 +779,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertIn("routes", payload)
         self.assertEqual(
             payload["routes"]["accounts"],
-            ["/v1/accounts/{id}/risk", "/v1/accounts/{id}/pnl", "/v1/accounts/{id}/exposure"],
+            ["/v1/accounts/{id}/risk", "/v1/accounts/{id}/pnl", "/v1/accounts/{id}/exposure", "/v1/accounts/{id}/positions"],
         )
         self.assertEqual(payload["routes"]["health"], ["/health", "/healthz", "/v1/health", "/v1/version"])
         self.assertEqual(payload["routes"]["stats"], ["/v1/stats"])
@@ -2551,6 +2551,47 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.code, "method_not_allowed")
         self.assertEqual(error.details["method"], "POST")
         self.assertEqual(error.details["path"], "/v1/accounts/acct_test/exposure")
+
+    def test_account_positions_requires_known_account(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/accounts/acct_missing/positions")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 404)
+        self.assertEqual(error.code, "account_not_found")
+        self.assertEqual(error.details["accountId"], "acct_missing")
+
+    def test_account_positions_returns_open_positions_with_unrealized_pnl(self):
+        account_id = "acct_positions_test"
+        # Execute an event trade to create a position
+        trade_payload, trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=10.0, side="buy"),
+        )
+        self.assertEqual(trade_status, 201)
+
+        # Fetch positions
+        positions_payload, positions_status = server.route_request(
+            "GET", f"/v1/accounts/{account_id}/positions"
+        )
+
+        self.assertEqual(positions_status, 200)
+        self.assertEqual(positions_payload["account"]["id"], account_id)
+        self.assertIn("positions", positions_payload["account"])
+        positions = positions_payload["account"]["positions"]
+        self.assertGreater(len(positions), 0)
+
+        # Check position structure
+        position = positions[0]
+        self.assertIn("marketId", position)
+        self.assertIn("outcomeId", position)
+        self.assertIn("netSize", position)
+        self.assertIn("lastTradePrice", position)
+        self.assertIn("unrealizedPnl", position)
+        self.assertEqual(position["marketId"], "m1")
+        self.assertEqual(position["outcomeId"], "yes")
+        self.assertIsInstance(position["unrealizedPnl"], float)
 
     def test_probability_edit_success_updates_market(self):
         payload, status = server.route_request(

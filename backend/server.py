@@ -162,6 +162,7 @@ ACCOUNT_SERVICE_INDEX_ROUTES = (
     "/v1/accounts/{id}/risk",
     "/v1/accounts/{id}/pnl",
     "/v1/accounts/{id}/exposure",
+    "/v1/accounts/{id}/positions",
 )
 MARKET_SERVICE_INDEX_ROUTES = (
     "GET /v1/markets",
@@ -1757,6 +1758,59 @@ def get_account_exposure(account_id: str) -> tuple[dict[str, Any], int]:
         "account": {
             "id": account_id,
             "exposure": exposure,
+        },
+        "meta": make_meta(),
+    }, 200
+
+
+def get_account_positions(account_id: str) -> tuple[dict[str, Any], int]:
+    """Return the open positions for one account with unrealized P&L."""
+    account = ACCOUNT_EXPOSURE.get(account_id)
+    if account is None:
+        raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
+
+    positions_data = account.get("positions")
+    if not isinstance(positions_data, dict):
+        positions_data = {}
+
+    positions: list[dict[str, Any]] = []
+    for position in positions_data.values():
+        if not isinstance(position, dict):
+            continue
+        net_size = round_exposure_value(position.get("netSize"))
+        if net_size == 0.0:
+            continue
+
+        market_id = str(position["marketId"])
+        outcome_id = str(position["outcomeId"])
+        last_trade_price = round_exposure_value(position.get("lastTradePrice"))
+
+        # Calculate unrealized P&L based on current market marginal
+        market = MARKETS.get(market_id)
+        if market is not None:
+            current_price = float(market.get("marginals", {}).get(outcome_id, 0.0))
+        else:
+            current_price = last_trade_price
+
+        unrealized_pnl = round_risk_value(net_size * (current_price - last_trade_price))
+
+        positions.append({
+            "marketId": market_id,
+            "outcomeId": outcome_id,
+            "netSize": net_size,
+            "lastTradePrice": last_trade_price,
+            "unrealizedPnl": unrealized_pnl,
+        })
+
+    if not positions:
+        raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
+
+    positions.sort(key=lambda p: (p["marketId"], p["outcomeId"]))
+
+    return {
+        "account": {
+            "id": account_id,
+            "positions": positions,
         },
         "meta": make_meta(),
     }, 200
@@ -5277,7 +5331,7 @@ def route_request(
         )
 
     parts = [part for part in path.split("/") if part]
-    if len(parts) == 4 and parts[:2] == ["v1", "accounts"] and parts[3] in {"risk", "pnl", "exposure"}:
+    if len(parts) == 4 and parts[:2] == ["v1", "accounts"] and parts[3] in {"risk", "pnl", "exposure", "positions"}:
         account_id = parts[2]
         if method != "GET":
             raise ApiError(
@@ -5290,6 +5344,8 @@ def route_request(
             return get_account_risk(account_id)
         if parts[3] == "pnl":
             return get_account_pnl(account_id)
+        if parts[3] == "positions":
+            return get_account_positions(account_id)
         return get_account_exposure(account_id)
 
     if len(parts) >= 3 and parts[:2] == ["v1", "markets"]:
