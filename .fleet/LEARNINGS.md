@@ -383,3 +383,20 @@ if (!valParsed || valParsed.verdict !== "approve") {
 **Validation quality:** Caught 3 missed questions (naming convention, backward compatibility, API exposure) but approved because implementation handled them correctly without explicit questions.
 
 ---
+
+### [2026-04-11] Child context injection shipped via epistemicExecutor
+
+**Success:** task-child-context-injection-001 workflow completed in 18m33s with auto-merge to temporal-fleet main.
+
+**What was delivered:**
+- New childSummaries.ts activity (50 lines) + tests (102 lines)
+- parentLifecycle: child summaries passed to analysisDecompose for re-decomposition rounds
+- recursiveLifecycle: integration prompt now has rich child summaries instead of bare ID lists
+- child-summaries.json artifact for debuggability
+- 0.85 plan_adherence, all 10 tests pass
+
+**Key insight:** Research phase correctly identified that the task description referenced epistemicExecutor, but the actual codebase uses parentLifecycle/recursiveLifecycle. The workflow re-scoped automatically.
+
+**Minor issue found:** formatChildSummaries() is exported and tested but never called by workflows (dead code). Both workflows duplicate the formatting logic inline.
+
+---

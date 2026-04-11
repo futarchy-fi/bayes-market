@@ -22,7 +22,10 @@ Pick ONE at a time. These test the system with real work:
 
 ## Priority 3: Architecture gaps
 - [ ] **Progressive decomposition prompts** — Update phase prompts to use 4-step decomposition protocol
-- [ ] **Inject child results after thaw** — Parent needs context about what children did when it wakes up
+- [x] **Inject child results after thaw** — Parent needs context about what children did when it wakes up
+  - DONE: task-child-context-injection-001 completed in 18m33s, merged to temporal-fleet main
+  - Added: childSummaries.ts activity (50 lines), 102 lines tests, updates to parentLifecycle/recursiveLifecycle
+  - Child summaries now injected into integration prompt and re-decomposition rounds
 - [ ] **Agent identity scheme** — Implement `role.context.index` naming everywhere (logs, attribution, metrics)
 - [ ] **Parallel child execution** — Respect DAG dependencies, run independent children in parallel
 
