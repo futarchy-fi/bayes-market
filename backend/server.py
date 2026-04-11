@@ -887,6 +887,7 @@ def v1_version_payload() -> dict[str, str]:
         "version": ENGINE_CONFIG.version,
         "git_sha": BUILD_GIT_SHA,
         "build_timestamp": BUILD_TIMESTAMP,
+        "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
     }
 
 

@@ -6,6 +6,7 @@ import json
 import math
 import pathlib
 import random
+import sys
 import threading
 import time
 import unittest
@@ -961,12 +962,14 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "version": "9.9.9",
             "git_sha": "0123456789abcdef0123456789abcdef01234567",
             "build_timestamp": "2026-04-10T00:00:00Z",
+            "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
         }
         self.assertEqual(status, 200)
         self.assertEqual(repeated_status, 200)
         self.assertEqual(payload, expected_payload)
         self.assertEqual(repeated_payload, expected_payload)
         self.assertEqual(payload["version"], server.ENGINE_CONFIG.version)
+        self.assertIn("python_version", payload)
 
     def test_v1_version_route_is_method_not_allowed_for_non_get(self):
         for method in ("POST", "PUT", "DELETE"):
@@ -9512,12 +9515,13 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         status, payload = self.request("GET", "/v1/version")
 
         self.assertEqual(status, 200)
-        self.assertEqual(set(payload), {"service", "version", "git_sha", "build_timestamp"})
+        self.assertEqual(set(payload), {"service", "version", "git_sha", "build_timestamp", "python_version"})
         self.assertEqual(payload["service"], "bayes-market")
         self.assertEqual(payload["version"], server.ENGINE_CONFIG.version)
         self.assertEqual(payload["git_sha"], server.BUILD_GIT_SHA)
         self.assertEqual(payload["build_timestamp"], server.BUILD_TIMESTAMP)
         self.assertRegex(payload["build_timestamp"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$")
+        self.assertRegex(payload["python_version"], r"^\d+\.\d+\.\d+$")
         if payload["git_sha"] != "unknown":
             self.assertRegex(payload["git_sha"], r"^[0-9a-f]{40}$")
 
