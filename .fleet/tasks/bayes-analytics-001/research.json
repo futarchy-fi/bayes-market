@@ -1,0 +1,79 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The GET /v1/markets/{id}/analytics endpoint DOES NOT EXIST. server.py is 4,674 lines (not 5,393+), contains zero references to 'analytics', and the route_request() function (lines 4207-4395) has no /analytics route. The service_index_payload() (lines 990-1015) does not list it. Similarly, client.ts has no getMarketAnalytics() and types.ts has no MarketAnalyticsResponse. The entire analytics feature is a greenfield implementation — nothing has been built yet.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:4207-4395 (route_request has no analytics route)",
+        "backend/server.py:990-1015 (service index omits analytics)",
+        "frontend/src/lib/api/client.ts (no getMarketAnalytics function)",
+        "frontend/src/lib/api/types.ts (no MarketAnalyticsResponse type)"
+      ],
+      "uncertainty": "None — exhaustive grep for 'analytics' across the entire codebase returned zero matches."
+    },
+    {
+      "question_id": "q2",
+      "answer": "None of the referenced frontend components exist. There is no AnalyticsSummaryCards, PriceChart, VolumeChart, TraderLeaderboard, or AnalyticsFilters component anywhere in the frontend. There is no features/analytics/ directory. The frontend has 41 total .ts/.tsx files and none relate to analytics. There is no contract mismatch because neither the endpoint nor the components exist.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/ (41 total .ts/.tsx files, zero analytics-related)",
+        "frontend/src/lib/query/hooks.ts:15-25 (query keys have no analytics entry)",
+        "frontend/src/app/router.tsx:9-21 (no analytics route)"
+      ],
+      "uncertainty": "None — no analytics-related code exists in the frontend."
+    },
+    {
+      "question_id": "q3",
+      "answer": "None of the 6 referenced tests exist. The test file tests/test_bayes_market_api.py has 261 test methods but zero analytics tests. There is no test_market_analytics_returns_multi_outcome_price_series, test_market_analytics_buckets_mixed_activity, test_market_analytics_ranks_traders_deterministically, or any other analytics test. All 6 tests plus additional edge cases (empty markets, single trade, zero volume periods, trader ties, resolved markets) need to be written from scratch.",
+      "confidence": 0.99,
+      "evidence": [
+        "tests/test_bayes_market_api.py (261 tests, zero analytics tests)",
+        "grep for 'analytics' in tests/ returned zero results"
+      ],
+      "uncertainty": "None — comprehensive search confirms zero analytics test coverage."
+    },
+    {
+      "question_id": "q4",
+      "answer": "The entire analytics data flow is missing: no getMarketAnalytics() in client.ts, no useMarketAnalytics() hook in hooks.ts, no analytics query key, no analytics route in router.tsx, and no analytics page component. The existing React Query infrastructure (useMarkets, useMarket, useMarketEvents, useEngineStats, useAccountRisk, useAccountExposure) is properly wired and functional — it provides a clear pattern to follow. Implementation requires: (1) backend endpoint, (2) MarketAnalyticsResponse type in types.ts, (3) getMarketAnalytics() in client.ts, (4) useMarketAnalytics() hook in hooks.ts, (5) analytics components, (6) route + page.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/lib/api/client.ts:108-314 (existing API functions, no analytics)",
+        "frontend/src/lib/query/hooks.ts:15-25 (query keys, no analytics)",
+        "frontend/src/lib/query/hooks.ts:273-342 (existing hooks pattern)",
+        "frontend/src/app/router.tsx:9-21 (routes, no analytics)"
+      ],
+      "uncertainty": "None — the missing integration is the entire chain, not a single missing link."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "WRONG",
+      "confidence": 0.99,
+      "impact": "The analytics endpoint, frontend client, types, and tests do not exist at all. This is a complete greenfield implementation, not a verification task. All deliverables must be built from scratch."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "WRONG",
+      "confidence": 0.99,
+      "impact": "The work has NOT been done. The task description is correct that the endpoint needs to be added. The questions.json incorrectly assumed the work was already complete."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The system uses in-memory data structures. The analytics endpoint can compute volume, trade count, price history, and top traders from existing in-memory market/order/trade data without any database migration."
+    }
+  ],
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.99,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All four questions are answered with 0.99 confidence. The finding is unambiguous: nothing exists and everything must be built from scratch. The existing codebase provides clear patterns to follow (route_request for routing, existing handlers for endpoint structure, existing hooks/client/types for frontend). No research gaps remain — the implementation path is clear."
+  },
+  "spawn_children": false,
+  "children": []
+}
