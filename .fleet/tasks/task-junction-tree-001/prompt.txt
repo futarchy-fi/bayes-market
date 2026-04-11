@@ -1,0 +1,27 @@
+[Task task-junction-tree-001] PHASE 1: QUESTION GENERATION
+Title: Test JunctionTreePanel component
+Description: Create a comprehensive vitest test file for frontend/src/features/graph/JunctionTreePanel.tsx. This component displays engine stats, junction tree info, cliques, and inference diagnostics. Test: (1) Loading state shows "Loading engine stats...", (2) Returns null when no data, (3) Engine banner shows mode/backend/version/precision, (4) Shows compile_id when present, (5) Shows source_state_hash when present, (6) Junction tree summary shows num_cliques/max_clique_size/junction_tree_width, (7) Renders clique cards with id/size/states/nodes, (8) Shows empty clique message when no cliques, (9) Inference diagnostics shows request_count/error_count, (10) Shows cache hit rate and hits/misses, (11) Shows latency metrics when sample_count > 0, (12) Shows compile_time_ms when present, (13) Shows memory in formatted bytes, (14) MetricBox shows warn color when warn=true, (15) formatBytes formats B/KB/MB correctly. Mock useEngineStats from @/lib/query/hooks. Follow patterns from existing tests. Place test at frontend/src/__tests__/JunctionTreePanel.test.tsx.
+Repo: /home/kelvin/bayes-market
+
+Explore the codebase. Identify what you need to know before building.
+
+YOU MUST create .fleet/tasks/task-junction-tree-001/questions.json with this structure:
+{
+  "phase": "question",
+  "questions": [
+    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  ],
+  "assumptions": [
+    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  ],
+  "spawn_children": false,
+  "children": []
+}
+
+DO NOT STOP until questions.json exists and contains at least one question.
+Verify: ls -la .fleet/tasks/task-junction-tree-001/ to confirm the file was written.
+
+DECOMPOSITION: Set spawn_children=true only if sub-questions warrant their own
+full 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: task-junction-tree-001"
