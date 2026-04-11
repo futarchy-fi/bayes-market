@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import importlib.util
 import itertools
 import json
@@ -656,6 +657,28 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         handler.handle_api.assert_called_once_with("GET")
         handler._serve_static.assert_not_called()
+
+    def test_serve_static_returns_repo_root_hello_text_asset(self):
+        handler = object.__new__(server.BayesHandler)
+        handler.wfile = io.BytesIO()
+        handler.send_response = Mock()
+        handler.send_header = Mock()
+        handler.end_headers = Mock()
+
+        served = server.BayesHandler._serve_static(handler, "/hello.txt?cache=bust")
+
+        self.assertTrue(served)
+        handler.send_response.assert_called_once_with(200)
+        self.assertEqual(
+            [call.args for call in handler.send_header.call_args_list],
+            [
+                ("Content-Type", "text/plain; charset=utf-8"),
+                ("Content-Length", str(len(server.HELLO_TEXT_PATH.read_bytes()))),
+                ("Cache-Control", "no-store"),
+            ],
+        )
+        handler.end_headers.assert_called_once_with()
+        self.assertEqual(handler.wfile.getvalue(), server.HELLO_TEXT_PATH.read_bytes())
 
     def test_list_markets_excludes_resolved_by_default_and_returns_summary_shape(self):
         payload, status = server.route_request("GET", "/v1/markets")
