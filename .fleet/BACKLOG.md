@@ -26,7 +26,10 @@ Pick ONE at a time. These test the system with real work:
   - DONE: task-child-context-injection-001 completed in 18m33s, merged to temporal-fleet main
   - Added: childSummaries.ts activity (50 lines), 102 lines tests, updates to parentLifecycle/recursiveLifecycle
   - Child summaries now injected into integration prompt and re-decomposition rounds
-- [ ] **Agent identity scheme** — Implement `role.context.index` naming everywhere (logs, attribution, metrics)
+- [x] **Agent identity scheme** — Implement `role.context.index` naming everywhere (logs, attribution, metrics)
+  - DONE: task-agent-identity-001 completed in 17min, merged to temporal-fleet main
+  - Added: agentIdentity.ts (97 lines) + tests (125 lines, 17 tests)
+  - Updated: sender_id in fleet-msg, log prefixes, workflow state threading
 - [ ] **Parallel child execution** — Respect DAG dependencies, run independent children in parallel
 
 ## Priority 4: Polish when idle

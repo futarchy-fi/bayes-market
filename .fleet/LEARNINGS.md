@@ -400,3 +400,23 @@ if (!valParsed || valParsed.verdict !== "approve") {
 **Minor issue found:** formatChildSummaries() is exported and tested but never called by workflows (dead code). Both workflows duplicate the formatting logic inline.
 
 ---
+
+### [2026-04-11] Agent identity scheme shipped via epistemicExecutor
+
+**Success:** task-agent-identity-001 workflow completed in 17min with auto-merge to temporal-fleet main.
+
+**What was delivered:**
+- New agentIdentity.ts module (97 lines) with parseIdentity/formatIdentity/makeIdentity utilities
+- 17 unit tests for identity parsing, formatting, round-trips
+- sender_id in notifyAgent updated to use dotted identity format
+- Log prefixes now include agent identity
+- Workflow state threading for agentIdentity
+
+**Decisions captured:**
+- Context = taskId for workers, domain for persistent agents
+- CAO session naming kept separate from agent identity
+- AgentIdentity type lives in temporal-fleet, not shared package
+
+**Minor gaps noted:** DAG child identity threading not fully implemented; notifyAgent callers not yet passing agentIdentity.
+
+---
