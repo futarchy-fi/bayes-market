@@ -436,3 +436,15 @@ if (!valParsed || valParsed.verdict !== "approve") {
 **Architecture:** Children grouped into topological waves (wave 0 = no deps), waves execute in parallel, waves run sequentially, branch merging done via onRoundComplete callback.
 
 ---
+
+### [2026-04-11] Missing fleetSlug causes auto-merge failure
+
+**Symptom:** Workflow task-fix-pr5-ts-errors-001 completed (phase="done") but branch was `undefined/Tfix-pr5-ts-errors-001` and merge activity failed.
+
+**Root cause:** Workflow input lacked `fleetSlug` parameter. Branch name is computed as `${fleetSlug}/T${taskId}` — undefined fleetSlug → literal "undefined" in branch name. Merge target mismatch.
+
+**Fix:** Manual merge of branch to frontend-scaffold, then delete branch.
+
+**Prevention:** Always include `fleetSlug: "fleet"` (or appropriate value) in epistemicExecutor workflow input. Add input validation to reject undefined fleetSlug.
+
+---
