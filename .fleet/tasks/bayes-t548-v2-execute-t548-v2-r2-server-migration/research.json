@@ -1,0 +1,127 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "question": "Which server.py helper functions are now duplicated in the inference module and can be removed?",
+      "answer": "Four functions are dead code: parse_context_key_variable_ids (server.py:1043) duplicated by _parse_context_key_variable_ids (current_model.py:155), clique_state_count (server.py:1056) subsumed by _build_cliques (current_model.py:179), build_market_cliques (server.py:1066) subsumed by _build_cliques (current_model.py:179), and estimate_market_engine_memory_bytes (server.py:1085) subsumed by _estimate_memory_bytes (current_model.py:212). None of the four are called from tests or from any code path other than each other. build_market_cliques and estimate_market_engine_memory_bytes have zero external callers. parse_context_key_variable_ids and clique_state_count are only called by build_market_cliques. Additionally, estimate_market_engine_memory_bytes references CliqueSummary (line 1089) which is not imported, confirming it cannot be called at runtime.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:1043",
+        "backend/server.py:1056",
+        "backend/server.py:1066",
+        "backend/server.py:1085",
+        "backend/inference/current_model.py:155",
+        "backend/inference/current_model.py:179",
+        "backend/inference/current_model.py:212"
+      ],
+      "uncertainty": "Extremely minor chance some dynamic import or string-based call references these functions",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "question": "What changes are needed to compile_market_for_inference to pass market_outcomes_by_variable?",
+      "answer": "compile_market_for_inference (server.py:975) currently calls CURRENT_MODEL_COMPILER.compile_result() with market_snapshot and conditional_marginals but does NOT pass market_outcomes_by_variable. Without this parameter, the compiler (current_model.py:394-400) falls back to singleton cliques. The fix: build a mapping of variable_id -> outcome_count by (1) extracting all variable_ids from CONDITIONAL_MARGINALS context keys using the same parsing logic already in the inference module, and (2) looking up each variable's outcome count via find_market_by_variable_id. Then pass market_outcomes_by_variable to compile_result(). The inference module's _parse_context_key_variable_ids and _build_cliques already handle the rest.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:975-994",
+        "backend/server.py:987",
+        "backend/inference/current_model.py:394-400",
+        "backend/inference/current_model.py:369",
+        "backend/inference/current_model.py:435"
+      ],
+      "uncertainty": "Whether the market_outcomes_by_variable mapping should include ALL market variable outcome counts or only those referenced in conditional_marginals context keys. The compiler only needs context-variable outcome counts (plus the market's own variable), but being over-inclusive is harmless.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "question": "How should the market_outcomes_by_variable mapping be built in server.py?",
+      "answer": "The mapping should be built by iterating over the conditional_marginals context keys for the market, parsing each key to extract variable_ids (using the same 'var=outcome|var=outcome' format), and looking up each variable's market via find_market_by_variable_id to count outcomes. This mirrors what clique_state_count (server.py:1056-1063) did, but produces a flat {variable_id: outcome_count} dict rather than computing per-clique state products. The compiler's _build_cliques function (current_model.py:197-199) uses market_outcomes_by_variable.get(node_id, ...) to resolve outcome counts per node.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:1056-1063",
+        "backend/server.py:2972-2977",
+        "backend/inference/current_model.py:197-199"
+      ],
+      "uncertainty": "None significant",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "question": "What happens to build_market_compile_result after compile_market_for_inference is updated?",
+      "answer": "build_market_compile_result (server.py:1099-1103) is a thin wrapper that calls compile_market_for_inference. It is called only from refresh_market_compile_snapshot (server.py:1123). After compile_market_for_inference is updated to pass market_outcomes_by_variable, build_market_compile_result automatically benefits. No changes needed to build_market_compile_result itself - it simply delegates. It should be kept because refresh_market_compile_snapshot uses it.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:1099-1103",
+        "backend/server.py:1123"
+      ],
+      "uncertainty": "None",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "question": "Are there any __init__.py export changes needed?",
+      "answer": "The inference module's __init__.py already exports all the necessary types: CompileResult, CliqueSummary, CURRENT_MODEL_COMPILER, CURRENT_MODEL_QUERY_BACKEND, compile_current_market_result, etc. Server.py already imports what it needs (line 54-64). No new inference module exports are required. The only cleanup is removing the four dead server.py functions. No test imports need updating since tests don't reference these functions.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/inference/__init__.py:1-57",
+        "backend/server.py:54-64"
+      ],
+      "uncertainty": "There might be other downstream code outside this repo that imports these server.py functions, but within this codebase there are zero references.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "question": "What is the full set of changes needed for this migration?",
+      "answer": "Three changes: (1) Update compile_market_for_inference to build market_outcomes_by_variable from CONDITIONAL_MARGINALS context keys and MARKETS data, then pass it to CURRENT_MODEL_COMPILER.compile_result(). This requires adding a helper function (e.g., _build_market_outcomes_by_variable) that parses context keys and looks up outcome counts via find_market_by_variable_id. (2) Delete the four dead functions: parse_context_key_variable_ids, clique_state_count, build_market_cliques, estimate_market_engine_memory_bytes from server.py. (3) No export or import changes needed - the inference module __init__.py and server.py imports are already correct.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:975-994",
+        "backend/server.py:1043-1097",
+        "backend/inference/__init__.py:1-57",
+        "backend/inference/current_model.py:364-448"
+      ],
+      "uncertainty": "None significant. The changes are mechanical and well-scoped.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "assumption": "The r1 task (multi-variable cliques) already implemented _parse_context_key_variable_ids, _build_cliques, and _estimate_memory_bytes in the inference module",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "This is the foundation for the migration - the inference module already has all the logic we need"
+    },
+    {
+      "assumption_id": "a2",
+      "assumption": "The four server.py helper functions (parse_context_key_variable_ids, clique_state_count, build_market_cliques, estimate_market_engine_memory_bytes) are dead code",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Safe to delete without breaking any code paths"
+    },
+    {
+      "assumption_id": "a3",
+      "assumption": "compile_market_for_inference does not currently pass market_outcomes_by_variable to the compiler",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "This means the compiler currently falls back to singleton cliques, not multi-variable ones. The migration will enable multi-variable clique computation in production."
+    },
+    {
+      "assumption_id": "a4",
+      "assumption": "No tests directly reference the four functions being removed",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No test breakage expected from deletion"
+    },
+    {
+      "assumption_id": "a5",
+      "assumption": "The __init__.py exports are already correct and don't need updating",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Step 5 of the plan is essentially a no-op - the r1 task already set up the exports correctly"
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
