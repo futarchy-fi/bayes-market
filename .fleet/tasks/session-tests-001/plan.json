@@ -1,0 +1,81 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use vi.spyOn(Storage.prototype, 'getItem'/'setItem') to mock localStorage rather than vi.stubGlobal",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["vi.stubGlobal to replace localStorage entirely — more invasive and unnecessary since jsdom provides a working Storage"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Render SessionProvider directly instead of using renderWithProviders helper",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["renderWithProviders — adds unnecessary QueryClientProvider and MemoryRouter layers when testing the provider itself"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Suppress console.error for the useSession-outside-provider test using the same pattern as ErrorBoundary.test.tsx",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Let errors print — would produce noisy test output that confuses developers"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Explicitly test isConfigured edge cases: accountId-only logic, including that agentId alone does NOT make isConfigured true",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Only test happy path — would miss documenting the accountId-only behavior"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Test both invalid JSON and valid JSON with missing/partial fields for corrupt storage scenarios",
+      "based_on": ["q5"],
+      "alternatives_rejected": ["Only test invalid JSON — would miss documenting the nullish coalescing fallback behavior for partial data"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Use renderHook from @testing-library/react for testing useSession hook directly",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Create wrapper test components to call the hook — renderHook is cleaner and available in @testing-library/react v16"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create frontend/src/__tests__/session.test.tsx with test scaffold: imports, describe blocks, beforeEach (localStorage.clear + vi.restoreAllMocks), and console.error suppression for error-throwing tests",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Write loadSession tests: (a) returns defaults when localStorage is empty, (b) loads valid stored session, (c) returns defaults for invalid JSON (corrupt storage), (d) returns defaults for valid JSON with missing fields, (e) returns partial data for valid JSON with only some fields present",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Write saveSession tests via SessionProvider: (a) setAccountId persists to localStorage, (b) setAgentId persists to localStorage, (c) verify JSON structure written to storage",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Write isConfigured tests: (a) false when both empty, (b) true when accountId set + agentId empty, (c) false when accountId empty + agentId set, (d) true when both set",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Write useSession-outside-provider test: verify it throws 'useSession must be used within SessionProvider' error, with console.error suppression",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Run vitest to confirm all tests pass, fix any issues",
+      "depends_on": [2, 3, 4, 5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
