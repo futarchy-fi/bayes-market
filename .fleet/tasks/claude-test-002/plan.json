@@ -1,0 +1,21 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Create hello.txt in the repository root with a simple greeting message",
+      "based_on": ["task-title"],
+      "alternatives_rejected": ["Creating in a subdirectory", "Creating an empty file"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create hello.txt file in the repository root with content 'Hello, World!'",
+      "depends_on": []
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
