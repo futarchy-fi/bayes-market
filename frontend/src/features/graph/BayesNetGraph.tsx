@@ -1,9 +1,12 @@
-import { useMemo, useEffect, useRef } from "react";
+import { useMemo, useEffect, useRef, useState, useCallback } from "react";
 import { useMarkets, useMarket, useEngineStats } from "@/lib/query/hooks";
 import { formatProbability } from "@/lib/utils/format";
 import { useAssumptions } from "@/features/assumptions/AssumptionContext";
 import { useAnimationPropagation } from "./useAnimationPropagation";
 import { deriveEdgesFromCliques, mergeEdges } from "./deriveEdges";
+import { buildNetworkExport, downloadJson } from "./networkExport";
+import { readAndValidateFile } from "./networkImport";
+import type { NetworkExportSchema } from "./networkExportSchema";
 import type { MarketSummary } from "@/lib/api/types";
 
 interface GraphNode {
@@ -242,9 +245,39 @@ export function BayesNetGraph({
   const { data: marketsData, isLoading } = useMarkets();
   const { data: engineStats } = useEngineStats(focusMarketId ?? "", { enabled: !!focusMarketId });
 
-  const markets = marketsData?.markets ?? [];
-  const nodes = useMemo(() => layoutNodes(markets), [markets]);
-  const cliques = engineStats?.cliques.cliques ?? [];
+  // --- Snapshot state for imported networks ---
+  const [snapshot, setSnapshot] = useState<NetworkExportSchema | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const liveMarkets = marketsData?.markets ?? [];
+  const markets = snapshot
+    ? snapshot.nodes.map((n) => ({
+        id: n.id,
+        title: n.title,
+        status: n.status,
+        liquidity: n.liquidity,
+        volume: n.volume,
+        expires_at: n.expires_at,
+      }))
+    : liveMarkets;
+
+  const nodes = useMemo(
+    () =>
+      snapshot
+        ? snapshot.nodes.map((n) => ({
+            id: n.id,
+            title: n.title.length > 28 ? n.title.slice(0, 26) + "…" : n.title,
+            x: n.position.x,
+            y: n.position.y,
+            marginals: {} as Record<string, number>,
+            outcomeName: "",
+            status: n.status,
+          }))
+        : layoutNodes(liveMarkets),
+    [snapshot, liveMarkets],
+  );
+  const cliques = snapshot ? snapshot.cliques : (engineStats?.cliques.cliques ?? []);
 
   // --- Animation: detect assumption changes and trigger propagation ---
   const { assumptions } = useAssumptions();
@@ -286,6 +319,29 @@ export function BayesNetGraph({
   // Cancel animation on unmount
   useEffect(() => cancelAnimation, [cancelAnimation]);
 
+  // --- Export handler ---
+  const handleExport = useCallback(() => {
+    const cliqueEdges = deriveEdgesFromCliques(cliques);
+    const data = buildNetworkExport(markets as MarketSummary[], nodes, cliqueEdges, conditionalEdges, cliques);
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    downloadJson(data, `bayes-network-${ts}.json`);
+  }, [markets, nodes, cliques, conditionalEdges]);
+
+  // --- Import handler ---
+  const handleImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportError(null);
+    const result = await readAndValidateFile(file);
+    if (result.ok) {
+      setSnapshot(result.data);
+    } else {
+      setImportError(result.error);
+    }
+    // Reset so the same file can be re-selected
+    e.target.value = "";
+  }, []);
+
   if (isLoading) {
     return (
       <div style={panelStyle}>
@@ -318,15 +374,61 @@ export function BayesNetGraph({
     <div style={panelStyle}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-sm)" }}>
         <h3 style={{ fontSize: "1rem", fontWeight: 600 }}>
-          Bayesian Network
+          Bayesian Network{snapshot ? " (imported)" : ""}
         </h3>
-        <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-          {markets.length} variable{markets.length !== 1 ? "s" : ""}
-          {conditionalEdges.length > 0 && ` · ${conditionalEdges.length} edge${conditionalEdges.length !== 1 ? "s" : ""}`}
-          {cliques.length > 0 && ` · ${cliques.length} clique${cliques.length !== 1 ? "s" : ""}`}
-          {engineStats && ` · JT width ${engineStats.cliques.junction_tree_width}`}
+
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+          {/* Export / Import buttons */}
+          <div style={{ display: "flex", gap: 4 }}>
+            <button
+              type="button"
+              onClick={handleExport}
+              style={smallButtonStyle}
+              title="Export network as JSON"
+            >
+              Export
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              style={smallButtonStyle}
+              title="Import network from JSON"
+            >
+              Import
+            </button>
+            {snapshot && (
+              <button
+                type="button"
+                onClick={() => { setSnapshot(null); setImportError(null); }}
+                style={{ ...smallButtonStyle, color: "var(--color-danger)" }}
+                title="Return to live network"
+              >
+                Clear
+              </button>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              style={{ display: "none" }}
+              onChange={handleImportFile}
+            />
+          </div>
+
+          <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+            {markets.length} variable{markets.length !== 1 ? "s" : ""}
+            {conditionalEdges.length > 0 && ` · ${conditionalEdges.length} edge${conditionalEdges.length !== 1 ? "s" : ""}`}
+            {cliques.length > 0 && ` · ${cliques.length} clique${cliques.length !== 1 ? "s" : ""}`}
+            {engineStats && !snapshot && ` · JT width ${engineStats.cliques.junction_tree_width}`}
+          </div>
         </div>
       </div>
+
+      {importError && (
+        <div style={{ fontSize: "0.75rem", color: "var(--color-danger)", marginBottom: "var(--space-sm)" }}>
+          Import failed: {importError}
+        </div>
+      )}
 
       <svg
         viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
@@ -460,4 +562,15 @@ const panelStyle: React.CSSProperties = {
   borderRadius: "var(--radius-md)",
   border: "1px solid var(--color-border)",
   background: "var(--color-bg-surface)",
+};
+
+const smallButtonStyle: React.CSSProperties = {
+  padding: "2px 8px",
+  fontSize: "0.7rem",
+  borderRadius: "var(--radius-sm)",
+  border: "1px solid var(--color-border)",
+  background: "var(--color-bg)",
+  color: "var(--color-text)",
+  cursor: "pointer",
+  fontWeight: 500,
 };
