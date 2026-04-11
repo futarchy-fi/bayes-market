@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The task description mentions testing 'probability input', but EventTradePanel has no probability slider or input — it has a side toggle (buy/sell) and an outcome selector dropdown. Should 'probability input' be interpreted as testing the outcome selection which displays marginal probabilities, or is there a different component intended?",
+      "category": "requirements",
+      "why_it_matters": "If the task actually expects a probability slider test (like TradingPanel has), the test would be fundamentally different. The current component only displays probabilities — it doesn't accept probability input from the user."
+    },
+    {
+      "id": "q2",
+      "question": "Should crypto.randomUUID() be mocked in the test environment to produce deterministic idempotency keys, or should the payload assertion just check that idempotencyKey is defined (like TradingPanel.test.tsx does)?",
+      "category": "design",
+      "why_it_matters": "jsdom may not provide crypto.randomUUID(). If it doesn't, tests will throw at runtime. Mocking it also enables exact payload matching vs. partial assertions."
+    },
+    {
+      "id": "q3",
+      "question": "Should the TradeReceipt sub-component's color-coding logic (impactScore thresholds at >0.5 danger, >0.2 warning) be tested with distinct fixtures, or is verifying that TradeReceipt renders with the correct values sufficient?",
+      "category": "design",
+      "why_it_matters": "Testing TradeReceipt's conditional color logic adds 2-3 extra test cases but covers important risk-display behavior. Without these, a regression in threshold logic would go undetected."
+    },
+    {
+      "id": "q4",
+      "question": "EventTradePanel returns null (no visible message) when the session is unconfigured, unlike TradingPanel which shows 'Set your Account ID'. Should the test verify the absence of any rendered output, or should we also test for inactive market status returning null?",
+      "category": "requirements",
+      "why_it_matters": "The component has two early-return-null conditions (inactive market, unconfigured session). Testing both ensures guard clauses work, but the task description says 'session integration' — clarifying scope prevents over- or under-testing."
+    },
+    {
+      "id": "q5",
+      "question": "The mutation payload includes a formula array with nested objects (variableId, outcomeId, negated). Should the test assert the exact formula structure, or just verify key fields like accountId, side, and selectedOutcome?",
+      "category": "design",
+      "why_it_matters": "The formula structure is the core of event trading semantics. An exact assertion catches structural regressions but is more brittle. A partial assertion is more resilient but might miss formula construction bugs."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Follow the exact same mocking pattern as TradingPanel.test.tsx: mock useSession and useEventTrade at module level, use vi.mocked, create defaultMutationState helper, use renderWithProviders.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to restructure the entire test file's setup and potentially use different testing utilities."
+    },
+    {
+      "id": "a2",
+      "assumption": "The Market fixture from TradingPanel.test.tsx can be reused as-is since EventTradePanel uses the same Market type (id, status, outcomes, marginals).",
+      "confidence": 0.95,
+      "if_wrong": "Would need to add extra fields to the fixture if EventTradePanel accesses Market properties not covered by the existing fixture."
+    },
+    {
+      "id": "a3",
+      "assumption": "'Probability input' in the task description refers to the outcome selector that displays marginal probabilities, not a dedicated probability input field.",
+      "confidence": 0.85,
+      "if_wrong": "The test scope would need to be adjusted — possibly the wrong component was specified, or there's a missing feature that should exist."
+    },
+    {
+      "id": "a4",
+      "assumption": "crypto.randomUUID() is available in the jsdom test environment (Node 19+ / jsdom 25+), so we only need to mock it if we want deterministic assertions.",
+      "confidence": 0.8,
+      "if_wrong": "Tests would crash at runtime. Would need to add a global mock for crypto.randomUUID in beforeEach or setup."
+    },
+    {
+      "id": "a5",
+      "assumption": "The test file should cover: (1) null render for inactive market, (2) null render for unconfigured session, (3) rendering form elements, (4) buy/sell toggle, (5) outcome selection with price display, (6) trade submission with correct payload, (7) pending state, (8) success with TradeReceipt, (9) error display.",
+      "confidence": 0.9,
+      "if_wrong": "May be over- or under-scoping. Task says 'rendering event trade form, probability input, submission handling, session integration' which maps well to these cases."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

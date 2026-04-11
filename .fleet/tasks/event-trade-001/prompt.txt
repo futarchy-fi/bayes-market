@@ -1,0 +1,27 @@
+[Task event-trade-001] PHASE 1: QUESTION GENERATION
+Title: Add tests for EventTradePanel component
+Description: Create frontend/src/__tests__/EventTradePanel.test.tsx with tests for frontend/src/features/trading/EventTradePanel.tsx. Test: rendering event trade form, probability input, submission handling, session integration.
+Repo: /home/kelvin/bayes-market
+
+Explore the codebase. Identify what you need to know before building.
+
+YOU MUST create .fleet/tasks/event-trade-001/questions.json with this structure:
+{
+  "phase": "question",
+  "questions": [
+    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  ],
+  "assumptions": [
+    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  ],
+  "spawn_children": false,
+  "children": []
+}
+
+DO NOT STOP until questions.json exists and contains at least one question.
+Verify: ls -la .fleet/tasks/event-trade-001/ to confirm the file was written.
+
+DECOMPOSITION: Set spawn_children=true only if sub-questions warrant their own
+full 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: event-trade-001"
