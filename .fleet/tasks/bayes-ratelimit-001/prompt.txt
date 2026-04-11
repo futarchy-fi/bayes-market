@@ -1,37 +1,30 @@
-[Task bayes-ratelimit-001] PHASE 3a: PLAN
+[Task bayes-ratelimit-001] PHASE 3b: IMPLEMENT
 Title: Add rate limit headers (X-RateLimit-*) to all write endpoints
 
-Read .fleet/tasks/bayes-ratelimit-001/questions.json and .fleet/tasks/bayes-ratelimit-001/research.json
-for context on what was asked and answered.
+Read your plan at .fleet/tasks/bayes-ratelimit-001/plan.json.
 
-YOU MUST create .fleet/tasks/bayes-ratelimit-001/plan.json with this structure:
+YOU MUST IMPLEMENT the plan completely. This is the critical execution phase.
+
+For EACH step in plan.json, you MUST:
+1. Announce: "=== Step N: {task description} ==="
+2. Execute the step — create/modify the actual source files
+3. Verify it worked (check file exists, run code, test passes)
+4. Announce: "=== Step N complete ===" before moving to next
+
+DO NOT STOP until ALL steps are executed and verified.
+DO NOT just read the plan — you must CREATE the files it specifies.
+
+DEPENDENCIES: Fresh worktree — install before testing:
+  - Node: pnpm install or npm install
+  - Python: pip install -r requirements.txt
+
+After all steps are complete, write .fleet/tasks/bayes-ratelimit-001/implementation.json:
 {
-  "phase": "plan",
-  "decisions": [
-    { "id": "d1", "decision": "...", "based_on": ["q1"], "alternatives_rejected": ["..."], "reversibility": "easy|medium|hard" }
+  "phase": "implement",
+  "steps_completed": [
+    { "step": 1, "task": "...", "files_created": ["..."], "files_modified": ["..."], "verified": true }
   ],
-  "steps": [
-    { "step": 1, "task": "...", "depends_on": [], "estimated_lines": <number>, "risk": "low|medium|high" }
-  ],
-
-  "decomposition_assessment": {
-    "total_steps": <count>,
-    "estimated_total_lines": <sum of step estimates>,
-    "high_risk_steps": <count where risk=high>,
-    "parallelizable_groups": [["step1", "step2"], ["step3"]],
-    "decision": "PROCEED_ALONE | SPAWN_CHILDREN",
-    "decision_reason": "justify based on scope and parallelization potential"
-  },
-
-  "spawn_children": <true if decision=SPAWN_CHILDREN>,
-  "children": [{ "id": "impl-child-1", "title": "...", "description": "implement steps: ..." }]
+  "all_steps_done": true
 }
 
-DECOMPOSITION DECISION RULES:
-- estimated_total_lines > 500 → SPAWN_CHILDREN (split by module)
-- high_risk_steps >= 2 → SPAWN_CHILDREN (isolate risky changes)
-- 2+ parallelizable_groups with no dependencies → SPAWN_CHILDREN
-- Otherwise → PROCEED_ALONE
-
-DO NOT STOP until plan.json exists and contains at least one step.
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "plan: bayes-ratelimit-001"
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "execute: bayes-ratelimit-001"
