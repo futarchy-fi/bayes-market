@@ -1,0 +1,80 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Test formatResolutionProbabilities indirectly through the resolved-market rendering path. The function is a private module-level function (not exported, defined at line 214) that is only called in the resolved summary computation (line 18). Since it is purely a formatting helper with no side effects, the most maintainable approach is to test it through the component's resolved state display — render a market with status='resolved' and resolutionProbabilities set, then assert the formatted output appears. This matches the project's existing test style (TradingPanel.test.tsx tests rendering output, not internal helpers).",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/market/ResolveMarketPanel.tsx:214-217",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:15-19",
+        "frontend/src/__tests__/TradingPanel.test.tsx:112-128"
+      ],
+      "uncertainty": "None significant — the function is definitively private and only used in one place."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Test the full two-step confirmation flow as an integration-style interaction test. The TradingPanel tests follow a pattern of simulating real user interactions (fireEvent.change on select, fireEvent.click on button) and verifying that the mutation is called with the correct payload (TradingPanel.test.tsx:139-165). The ResolveMarketPanel's two-step flow (click Resolve -> see confirmation text -> click 'Yes, Resolve') is a core UX behavior that should be tested end-to-end. This means: (1) select an outcome, (2) click 'Resolve' button, (3) assert confirmation text appears with the selected outcome, (4) click 'Yes, Resolve', (5) assert mutation.mutate was called with correct payload. Also test the Cancel button in the confirming state and the behavior where changing the select resets the confirming state.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/market/ResolveMarketPanel.tsx:40-63",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:73-78",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:89-107",
+        "frontend/src/__tests__/TradingPanel.test.tsx:139-165"
+      ],
+      "uncertainty": "None — the two-step flow is clearly implemented and the existing test patterns strongly support this approach."
+    },
+    {
+      "question_id": "q3",
+      "answer": "No additional guard conditions exist beyond status checks and missing accountId. The component itself guards on: (1) market.status === 'resolved' returns a resolved summary, (2) market.status not in ['active', 'closed'] returns null, (3) !session.accountId returns null. The parent MarketDetail route (line 50) renders <ResolveMarketPanel market={m} /> unconditionally — there is no role-based access, ownership check, or authorization gate upstream. The component handles all its own visibility logic. Test all three guard branches: resolved status, draft/other status, and no accountId.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/market/ResolveMarketPanel.tsx:21-29",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:32-34",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:36-38",
+        "frontend/src/routes/MarketDetail.tsx:50"
+      ],
+      "uncertainty": "Authorization may exist server-side, but the component itself has no additional client-side guards."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "Component confirmed at frontend/src/features/market/ResolveMarketPanel.tsx"
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "All existing test files are in frontend/src/__tests__/*.test.tsx (23 files). ResolveMarketPanel.test.tsx should go there."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "TradingPanel.test.tsx uses exactly this pattern: vi.mock for hooks, vi.mocked for typed access, defaultMutationState helper. ResolveMarketPanel tests should mock useResolveMarket and useSession the same way."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "All listed scenarios are valid. The component has: guard for resolved (shows summary), guard for non-active/closed (returns null), guard for no session (returns null), resolve form rendering, outcome selection, two-step confirm flow, mutation payload, pending/success/error states."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Line 76-77 clearly shows onChange resets confirming to false. This is a user-facing behavior (if you change the outcome while in confirming state, confirmation is cancelled). Worth testing as it's observable behavior."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "renderWithProviders from helpers.tsx provides QueryClientProvider, SessionProvider, and MemoryRouter. ResolveMarketPanel only needs session context (mocked) and react-query (for mutation). No additional providers needed."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
