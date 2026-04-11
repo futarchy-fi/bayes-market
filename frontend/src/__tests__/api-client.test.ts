@@ -182,7 +182,7 @@ describe("API Client", () => {
     mockFetch.mockResolvedValue(jsonResponse(body));
     const result = await createMarket(payload);
     expect(mockFetch).toHaveBeenCalledWith("/v1/markets", expect.objectContaining({ method: "POST", body: JSON.stringify(payload) }));
-    const headers = mockFetch.mock.calls[0][1].headers;
+    const headers = mockFetch.mock.calls[0]![1].headers;
     expect(headers["Content-Type"]).toBe("application/json");
     expect(headers["X-Bayes-Agent-Id"]).toBeUndefined();
     expect(result.market.id).toBe("m-new");
@@ -194,7 +194,7 @@ describe("API Client", () => {
     const body = { market: { id: "m-new" }, meta: { apiVersion: "1.0", timestamp: "" } };
     mockFetch.mockResolvedValue(jsonResponse(body));
     await createMarket(payload, session);
-    const headers = mockFetch.mock.calls[0][1].headers;
+    const headers = mockFetch.mock.calls[0]![1].headers;
     expect(headers["Content-Type"]).toBe("application/json");
     expect(headers["X-Bayes-Agent-Id"]).toBe("agent-42");
   });
@@ -213,7 +213,7 @@ describe("API Client", () => {
     mockFetch.mockResolvedValue(jsonResponse(body));
     const result = await submitProbabilityEdit("m1", payload, session);
     expect(mockFetch).toHaveBeenCalledWith("/v1/markets/m1/orders/probability-edit", expect.objectContaining({ method: "POST", body: JSON.stringify(payload) }));
-    const headers = mockFetch.mock.calls[0][1].headers;
+    const headers = mockFetch.mock.calls[0]![1].headers;
     expect(headers["Content-Type"]).toBe("application/json");
     expect(headers["X-Bayes-Agent-Id"]).toBe("agent-1");
     expect(result.order.orderId).toBe("o1");
@@ -226,7 +226,7 @@ describe("API Client", () => {
     mockFetch.mockResolvedValue(jsonResponse(body));
     const result = await resolveMarket("m1", payload, session);
     expect(mockFetch).toHaveBeenCalledWith("/v1/markets/m1/resolve", expect.objectContaining({ method: "POST", body: JSON.stringify(payload) }));
-    const headers = mockFetch.mock.calls[0][1].headers;
+    const headers = mockFetch.mock.calls[0]![1].headers;
     expect(headers["Content-Type"]).toBe("application/json");
     expect(headers["X-Bayes-Agent-Id"]).toBe("agent-2");
     expect(result.result.terminal).toBe(true);
@@ -243,7 +243,7 @@ describe("API Client", () => {
     mockFetch.mockResolvedValue(jsonResponse(body));
     const result = await submitEventTrade("m1", payload, session);
     expect(mockFetch).toHaveBeenCalledWith("/v1/markets/m1/orders/event-trade", expect.objectContaining({ method: "POST", body: JSON.stringify(payload) }));
-    const headers = mockFetch.mock.calls[0][1].headers;
+    const headers = mockFetch.mock.calls[0]![1].headers;
     expect(headers["Content-Type"]).toBe("application/json");
     expect(headers["X-Bayes-Agent-Id"]).toBe("agent-3");
     expect(result.order.orderId).toBe("o2");
@@ -256,7 +256,7 @@ describe("API Client", () => {
     mockFetch.mockResolvedValue(jsonResponse(body));
     const result = await submitMarketComment("m1", payload, session);
     expect(mockFetch).toHaveBeenCalledWith("/v1/markets/m1/comments", expect.objectContaining({ method: "POST", body: JSON.stringify(payload) }));
-    const headers = mockFetch.mock.calls[0][1].headers;
+    const headers = mockFetch.mock.calls[0]![1].headers;
     expect(headers["Content-Type"]).toBe("application/json");
     expect(headers["X-Bayes-Agent-Id"]).toBe("agent-4");
     expect(result.comment.commentId).toBe("c1");

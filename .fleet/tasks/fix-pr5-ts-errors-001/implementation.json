@@ -1,0 +1,55 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Installed dependencies with pnpm install and ran pnpm build to capture all TypeScript errors: Portfolio.test.tsx (missing UseQueryResult properties), ProbabilityBar.test.tsx (array indexed access), api-client.test.ts (array indexed access), chartUtils.test.ts (process.env type)",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Created shared createMockQueryResult<T> and createMockMutationResult helpers in helpers.tsx with all 25 UseQueryResult properties including the 5 missing ones (isFetched, isFetchedAfterMount, isInitialLoading, isPaused, isEnabled)",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/helpers.tsx"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Refactored Portfolio.test.tsx to use createMockQueryResult from helpers.tsx, replacing local emptyQueryResult and all 'as ReturnType' casts. MarketDetail, DiscussionThread, and ConditionalEditor were not modified as they already use 'as unknown as' casts and had no build errors.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Portfolio.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Created test-globals.d.ts with minimal process.env type declaration for chartUtils.test.ts",
+      "files_created": ["frontend/src/test-globals.d.ts"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Added non-null assertions (!) to array indexed access in ProbabilityBar.test.tsx (bars[0]!, bars[1]!, spans[0]!, etc.) and api-client.test.ts (mockFetch.mock.calls[0]![1])",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/ProbabilityBar.test.tsx", "frontend/src/__tests__/api-client.test.ts"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Ran pnpm build — tsc and vite build both passed clean with zero errors",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Ran pnpm test — all 410 tests passed across 32 test files",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}

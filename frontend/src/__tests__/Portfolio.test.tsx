@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
-import { renderWithProviders } from "./helpers";
+import { renderWithProviders, createMockQueryResult } from "./helpers";
 import Portfolio from "@/routes/Portfolio";
 
 // ---------------------------------------------------------------------------
@@ -47,29 +47,6 @@ const configuredSession = {
   isConfigured: true,
 };
 
-const emptyQueryResult = {
-  data: undefined,
-  isLoading: false,
-  error: null,
-  isSuccess: false,
-  isError: false,
-  isPending: false,
-  isLoadingError: false,
-  isRefetchError: false,
-  status: "pending" as const,
-  fetchStatus: "idle" as const,
-  isFetching: false,
-  isPlaceholderData: false,
-  isRefetching: false,
-  isStale: false,
-  dataUpdatedAt: 0,
-  errorUpdatedAt: 0,
-  failureCount: 0,
-  failureReason: null,
-  errorUpdateCount: 0,
-  refetch: vi.fn(),
-  promise: Promise.resolve(undefined as never),
-};
 
 function makeRiskData(overrides: {
   status?: "healthy" | "warning" | "critical";
@@ -120,7 +97,7 @@ const defaultMarkets = {
 describe("Portfolio", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseMarkets.mockReturnValue({ ...emptyQueryResult, data: defaultMarkets } as ReturnType<typeof useMarkets>);
+    mockUseMarkets.mockReturnValue(createMockQueryResult({ data: defaultMarkets }) as ReturnType<typeof useMarkets>);
   });
 
   // -------------------------------------------------------------------------
@@ -128,7 +105,7 @@ describe("Portfolio", () => {
   // -------------------------------------------------------------------------
   it("renders account prompt when no session configured", () => {
     mockUseSession.mockReturnValue(unconfiguredSession);
-    mockUseAccountRisk.mockReturnValue({ ...emptyQueryResult } as ReturnType<typeof useAccountRisk>);
+    mockUseAccountRisk.mockReturnValue(createMockQueryResult() as ReturnType<typeof useAccountRisk>);
 
     renderWithProviders(<Portfolio />);
     expect(screen.getByText(/Set your Account ID/)).toBeInTheDocument();
@@ -139,10 +116,7 @@ describe("Portfolio", () => {
   // -------------------------------------------------------------------------
   it("renders loading page while risk data loads", () => {
     mockUseSession.mockReturnValue(configuredSession);
-    mockUseAccountRisk.mockReturnValue({
-      ...emptyQueryResult,
-      isLoading: true,
-    } as ReturnType<typeof useAccountRisk>);
+    mockUseAccountRisk.mockReturnValue(createMockQueryResult({ isLoading: true }) as ReturnType<typeof useAccountRisk>);
 
     const { container } = renderWithProviders(<Portfolio />);
     // LoadingPage renders an SVG spinner
@@ -154,10 +128,7 @@ describe("Portfolio", () => {
   // -------------------------------------------------------------------------
   it("renders error message when risk fetch fails", () => {
     mockUseSession.mockReturnValue(configuredSession);
-    mockUseAccountRisk.mockReturnValue({
-      ...emptyQueryResult,
-      error: new Error("fail"),
-    } as ReturnType<typeof useAccountRisk>);
+    mockUseAccountRisk.mockReturnValue(createMockQueryResult({ error: new Error("fail") }) as ReturnType<typeof useAccountRisk>);
 
     renderWithProviders(<Portfolio />);
     expect(screen.getByText("Account not found or no positions yet.")).toBeInTheDocument();
@@ -168,11 +139,7 @@ describe("Portfolio", () => {
   // -------------------------------------------------------------------------
   it("renders portfolio heading and metric cards with full data", () => {
     mockUseSession.mockReturnValue(configuredSession);
-    mockUseAccountRisk.mockReturnValue({
-      ...emptyQueryResult,
-      data: makeRiskData(),
-      isSuccess: true,
-    } as ReturnType<typeof useAccountRisk>);
+    mockUseAccountRisk.mockReturnValue(createMockQueryResult({ data: makeRiskData(), isSuccess: true }) as ReturnType<typeof useAccountRisk>);
 
     renderWithProviders(<Portfolio />);
 
@@ -194,11 +161,7 @@ describe("Portfolio", () => {
     { status: "critical" as const, color: "var(--color-danger)" },
   ])("renders health status '$status' with correct color", ({ status, color }) => {
     mockUseSession.mockReturnValue(configuredSession);
-    mockUseAccountRisk.mockReturnValue({
-      ...emptyQueryResult,
-      data: makeRiskData({ status }),
-      isSuccess: true,
-    } as ReturnType<typeof useAccountRisk>);
+    mockUseAccountRisk.mockReturnValue(createMockQueryResult({ data: makeRiskData({ status }), isSuccess: true }) as ReturnType<typeof useAccountRisk>);
 
     renderWithProviders(<Portfolio />);
 
@@ -212,11 +175,7 @@ describe("Portfolio", () => {
   it("renders last-updated timestamp", () => {
     const knownTimestamp = "2026-04-09T12:30:00Z";
     mockUseSession.mockReturnValue(configuredSession);
-    mockUseAccountRisk.mockReturnValue({
-      ...emptyQueryResult,
-      data: makeRiskData({ updatedAt: knownTimestamp }),
-      isSuccess: true,
-    } as ReturnType<typeof useAccountRisk>);
+    mockUseAccountRisk.mockReturnValue(createMockQueryResult({ data: makeRiskData({ updatedAt: knownTimestamp }), isSuccess: true }) as ReturnType<typeof useAccountRisk>);
 
     renderWithProviders(<Portfolio />);
 
@@ -252,13 +211,8 @@ describe("Portfolio", () => {
     ];
 
     mockUseSession.mockReturnValue(configuredSession);
-    mockUseAccountRisk.mockReturnValue({
-      ...emptyQueryResult,
-      data: makeRiskData({ markets: marketRows }),
-      isSuccess: true,
-    } as ReturnType<typeof useAccountRisk>);
-    mockUseMarkets.mockReturnValue({
-      ...emptyQueryResult,
+    mockUseAccountRisk.mockReturnValue(createMockQueryResult({ data: makeRiskData({ markets: marketRows }), isSuccess: true }) as ReturnType<typeof useAccountRisk>);
+    mockUseMarkets.mockReturnValue(createMockQueryResult({
       data: {
         markets: [
           { id: "mkt-1", title: "ETH Price > $3000", status: "active", liquidity: 100, volume: 200, expires_at: "2026-12-31T00:00:00Z" },
@@ -267,7 +221,7 @@ describe("Portfolio", () => {
         count: 2,
         meta: { apiVersion: "1.0", timestamp: "2026-04-09T00:00:00Z" },
       },
-    } as ReturnType<typeof useMarkets>);
+    }) as ReturnType<typeof useMarkets>);
 
     renderWithProviders(<Portfolio />);
 
@@ -298,11 +252,7 @@ describe("Portfolio", () => {
   // -------------------------------------------------------------------------
   it("renders 'No positions.' when markets array is empty", () => {
     mockUseSession.mockReturnValue(configuredSession);
-    mockUseAccountRisk.mockReturnValue({
-      ...emptyQueryResult,
-      data: makeRiskData({ markets: [] }),
-      isSuccess: true,
-    } as ReturnType<typeof useAccountRisk>);
+    mockUseAccountRisk.mockReturnValue(createMockQueryResult({ data: makeRiskData({ markets: [] }), isSuccess: true }) as ReturnType<typeof useAccountRisk>);
 
     renderWithProviders(<Portfolio />);
     expect(screen.getByText("No positions.")).toBeInTheDocument();

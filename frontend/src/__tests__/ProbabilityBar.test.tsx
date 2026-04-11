@@ -149,15 +149,15 @@ describe("ProbabilityBar", () => {
 
     // Verify colors wrap: outcome at index 8 should have same color as index 0
     const colorOf = (el: Element) => (el as HTMLElement).style.background;
-    expect(colorOf(bars[0])).toBeTruthy();
-    expect(colorOf(bars[OUTCOME_COLORS.length])).toBe(colorOf(bars[0]));
-    expect(colorOf(bars[OUTCOME_COLORS.length + 1])).toBe(colorOf(bars[1]));
+    expect(colorOf(bars[0]!)).toBeTruthy();
+    expect(colorOf(bars[OUTCOME_COLORS.length]!)).toBe(colorOf(bars[0]!));
+    expect(colorOf(bars[OUTCOME_COLORS.length + 1]!)).toBe(colorOf(bars[1]!));
 
     // Verify legend spans also use wrapped colors
     const spans = container.querySelectorAll("span");
     expect(spans.length).toBe(count);
     const spanColor = (el: Element) => (el as HTMLElement).style.color;
-    expect(spanColor(spans[0])).toBeTruthy();
-    expect(spanColor(spans[OUTCOME_COLORS.length])).toBe(spanColor(spans[0]));
+    expect(spanColor(spans[0]!)).toBeTruthy();
+    expect(spanColor(spans[OUTCOME_COLORS.length]!)).toBe(spanColor(spans[0]!));
   });
 });
