@@ -1,0 +1,69 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Create test file with imports (vitest, @testing-library/react, VolumeChart) and makeBucket() helper",
+      "files_created": ["frontend/src/__tests__/VolumeChart.test.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Write 'renders SVG with data-testid' test",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/VolumeChart.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Write 'renders correct number of bars' test",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/VolumeChart.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Write 'bar heights are proportional to volume' test",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/VolumeChart.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Write 'displays trade count labels above bars' test",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/VolumeChart.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Write 'empty state renders chart frame without bars' test",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/VolumeChart.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Write 'renders x-axis time labels' test",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/VolumeChart.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 8,
+      "task": "Write 'renders y-axis currency labels' test",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/VolumeChart.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 9,
+      "task": "Run vitest on the new test file, fix any failures, ensure all tests pass green",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
