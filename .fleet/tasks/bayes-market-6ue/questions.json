@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What is the canonical source for the new `/v1/version` response's `version` field: should it reuse `backend.inference.config.DEFAULT_ENGINE_CONFIG.version`, `frontend/package.json`'s version, or a new backend/application version constant?",
+      "category": "requirements",
+      "why_it_matters": "The backend currently exposes an engine version on `/v1/health` and `/v1/markets/{id}/engine-stats`, but there is no separate backend package/version file in the repo. Picking the wrong source would freeze the wrong contract."
+    },
+    {
+      "id": "q2",
+      "question": "What exact `git_sha` contract is expected: full `HEAD`, short SHA, or any non-empty revision string, and should it be captured once at startup or resolved on every request before falling back to `\"unknown\"`?",
+      "category": "design",
+      "why_it_matters": "The brief says `git_sha (from subprocess or unknown)`, but the string format and when it is computed determine the idempotency behavior, error handling, and how precise the tests can be."
+    },
+    {
+      "id": "q3",
+      "question": "Should `build_timestamp` mean module import / process startup time and remain stable for the lifetime of the server process, or should test helpers such as `reset_state()` be treated as a fresh startup boundary?",
+      "category": "codebase",
+      "why_it_matters": "This server is a long-lived module with module-level startup state already used for uptime, and `reset_state()` does not reload the module. That choice directly affects how the endpoint caches its timestamp and how the idempotency test should be written."
+    },
+    {
+      "id": "q4",
+      "question": "Should `GET /v1/version` return only the four top-level fields named in the task, or should it also follow the repo's common response conventions such as `meta.timestamp` and/or inclusion in the root service index routes?",
+      "category": "design",
+      "why_it_matters": "Current top-level operational routes are mixed: `/health` and `/v1/health` are flat payloads, while many other read routes include `meta`, and the root `/` index advertises public routes. The implementation scope changes if discoverability and envelope consistency are required."
+    },
+    {
+      "id": "q5",
+      "question": "Is the coding scope for this task backend-only (`backend/server.py` plus `tests/test_bayes_market_api.py`), or should it also wire the new public endpoint into frontend client/types or the `System` page?",
+      "category": "requirements",
+      "why_it_matters": "The frontend already shows health and API-surface information but has no client/type for `/v1/version`. If the endpoint is meant to be user-visible, this task expands beyond a simple backend route and two backend tests."
+    },
+    {
+      "id": "q6",
+      "question": "Where should the two required tests live: direct `route_request(...)` coverage, HTTP integration coverage through `BayesHandler`, or one test in each layer?",
+      "category": "codebase",
+      "why_it_matters": "The existing suite exercises top-level GET routes in both dispatch and live HTTP layers. The task only budgets two tests, so choosing the wrong layer could either miss the intended seam or overbuild the verification."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new endpoint belongs in `backend/server.py` alongside the existing top-level public routes `/v1/health` and `/v1/stats`.",
+      "confidence": 0.99,
+      "if_wrong": "Implementation could target the wrong entry point or miss a separate routing abstraction."
+    },
+    {
+      "id": "a2",
+      "assumption": "No auth or rate-limit changes are needed for `/v1/version`, because GET routes do not pass through the protected-write agent-id policy path.",
+      "confidence": 0.99,
+      "if_wrong": "The route could accidentally ship with the wrong access controls or missing headers behavior."
+    },
+    {
+      "id": "a3",
+      "assumption": "The intended `build_timestamp` is a single startup-time value captured once per server process, not a per-request timestamp.",
+      "confidence": 0.9,
+      "if_wrong": "The endpoint would return a moving value, and the idempotency test would need a different contract."
+    },
+    {
+      "id": "a4",
+      "assumption": "If git revision lookup fails, the fallback string must be the literal `\"unknown\"` named in the task, not `null`, an empty string, or omission of the field.",
+      "confidence": 0.96,
+      "if_wrong": "The response schema and failure-path tests would assert the wrong shape."
+    },
+    {
+      "id": "a5",
+      "assumption": "Unless clarified otherwise, the backend has no separate application version source today, so implementation will likely need to reuse an existing constant rather than introduce packaging machinery.",
+      "confidence": 0.71,
+      "if_wrong": "A hidden or external version source could exist, and reusing the engine version would publish the wrong value."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -780,7 +780,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             payload["routes"]["accounts"],
             ["/v1/accounts/{id}/risk", "/v1/accounts/{id}/pnl", "/v1/accounts/{id}/exposure"],
         )
-        self.assertEqual(payload["routes"]["health"], ["/health", "/healthz", "/v1/health"])
+        self.assertEqual(payload["routes"]["health"], ["/health", "/healthz", "/v1/health", "/v1/version"])
         self.assertEqual(payload["routes"]["stats"], ["/v1/stats"])
         self.assertIn("GET /v1/markets/{id}/analytics", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/meta", payload["routes"]["markets"])
@@ -932,6 +932,53 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 self.assertEqual(error.code, "method_not_allowed")
                 self.assertEqual(error.details["method"], method)
                 self.assertEqual(error.details["path"], "/v1/health")
+
+    def test_v1_version_route_returns_startup_scoped_build_payload(self):
+        original_engine_config = server.ENGINE_CONFIG
+        original_build_git_sha = server.BUILD_GIT_SHA
+        original_build_timestamp = server.BUILD_TIMESTAMP
+        self.addCleanup(setattr, server, "ENGINE_CONFIG", original_engine_config)
+        self.addCleanup(setattr, server, "BUILD_GIT_SHA", original_build_git_sha)
+        self.addCleanup(setattr, server, "BUILD_TIMESTAMP", original_build_timestamp)
+
+        server.ENGINE_CONFIG = server.EngineConfig(
+            mode="EXACT",
+            backend="variable_elimination",
+            version="9.9.9",
+            precision="float64",
+            compile_type="junction_tree",
+            inference_sample_limit=100,
+        )
+        server.BUILD_GIT_SHA = "0123456789abcdef0123456789abcdef01234567"
+        server.BUILD_TIMESTAMP = "2026-04-10T00:00:00Z"
+
+        payload, status = server.route_request("GET", "/v1/version")
+        server.reset_state()
+        repeated_payload, repeated_status = server.route_request("GET", "/v1/version/")
+
+        expected_payload = {
+            "service": "bayes-market",
+            "version": "9.9.9",
+            "git_sha": "0123456789abcdef0123456789abcdef01234567",
+            "build_timestamp": "2026-04-10T00:00:00Z",
+        }
+        self.assertEqual(status, 200)
+        self.assertEqual(repeated_status, 200)
+        self.assertEqual(payload, expected_payload)
+        self.assertEqual(repeated_payload, expected_payload)
+        self.assertEqual(payload["version"], server.ENGINE_CONFIG.version)
+
+    def test_v1_version_route_is_method_not_allowed_for_non_get(self):
+        for method in ("POST", "PUT", "DELETE"):
+            with self.subTest(method=method):
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(method, "/v1/version/", {})
+
+                error = ctx.exception
+                self.assertEqual(error.status, 405)
+                self.assertEqual(error.code, "method_not_allowed")
+                self.assertEqual(error.details["method"], method)
+                self.assertEqual(error.details["path"], "/v1/version")
 
     def test_do_get_routes_public_health_paths_before_static_fallback(self):
         handler = object.__new__(server.BayesHandler)
@@ -9379,6 +9426,19 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertIsInstance(payload["uptime_seconds"], float)
         self.assertIsInstance(payload["components"], dict)
         self.assertEqual(set(payload["components"]), {"db", "inference", "auth"})
+
+    def test_v1_version_http_returns_build_payload(self):
+        status, payload = self.request("GET", "/v1/version")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(set(payload), {"service", "version", "git_sha", "build_timestamp"})
+        self.assertEqual(payload["service"], "bayes-market")
+        self.assertEqual(payload["version"], server.ENGINE_CONFIG.version)
+        self.assertEqual(payload["git_sha"], server.BUILD_GIT_SHA)
+        self.assertEqual(payload["build_timestamp"], server.BUILD_TIMESTAMP)
+        self.assertRegex(payload["build_timestamp"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$")
+        if payload["git_sha"] != "unknown":
+            self.assertRegex(payload["git_sha"], r"^[0-9a-f]{40}$")
 
     def test_create_market_http_returns_created_market_and_collection_entry(self):
         body = build_create_market_body(

@@ -11,6 +11,7 @@ import json
 import math
 import os
 import re
+import subprocess
 import sys
 import threading
 import time
@@ -26,6 +27,29 @@ BACKEND_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = str(BACKEND_DIR.parent)
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+
+def _utc_now_timestamp() -> str:
+    """Return the current UTC timestamp in ISO-8601 Zulu form."""
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _resolve_build_git_sha() -> str:
+    """Resolve the current git HEAD revision for build metadata when available."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+    except (FileNotFoundError, OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return "unknown"
+
+    git_sha = result.stdout.strip()
+    return git_sha or "unknown"
 
 from backend.inference import (
     CURRENT_MODEL_COMPILER,
@@ -128,6 +152,8 @@ ACCOUNT_RISK_LIMIT = 100.0
 LEGACY_HEALTH_ROUTES = ("/health", "/healthz")
 VERSIONED_HEALTH_ROUTE = "/v1/health"
 PUBLIC_HEALTH_ROUTES = (*LEGACY_HEALTH_ROUTES, VERSIONED_HEALTH_ROUTE)
+VERSION_ROUTE = "/v1/version"
+HEALTH_SERVICE_INDEX_ROUTES = (*PUBLIC_HEALTH_ROUTES, VERSION_ROUTE)
 STATS_ROUTE = "/v1/stats"
 STATS_SERVICE_INDEX_ROUTES = (STATS_ROUTE,)
 max_position_size = 100.0
@@ -189,6 +215,8 @@ OG_DESCRIPTION_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:descrip
 OG_TYPE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:type[\"'][^>]*>", re.IGNORECASE)
 OG_URL_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:url[\"'][^>]*>", re.IGNORECASE)
 PROCESS_START_MONOTONIC = time.monotonic()
+BUILD_GIT_SHA = _resolve_build_git_sha()
+BUILD_TIMESTAMP = _utc_now_timestamp()
 
 MARKETS: dict[str, dict[str, Any]] = deepcopy(INITIAL_MARKETS)
 CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {}
@@ -242,7 +270,7 @@ def get_market_write_lock(market_id: str) -> threading.Lock:
 
 def utc_timestamp() -> str:
     """Return the current UTC timestamp in ISO-8601 Zulu form."""
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return _utc_now_timestamp()
 
 
 class ApiError(Exception):
@@ -848,13 +876,23 @@ def v1_health_payload() -> dict[str, Any]:
     return payload
 
 
+def v1_version_payload() -> dict[str, str]:
+    """Build the public version/build metadata payload."""
+    return {
+        "service": "bayes-market",
+        "version": ENGINE_CONFIG.version,
+        "git_sha": BUILD_GIT_SHA,
+        "build_timestamp": BUILD_TIMESTAMP,
+    }
+
+
 def service_index_payload() -> dict[str, Any]:
     """Build the root index payload describing the public HTTP surface."""
     return {
         "service": "bayes-market",
         "status": "ok",
         "routes": {
-            "health": list(PUBLIC_HEALTH_ROUTES),
+            "health": list(HEALTH_SERVICE_INDEX_ROUTES),
             "markets": list(MARKET_SERVICE_INDEX_ROUTES),
             "orders": list(ORDER_SERVICE_INDEX_ROUTES),
             "accounts": list(ACCOUNT_SERVICE_INDEX_ROUTES),
@@ -5156,6 +5194,16 @@ def route_request(
     if path == VERSIONED_HEALTH_ROUTE:
         if method == "GET":
             return v1_health_payload(), 200
+        raise ApiError(
+            405,
+            "method_not_allowed",
+            f"{method} is not allowed for this resource",
+            {"method": method, "path": path},
+        )
+
+    if path == VERSION_ROUTE:
+        if method == "GET":
+            return v1_version_payload(), 200
         raise ApiError(
             405,
             "method_not_allowed",
