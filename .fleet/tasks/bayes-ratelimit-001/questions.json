@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The rate limit headers (X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, X-RateLimit-Policy) are already implemented in rate_limit_headers() at server.py:576-601 and applied in handle_api() at server.py:5656-5663. Is this task already complete, or are there specific gaps or additional requirements beyond what's currently implemented?",
+      "category": "requirements",
+      "why_it_matters": "If the feature is already fully implemented, no code changes are needed. If there are gaps, we need to know exactly what's missing."
+    },
+    {
+      "id": "q2",
+      "question": "The breadth test at line 9021 covers 5 of 7 rate-limited routes (create-market, probability-edit, market-resolve, comment-post, event-trade) but omits close and reopen. Should header-emission tests be added for the close and reopen endpoints specifically?",
+      "category": "requirements",
+      "why_it_matters": "Close and reopen are rate-limited routes that lack explicit header-emission tests. The existing test_protected_post_routes_emit_rate_limit_headers_on_first_success only covers 5 routes."
+    },
+    {
+      "id": "q3",
+      "question": "The current implementation includes X-RateLimit-Policy as a fourth header beyond the three specified in the task (Limit, Remaining, Reset). Should the task scope be limited to validating only the three requested headers, or should we also verify the Policy header?",
+      "category": "requirements",
+      "why_it_matters": "The task specifies three headers but the implementation provides four. Understanding scope prevents unnecessary work or missing coverage."
+    },
+    {
+      "id": "q4",
+      "question": "Rate limit headers are only emitted when RATE_LIMIT_PER_MIN > 0 AND agent_id is non-empty (server.py:578-579). On success responses where rate limiting is disabled or no agent ID is present, no headers are sent. Is this the desired behavior, or should headers always be present on write endpoints?",
+      "category": "design",
+      "why_it_matters": "Clients relying on rate limit headers for flow control would get no signal when rate limiting is disabled, which could cause confusion or brittle client code."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The rate limit header feature is already fully implemented in the codebase - rate_limit_headers() generates all required headers and handle_api() applies them to both success and 429 responses on all rate-limited write endpoints.",
+      "confidence": 0.95,
+      "if_wrong": "There may be write endpoints or response paths that are missing header application, requiring targeted code changes."
+    },
+    {
+      "id": "a2",
+      "assumption": "All 7 rate-limited POST routes (create, close, reopen, resolve, comments, probability-edit, event-trade) receive headers through the shared handle_api() code path, even though only 5 are explicitly tested in the breadth test.",
+      "confidence": 0.95,
+      "if_wrong": "Close and reopen might have a different code path that bypasses header emission, requiring both code and test changes."
+    },
+    {
+      "id": "a3",
+      "assumption": "The task's primary remaining work is adding close and reopen to the header-emission breadth test, since the implementation itself is already complete.",
+      "confidence": 0.8,
+      "if_wrong": "The task may require more substantial implementation changes beyond test coverage."
+    },
+    {
+      "id": "a4",
+      "assumption": "No other HTTP methods (PUT, PATCH, DELETE) have write endpoints currently, so only POST routes need rate limit headers.",
+      "confidence": 0.99,
+      "if_wrong": "We'd need to audit non-POST write endpoints for header coverage."
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 1,
+    "complexity_reason": "The feature is already implemented. At most, 2 additional sub-tests need to be added to the existing breadth test to cover close and reopen endpoints. This is a ~20-line change in a single test file.",
+    "uncertainty_score": 2,
+    "uncertainty_reason": "The main uncertainty is whether the task considers the existing implementation sufficient or expects something beyond what's already in place. The code and tests are clear.",
+    "independent_subproblems": [
+      "Verify close endpoint emits rate limit headers (test addition)",
+      "Verify reopen endpoint emits rate limit headers (test addition)"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity is 1 (trivial), uncertainty is 2 (low). The feature exists; at most we add 2 test cases to a single file. No architectural changes, no multi-file edits. This is well below the threshold for spawning children."
+  },
+  "spawn_children": false,
+  "children": []
+}
