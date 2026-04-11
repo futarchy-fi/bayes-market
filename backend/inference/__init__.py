@@ -16,10 +16,16 @@ from .current_model import (
     CurrentModelCompileArtifact,
     CurrentModelCompiler,
     CurrentModelQueryBackend,
+    canonical_json_hash,
     compile_current_market_artifact,
     compile_current_market_result,
     compile_current_model_artifact,
     compile_current_model_result,
+)
+from .cache import (
+    COMPILE_RESULT_CACHE,
+    CacheStats,
+    CompileResultCache,
 )
 from .errors import (
     InferenceCompileError,
@@ -30,6 +36,9 @@ from .errors import (
 
 __all__ = [
     "AtomicEventQueryResult",
+    "COMPILE_RESULT_CACHE",
+    "CacheStats",
+    "CompileResultCache",
     "CURRENT_MODEL_COMPILER",
     "CURRENT_MODEL_QUERY_BACKEND",
     "CURRENT_MODEL_EXACT_ELIGIBILITY_REASON",
@@ -47,6 +56,7 @@ __all__ = [
     "InferenceQueryError",
     "InferenceUnsupportedQueryError",
     "MarginalQueryResult",
+    "canonical_json_hash",
     "compile_current_market_artifact",
     "compile_current_market_result",
     "compile_current_model_artifact",

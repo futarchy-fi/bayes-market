@@ -1,0 +1,50 @@
+{
+  "phase": "plan",
+  "title": "Implement junction-tree cache invalidation logic",
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add CompileResultCache class to inference module",
+      "description": "Create backend/inference/cache.py with a per-market CompileResult cache that stores compiled artifacts keyed by (market_id, source_state_hash). Supports get, put, invalidate, and stats operations.",
+      "files_to_create": ["backend/inference/cache.py"],
+      "files_to_modify": ["backend/inference/__init__.py"]
+    },
+    {
+      "step": 2,
+      "task": "Integrate cache into server.py compile and query paths",
+      "description": "Modify compile_market_for_inference() to check cache before recompiling. On cache miss, compile and store. On cache hit, return cached CompileResult. Update query_market_marginals_for_inference() and query_market_atomic_probability_for_inference() to propagate cache_hit status.",
+      "files_to_modify": ["backend/server.py"]
+    },
+    {
+      "step": 3,
+      "task": "Wire cache invalidation on ProbabilityEdit and market resolution",
+      "description": "Modify refresh_market_compile_snapshot() to invalidate the cache for the affected market before rebuilding. This ensures ProbabilityEdit acceptance (201) and market resolution (201) both trigger invalidation.",
+      "files_to_modify": ["backend/server.py"]
+    },
+    {
+      "step": 4,
+      "task": "Update cache_hit/cache_miss counters in MARKET_ENGINE_STATS",
+      "description": "Increment cache_hits and cache_misses counters in the engine stats when compile results are served from cache vs freshly compiled.",
+      "files_to_modify": ["backend/server.py"]
+    },
+    {
+      "step": 5,
+      "task": "Add cache invalidation unit and integration tests",
+      "description": "Add tests verifying: cache hit on repeated compile, cache invalidation on ProbabilityEdit, cache invalidation on resolution, cache stats tracking, and cache_hit field in query results.",
+      "files_to_create": ["tests/test_bayes_market_cache_invalidation.py"]
+    },
+    {
+      "step": 6,
+      "task": "Run full test suite and verify all tests pass",
+      "description": "Run python3 -m unittest discover to verify all existing and new tests pass.",
+      "verification": "python3 -m unittest discover -s tests"
+    }
+  ],
+  "assumptions": [
+    "Cache is per-market, in-memory, invalidate-on-write (no TTL/LRU)",
+    "No public /v1/cache/* endpoints (T553 freeze decision)",
+    "Cross-market conditional invalidation deferred to T554",
+    "EventTrade does not trigger cache invalidation (per T553 freeze)",
+    "cache_hit=True returned when serving from cached CompileResult"
+  ]
+}
