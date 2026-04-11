@@ -420,3 +420,19 @@ if (!valParsed || valParsed.verdict !== "approve") {
 **Minor gaps noted:** DAG child identity threading not fully implemented; notifyAgent callers not yet passing agentIdentity.
 
 ---
+
+### [2026-04-11] Parallel child execution shipped via epistemicExecutor
+
+**Success:** task-parallel-children-001 workflow completed in 24m35s with auto-merge to temporal-fleet main.
+
+**What was delivered:**
+- New parallelChildren.ts module (218 lines) with computeTopoRounds and executeChildrenInParallel
+- 11 new tests for topological sorting, dependency mapping, and parallel execution
+- parentLifecycle and recursiveLifecycle refactored to use parallel execution with round-based DAG scheduling
+- dagExecutor now imports shared computeTopoRounds
+
+**Key insight:** Research phase corrected the task premise — found that dagExecutor already had parallel execution, so the task became extracting that pattern into a shared module for parentLifecycle/recursiveLifecycle.
+
+**Architecture:** Children grouped into topological waves (wave 0 = no deps), waves execute in parallel, waves run sequentially, branch merging done via onRoundComplete callback.
+
+---

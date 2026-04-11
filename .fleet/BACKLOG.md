@@ -30,7 +30,10 @@ Pick ONE at a time. These test the system with real work:
   - DONE: task-agent-identity-001 completed in 17min, merged to temporal-fleet main
   - Added: agentIdentity.ts (97 lines) + tests (125 lines, 17 tests)
   - Updated: sender_id in fleet-msg, log prefixes, workflow state threading
-- [ ] **Parallel child execution** — Respect DAG dependencies, run independent children in parallel
+- [x] **Parallel child execution** — Respect DAG dependencies, run independent children in parallel
+  - DONE: task-parallel-children-001 completed in 24m35s, merged to temporal-fleet main
+  - Added: parallelChildren.ts (218 lines) + tests (225 lines, 11 tests)
+  - parentLifecycle/recursiveLifecycle now use executeChildrenInParallel with round-based DAG execution
 
 ## Priority 4: Polish when idle
 - [ ] Clean up old worktrees: `git worktree list` and remove stale ones
