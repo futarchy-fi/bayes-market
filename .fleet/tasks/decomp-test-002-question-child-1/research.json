@@ -1,0 +1,139 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Full replacement is the right approach. BayesNetGraph is used in exactly one place (MarketDetail.tsx line 62, passing only focusMarketId). There is no toggle mechanism, no other consumer, and the component is self-contained with its own data fetching. Replacing in-place avoids maintaining two graph implementations. The existing tests (11 scenarios in BayesNetGraph.test.tsx) will need rewriting regardless since the rendering model changes fundamentally.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/routes/MarketDetail.tsx:62",
+        "frontend/src/features/graph/BayesNetGraph.tsx:227-229",
+        "frontend/src/__tests__/BayesNetGraph.test.tsx:1-332"
+      ],
+      "uncertainty": "Whether stakeholders have a strong preference for keeping the static layout as a fallback. The circular layout is simpler to reason about for small networks."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Hybrid React+D3 approach is strongly preferred. The codebase is pure React with inline styles, React Query hooks (TanStack v5.60), and component composition patterns. NodeWithDetail (BayesNetGraph.tsx:212-225) uses useMarket() per node for lazy data loading — this pattern requires React to own the DOM. D3 should handle force simulation math (d3-force), zoom transforms (d3-zoom via useEffect on SVG ref), and drag behavior (d3-drag via useEffect on node refs). React renders SVG elements and manages state; D3 computes positions and handles interactions.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:212-225",
+        "frontend/src/lib/query/hooks.ts:48-54",
+        "frontend/package.json:dependencies"
+      ],
+      "uncertainty": "d3-drag and d3-zoom integration with React's synthetic event system can be tricky — may need useRef + useEffect wiring that bypasses React's event delegation."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Keep the d3.forceSimulation instance in a useRef, not in state. On data refetch (every 5s from useMarkets), diff the incoming market list against current simulation nodes: (1) add new nodes at centroid position with zero velocity, (2) remove departed nodes, (3) update data properties (title, status, probability) on existing nodes without touching x/y/vx/vy. Call simulation.nodes(updatedNodes) and simulation.alpha(0.1).restart() with a low alpha to gently re-settle without full reset. For links, similarly diff and call forceLink.links(). The NodeWithDetail per-node useMarket(node.id) calls also refetch at 5s — these update visual properties (marginals, outcomes) without affecting simulation positions at all since they only change the detail prop.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:48-54",
+        "frontend/src/lib/query/hooks.ts:56-65",
+        "frontend/src/features/graph/BayesNetGraph.tsx:212-225"
+      ],
+      "uncertainty": "The exact alpha restart value needs tuning. Too high causes visual jitter on every refetch; too low means new nodes don't settle properly. May need alphaDecay tuning as well."
+    },
+    {
+      "question_id": "q4",
+      "answer": "There is NO API endpoint or hook that returns directed conditional dependency edges. The conditionalEdges prop on BayesNetGraph is defined (GraphEdge interface at BayesNetGraph.tsx:16-20) and fully rendered when provided, but MarketDetail.tsx never passes it (line 62 only passes focusMarketId). Conditional dependencies are created via useProbabilityEdit and stored server-side in CONDITIONAL_MARGINALS dict (backend/server.py:223, 3489-3510) keyed by context_state_key format 'variableId=outcomeId|...', but there's no GET endpoint to retrieve these relationships. Cliques from useEngineStats provide undirected groupings (which variables participate in the same factor), NOT directed conditional edges. To show edges, either: (a) add a new API endpoint that returns edges from CONDITIONAL_MARGINALS, or (b) infer undirected connections from clique membership (any two nodes in the same clique share an edge — but this loses directionality).",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:16-27",
+        "frontend/src/routes/MarketDetail.tsx:62",
+        "backend/server.py:223",
+        "backend/server.py:3303-3311",
+        "backend/server.py:3489-3510",
+        "frontend/src/lib/api/types.ts:105-151"
+      ],
+      "uncertainty": "Whether the CONDITIONAL_MARGINALS data structure captures enough information to reconstruct directed edges (it stores context→target relationships which ARE directed edges). Need to verify if this dict is always populated or only after explicit user edits."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Clique overlays must adapt to the dynamic layout. The current CliqueOverlay (BayesNetGraph.tsx:171-210) computes a static bounding box from fixed node positions. In a force-directed layout, nodes move during simulation ticks and user drags, so the overlay must recompute on every frame. Recommended approach: compute the convex hull of member node positions on each simulation tick using a simple gift-wrapping algorithm (O(nh) for small cliques), then render as an SVG path with rounded corners and padding. This is computationally cheap since cliques are typically 2-5 nodes. A simpler fallback is a dynamic bounding box (min/max of member node x/y + padding), which works well for small cliques but looks awkward for non-convex arrangements.",
+      "confidence": 0.8,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:171-210",
+        "frontend/src/features/graph/BayesNetGraph.tsx:285-287"
+      ],
+      "uncertainty": "Whether convex hull or bounding box is visually better. Convex hull is more accurate but bounding box is simpler and may suffice for typical 2-4 node cliques. Also unclear if clique overlays should animate smoothly or snap to new positions."
+    },
+    {
+      "question_id": "q6",
+      "answer": "The callback should be a simple onNodeClick(marketId: string) prop, with the parent component deciding the action. Current architecture supports this: MarketDetail is at route /markets/:id, and ConditionalEditor (ConditionalEditor.tsx:1-289) requires a full Market object and is deeply embedded in the trading workflow (needs session, account, outcome selection UI). The graph component should NOT embed the CPT editor — it should navigate to the market detail page via react-router-dom. The parent (MarketDetail) can use navigate(`/markets/${marketId}`) to switch focus. This keeps the graph component decoupled from trading features and consistent with the existing architecture where BayesNetGraph is a visualization-only component.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/features/trading/ConditionalEditor.tsx:16-23",
+        "frontend/src/routes/MarketDetail.tsx:62",
+        "frontend/src/features/graph/BayesNetGraph.tsx:227-229"
+      ],
+      "uncertainty": "Whether the callback should also support secondary actions (right-click for context menu, shift-click for multi-select). The task only mentions 'CPT editor integration' which suggests simple navigation for now."
+    },
+    {
+      "question_id": "q7",
+      "answer": "Individual modules (d3-force, d3-selection, d3-zoom, d3-drag) are strongly preferred. The frontend has only 4 runtime dependencies (react, react-dom, react-router-dom, @tanstack/react-query). Adding the full d3 bundle (~500KB) would roughly double the bundle size. Individual modules total ~60KB and import only what's needed. The hybrid React+D3 approach further reduces the need for d3-selection since React handles DOM — we primarily need d3-force for simulation, d3-zoom for pan/zoom transforms, and d3-drag for node dragging. d3-selection may still be needed as a peer dependency for d3-zoom and d3-drag event handling.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/package.json:dependencies"
+      ],
+      "uncertainty": "Whether d3-selection is needed as a direct dependency or only as a transitive dependency of d3-zoom/d3-drag. Need to check peer dependency requirements."
+    },
+    {
+      "question_id": "q8",
+      "answer": "The existing 11 tests in BayesNetGraph.test.tsx will need significant rework but not complete abandonment. The tests mock useMarkets/useEngineStats and assert on SVG elements/text — the mocking strategy remains valid, but assertions on specific SVG structure will change. Recommended approach: (1) Separate simulation logic into a pure function/hook (useForceGraph) that can be unit-tested without DOM — test that nodes get positions, edges resolve, simulation converges. (2) For component tests, mock the simulation to return fixed positions (bypass async tick) and assert on rendered SVG structure similar to current tests. (3) Keep existing test scenarios (loading state, empty state, truncation, focus highlight, status dots, legend items) as they test business logic, not layout specifics. (4) Drop tests that assert exact pixel positions since force layout is non-deterministic.",
+      "confidence": 0.8,
+      "evidence": [
+        "frontend/src/__tests__/BayesNetGraph.test.tsx:1-332",
+        "frontend/src/__tests__/BayesNetGraph.test.tsx:147-154",
+        "frontend/src/__tests__/BayesNetGraph.test.tsx:168-178"
+      ],
+      "uncertainty": "Whether vitest + jsdom properly supports D3's force simulation (it runs requestAnimationFrame-based ticks). May need to mock d3-force's simulation or use fake timers in tests."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Individual D3 modules are clearly the right choice. Frontend has only 4 runtime deps, and the hybrid React+D3 approach minimizes which D3 modules are even needed. Install d3-force, d3-zoom, d3-drag, and d3-selection (as peer dep)."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "The NodeWithDetail pattern (useMarket per node for lazy detail loading) and React Query integration require React to own the DOM. D3 should only compute positions and handle zoom/drag interactions via useEffect hooks on refs."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.8,
+      "impact": "useMarkets provides nodes, useEngineStats provides cliques. No new endpoints needed for the graph itself. However, directed edges are NOT available from any existing endpoint — see a4. If directed edges are required, a new endpoint reading CONDITIONAL_MARGINALS would be needed."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "WRONG",
+      "confidence": 0.9,
+      "impact": "Cliques are undirected groups from junction tree decomposition, NOT directed conditional dependency edges. CONDITIONAL_MARGINALS on the backend stores directed context→target relationships, but there's no GET endpoint to retrieve them. Options: (1) Add a /v1/graph/edges endpoint that reads CONDITIONAL_MARGINALS keys, (2) Derive undirected edges from clique co-membership (loses directionality), (3) Accept that edges may be empty until a new API is built. This is the most significant gap identified."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "BayesNetGraph is used in exactly one place (MarketDetail.tsx:62). Full replacement avoids dual maintenance. Tests will need rewriting regardless. The component's props interface (focusMarketId, conditionalEdges) can be preserved."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Current implementation uses dynamic SVG viewBox calculation (BayesNetGraph.tsx:258-264). The force-directed version should fill its container, use viewBox for coordinate space, and handle resize via ResizeObserver or similar. No breakpoint-based layout changes needed."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Simple onNodeClick(marketId: string) callback is appropriate. ConditionalEditor requires full Market objects, session state, and complex form UI — embedding it in the graph would violate separation of concerns. Parent navigates to /markets/:id on click."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
