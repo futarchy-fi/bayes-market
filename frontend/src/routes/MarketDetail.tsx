@@ -8,7 +8,7 @@ import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { formatCurrency, timeUntil, truncateHash, formatRelativeTime } from "@/lib/utils/format";
 import { AssumptionProvider } from "@/features/assumptions/AssumptionContext";
 import { AssumptionPanel } from "@/features/assumptions/AssumptionPanel";
-import { BayesNetGraph } from "@/features/graph/BayesNetGraph";
+import { ForceDirectedGraph } from "@/features/graph/ForceDirectedGraph";
 import { JunctionTreePanel } from "@/features/graph/JunctionTreePanel";
 import { DiscussionThread } from "@/features/market/DiscussionThread";
 import { ResolveMarketPanel } from "@/features/market/ResolveMarketPanel";
@@ -59,7 +59,7 @@ export default function MarketDetail() {
 
       <DiscussionThread market={m} />
 
-      <BayesNetGraph focusMarketId={m.id} />
+      <ForceDirectedGraph focusMarketId={m.id} />
 
       {/* Event Journal */}
       <div>
