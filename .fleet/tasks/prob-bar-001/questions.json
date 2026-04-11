@@ -1,0 +1,57 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should multi-outcome scenarios (3+ outcomes) be tested, or only binary (yes/no) cases with probability values 0, 0.5, 1?",
+      "category": "requirements",
+      "why_it_matters": "The component supports up to 8 color-coded outcomes and cycles colors. Testing only binary cases would miss color cycling and multi-segment layout behavior."
+    },
+    {
+      "id": "q2",
+      "question": "Should edge cases like empty outcomes array or marginals with missing keys be tested?",
+      "category": "requirements",
+      "why_it_matters": "The component uses `marginals[o.id] ?? 0` fallback. Testing this guard ensures robustness, but may be out of scope for the stated requirements."
+    },
+    {
+      "id": "q3",
+      "question": "Should the title attribute on bar segments (tooltip text) be asserted, or only the visible percentage text in the labels?",
+      "category": "requirements",
+      "why_it_matters": "The component renders probability info in two places: title attributes on bar segments and visible span labels. The task says 'displaying percentage text' which could mean either or both."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Tests should use @testing-library/react with the existing vitest + jsdom setup (vitest.config.ts already configures jsdom, setup.ts imports jest-dom matchers).",
+      "confidence": 0.99,
+      "if_wrong": "Would need to set up an alternative test runner or environment."
+    },
+    {
+      "id": "a2",
+      "assumption": "Binary outcomes (Yes/No) are sufficient for testing probability values 0, 0.5, and 1 as stated in the task description.",
+      "confidence": 0.85,
+      "if_wrong": "Would need additional test cases for 3+ outcome markets to cover color cycling and multi-segment layout."
+    },
+    {
+      "id": "a3",
+      "assumption": "Bar width styling can be asserted by checking the inline style `width` property on rendered div elements.",
+      "confidence": 0.95,
+      "if_wrong": "May need to use getComputedStyle or a different approach to verify styling."
+    },
+    {
+      "id": "a4",
+      "assumption": "Percentage text is the visible span text formatted by formatProbability (e.g., '50.0%'), and title attributes on bar segments should also be verified.",
+      "confidence": 0.9,
+      "if_wrong": "Tests would need to be scoped differently to match only visible text or only tooltips."
+    },
+    {
+      "id": "a5",
+      "assumption": "The test file should be placed at frontend/src/__tests__/ProbabilityBar.test.tsx as specified in the task.",
+      "confidence": 1.0,
+      "if_wrong": "N/A - path is explicitly stated in the task description."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

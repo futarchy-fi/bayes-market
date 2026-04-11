@@ -1,0 +1,52 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use binary (Yes/No) outcomes for all probability boundary tests (0, 0.5, 1). Add one multi-outcome test for color cycling coverage since it's low cost.",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Only binary outcomes with no multi-outcome test", "Full multi-outcome matrix testing"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Do not duplicate edge case tests (empty outcomes, missing marginals) since they already exist in ui-components.test.tsx.",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Duplicate all edge case tests in the new file for standalone completeness"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Assert both visible span text and title attributes for percentage display. Assert inline style width property for bar width styling.",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Only test visible span text", "Only test title attributes"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Place test file at frontend/src/__tests__/ProbabilityBar.test.tsx using vitest + @testing-library/react with the existing jsdom setup.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create frontend/src/__tests__/ProbabilityBar.test.tsx with a describe block containing tests: (a) renders with probability 0 — both outcomes at 0, verify 0.0% text, 0% width, minWidth 0; (b) renders with probability 0.5 — both outcomes at 0.5, verify 50.0% text, 50% width, minWidth 2; (c) renders with probability 1 — one outcome at 1 and other at 0, verify 100.0% and 0.0% text, 100% and 0% widths; (d) displays percentage text in both title attributes and visible span labels; (e) correct bar width styling via inline style assertions; (f) multi-outcome test with 3+ outcomes verifying color cycling wraps at OUTCOME_COLORS.length.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Run vitest on the new test file to verify all tests pass: npx vitest run frontend/src/__tests__/ProbabilityBar.test.tsx",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Run the full test suite to verify no regressions: npx vitest run",
+      "depends_on": [2]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
