@@ -1,0 +1,27 @@
+[Task task-system-coverage-001] PHASE 1: QUESTION GENERATION
+Title: Expand System route test coverage
+Description: Expand test coverage for frontend/src/routes/System.tsx. Currently only has 5 tests. Add tests for: (1) Loading state shows "Checking..." with orange beacon, (2) Error state shows error message and red beacon, (3) Health beacon shows service name and timestamp, (4) Green glow effect when API is online, (5) Market counts by all statuses (closed, draft not just active/resolved), (6) API version display in surface section, (7) Route groups with proper group names, (8) CountCard renders with correct colors for each status, (9) Platform stats loading state, (10) formatCurrency used for volume/liquidity. Update frontend/src/__tests__/System.test.tsx.
+Repo: /home/kelvin/bayes-market
+
+Explore the codebase. Identify what you need to know before building.
+
+YOU MUST create .fleet/tasks/task-system-coverage-001/questions.json with this structure:
+{
+  "phase": "question",
+  "questions": [
+    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  ],
+  "assumptions": [
+    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  ],
+  "spawn_children": false,
+  "children": []
+}
+
+DO NOT STOP until questions.json exists and contains at least one question.
+Verify: ls -la .fleet/tasks/task-system-coverage-001/ to confirm the file was written.
+
+DECOMPOSITION: Set spawn_children=true only if sub-questions warrant their own
+full 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: task-system-coverage-001"
