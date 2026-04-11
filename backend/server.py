@@ -143,6 +143,7 @@ MARKET_SERVICE_INDEX_ROUTES = (
     "GET /v1/markets/{id}/analytics",
     "/v1/markets/{id}/meta",
     "/v1/markets/{id}/events",
+    "/v1/markets/{id}/trades",
     "GET /v1/markets/{id}/comments",
     "POST /v1/markets/{id}/comments",
     "/v1/markets/{id}/engine-stats",
@@ -2653,6 +2654,35 @@ def get_market_preview_response(
     }, 200
 
 
+def parse_optional_string_query_param(
+    query: dict[str, list[str]],
+    name: str,
+) -> str | None:
+    """Parse and validate one optional single-valued string query parameter."""
+    values = query.get(name, [])
+    if len(values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            f"{name} must be provided at most once",
+            {"parameter": name, "received": values},
+        )
+
+    if not values:
+        return None
+
+    raw_value = values[0]
+    if not raw_value:
+        raise ApiError(
+            400,
+            "invalid_query",
+            f"{name} must not be blank",
+            {"parameter": name, "received": raw_value},
+        )
+
+    return raw_value
+
+
 def parse_integer_query_param(
     query: dict[str, list[str]],
     name: str,
@@ -2746,6 +2776,87 @@ def get_market_events(market_id: str, query: dict[str, list[str]]) -> tuple[dict
             "limit": limit,
             "returned": len(page_events),
             "nextFromSeq": next_from_seq,
+        },
+        "meta": make_meta(),
+    }, 200
+
+
+ORDER_ID_SEQUENCE_RE = re.compile(r"^ord_(?P<date>\d{8})_(?P<counter>\d+)$")
+
+
+def market_trade_fill_sequence(order_id: str, snapshot_index: int) -> tuple[int, int, int]:
+    """Build a stable newest-first sort key from an order id or snapshot position."""
+    match = ORDER_ID_SEQUENCE_RE.match(order_id)
+    if match is None:
+        return (0, 0, snapshot_index)
+    return (int(match.group("date")), int(match.group("counter")), snapshot_index)
+
+
+def serialize_market_trade(order: dict[str, Any]) -> dict[str, Any]:
+    """Project one stored EventTrade order into the public trade-history shape."""
+    target_outcome_id = str(order.get("targetOutcomeId") or order["payload"]["formula"][0][0]["outcomeId"])
+    side = str(order.get("side") or order["payload"]["side"])
+    return {
+        "id": str(order["id"]),
+        "accountId": str(order["accountId"]),
+        "targetOutcomeId": target_outcome_id,
+        "side": side,
+        "size": round_risk_value(abs(float(order["size"]))),
+        "price": round_risk_value(float(order["price"])),
+        "notional": round_risk_value(float(order["notional"])),
+        "filledAt": str(order["filledAt"]),
+    }
+
+
+def get_market_trades(market_id: str, query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
+    """Return the paginated accepted-trade feed for a market."""
+    if market_id not in MARKETS:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    before_id = parse_optional_string_query_param(query, "before_id")
+    limit = parse_integer_query_param(query, "limit", default=100, minimum=1, maximum=100)
+
+    with get_market_write_lock(market_id):
+        order_records = deepcopy(list(ORDERS.copy().values()))
+
+    trade_feed = sorted(
+        (
+            (market_trade_fill_sequence(str(order["id"]), snapshot_index), serialize_market_trade(order))
+            for snapshot_index, order in enumerate(order_records)
+            if str(order.get("marketId")) == market_id
+            and str(order.get("type")) == "EventTrade"
+            and str(order.get("status")) == "filled"
+        ),
+        key=lambda item: item[0],
+        reverse=True,
+    )
+    trades = [trade for _, trade in trade_feed]
+
+    start_index = 0
+    if before_id is not None:
+        cursor_index = next((index for index, trade in enumerate(trades) if trade["id"] == before_id), None)
+        if cursor_index is None:
+            raise ApiError(
+                400,
+                "invalid_query",
+                "before_id must reference a known trade in this market feed",
+                {"parameter": "before_id", "received": before_id, "marketId": market_id},
+            )
+        start_index = cursor_index + 1
+
+    page_trades = trades[start_index : start_index + limit]
+    next_before_id = None
+    if page_trades and start_index + len(page_trades) < len(trades):
+        next_before_id = str(page_trades[-1]["id"])
+
+    return {
+        "marketId": market_id,
+        "trades": page_trades,
+        "pagination": {
+            "beforeId": before_id,
+            "limit": limit,
+            "returned": len(page_trades),
+            "nextBeforeId": next_before_id,
         },
         "meta": make_meta(),
     }, 200
@@ -5141,6 +5252,16 @@ def route_request(
                     {"method": method, "path": path},
                 )
             return get_market_events(market_id, parse_qs(parsed.query, keep_blank_values=True))
+
+        if len(parts) == 4 and parts[3] == "trades":
+            if method != "GET":
+                raise ApiError(
+                    405,
+                    "method_not_allowed",
+                    f"{method} is not allowed for this resource",
+                    {"method": method, "path": path},
+                )
+            return get_market_trades(market_id, parse_qs(parsed.query, keep_blank_values=True))
 
         if len(parts) == 4 and parts[3] == "comments":
             if method == "GET":

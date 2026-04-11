@@ -785,6 +785,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertIn("GET /v1/markets/{id}/analytics", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/meta", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/events", payload["routes"]["markets"])
+        self.assertIn("/v1/markets/{id}/trades", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/engine-stats", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/close", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/reopen", payload["routes"]["markets"])
@@ -1781,6 +1782,330 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.code, "method_not_allowed")
         self.assertEqual(error.details["method"], "POST")
         self.assertEqual(error.details["path"], "/v1/markets/m1/events")
+
+    def test_get_market_trades_returns_only_filled_event_trades_for_requested_market(self):
+        first_trade, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m1", "yes", size=12.5, side="buy"),
+        )
+        edit_payload, edit_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_trade_history", "m1", "yes", 0.8),
+        )
+        other_market_trade, other_market_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m2", "delayed", size=4.0, side="buy"),
+        )
+        rejected_trade_payload, rejected_trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m3/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m3", "yes", size=6.0, side="buy"),
+        )
+        second_trade, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m1", "no", size=7.5, side="sell"),
+        )
+
+        payload, status = server.get_market_trades("m1", {})
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(edit_status, 201)
+        self.assertEqual(other_market_status, 201)
+        self.assertEqual(rejected_trade_status, 409)
+        self.assertEqual(second_status, 201)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["marketId"], "m1")
+        trade_ids = [trade["id"] for trade in payload["trades"]]
+        self.assertEqual(trade_ids, [second_trade["order"]["id"], first_trade["order"]["id"]])
+        self.assertNotIn(edit_payload["order"]["id"], trade_ids)
+        self.assertNotIn(other_market_trade["order"]["id"], trade_ids)
+        self.assertEqual(
+            payload["trades"][0],
+            {
+                "id": second_trade["order"]["id"],
+                "accountId": "acct_trade_history",
+                "targetOutcomeId": "no",
+                "side": "sell",
+                "size": 7.5,
+                "price": second_trade["order"]["price"],
+                "notional": second_trade["order"]["notional"],
+                "filledAt": second_trade["order"]["filledAt"],
+            },
+        )
+        self.assertEqual(
+            payload["trades"][1],
+            {
+                "id": first_trade["order"]["id"],
+                "accountId": "acct_trade_history",
+                "targetOutcomeId": "yes",
+                "side": "buy",
+                "size": 12.5,
+                "price": first_trade["order"]["price"],
+                "notional": first_trade["order"]["notional"],
+                "filledAt": first_trade["order"]["filledAt"],
+            },
+        )
+        self.assertEqual(
+            payload["pagination"],
+            {
+                "beforeId": None,
+                "limit": 100,
+                "returned": 2,
+                "nextBeforeId": None,
+            },
+        )
+        self.assertNotIn("chain", payload)
+        self.assertEqual(edit_payload["order"]["type"], "ProbabilityEdit")
+        self.assertEqual(other_market_trade["order"]["marketId"], "m2")
+        self.assertEqual(rejected_trade_payload["result"]["status"], "rejected")
+        self.assertEqual(rejected_trade_payload["result"]["reasonCode"], "market_not_active")
+        self.assertEqual(rejected_trade_payload["error"]["details"]["marketId"], "m3")
+
+    def test_get_market_trades_supports_exclusive_before_id_pagination(self):
+        first_trade, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m1", "yes", size=3.0, side="buy"),
+        )
+        second_trade, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m1", "no", size=4.0, side="buy"),
+        )
+        third_trade, third_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m1", "yes", size=5.0, side="sell"),
+        )
+
+        first_page, first_page_status = server.get_market_trades("m1", {"limit": ["2"]})
+        second_page, second_page_status = server.get_market_trades(
+            "m1",
+            {"before_id": [first_page["pagination"]["nextBeforeId"]], "limit": ["2"]},
+        )
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        self.assertEqual(third_status, 201)
+        self.assertEqual(first_page_status, 200)
+        self.assertEqual(second_page_status, 200)
+        first_page_trade_ids = [trade["id"] for trade in first_page["trades"]]
+        second_page_trade_ids = [trade["id"] for trade in second_page["trades"]]
+        self.assertEqual(first_page_trade_ids, [third_trade["order"]["id"], second_trade["order"]["id"]])
+        self.assertEqual(
+            first_page["pagination"],
+            {
+                "beforeId": None,
+                "limit": 2,
+                "returned": 2,
+                "nextBeforeId": second_trade["order"]["id"],
+            },
+        )
+        self.assertEqual(second_page_trade_ids, [first_trade["order"]["id"]])
+        self.assertNotIn(second_trade["order"]["id"], second_page_trade_ids)
+        self.assertEqual(
+            second_page["pagination"],
+            {
+                "beforeId": second_trade["order"]["id"],
+                "limit": 2,
+                "returned": 1,
+                "nextBeforeId": None,
+            },
+        )
+
+    def test_get_market_trades_rejects_before_id_that_is_not_in_market_feed(self):
+        market_one_trade, market_one_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m1", "yes"),
+        )
+        other_market_trade, other_market_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m2", "yes"),
+        )
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.get_market_trades("m1", {"before_id": [other_market_trade["order"]["id"]]})
+
+        self.assertEqual(market_one_status, 201)
+        self.assertEqual(other_market_status, 201)
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_query")
+        self.assertEqual(error.details["parameter"], "before_id")
+        self.assertEqual(error.details["received"], other_market_trade["order"]["id"])
+        self.assertEqual(error.details["marketId"], "m1")
+        self.assertEqual(market_one_trade["order"]["marketId"], "m1")
+
+    def test_market_trades_route_returns_trade_history_for_market(self):
+        trade_payload, trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_route", "m1", "yes", size=3.0, side="buy"),
+        )
+
+        payload, status = server.route_request("GET", "/v1/markets/m1/trades")
+
+        self.assertEqual(trade_status, 201)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["marketId"], "m1")
+        self.assertEqual(
+            payload["trades"],
+            [
+                {
+                    "id": trade_payload["order"]["id"],
+                    "accountId": "acct_trade_route",
+                    "targetOutcomeId": "yes",
+                    "side": "buy",
+                    "size": 3.0,
+                    "price": trade_payload["order"]["price"],
+                    "notional": trade_payload["order"]["notional"],
+                    "filledAt": trade_payload["order"]["filledAt"],
+                }
+            ],
+        )
+        self.assertEqual(
+            payload["pagination"],
+            {
+                "beforeId": None,
+                "limit": 100,
+                "returned": 1,
+                "nextBeforeId": None,
+            },
+        )
+        self.assertTrue(payload["meta"]["timestamp"].endswith("Z"))
+
+    def test_market_trades_route_supports_exclusive_before_id_pagination_via_raw_query(self):
+        first_trade, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_route_query", "m1", "yes", size=3.0, side="buy"),
+        )
+        second_trade, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_route_query", "m1", "no", size=4.0, side="buy"),
+        )
+        third_trade, third_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_route_query", "m1", "yes", size=5.0, side="sell"),
+        )
+        fourth_trade, fourth_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_route_query", "m1", "no", size=6.0, side="sell"),
+        )
+
+        payload, status = server.route_request(
+            "GET",
+            f"/v1/markets/m1/trades?before_id={fourth_trade['order']['id']}&limit=2",
+        )
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        self.assertEqual(third_status, 201)
+        self.assertEqual(fourth_status, 201)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["marketId"], "m1")
+        self.assertEqual(
+            [trade["id"] for trade in payload["trades"]],
+            [third_trade["order"]["id"], second_trade["order"]["id"]],
+        )
+        self.assertNotIn(fourth_trade["order"]["id"], [trade["id"] for trade in payload["trades"]])
+        self.assertEqual(
+            payload["pagination"],
+            {
+                "beforeId": fourth_trade["order"]["id"],
+                "limit": 2,
+                "returned": 2,
+                "nextBeforeId": second_trade["order"]["id"],
+            },
+        )
+        self.assertEqual(first_trade["order"]["marketId"], "m1")
+
+    def test_market_trades_route_requires_known_market(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/markets/missing/trades")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 404)
+        self.assertEqual(error.code, "market_not_found")
+        self.assertEqual(error.details["market_id"], "missing")
+
+    def test_market_trades_route_rejects_invalid_query(self):
+        market_trade, market_trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_invalid_query", "m1", "yes"),
+        )
+        other_market_trade, other_market_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body("acct_trade_invalid_query", "m2", "yes"),
+        )
+
+        invalid_queries = (
+            (
+                "unknown before_id",
+                f"/v1/markets/m1/trades?before_id={other_market_trade['order']['id']}",
+                {"parameter": "before_id", "received": other_market_trade["order"]["id"], "marketId": "m1"},
+            ),
+            (
+                "blank before_id",
+                "/v1/markets/m1/trades?before_id=",
+                {"parameter": "before_id", "received": ""},
+            ),
+            (
+                "repeated before_id",
+                "/v1/markets/m1/trades?before_id=ord_1&before_id=ord_2",
+                {"parameter": "before_id", "received": ["ord_1", "ord_2"]},
+            ),
+            (
+                "malformed limit",
+                "/v1/markets/m1/trades?limit=abc",
+                {"parameter": "limit", "received": "abc"},
+            ),
+            (
+                "minimum limit",
+                "/v1/markets/m1/trades?limit=0",
+                {"parameter": "limit", "received": "0", "minimum": 1},
+            ),
+            (
+                "maximum limit",
+                "/v1/markets/m1/trades?limit=101",
+                {"parameter": "limit", "received": "101", "maximum": 100},
+            ),
+        )
+
+        self.assertEqual(market_trade_status, 201)
+        self.assertEqual(other_market_status, 201)
+        self.assertEqual(market_trade["order"]["marketId"], "m1")
+
+        for label, path, expected_details in invalid_queries:
+            with self.subTest(label=label, path=path):
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("GET", path)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_query")
+                self.assertEqual(error.details, expected_details)
+
+    def test_market_trades_route_is_method_not_allowed_for_post(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", "/v1/markets/m1/trades", {})
+
+        error = ctx.exception
+        self.assertEqual(error.status, 405)
+        self.assertEqual(error.code, "method_not_allowed")
+        self.assertEqual(error.details["method"], "POST")
+        self.assertEqual(error.details["path"], "/v1/markets/m1/trades")
 
     def test_market_engine_stats_returns_zeroed_empty_state_for_existing_market(self):
         payload, status = server.route_request("GET", "/v1/markets/m1/engine-stats")
