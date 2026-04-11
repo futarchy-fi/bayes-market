@@ -1,0 +1,99 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the D3 force-directed graph fully replace BayesNetGraph.tsx or coexist as an alternative view (e.g., toggle between static circular and force-directed layouts)?",
+      "category": "requirements",
+      "why_it_matters": "The task says 'replace or extend' — full replacement is simpler but breaks existing tests and the known-working static layout. Extending means maintaining two code paths."
+    },
+    {
+      "id": "q2",
+      "question": "Should we use a hybrid React+D3 approach (React owns the DOM, D3 handles math/simulation) or a D3-owns-the-DOM approach (D3 selections create/update SVG elements directly)?",
+      "category": "design",
+      "why_it_matters": "The codebase is pure React with inline styles. A hybrid approach preserves React idioms (hooks, component composition, CSS variables) but is more complex to wire up with d3-drag/d3-zoom. A D3-owns-DOM approach is simpler for interactions but fights React's rendering model and breaks the existing NodeWithDetail lazy-loading pattern."
+    },
+    {
+      "id": "q3",
+      "question": "How should the force simulation handle real-time data updates from the 5-second refetch interval on useMarkets without resetting node positions?",
+      "category": "design",
+      "why_it_matters": "The current hooks refetch every 5 seconds. Naively re-initializing the force simulation on each update would reset all node positions and animations, destroying the user's drag state and causing visual jitter."
+    },
+    {
+      "id": "q4",
+      "question": "What data source defines the directed edges (conditional dependencies) between markets? The current BayesNetGraph accepts an optional conditionalEdges prop, but MarketDetail passes only focusMarketId — where do edges come from at runtime?",
+      "category": "codebase",
+      "why_it_matters": "Without a clear edge data source, the force-directed graph would show disconnected nodes. The ConditionalEditor creates dependencies via useProbabilityEdit, but there's no visible API endpoint or hook that returns the full dependency graph. This affects whether edges can be rendered at all."
+    },
+    {
+      "id": "q5",
+      "question": "Should the clique overlay visualization remain as static rounded rectangles enclosing clique members, or should it adapt to the dynamic force layout (e.g., convex hull around clique nodes)?",
+      "category": "design",
+      "why_it_matters": "The current implementation draws clique overlays at fixed positions. In a force-directed layout, nodes move — so clique overlays need to dynamically recompute their bounds (convex hull or bounding box) as nodes are dragged or the simulation ticks, which adds significant complexity."
+    },
+    {
+      "id": "q6",
+      "question": "What should the node click callback signature look like for CPT editor integration? Should it open the ConditionalEditor inline, in a modal, or navigate to the market detail page?",
+      "category": "requirements",
+      "why_it_matters": "The task mentions 'node click callback for CPT editor integration' but the ConditionalEditor currently lives within the MarketDetail page and requires target/context variable IDs. The callback contract affects how tightly coupled the graph becomes to the trading feature."
+    },
+    {
+      "id": "q7",
+      "question": "Should d3 be installed as the full bundle ('d3') or as individual modules ('d3-force', 'd3-selection', 'd3-zoom', 'd3-drag')? Are there bundle size constraints?",
+      "category": "requirements",
+      "why_it_matters": "The full d3 package is ~500KB minified. Individual modules (d3-force + d3-selection + d3-zoom + d3-drag) total ~60KB. The current frontend has minimal dependencies — this choice significantly impacts bundle size."
+    },
+    {
+      "id": "q8",
+      "question": "How should the existing BayesNetGraph tests be handled? The current test suite mocks useMarkets/useEngineStats and asserts on specific SVG elements and text content.",
+      "category": "codebase",
+      "why_it_matters": "D3 force simulations are asynchronous and DOM-manipulating, making the existing synchronous render-and-assert tests invalid. We need to decide whether to rewrite tests for D3, use snapshot testing, or test the simulation logic separately from rendering."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "We will use individual D3 modules (d3-force, d3-selection, d3-zoom, d3-drag) rather than the full d3 bundle to minimize bundle size.",
+      "confidence": 0.8,
+      "if_wrong": "Need to install the full d3 package instead; no architectural impact, just a different import pattern and larger bundle."
+    },
+    {
+      "id": "a2",
+      "assumption": "A hybrid React+D3 approach is preferred: React renders SVG elements, D3 handles force simulation math, zoom transforms, and drag behavior via useEffect hooks.",
+      "confidence": 0.7,
+      "if_wrong": "If D3-owns-DOM is preferred, we'd need to restructure away from React components for nodes/edges and lose the NodeWithDetail lazy-loading pattern."
+    },
+    {
+      "id": "a3",
+      "assumption": "The existing useMarkets and useEngineStats hooks provide all necessary data — no new API endpoints are needed.",
+      "confidence": 0.85,
+      "if_wrong": "May need a dedicated graph/topology API endpoint that returns nodes and edges together, especially for conditional dependency edges."
+    },
+    {
+      "id": "a4",
+      "assumption": "Conditional edges (directed dependencies) are derivable from the clique structure returned by useEngineStats — nodes sharing a clique have edges between them.",
+      "confidence": 0.4,
+      "if_wrong": "Cliques represent groups, not directed edges. We'd need an explicit dependency/edge API or the conditionalEdges prop to be populated from somewhere. This is a significant gap."
+    },
+    {
+      "id": "a5",
+      "assumption": "The component should be a full replacement of BayesNetGraph.tsx, not a separate component, to avoid maintaining two graph implementations.",
+      "confidence": 0.7,
+      "if_wrong": "Would need to add a toggle mechanism and keep both implementations, increasing maintenance burden."
+    },
+    {
+      "id": "a6",
+      "assumption": "Responsive sizing means the SVG fills its container and responds to window resize events, similar to the current viewBox approach.",
+      "confidence": 0.9,
+      "if_wrong": "If responsive means specific breakpoint-based layouts, the force simulation parameters would need to change at different screen sizes."
+    },
+    {
+      "id": "a7",
+      "assumption": "The node click callback will be a simple onNodeClick(marketId: string) prop, leaving the parent component to decide navigation or modal behavior.",
+      "confidence": 0.75,
+      "if_wrong": "If the graph needs to embed the CPT editor directly, the component becomes much more complex with internal state management for editing."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

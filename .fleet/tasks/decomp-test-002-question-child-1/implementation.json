@@ -1,0 +1,79 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Install D3 modules: d3-force, d3-selection, d3-zoom, d3-drag and their @types/* packages",
+      "files_created": [],
+      "files_modified": ["frontend/package.json", "frontend/package-lock.json"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Create useForceGraph hook encapsulating d3.forceSimulation setup, node/link diffing, position state, alpha restart, and cleanup",
+      "files_created": ["frontend/src/features/graph/useForceGraph.ts"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Create edge derivation utility deriveEdges.ts for computing undirected edges from clique co-membership with deduplication",
+      "files_created": ["frontend/src/features/graph/deriveEdges.ts"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Build core ForceDirectedGraph component with SVG nodes, edges, clique overlays, NodeWithDetail pattern, and onNodeClick",
+      "files_created": ["frontend/src/features/graph/ForceDirectedGraph.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Add zoom/pan behavior via d3-zoom on SVG element with constrained extent and double-click reset",
+      "files_created": [],
+      "files_modified": ["frontend/src/features/graph/ForceDirectedGraph.tsx"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Add node drag behavior via d3-drag with fx/fy pinning, alpha restart, and release on drag end",
+      "files_created": [],
+      "files_modified": ["frontend/src/features/graph/ForceDirectedGraph.tsx"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Implement dynamic clique overlays computing bounding box from member positions with padding, rendered as rounded SVG rects",
+      "files_created": [],
+      "files_modified": ["frontend/src/features/graph/ForceDirectedGraph.tsx"],
+      "verified": true
+    },
+    {
+      "step": 8,
+      "task": "Implement focus highlight (thicker stroke, dim non-connected nodes), status dots, probability bars, legend",
+      "files_created": [],
+      "files_modified": ["frontend/src/features/graph/ForceDirectedGraph.tsx"],
+      "verified": true
+    },
+    {
+      "step": 9,
+      "task": "Replace BayesNetGraph in MarketDetail.tsx with ForceDirectedGraph, update import and usage",
+      "files_created": [],
+      "files_modified": ["frontend/src/routes/MarketDetail.tsx"],
+      "verified": true
+    },
+    {
+      "step": 10,
+      "task": "Rewrite tests: ForceDirectedGraph.test.tsx with mocked useForceGraph hook, deriveEdges.test.ts for edge utility. 20 tests total, all passing.",
+      "files_created": [
+        "frontend/src/__tests__/ForceDirectedGraph.test.tsx",
+        "frontend/src/__tests__/deriveEdges.test.ts"
+      ],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}

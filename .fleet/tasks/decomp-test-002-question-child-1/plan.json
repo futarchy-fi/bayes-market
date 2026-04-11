@@ -1,0 +1,135 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Full replacement of BayesNetGraph.tsx — no toggle or coexistence mode",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Toggle between static circular and force-directed layouts (adds dual maintenance for a component used in exactly one place)"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Hybrid React+D3 approach: React owns the DOM and renders SVG elements, D3 handles force simulation math, zoom transforms, and drag behavior via useEffect hooks on refs",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "D3-owns-the-DOM approach (breaks React rendering model, loses NodeWithDetail lazy-loading pattern, fights React Query integration)"
+      ],
+      "reversibility": "hard"
+    },
+    {
+      "id": "d3",
+      "decision": "Install individual D3 modules (d3-force, d3-selection, d3-zoom, d3-drag) plus their @types packages, not the full d3 bundle",
+      "based_on": ["q7"],
+      "alternatives_rejected": [
+        "Full d3 bundle (~500KB minified, would roughly double frontend bundle size vs ~60KB for individual modules)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep force simulation in a useRef, diff incoming data on refetch to preserve node positions — add new nodes at centroid, remove departed nodes, update data props without touching x/y/vx/vy, restart with low alpha (0.1)",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Re-initialize simulation on each data fetch (resets all positions, destroys drag state, causes visual jitter)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Derive undirected edges from clique co-membership for now (any two nodes sharing a clique get an edge). Directed edge API deferred to future work.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Build a new /v1/graph/edges API endpoint now (out of scope for this task, requires backend changes)",
+        "Show no edges at all (defeats the purpose of a network graph)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Dynamic clique overlays using bounding box (min/max of member node positions + padding), rendered as rounded SVG rects that update on each simulation tick",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Static fixed-position overlays (nodes move in force layout, overlays would be wrong)",
+        "Convex hull (more accurate but overkill for typical 2-4 node cliques, adds geometric complexity)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d7",
+      "decision": "Simple onNodeClick(marketId: string) callback prop — parent component decides navigation behavior",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Embedding ConditionalEditor inline in the graph (violates separation of concerns, requires session/account state)",
+        "Complex callback with multi-select or context menu (over-engineering for current requirements)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d8",
+      "decision": "Extract simulation logic into a testable useForceGraph hook; component tests mock simulation to return fixed positions; keep existing test scenarios for business logic (loading, empty, truncation, focus, status dots, legend)",
+      "based_on": ["q8"],
+      "alternatives_rejected": [
+        "Keeping existing tests as-is (will break due to fundamentally different rendering model)",
+        "Snapshot testing only (brittle, doesn't test behavior)"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Install D3 modules: npm install d3-force d3-selection d3-zoom d3-drag and their @types/* packages as devDependencies",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Create useForceGraph hook in frontend/src/features/graph/useForceGraph.ts — encapsulates d3.forceSimulation setup, node/link diffing on data updates, position state management via useRef, alpha restart logic, and cleanup on unmount. Exports node positions as React state for rendering.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Create edge derivation utility in frontend/src/features/graph/deriveEdges.ts — given clique data from useEngineStats, compute undirected edges as pairs of market IDs sharing a clique. Deduplicate edges. Also accept optional conditionalEdges prop for future directed edge support.",
+      "depends_on": []
+    },
+    {
+      "step": 4,
+      "task": "Build the core ForceDirectedGraph component in frontend/src/features/graph/ForceDirectedGraph.tsx — renders SVG with nodes (circles + labels), edges (lines), and dynamic clique overlays (rounded rects). Uses useForceGraph for positions. Accepts focusMarketId and onNodeClick props. Preserves NodeWithDetail pattern for lazy per-node data loading.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 5,
+      "task": "Add zoom/pan behavior: attach d3-zoom to the SVG element via useEffect + useRef. Apply zoom transform to a <g> wrapper. Constrain zoom extent. Handle double-click to reset zoom.",
+      "depends_on": [4]
+    },
+    {
+      "step": 6,
+      "task": "Add node drag behavior: attach d3-drag to node groups via useEffect + useRef. On drag start, set node.fx/fy to pin position and raise alpha. On drag, update fx/fy. On drag end, release fx/fy (or optionally keep pinned). Coordinate with React state updates.",
+      "depends_on": [4]
+    },
+    {
+      "step": 7,
+      "task": "Implement dynamic clique overlays: on each simulation tick, compute bounding box of member node positions with padding, render as animated rounded SVG rects behind nodes. Use the same color scheme as existing CliqueOverlay.",
+      "depends_on": [4]
+    },
+    {
+      "step": 8,
+      "task": "Implement focus highlight and visual polish: highlight focusMarketId node and its edges, dim non-connected nodes. Add status indicator dots, probability labels, and legend matching existing BayesNetGraph features. Apply CSS variables for theming consistency.",
+      "depends_on": [4]
+    },
+    {
+      "step": 9,
+      "task": "Replace BayesNetGraph in MarketDetail.tsx: update import to ForceDirectedGraph, pass focusMarketId and onNodeClick (navigate to /markets/:id). Remove old BayesNetGraph.tsx file.",
+      "depends_on": [5, 6, 7, 8]
+    },
+    {
+      "step": 10,
+      "task": "Rewrite tests in BayesNetGraph.test.tsx (rename to ForceDirectedGraph.test.tsx): unit test useForceGraph hook with mock data and fake timers, unit test deriveEdges utility, component tests with mocked simulation positions for loading/empty/truncation/focus/status/legend scenarios. Drop exact pixel position assertions.",
+      "depends_on": [9]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
