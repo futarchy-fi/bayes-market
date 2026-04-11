@@ -1,0 +1,96 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Mock useSession at module level via vi.mock('@/features/session/context') to control isConfigured and session values per test",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Manipulating localStorage/SessionProvider state to drive configured vs unconfigured paths — more complex, less explicit control"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Mock useProbabilityEdit from '@/lib/query/hooks' directly to return controlled mutation state objects (isPending, isSuccess, isError, data, error)",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Mocking '@/lib/api/client' and testing through real react-query mutation lifecycle — harder to control deterministic mutation states per test case"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "No polyfill or mock needed for crypto.randomUUID — available in Node.js test environment",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Adding a global mock or polyfill for crypto.randomUUID — unnecessary since Node 19+ includes it"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Use separate test cases for success message and error message rendering",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Combining success/error assertions into a single form submission test — less clear, harder to debug failures"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Use fireEvent.change for slider and select interactions, consistent with existing test patterns",
+      "based_on": ["q5"],
+      "alternatives_rejected": ["Using @testing-library/user-event — not installed, would add inconsistent dependency pattern"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Use renderWithProviders from helpers.tsx for rendering, since vi.mock overrides useSession regardless of SessionProvider in the tree",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Custom wrapper with just QueryClientProvider — works but diverges from established test patterns"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create frontend/src/__tests__/TradingPanel.test.tsx with vi.mock setup for '@/features/session/context' and '@/lib/query/hooks', mock data fixtures (market object with outcomes/marginals), and helper to configure mock return values per test",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Write test: 'shows setup message when session is not configured' — mock useSession returning isConfigured:false, assert 'Set your Account ID' text is rendered and form is not present",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Write test: 'renders trading form when session is configured' — mock useSession returning isConfigured:true with session data, assert form elements are present (outcome select with market outcomes, probability slider, submit button with 'Submit Edit')",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Write test: 'updates probability display when slider changes' — use fireEvent.change on range input, assert formatProbability output updates in the label",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Write test: 'calls mutation.mutate with correct payload on form submission' — submit the form, assert mutate was called with accountId, variableId, outcomeId, probability, and idempotencyKey",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Write test: 'disables submit button and shows Submitting text when mutation is pending' — mock useProbabilityEdit returning isPending:true, assert button is disabled and shows 'Submitting…'",
+      "depends_on": [1]
+    },
+    {
+      "step": 7,
+      "task": "Write test: 'shows success message with orderId when mutation succeeds' — mock useProbabilityEdit returning isSuccess:true with data.order.orderId, assert 'Order accepted: {orderId}' is rendered",
+      "depends_on": [1]
+    },
+    {
+      "step": 8,
+      "task": "Write test: 'shows error message when mutation fails' — mock useProbabilityEdit returning isError:true with error object, assert error message is rendered",
+      "depends_on": [1]
+    },
+    {
+      "step": 9,
+      "task": "Run vitest on TradingPanel.test.tsx to verify all tests pass, fix any issues",
+      "depends_on": [2, 3, 4, 5, 6, 7, 8]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
