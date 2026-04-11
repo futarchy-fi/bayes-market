@@ -1,0 +1,48 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Add formatRelativeTime and timeUntil imports to format.test.ts",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/format.test.ts"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Add describe('formatRelativeTime') block with vi.useFakeTimers() and 4 tests: just now, minutes ago, hours ago, days ago",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/format.test.ts"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Add describe('timeUntil') block with fake timers and 3 tests: expired, hours+minutes, days+hours",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/format.test.ts"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Add negative number tests to formatCurrency describe block: -45000 → '-45.0K', -1500000 → '-1.5M'",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/format.test.ts"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Add 2 tests to truncateHash: custom length param, non-sha256 long string truncation",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/format.test.ts"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Run vitest on format.test.ts to verify all 22 tests pass",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
