@@ -1,0 +1,99 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use vi.mock('@/lib/query/hooks') to mock useEngineStats, following the BayesNetGraph.test.tsx pattern",
+      "based_on": ["q2", "a1"],
+      "alternatives_rejected": ["Manual mock file in __mocks__", "Mock at individual test level with vi.spyOn"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Test formatBytes indirectly via rendered component output since it is not exported",
+      "based_on": ["q3", "a2"],
+      "alternatives_rejected": ["Export formatBytes just for testing", "Use module internals access via rewire"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Use renderWithProviders from helpers.tsx for consistency with other tests",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Render with just QueryClientProvider", "Render without providers since hooks are mocked"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Use small fixture values (<1000) for numeric fields where possible; use value.toLocaleString() in assertions for larger numbers",
+      "based_on": ["q4", "a6"],
+      "alternatives_rejected": ["Regex matchers for locale output", "Mock toLocaleString globally"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Create fixtures with and without optional fields (compile_time_ms, memory_bytes, last_updated) to cover all conditional branches",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Single fixture with all fields present", "Parameterized test matrix"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create test file at frontend/src/__tests__/JunctionTreePanel.test.tsx with imports: vi, render utilities from helpers.tsx, screen/waitFor from @testing-library/react, the JunctionTreePanel component, and useEngineStats from @/lib/query/hooks",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Set up vi.mock('@/lib/query/hooks') with a factory that returns mockUseEngineStats for useEngineStats, and create a mockUseEngineStats vi.fn() variable",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Create test fixtures: fullDiagnosticsData (all fields present including optional ones), minimalDiagnosticsData (no optional fields), and errorCountData (error_count > 0 for warning color test)",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Write test: loading state - mock returns { data: undefined, isLoading: true }, assert loading indicator is shown",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Write test: renders clique tree stats (cliques count, max_clique_size, states via toLocaleString) when data is loaded",
+      "depends_on": [3]
+    },
+    {
+      "step": 6,
+      "task": "Write test: renders inference diagnostics (request_count, avg_inference_ms, error_count) when data is loaded",
+      "depends_on": [3]
+    },
+    {
+      "step": 7,
+      "task": "Write test: optional compile_time_ms renders Compile Time MetricBox when present, absent when omitted",
+      "depends_on": [3]
+    },
+    {
+      "step": 8,
+      "task": "Write test: optional memory_bytes renders formatted Memory MetricBox (test formatBytes indirectly: 512→'512B', 2048→'2.0KB', 1048576→'1.0MB')",
+      "depends_on": [3]
+    },
+    {
+      "step": 9,
+      "task": "Write test: optional last_updated renders timestamp line when present, absent when omitted",
+      "depends_on": [3]
+    },
+    {
+      "step": 10,
+      "task": "Write test: error_count > 0 triggers warning/danger color styling on the error count MetricBox",
+      "depends_on": [3]
+    },
+    {
+      "step": 11,
+      "task": "Run vitest on the new test file to verify all tests pass, fix any issues",
+      "depends_on": [4, 5, 6, 7, 8, 9, 10]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

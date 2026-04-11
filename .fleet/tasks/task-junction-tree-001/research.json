@@ -1,0 +1,88 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes, the EngineStatsResponse diagnostics type has three optional fields: compile_time_ms?: number, memory_bytes?: number, and last_updated?: string (types.ts:146-148). The component conditionally renders each: compile_time_ms renders a 'Compile Time' MetricBox (line 63-65), memory_bytes renders a 'Memory' MetricBox via formatBytes (line 66-68), and last_updated renders a 'Last updated' timestamp line (line 165-168). Tests must create fixtures both with and without these fields to cover all conditional branches.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/lib/api/types.ts:146-148",
+        "frontend/src/features/graph/JunctionTreePanel.tsx:63-68",
+        "frontend/src/features/graph/JunctionTreePanel.tsx:165-168"
+      ],
+      "uncertainty": "None - the types and conditional rendering are clearly visible in the source."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes, renderWithProviders from helpers.tsx should be used. It wraps with QueryClientProvider (retry:false, gcTime:0), SessionProvider, and MemoryRouter. JunctionTreePanel only needs a marketId prop and useEngineStats is mocked at module level, so no special provider props are needed. The component doesn't use routing or session context directly, but the providers are harmless and maintain consistency with other tests (e.g., BayesNetGraph.test.tsx uses the same pattern).",
+      "confidence": 0.98,
+      "evidence": [
+        "frontend/src/__tests__/helpers.tsx:1-51",
+        "frontend/src/__tests__/BayesNetGraph.test.tsx:11-21",
+        "frontend/src/features/graph/JunctionTreePanel.tsx:91-92"
+      ],
+      "uncertainty": "JunctionTreePanel doesn't visibly need SessionProvider or MemoryRouter, but using renderWithProviders is the established pattern and won't cause issues."
+    },
+    {
+      "question_id": "q3",
+      "answer": "formatBytes is NOT exported. It is a module-internal function defined at JunctionTreePanel.tsx:85-89 with 'function formatBytes(...)' (no 'export' keyword). It can only be tested indirectly by rendering the component with memory_bytes set in the mock data and checking the rendered output. For example: setting memory_bytes to 2048 should render '2.0KB', and setting it to 1048576 should render '1.0MB'.",
+      "confidence": 1.0,
+      "evidence": [
+        "frontend/src/features/graph/JunctionTreePanel.tsx:85-89",
+        "frontend/src/features/graph/JunctionTreePanel.tsx:66-68"
+      ],
+      "uncertainty": "None - confirmed by reading the source. The function keyword has no export prefix."
+    },
+    {
+      "question_id": "q4",
+      "answer": "The existing test pattern (seen in AnalyticsSummaryCards.test.tsx) handles toLocaleString by calling toLocaleString() on the expected value in the assertion. For example: expect(screen.getByText(summary.totalTrades.toLocaleString())).toBeInTheDocument(). This ensures the expected string matches whatever locale formatting the test environment (jsdom) uses. For JunctionTreePanel, the same approach should be used for clique.states.toLocaleString() and diagnostics.request_count.toLocaleString(). With small test fixture values (e.g., < 1000), toLocaleString typically returns the plain number string, avoiding locale separator issues entirely.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/AnalyticsSummaryCards.test.tsx:29-64",
+        "frontend/src/features/graph/JunctionTreePanel.tsx:18",
+        "frontend/src/features/graph/JunctionTreePanel.tsx:49-50"
+      ],
+      "uncertainty": "jsdom's toLocaleString behavior is generally predictable in CI, but locale-specific separators for large numbers (e.g., 100,000) could vary. Using small fixture values (<1000) sidesteps this."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "vi.mock('@/lib/query/hooks') is the established pattern. BayesNetGraph.test.tsx mocks useEngineStats along with other hooks from the same module. JunctionTreePanel only uses useEngineStats, so the mock factory only needs to export that one hook."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "formatBytes at JunctionTreePanel.tsx:85 has no 'export' keyword. Must test indirectly by rendering with memory_bytes values (e.g., 512 → '512B', 2048 → '2.0KB', 1048576 → '1.0MB') and checking rendered text."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "The __tests__ directory contains all test files in a flat structure. The test file path frontend/src/__tests__/JunctionTreePanel.test.tsx is correct and matches the existing convention."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "MetricBox is defined as a module-internal function (JunctionTreePanel.tsx:73-83, no export). It must be tested indirectly through InferenceDiagnostics/JunctionTreePanel rendering. The warn color test (error_count > 0 → var(--color-danger)) can be verified by checking the rendered error count element's style or using a snapshot."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "BayesNetGraph.test.tsx uses { data, isLoading, isError, error } shape cast as ReturnType<typeof useEngineStats>. JunctionTreePanel only destructures { data, isLoading } (line 92), so the mock needs at minimum those two fields. Following the existing pattern with the full shape is safest."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.92,
+      "impact": "AnalyticsSummaryCards.test.tsx successfully uses toLocaleString() matching in assertions (e.g., (15000).toLocaleString()). The pattern works in CI. For extra safety, use small fixture values where toLocaleString() returns the plain number string (no thousands separators). For large numbers, always use value.toLocaleString() in assertions to match."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
