@@ -1,0 +1,111 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Interpret 'probability input' as testing the outcome selector dropdown that displays marginal probabilities, not a slider input",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Testing a probability slider (component has none)", "Testing a different component"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Assert idempotencyKey with toBeDefined() without mocking crypto.randomUUID(), matching existing test conventions",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Mocking crypto.randomUUID() for deterministic assertions"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Test TradeReceipt color-coding with distinct impactScore fixtures (danger >0.5, warning >0.2, muted <=0.2) via integration with parent component",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Only verifying TradeReceipt renders without checking color thresholds"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Test both early-return-null conditions: inactive market and unconfigured session",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Only testing unconfigured session guard"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Assert exact formula structure using toEqual for deep matching: formula: [[{ variableId, outcomeId, negated }]]",
+      "based_on": ["q5"],
+      "alternatives_rejected": ["Partial assertion checking only key fields like accountId and side"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Follow exact same mocking pattern as TradingPanel.test.tsx: mock useSession and useEventTrade at module level, use vi.mocked, reuse mockMarket fixture and session fixtures, use renderWithProviders",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": ["Different testing approach or utilities"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create test file frontend/src/__tests__/EventTradePanel.test.tsx with module-level mocks for useSession and useEventTrade, reusing mockMarket, configuredSession, unconfiguredSession fixtures from TradingPanel pattern, and a defaultMutationState helper typed to ReturnType<typeof useEventTrade>",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Write guard clause tests: (a) renders nothing when market.status is not 'active' — pass market with status 'closed', assert container.firstChild is null; (b) renders nothing when session is unconfigured — mock useSession to return unconfiguredSession, assert container.firstChild is null",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Write rendering test: verify 'Quick Trade' heading, Buy/Sell toggle buttons, outcome selector with options showing marginal probabilities (e.g. 'Yes @ 65.0%'), and trade button are present when session is configured and market is active",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Write interaction tests: (a) buy/sell toggle — click Sell button, verify side changes (button style or submit button text updates to 'Sell ...'); (b) outcome selection — select an outcome, verify Price label appears with correct percentage",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Write submission test: select outcome 'out-yes', click trade button, assert mockMutate called once with exact payload: accountId 'acc-123', formula [[{ variableId: 'mkt-1', outcomeId: 'out-yes', negated: false }]], side 'buy', idempotencyKey toBeDefined(), and session object",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Write submission with sell side test: toggle to sell, select outcome, submit, assert payload.side is 'sell'",
+      "depends_on": [1]
+    },
+    {
+      "step": 7,
+      "task": "Write pending state test: mock useEventTrade to return isPending:true, verify button shows 'Submitting...' text and is disabled",
+      "depends_on": [1]
+    },
+    {
+      "step": 8,
+      "task": "Write success state test: mock useEventTrade to return isSuccess:true with data containing order.orderId and assetDelta (beforeMinAsset, afterMinAsset, impactScore, riskLimit), verify 'Trade accepted — Order {orderId}' text and TradeReceipt values (Before, After, Impact %, Limit) are rendered",
+      "depends_on": [1]
+    },
+    {
+      "step": 9,
+      "task": "Write TradeReceipt color threshold tests: (a) impactScore 0.6 — assert impact element has style.color 'var(--color-danger)'; (b) impactScore 0.3 — assert style.color 'var(--color-warning, orange)'; (c) impactScore 0.1 — assert style.color 'var(--color-text-muted)'",
+      "depends_on": [1]
+    },
+    {
+      "step": 10,
+      "task": "Write error state test: mock useEventTrade to return isError:true with Error('Insufficient balance'), verify error message is displayed. Also test non-Error error fallback showing 'Trade failed'",
+      "depends_on": [1]
+    },
+    {
+      "step": 11,
+      "task": "Write no-submission guard test: do not select an outcome, click trade button, assert mockMutate was NOT called (handleTrade early return when !selectedOutcome)",
+      "depends_on": [1]
+    },
+    {
+      "step": 12,
+      "task": "Run vitest on the new test file to verify all tests pass: npx vitest run frontend/src/__tests__/EventTradePanel.test.tsx",
+      "depends_on": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
