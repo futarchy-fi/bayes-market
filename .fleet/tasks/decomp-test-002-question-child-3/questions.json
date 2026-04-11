@@ -1,0 +1,100 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The task says 'integrate with the D3 graph's node/edge references', but the graph (BayesNetGraph.tsx) is pure React SVG with no D3 dependency. Should we add D3 for animation, or implement the wave/highlight animations using CSS transitions + requestAnimationFrame on raw SVG elements?",
+      "category": "design",
+      "why_it_matters": "Adding D3 as a dependency changes the architecture significantly. Pure SVG + CSS/rAF is lighter and consistent with existing code, but D3 transitions would be more powerful for complex path animations."
+    },
+    {
+      "id": "q2",
+      "question": "How should the animation be triggered? Currently, evidence is set via AssumptionContext.addAssumption() and probability edits go through useProbabilityEdit() which invalidates React Query cache. Should we intercept at the context level (addAssumption), at the mutation level (onMutate/onSuccess), or both?",
+      "category": "design",
+      "why_it_matters": "The trigger point determines whether the animation fires on assumption-toggle (instant, before API call) or on data return (after API, when marginals actually change). The task says 'when evidence is set', suggesting the former."
+    },
+    {
+      "id": "q3",
+      "question": "The task requires 'frontend-simulated intermediate steps since backend returns only final marginals'. What heuristic should be used to simulate propagation order? Options: (a) BFS from evidence node along conditionalEdges, (b) use clique/junction-tree topology from engineStats, (c) simple distance-based delay from evidence node.",
+      "category": "design",
+      "why_it_matters": "The simulation approach determines visual realism. BFS along edges is simplest and most visually intuitive, but clique-based propagation would be more faithful to actual belief propagation. The graph currently has conditionalEdges and clique data available."
+    },
+    {
+      "id": "q4",
+      "question": "The current BayesNetGraph component renders each node via NodeWithDetail, which independently fetches market data via useMarket(). There's no shared state tracking 'which nodes changed' after an evidence update. How do we detect which nodes' marginals actually changed to animate only affected nodes?",
+      "category": "codebase",
+      "why_it_matters": "Without before/after marginal comparison, we can't selectively animate affected nodes. We'd need to either compare cached vs. new React Query data, or animate all connected nodes regardless of actual change."
+    },
+    {
+      "id": "q5",
+      "question": "Should the wave animation travel along the existing conditionalEdges only, or should it also consider edges implied by the junction tree cliques from engineStats? Currently, conditionalEdges may be empty if no conditional edits have been made.",
+      "category": "requirements",
+      "why_it_matters": "If conditionalEdges is empty (no conditional dependencies defined), there are no edges to animate along. The animation would need fallback behavior, or we'd need to derive edges from clique membership."
+    },
+    {
+      "id": "q6",
+      "question": "What should the animation duration and timing be? The existing CSS transitions use 0.2-0.3s ease for probability bars. A propagation wave across multiple nodes would need longer total duration (e.g., 150ms stagger per hop). Should the animation be interruptible if new evidence is set mid-animation?",
+      "category": "requirements",
+      "why_it_matters": "Animation timing affects UX quality. Too fast = invisible, too slow = feels sluggish. Interruptibility matters if users rapidly toggle assumptions."
+    },
+    {
+      "id": "q7",
+      "question": "The graph's SVG viewBox is computed from node positions and is static. Animations that add visual elements (glow effects, wave particles) outside node bounds could be clipped. Should we expand the viewBox or use overflow: visible?",
+      "category": "codebase",
+      "why_it_matters": "SVG clipping would make edge wave animations invisible if they extend beyond the computed viewBox. This is a subtle rendering issue that needs to be handled."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "We will NOT add D3 as a dependency, instead using CSS transitions, SVG animations (<animate>), and requestAnimationFrame on the existing pure-React SVG graph.",
+      "confidence": 0.75,
+      "if_wrong": "Would need to install d3/d3-transition, refactor BayesNetGraph to use D3 selections for node/edge manipulation, and handle React-D3 integration carefully."
+    },
+    {
+      "id": "a2",
+      "assumption": "The animation trigger will be AssumptionContext.addAssumption() (and removeAssumption), firing immediately when evidence is toggled, not waiting for backend response.",
+      "confidence": 0.8,
+      "if_wrong": "If triggered on API response instead, animation would have a noticeable delay but would only fire when data actually changes. Would need to hook into useProbabilityEdit's onSuccess."
+    },
+    {
+      "id": "a3",
+      "assumption": "BFS traversal along conditionalEdges from the evidence node is sufficient for simulating propagation order. No need for junction-tree-faithful propagation.",
+      "confidence": 0.85,
+      "if_wrong": "Would need to parse clique structure from engineStats and compute message-passing order, significantly more complex but more academically accurate."
+    },
+    {
+      "id": "a4",
+      "assumption": "The animation state (which nodes are highlighted, which edges are animating) can be managed via React state + useEffect in BayesNetGraph, without needing a separate context or state management.",
+      "confidence": 0.9,
+      "if_wrong": "If animation state needs to be shared across components (e.g., assumption panel also shows propagation), would need a dedicated AnimationContext."
+    },
+    {
+      "id": "a5",
+      "assumption": "Animating all connected nodes (not just those with changed marginals) is acceptable for the initial implementation, since detecting actual marginal changes requires comparing before/after snapshots.",
+      "confidence": 0.7,
+      "if_wrong": "Would need to capture pre-update marginals from React Query cache, compare with post-update values, and only animate nodes where marginals actually shifted."
+    },
+    {
+      "id": "a6",
+      "assumption": "The probability bar transitions already present (width 0.3s ease) are sufficient for step 3 (animate probability bar transitions), and we primarily need to add steps 1 (highlight evidence node) and 2 (edge wave animation).",
+      "confidence": 0.8,
+      "if_wrong": "May need to enhance bar transitions with color flash or bounce effect to make the update more noticeable during propagation animation."
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 3,
+    "complexity_reason": "Changes concentrated in 2-3 files (BayesNetGraph.tsx for rendering, AssumptionContext.tsx for trigger, possibly a new useAnimationPropagation hook). ~150-250 lines of new code for animation logic, SVG effects, and state management. No architectural changes needed - extends existing components.",
+    "uncertainty_score": 3,
+    "uncertainty_reason": "The SVG animation approach (CSS transitions vs rAF vs SVG <animate>) needs design decisions, and simulating propagation order without backend support requires heuristics. However, the codebase is well-understood and the integration points (AssumptionContext, BayesNetGraph) are clear.",
+    "independent_subproblems": [
+      "Evidence node highlight effect (glow/pulse on the node that received evidence)",
+      "Edge wave animation (visual effect traveling along SVG edges from source to targets)",
+      "Probability bar transition enhancement (coordinate bar updates with propagation timing)"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity 3 and uncertainty 3 are both below the threshold of 4. While there are 3 identifiable sub-tasks, they are tightly coupled: the edge wave animation depends on the evidence highlight timing, and the bar transitions depend on the wave arrival timing. These must be coordinated in a single animation sequence, making parallel execution impractical. All changes touch the same 2-3 files. A single implementation pass with a unified animation state machine is the most effective approach."
+  },
+  "spawn_children": false,
+  "children": []
+}
