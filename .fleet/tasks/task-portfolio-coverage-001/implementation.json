@@ -1,0 +1,69 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Refactor existing test: replaced vi.mock('@/lib/api/client') with hook-level mocks (vi.mock('@/lib/query/hooks') + vi.mock('@/features/session/context')). Set useSession to return unconfigured session. Existing assertion still passes.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Portfolio.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Added loading state test: useSession isConfigured=true, useAccountRisk returns isLoading=true. Asserts SVG spinner renders.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Portfolio.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Added error state test: useAccountRisk returns error. Asserts 'Account not found or no positions yet.' message renders.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Portfolio.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Added configured session with full data test: mocked useAccountRisk with complete risk data. Asserts heading 'Portfolio', MetricCard values (Limit 1000.00, Available 750.25, Consumed 249.75, Utilization 25.0%, Health healthy, Min Asset Overall 42.50).",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Portfolio.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Added health color tests using it.each for healthy/warning/critical. Asserts style.color equals var(--color-success)/var(--color-warning)/var(--color-danger) respectively.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Portfolio.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Added timestamp test: set updatedAt to known ISO string, asserts 'Last updated: {formatted date}' renders.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Portfolio.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Added per-market positions table test: 2 market entries with matching useMarkets data. Asserts table headers via columnheader role, market links with correct href and title text, numeric values formatted correctly.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Portfolio.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 8,
+      "task": "Added empty positions test: minAssets.markets=[], asserts 'No positions.' text renders.",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Portfolio.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 9,
+      "task": "Ran vitest — all 10 Portfolio tests pass, full suite of 353 tests across 32 files pass.",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
