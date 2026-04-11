@@ -1,0 +1,27 @@
+Error: config profile `[Task cgroup-test-002] PHASE 1: QUESTION GENERATION
+Title: Test cgroup freeze with working codex
+Description: Add a brief JSDoc comment to the main App function in src/App.tsx. This tests that codex can write files.
+Repo: /home/kelvin/bayes-market
+
+Explore the codebase. Identify what you need to know before building.
+
+Write your output to .fleet/tasks/cgroup-test-002/questions.json:
+{
+  "phase": "question",
+  "questions": [
+    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  ],
+  "assumptions": [
+    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  ],
+  "spawn_children": false,
+  "children": []
+}
+
+DECOMPOSITION: Set spawn_children=true if you need to investigate sub-questions
+that are too deep or tangential for this task. Each child runs a FULL 4-phase
+epistemic workflow (question→research→execute→validate). Only decompose when
+a sub-question truly warrants its own investigation cycle.
+Child format: { "id": "...", "title": "...", "description": "..." }
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: cgroup-test-002"` not found
