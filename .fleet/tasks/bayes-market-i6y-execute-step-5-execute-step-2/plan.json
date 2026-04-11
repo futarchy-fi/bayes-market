@@ -1,0 +1,84 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat this execution leaf as build-then-validate on the current branch: because `/v1/accounts/{id}/positions` still emits the legacy four-field row and lacks replay-backed `unrealizedPnl`, land or rebase the missing production seam before making the new `BayesMarketExposureProjectionTests` assertions authoritative.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Write the new tests against the current four-field serializer and leave them red until some later branch lands the replay/P&L seam.",
+        "Treat this leaf as validation-only and avoid touching the backend prerequisite at all."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep the new coverage in `BayesMarketExposureProjectionTests`, asserting representative replay/P&L behavior primarily through `get_account_positions(account_id)` while preserving the existing getter-versus-route parity baseline as the only required route-level smoke.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Drive every weighted-average, partial-close, and sign-flip scenario through `route_request(\"GET\", \"/v1/accounts/{id}/positions\")`.",
+        "Move the new cases into a separate helper-only cluster and stop checking route delegation near the public contract."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Update the existing `/positions` baseline to freeze the additive five-field row `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` together with lexical `(marketId, outcomeId)` ordering, instead of widening the payload with `/exposure` fields or leaving `unrealizedPnl` optional.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Reuse the richer `/exposure` row contract in the `/positions` assertions.",
+        "Only add new replay cases and leave the baseline parity test on the legacy four-field shape."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Build the weighted-average-add, partial-close, and sign-flip regressions mostly from accepted `EventTrade` writes and patch `query_market_atomic_probability_for_inference(...)` to fixed marks so the tests assert exact surviving signed `netSize` and `unrealizedPnl` against canonical fill pricing and exposure syncing.",
+      "based_on": ["q3", "q4"],
+      "alternatives_rejected": [
+        "Seed all representative replay cases directly in storage and give up the accepted EventTrade flow.",
+        "Assert only relative P&L behavior without fixing the mark or checking survivor size."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Cover the missing-history contract with a directly seeded live exposure row that has no usable replay history, asserting the row survives with `unrealizedPnl: 0.0`; validate the leaf with the focused service-index-plus-exposure pytest gate and keep the final audit diff scoped to `backend/server.py`, `tests/test_bayes_market_api.py`, and this task artifact.",
+      "based_on": ["q2", "q3", "q5"],
+      "alternatives_rejected": [
+        "Drop live rows that have no replayable history.",
+        "Broaden the verification gate to an unrelated backend sweep or skip the parent-branch diff audit."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Confirm the current branch has the replay-backed `/positions` production seam needed by this test leaf; if not, land or rebase the missing `backend/server.py` work so `BayesMarketExposureProjectionTests` can target the agreed five-field `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` contract instead of the legacy four-field serializer.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Update the existing `BayesMarketExposureProjectionTests` `/positions` baseline in `tests/test_bayes_market_api.py` so the getter-versus-route parity assertion now freezes lexical wire ordering and the full five-field row shape, including exact `unrealizedPnl` values for the seeded canonical rows.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add representative replay/P&L regressions in `tests/test_bayes_market_api.py` for same-side weighted-average adds, partial closes, and sign flips, building the fixtures mostly from accepted `POST /v1/markets/{id}/orders/event-trade` writes, patching the mark-query seam to fixed values, and asserting both the surviving signed `netSize` and exact `unrealizedPnl`.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Add a missing-history fallback regression in `BayesMarketExposureProjectionTests` that directly seeds a live `ACCOUNT_EXPOSURE` row without usable replayable order history and asserts `get_account_positions(account_id)` preserves the row with `unrealizedPnl: 0.0` instead of pruning it, dropping it, or failing the account read.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 5,
+      "task": "Run `python3 -m pytest -v --tb=short tests/test_bayes_market_api.py::BayesMarketApiUnitTests::test_root_route_returns_service_index tests/test_bayes_market_api.py::BayesMarketExposureProjectionTests`, review `git diff ff/Tbayes-market-i6y-execute-step-4..HEAD` for scope control, then stage the validated changes and create the execution commit.",
+      "depends_on": [3, 4]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The current worktree already exposes `/v1/accounts/{id}/positions` with a minimal four-field serializer, but `backend/server.py` still has no ordered EventTrade replay helper or row-level basis outputs. Should this leaf implement both the missing replay helper and the `/positions` integration locally, or is it expected to wait for a separate prerequisite branch?",
+      "category": "codebase",
+      "why_it_matters": "This decides whether the implementation stays a serializer-only edit or must also backfill new replay helpers and internal result shapes in the same patch."
+    },
+    {
+      "id": "q2",
+      "question": "What exact conditions should make matched filled `EventTrade` history unusable for row pricing: only missing history, or also invalid `side`, non-finite or non-parsable `size`/`price`, `size <= 0`, and probability `price` values outside `[0.0, 1.0]`?",
+      "category": "requirements",
+      "why_it_matters": "The replay seam needs one deterministic definition of 'no usable history' so `/positions` knows when to downgrade a live row to `unrealizedPnl: 0.0` instead of silently computing bad basis math or raising."
+    },
+    {
+      "id": "q3",
+      "question": "If deterministic replay reconstructs a surviving position whose rounded `netSize` or sign disagrees with the live `ACCOUNT_EXPOSURE` row for the same `(accountId, marketId, outcomeId)` slice, which source is authoritative for `/positions`: preserve the live row and downgrade only `unrealizedPnl` to `0.0`, trust the replayed survivor, or fail the whole read?",
+      "category": "design",
+      "why_it_matters": "The route already uses `ACCOUNT_EXPOSURE` for liveness and wire ordering. This mismatch rule determines whether replay augments the row conservatively or is allowed to override the public position state."
+    },
+    {
+      "id": "q4",
+      "question": "If `query_market_atomic_probability_for_inference(marketId, outcomeId)` cannot produce a mark for an otherwise live row because inference fails or the market is missing, should `/v1/accounts/{id}/positions` fail, omit the row, or preserve the row with `unrealizedPnl: 0.0`?",
+      "category": "requirements",
+      "why_it_matters": "The replay seam adds a new per-row inference dependency. The contract needs one explicit fallback rule so a single mark failure does not accidentally redefine the route's current projection-local behavior."
+    },
+    {
+      "id": "q5",
+      "question": "What rounding contract should the replay-backed pricing use for signed average cost and wire `unrealizedPnl`: round only the final public scalar, or also round intermediate accumulator transitions such as adds, partial closes, and sign-flip survivor basis updates?",
+      "category": "design",
+      "why_it_matters": "Deterministic ordering alone is not enough for stable tests; the seam also needs one rounding policy so replayed weighted-average math cannot drift across scenarios or produce mismatched exact assertions."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This worktree already contains the additive `/v1/accounts/{id}/positions` route, service-index entry, GET-only dispatch, and baseline route-parity tests; the missing work is the replay-backed `unrealizedPnl` seam in `backend/server.py`.",
+      "confidence": 0.99,
+      "if_wrong": "The task would need broader route-surface or test-plumbing work instead of focusing on replay-backed pricing."
+    },
+    {
+      "id": "a2",
+      "assumption": "Live-row existence, rounded-zero pruning, and lexical `(marketId, outcomeId)` wire ordering should continue to come from `ACCOUNT_EXPOSURE`, while replay only augments `unrealizedPnl` and must not rebuild the response directly from `ORDERS`.",
+      "confidence": 0.97,
+      "if_wrong": "The implementation would need a different authority model for `/positions`, likely changing liveness, sorting, and possibly 404 behavior."
+    },
+    {
+      "id": "a3",
+      "assumption": "Replay history should come only from filled `EventTrade` orders in `ORDERS` that match the live `(accountId, marketId, outcomeId)` slice, using deterministic `(filledAt, id)` ordering and the stored `targetMarketId`/`targetOutcomeId` fields when present.",
+      "confidence": 0.98,
+      "if_wrong": "The helper would need a wider or different history source, which would expand the seam beyond the current server-side order model."
+    },
+    {
+      "id": "a4",
+      "assumption": "The public wire row should remain the agreed five-field contract `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` with `0.0` fallback behavior, not a wider diagnostic or basis-bearing shape.",
+      "confidence": 0.96,
+      "if_wrong": "Both the serializer scope and the later regression plan would need to widen to additional public fields."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child tasks are needed because the relevant code, tests, and prior `bayes-market-i6y` task artifacts that define this seam are already present in the current worktree.",
+      "confidence": 0.99,
+      "if_wrong": "A follow-on investigation would be required before implementing the seam safely."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,115 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Treat step 5 as production-plus-validation on this branch. The `/positions` route, service-index entry, router hookup, and baseline discoverability/GET/404/405 coverage are already landed here, but `backend/server.py` still serializes the legacy four-field row and prior i6y validations explicitly say the replay-backed `unrealizedPnl` seam never landed. I found no local `ff/Tbayes-market-i6y*` ref with that prerequisite implemented, so this leaf is not validation-only.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:127",
+        "backend/server.py:1651",
+        "backend/server.py:4010",
+        "tests/test_bayes_market_api.py:570",
+        "tests/test_bayes_market_api.py:4767",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/validation.json:4",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/validation.json:4"
+      ],
+      "uncertainty": "A branch outside the refs available in this checkout could exist, but nothing in local `i6y` history or artifacts points to one.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The targeted step-5 backend gate should be `python3 -m pytest -v --tb=short tests/test_bayes_market_api.py::BayesMarketApiUnitTests::test_root_route_returns_service_index tests/test_bayes_market_api.py::BayesMarketExposureProjectionTests`. `BayesMarketExposureProjectionTests` owns the `/positions` getter, route parity, 404/405 behavior, and the planned replay/P&L regressions, while the root-route unit test is the checked-in assertion that freezes `/v1/accounts/{id}/positions` discoverability in the service index. I ran that exact selector on the current baseline and it passed with 15 tests.",
+      "confidence": 0.99,
+      "evidence": [
+        "tests/test_bayes_market_api.py:570",
+        "tests/test_bayes_market_api.py:579",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4836",
+        "tests/test_bayes_market_api.py:4896",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:97",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4-execute-step-5/validation.json:4"
+      ],
+      "uncertainty": "If execution introduces a new standalone replay-helper test outside `BayesMarketExposureProjectionTests`, the selector may need one extra node-specific target, but the current plan does not show that.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes. Count the missing prerequisite as complete only when `/positions` emits the additive five-field row `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` from live `ACCOUNT_EXPOSURE` rows plus deterministic replay of matching filled `EventTrade` orders in ascending `(filledAt, id)` order. That replay must preserve live-row liveness and lexical wire ordering, use weighted-average accumulation for same-side adds, preserve basis across partial closes, reset basis to the crossing fill on sign flips, compute `unrealizedPnl = (mark - averageCost) * netSize`, and downgrade to `unrealizedPnl: 0.0` when a live row has no usable replay history or its per-row mark lookup fails.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y/plan.json:27",
+        ".fleet/tasks/bayes-market-i6y/plan.json:37",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/plan.json:16",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/plan.json:27",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/plan.json:38",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/plan.json:49",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/plan.json:61",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/plan.json:71",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:83",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:88",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:93"
+      ],
+      "uncertainty": "The exact rounding contract for replay intermediate values versus the final `unrealizedPnl` scalar is still not frozen in product code here, but the behavioral seam and fallback rules are clear.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Getter-level verification inside `BayesMarketExposureProjectionTests` plus the existing getter-versus-route parity baseline is sufficient. The in-repo step-4 plan explicitly keeps deterministic replay and P&L coverage primarily at the helper/getter level and limits route-level checks to baseline serialization parity and smoke. Step 5 therefore does not require a direct `/v1/accounts/{id}/positions` read after every weighted-average, partial-close, and sign-flip scenario.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:15",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:68",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:82",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:87",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-4/plan.json:92",
+        "tests/test_bayes_market_api.py:4767",
+        "tests/test_bayes_market_api.py:4808"
+      ],
+      "uncertainty": "Adding one extra representative route smoke would still be reasonable, but the codebase does not support making that a hard requirement for every replay-math case.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Use `ff/Tbayes-market-i6y-execute-step-4` as the pre-commit audit baseline. That is the last execution leaf that already carried the `/positions` route and baseline tests before this step, and earlier validation on this line already used that parent when checking for missing execution. I also verified locally that diffing `ff/Tbayes-market-i6y-execute-step-4..HEAD` isolates only this task's `.fleet` file before implementation, so the expected product-file boundary for a completed step-5 commit remains `backend/server.py` and `tests/test_bayes_market_api.py`, plus `.fleet/tasks/bayes-market-i6y-execute-step-5/*`.",
+      "confidence": 0.93,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y/plan.json:69",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4-execute-step-5/validation.json:4",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/questions.json:29",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/questions.json:49"
+      ],
+      "uncertainty": "A reviewer could diff against the merged carrier branch `ff/Tbayes-market-i6y` instead, but for product files that is materially equivalent here and less precise than the step-4 leaf baseline.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The branch already has the additive `/positions` route and baseline contract tests, so the blocker is the missing replay/P&L production seam rather than route plumbing."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "This step should not be treated as a pure rerun. Earlier i6y artifacts still correctly describe the replay/P&L prerequisite and representative exact-P&L regressions as not yet landed in product code."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The execution and audit boundary stays backend-only: `backend/server.py`, `tests/test_bayes_market_api.py`, and this task's `.fleet` artifacts. Other file edits would be scope creep unless they are ignored test-run byproducts."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "No child task is needed because the branch ancestry, current serializer behavior, targeted tests, and missing replay/P&L seam are all visible in this checkout."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

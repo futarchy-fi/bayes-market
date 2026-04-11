@@ -1,0 +1,120 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "This leaf should implement both pieces locally: backfill the missing replay helper seam in `backend/server.py` and wire it into `/v1/accounts/{id}/positions` on this branch. The current checkout already has the route, service-index entry, dispatcher hookup, and baseline `/positions` tests, but product code still stops at the legacy four-field serializer and prior `i6y` execution artifacts explicitly say the replay/P&L implementation never landed here. The checked-in step plans for this line reject waiting for some other prerequisite branch and instead freeze a build-then-validate flow on the current branch.",
+      "confidence": 0.99,
+      "evidence": [
+        "backend/server.py:1651",
+        "backend/server.py:1666",
+        "backend/server.py:1737",
+        "tests/test_bayes_market_api.py:570",
+        "tests/test_bayes_market_api.py:4767",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-5/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-2/validation.json:4"
+      ],
+      "uncertainty": "A later rebase could change branch ancestry, but nothing in this worktree points to an authoritative prerequisite branch that already carries the exact `/positions` replay seam.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Matched filled `EventTrade` history should be treated as unusable for row pricing both when no replayable history exists and when any selected replay fill has invalid accumulator inputs. The collection step may skip otherwise matching rows that are missing `filledAt` or `id`, but once a fill is admitted for replay the whole slice should downgrade to no usable history if `side` is not `buy` or `sell`, if `size` or `price` is non-parsable or non-finite, if `size <= 0`, or if `price` is outside `[0.0, 1.0]`. In all of those cases the live row stays on the wire and `/positions` falls back to `unrealizedPnl: 0.0`.",
+      "confidence": 0.96,
+      "evidence": [
+        "backend/server.py:1324",
+        "backend/server.py:1332",
+        "backend/server.py:3486",
+        "backend/server.py:3502",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-1/plan.json:28",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-2/plan.json:26",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/plan.json:27"
+      ],
+      "uncertainty": "The exact downgrade path is frozen in task artifacts rather than implemented product code, but the invalid-input list itself is explicit in the later step-3 plan.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The live `ACCOUNT_EXPOSURE` row remains authoritative. If replay reconstructs a survivor whose rounded `netSize` or sign disagrees with the live row for the same `(accountId, marketId, outcomeId)` slice, `/positions` should preserve the live row and downgrade only `unrealizedPnl` to `0.0`; it should not overwrite the public row from replay and should not fail the whole read. The compatibility check is exact after the backend's canonical six-decimal rounding, not a tolerance band.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:1611",
+        "backend/server.py:1651",
+        "backend/server.py:1666",
+        "backend/server.py:1737",
+        "tests/test_bayes_market_api.py:4767",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/plan.json:16",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/plan.json:71",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4-execute-step-3/research.json:53"
+      ],
+      "uncertainty": "Current product code still lacks the replay seam, so the mismatch rule is frozen by the `i6y` artifacts rather than exercised by live tests in this checkout.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Preserve the row and downgrade only that row's `unrealizedPnl` to `0.0` when `query_market_atomic_probability_for_inference(marketId, outcomeId)` cannot produce a mark because inference fails or the market is missing. `/positions` is still a projection-local read over `ACCOUNT_EXPOSURE`; introducing a hard per-row inference dependency would change the route's existing behavior much more than the replay seam requires. The explicit fallback decision in the step-3 plan is per-row degradation, not request failure or row omission.",
+      "confidence": 0.97,
+      "evidence": [
+        "backend/server.py:1711",
+        "backend/server.py:1737",
+        "tests/test_bayes_market_api.py:4836",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/plan.json:49",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-3/research.json:59"
+      ],
+      "uncertainty": "The catch-and-downgrade branch is not implemented yet in product code here, but the plan and prior research are explicit about the intended fallback.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Replay-backed pricing should round at every fill transition, not only once on the final public scalar. The frozen contract is to use the backend's canonical six-decimal helpers to normalize each fill's `size` and `price`, derive a rounded signed delta, round the updated survivor `netSize`, coerce `-0.0` to `0.0`, and immediately round any recomputed weighted `averageCost`, including partial-close and sign-flip survivor updates. The emitted `unrealizedPnl` should then be serialized at the same canonical six-decimal precision, but the decisive in-tree choice is that intermediate accumulator transitions are rounded too.",
+      "confidence": 0.94,
+      "evidence": [
+        "backend/server.py:1132",
+        "backend/server.py:1224",
+        "backend/server.py:1324",
+        "backend/server.py:1334",
+        "backend/server.py:3486",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-2/plan.json:16",
+        ".fleet/tasks/bayes-market-i6y-execute-step-3-execute-step-2/research.json:21",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4-execute-step-3/research.json:53"
+      ],
+      "uncertainty": "Intermediate rounding is explicit. The exact helper name that will serialize the final wire `unrealizedPnl` is still inferred because product code has not implemented that field yet, although the backend's scalar precision is uniformly six decimals today.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "This task can stay focused on the missing replay-backed pricing seam in `backend/server.py`; no broader route-surface or dispatcher work is needed."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Keep live-row existence, rounded-zero pruning, and lexical wire ordering sourced from `ACCOUNT_EXPOSURE`, with replay augmenting only `unrealizedPnl`."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Replay should read only filled `EventTrade` orders from `ORDERS`, matched to the live slice with `targetMarketId` and `targetOutcomeId` when present and ordered by `(filledAt, id)`."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The intended public contract remains the additive five-field row `{marketId, outcomeId, netSize, lastTradePrice, unrealizedPnl}` with `0.0` fallback behavior, not a wider diagnostic or basis-bearing payload."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child task is needed. The necessary code, tests, and prior `i6y` task artifacts are all present in this worktree."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

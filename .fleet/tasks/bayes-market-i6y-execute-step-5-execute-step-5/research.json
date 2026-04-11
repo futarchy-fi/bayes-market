@@ -1,0 +1,115 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The premise is slightly stale: `HEAD` is already the leaf question commit `bc2fe859`, one commit ahead of `ff/Tbayes-market-i6y-execute-step-5` (`8e392fce`). That does not change the decision. This leaf still needs to backfill the missing backend and test implementation before any final execution commit can honestly stage a \"validated implementation\". The checked-in parent step-5 plan still treats replay-backed `unrealizedPnl` as the missing prerequisite, the live code still serves the legacy four-field `/positions` row, and the latest local i6y validations still reject the branch because no replay/P&L product diff exists. I found no local `ff/Tbayes-market-i6y*` ref or artifact that already contains the authoritative validated implementation to stage instead.",
+      "confidence": 0.98,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:6",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:60",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:69",
+        "backend/server.py:1651",
+        "tests/test_bayes_market_api.py:4767",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-i6y-execute-step-4/validation.json:4"
+      ],
+      "uncertainty": "An unseen ref outside this checkout could exist, but no local `i6y` ref, task artifact, or product file points to one.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "The final execution proof should be a fresh rerun in this checkout. The parent step-5 plan explicitly sequences the focused pytest command before staging and the final execution commit, and the latest i6y validation says that the same selector passed only during validation and therefore is not preserved in branch history. Because this line still has no checkout-authoritative `execution.json`, unchanged `backend/server.py` and `tests/test_bayes_market_api.py` are not enough to inherit proof from a prior validation run.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:16",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:69",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:80",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-ed8-execute-step-5/execution.json:9",
+        ".fleet/tasks/bayes-market-ed8-execute-step-5/execution.json:18"
+      ],
+      "uncertainty": "If an earlier i6y `execution.json` had already recorded this exact selector and the product files were unchanged since then, reuse could be reconsidered. No such artifact exists locally.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "Use both comparisons, but for different claims. `git diff ff/Tbayes-market-i6y-execute-step-4..HEAD` should remain the primary contract-consistency review because the parent step-5 plan already freezes that as the broad scope gate for the completed implementation. `git diff ff/Tbayes-market-i6y-execute-step-5..HEAD` should be the secondary leaf-local attribution check so this branch can prove what it added on top of the merged parent. For the eventual final execution commit that actually backfills step 5, the only newly staged paths should be `backend/server.py`, `tests/test_bayes_market_api.py`, the new parent artifact `.fleet/tasks/bayes-market-i6y-execute-step-5/execution.json`, and this leaf's `.fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-5/*` files. Anything else should be treated as scope creep.",
+      "confidence": 0.94,
+      "evidence": [
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:47",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:75",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:80",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-4/validation.json:4",
+        ".fleet/tasks/bayes-market-ed8-execute-step-5/execution.json:4",
+        ".fleet/tasks/bayes-market-ed8-execute-step-5/execution.json:7"
+      ],
+      "uncertainty": "If execution is split again across another child branch, the leaf-local artifact path could change, but the broad step-4 audit baseline should still stay authoritative.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. This leaf should create the missing parent artifact `.fleet/tasks/bayes-market-i6y-execute-step-5/execution.json` before the final commit. Local execute-phase precedent records the focused gate and scope review in `execution.json`, and an analogous final execute leaf (`u44`) was rejected specifically because the parent `execution.json` was still missing even though validation independently reran the gate. Leaving only this leaf's metadata would leave the parent step without the execute artifact that ties the pytest gate and diff review to the final commit.",
+      "confidence": 0.9,
+      "evidence": [
+        ".fleet/tasks/bayes-market-ed8-execute-step-5/execution.json:2",
+        ".fleet/tasks/bayes-market-ed8-execute-step-5/execution.json:4",
+        ".fleet/tasks/bayes-market-ed8-execute-step-5/execution.json:9",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-5/research.json:34",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-5/validation.json:4",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:80"
+      ],
+      "uncertainty": "No i6y-specific validation has yet rejected the missing parent `execution.json`, so this is inferred from the repo's execute-phase convention and the analogous parent-step precedent rather than an already-recorded i6y failure.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "Record explicit checks of both the live worktree and the staged index, not just a post-`git add -A` clean tree. The last-mile proof should keep the historical diff audits, inspect `git diff --name-only` and optionally `git status --short` for unstaged drift, stage with `git add -A`, then inspect `git diff --cached --name-only` to prove the index still contains only the allowed implementation and task-artifact paths before committing.",
+      "confidence": 0.95,
+      "evidence": [
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-5/research.json:62",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-5/plan.json:35",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-5/plan.json:63",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-5/plan.json:68",
+        ".fleet/tasks/bayes-market-u44-execute-step-5-execute-step-5/validation.json:4",
+        ".fleet/tasks/bayes-market-i6y-execute-step-5/plan.json:80"
+      ],
+      "uncertainty": "The exact command list can vary slightly, but a single historical diff or a single post-stage cleanliness check is weaker than separate worktree and index inspection.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "WRONG",
+      "confidence": 1.0,
+      "impact": "This leaf is already one commit past the parent merge: `HEAD` is `bc2fe859`, not `8e392fce`. The leaf-local diff is therefore not empty even before any future execution work."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The validated implementation is still missing. `backend/server.py` still emits the four-field `/positions` row and `tests/test_bayes_market_api.py` still freeze that baseline, so this step cannot be reduced to artifact writing alone."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The parent step still needs its own execute artifact. A final commit that adds only this leaf's metadata would leave the parent execution proof absent."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "The primary contract audit should stay anchored to `ff/Tbayes-market-i6y-execute-step-4`, with the step-5 parent baseline used only as a secondary leaf-attribution check."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "No child investigation is needed. The ancestry, current serializer/test state, missing parent artifact, and execution-artifact precedent are all visible in this checkout."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
