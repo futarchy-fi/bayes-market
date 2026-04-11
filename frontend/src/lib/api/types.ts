@@ -346,3 +346,25 @@ export interface Session {
   accountId: string;
   agentId: string;
 }
+
+export interface CptParent {
+  variableId: string;
+  marketId: string | null;
+  title: string;
+  outcomes: MarketOutcome[];
+}
+
+export interface CptEntry {
+  contextKey: string;
+  context: Array<{ variableId: string; outcomeId: string }>;
+  marginals: Record<string, number>;
+}
+
+export interface CptResponse {
+  marketId: string;
+  variableId: string;
+  outcomes: MarketOutcome[];
+  parents: CptParent[];
+  entries: CptEntry[];
+  meta: Meta;
+}

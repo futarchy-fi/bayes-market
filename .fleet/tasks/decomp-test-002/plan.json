@@ -1,0 +1,119 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Integrate features into ForceDirectedGraph (the active component) rather than replacing it with BayesNetGraph or building a new component",
+      "based_on": ["q1", "q6"],
+      "alternatives_rejected": [
+        "Replace ForceDirectedGraph with BayesNetGraph — would lose D3 force layout and drag/zoom",
+        "Build a third graph component — unnecessary duplication when ForceDirectedGraph just needs feature ports",
+        "Merge both graph components — too risky and creates a monolithic component"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Wire ForceDirectedGraph onNodeClick to navigate/select market for existing CptPanel rather than building a new CPT editor",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Build inline CPT editing inside graph nodes — too complex and CptPanel already handles this",
+        "Open CptPanel as a modal — CptPanel already renders as a panel, modal would break existing UX"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Port useAnimationPropagation integration from BayesNetGraph into ForceDirectedGraph using the same CSS keyframe approach",
+      "based_on": ["q3", "q7"],
+      "alternatives_rejected": [
+        "Rewrite animation with framer-motion — adds unnecessary dependency when CSS keyframes already work",
+        "Skip animation in ForceDirectedGraph — core feature requirement left unmet"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Create a GraphToolbar component to house export/import buttons and view switcher, reusing existing networkExport/networkImport utilities",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Embed toolbar directly in ForceDirectedGraph — violates separation of concerns and bloats the component",
+        "Add buttons to the existing UndoRedoToolbar — mixes unrelated concerns"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Keep undo/redo scoped to local state only, using existing HistoryContext and command pattern",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Extend undo/redo to server mutations — backend has no reversal endpoints and mutations may not be idempotent"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Add a view switcher toggle between ForceDirectedGraph and BayesNetGraph, allowing both to coexist as alternative views",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Only show ForceDirectedGraph — loses circular layout option that may be useful for small networks",
+        "Only show BayesNetGraph — loses D3 force layout with drag/zoom"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add selectedMarketId state to MarketDetail and wire ForceDirectedGraph onNodeClick to update it, passing selectedMarketId to CptPanel so clicking a graph node shows that node's CPT",
+      "depends_on": [],
+      "estimated_lines": 40,
+      "risk": "low"
+    },
+    {
+      "step": 2,
+      "task": "Integrate useAnimationPropagation into ForceDirectedGraph: import the hook, apply CSS animation classes to SVG node/edge elements based on animatingNodes/animatingEdges sets, port CSS keyframes (evidence-pulse, propagation-arrive, edge-flow) and SVG filter definitions from BayesNetGraph",
+      "depends_on": [],
+      "estimated_lines": 130,
+      "risk": "medium"
+    },
+    {
+      "step": 3,
+      "task": "Create GraphToolbar component with export button (calls downloadJson from networkExport), import button (hidden file input + readAndValidateFile from networkImport), and graph view toggle (force-directed vs circular)",
+      "depends_on": [],
+      "estimated_lines": 110,
+      "risk": "low"
+    },
+    {
+      "step": 4,
+      "task": "Integrate GraphToolbar into MarketDetail page: render above the graph area, connect import success to React Query cache invalidation for graph data refresh, wire view toggle state to conditionally render ForceDirectedGraph or BayesNetGraph",
+      "depends_on": [3],
+      "estimated_lines": 60,
+      "risk": "low"
+    },
+    {
+      "step": 5,
+      "task": "Connect assumption changes to trigger propagation animation in ForceDirectedGraph: listen to AssumptionContext changes and call triggerAnimation with the evidence node ID when assumptions are added/changed",
+      "depends_on": [2],
+      "estimated_lines": 40,
+      "risk": "low"
+    },
+    {
+      "step": 6,
+      "task": "Verify useUndoRedoKeyboard is active within ForceDirectedGraph context, ensure keyboard shortcuts (Ctrl+Z, Ctrl+Shift+Z) work when graph is focused, add integration tests for the full workflow (click node → edit CPT → undo → export)",
+      "depends_on": [1, 2, 3, 4, 5],
+      "estimated_lines": 60,
+      "risk": "low"
+    }
+  ],
+  "decomposition_assessment": {
+    "total_steps": 6,
+    "estimated_total_lines": 440,
+    "high_risk_steps": 0,
+    "parallelizable_groups": [["step1", "step2", "step3"], ["step4", "step5"], ["step6"]],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Estimated 440 total lines is under the 500-line threshold. Zero high-risk steps (only 1 medium-risk). While steps 1-3 are parallelizable, they all touch MarketDetail.tsx integration points and share graph component context, making parallel child spawning less beneficial than sequential integration. The work is primarily wiring existing components together — most features (CptPanel, HistoryContext, networkExport/Import, useAnimationPropagation) are fully implemented but disconnected. Integration work benefits from a single agent maintaining coherent state across the page-level wiring."
+  },
+  "spawn_children": false,
+  "children": []
+}

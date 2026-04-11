@@ -1,6 +1,12 @@
-import { useMemo } from "react";
+import { useMemo, useEffect, useRef, useState, useCallback } from "react";
 import { useMarkets, useMarket, useEngineStats } from "@/lib/query/hooks";
 import { formatProbability } from "@/lib/utils/format";
+import { useAssumptions } from "@/features/assumptions/AssumptionContext";
+import { useAnimationPropagation } from "./useAnimationPropagation";
+import { deriveEdgesFromCliques, mergeEdges } from "./deriveEdges";
+import { buildNetworkExport, downloadJson } from "./networkExport";
+import { readAndValidateFile } from "./networkImport";
+import type { NetworkExportSchema } from "./networkExportSchema";
 import type { MarketSummary } from "@/lib/api/types";
 
 interface GraphNode {
@@ -28,7 +34,7 @@ interface BayesNetGraphProps {
 
 const NODE_W = 160;
 const NODE_H = 72;
-const PADDING = 40;
+const PADDING = 60;
 
 function layoutNodes(markets: MarketSummary[]): GraphNode[] {
   // Arrange in a circle for small N, grid for larger
@@ -57,16 +63,21 @@ function MarketNode({
   node,
   isFocus,
   detail,
+  animationClass,
 }: {
   node: GraphNode;
   isFocus: boolean;
   detail?: { marginals: Record<string, number>; outcomes: Array<{ id: string; name: string }> };
+  animationClass?: string;
 }) {
   const borderColor = isFocus ? "var(--color-primary)" : "var(--color-border)";
   const bg = isFocus ? "var(--color-bg-surface)" : "var(--color-bg)";
 
   return (
-    <g transform={`translate(${node.x - NODE_W / 2}, ${node.y - NODE_H / 2})`}>
+    <g
+      transform={`translate(${node.x - NODE_W / 2}, ${node.y - NODE_H / 2})`}
+      className={animationClass}
+    >
       <rect
         width={NODE_W}
         height={NODE_H}
@@ -98,8 +109,9 @@ function MarketNode({
                   width={Math.max(2, barW * p)}
                   height={10}
                   rx={3}
-                  fill={p > 0.5 ? "var(--color-success)" : "var(--color-info)"}
-                  opacity={0.7}
+                  fill={animationClass ? "var(--color-info)" : p > 0.5 ? "var(--color-success)" : "var(--color-info)"}
+                  opacity={animationClass ? 0.9 : 0.7}
+                  style={{ transition: "width 0.3s ease, opacity 0.3s ease, fill 0.3s ease" }}
                 />
                 <text x={4} y={8} fontSize="8" fill="var(--color-text)" fontWeight={500}>
                   {o.name}: {formatProbability(p)}
@@ -213,15 +225,17 @@ function CliqueOverlay({
 function NodeWithDetail({
   node,
   isFocus,
+  animationClass,
 }: {
   node: GraphNode;
   isFocus: boolean;
+  animationClass?: string;
 }) {
   const { data } = useMarket(node.id);
   const detail = data
     ? { marginals: data.market.marginals, outcomes: data.market.outcomes }
     : undefined;
-  return <MarketNode node={node} isFocus={isFocus} detail={detail} />;
+  return <MarketNode node={node} isFocus={isFocus} detail={detail} animationClass={animationClass} />;
 }
 
 export function BayesNetGraph({
@@ -231,9 +245,102 @@ export function BayesNetGraph({
   const { data: marketsData, isLoading } = useMarkets();
   const { data: engineStats } = useEngineStats(focusMarketId ?? "", { enabled: !!focusMarketId });
 
-  const markets = marketsData?.markets ?? [];
-  const nodes = useMemo(() => layoutNodes(markets), [markets]);
-  const cliques = engineStats?.cliques.cliques ?? [];
+  // --- Snapshot state for imported networks ---
+  const [snapshot, setSnapshot] = useState<NetworkExportSchema | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const liveMarkets = marketsData?.markets ?? [];
+  const markets = snapshot
+    ? snapshot.nodes.map((n) => ({
+        id: n.id,
+        title: n.title,
+        status: n.status,
+        liquidity: n.liquidity,
+        volume: n.volume,
+        expires_at: n.expires_at,
+      }))
+    : liveMarkets;
+
+  const nodes = useMemo(
+    () =>
+      snapshot
+        ? snapshot.nodes.map((n) => ({
+            id: n.id,
+            title: n.title.length > 28 ? n.title.slice(0, 26) + "…" : n.title,
+            x: n.position.x,
+            y: n.position.y,
+            marginals: {} as Record<string, number>,
+            outcomeName: "",
+            status: n.status,
+          }))
+        : layoutNodes(liveMarkets),
+    [snapshot, liveMarkets],
+  );
+  const cliques = snapshot ? snapshot.cliques : (engineStats?.cliques.cliques ?? []);
+
+  // --- Animation: detect assumption changes and trigger propagation ---
+  const { assumptions } = useAssumptions();
+  const { animatingNodes, animatingEdges, evidenceNodeId, triggerAnimation, cancelAnimation } =
+    useAnimationPropagation();
+  const prevAssumptionsRef = useRef(assumptions);
+
+  // Derive all edges for BFS traversal (clique-derived + conditional)
+  const allEdges = useMemo(
+    () => mergeEdges(deriveEdgesFromCliques(cliques), conditionalEdges),
+    [cliques, conditionalEdges],
+  );
+
+  useEffect(() => {
+    const prev = prevAssumptionsRef.current;
+    prevAssumptionsRef.current = assumptions;
+
+    if (prev === assumptions) return;
+
+    // Find the assumption that was added or removed
+    const added = assumptions.find(
+      (a) => !prev.some((p) => p.variableId === a.variableId && p.outcomeId === a.outcomeId),
+    );
+    const removed = prev.find(
+      (p) => !assumptions.some((a) => a.variableId === p.variableId && a.outcomeId === p.outcomeId),
+    );
+
+    const changedVariableId = added?.variableId ?? removed?.variableId;
+    if (!changedVariableId) return;
+
+    // Find the node (market) that corresponds to the changed variable.
+    // Assumption variableId may match market id (MarketSummary only has id).
+    const evidenceNode = markets.find((m) => m.id === changedVariableId);
+    if (evidenceNode && allEdges.length > 0) {
+      triggerAnimation(evidenceNode.id, allEdges);
+    }
+  }, [assumptions, markets, allEdges, triggerAnimation]);
+
+  // Cancel animation on unmount
+  useEffect(() => cancelAnimation, [cancelAnimation]);
+
+  // --- Export handler ---
+  const handleExport = useCallback(() => {
+    const cliqueEdges = deriveEdgesFromCliques(cliques);
+    const data = buildNetworkExport(markets as MarketSummary[], nodes, cliqueEdges, conditionalEdges, cliques);
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    downloadJson(data, `bayes-network-${ts}.json`);
+  }, [markets, nodes, cliques, conditionalEdges]);
+
+  // --- Import handler ---
+  const handleImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportError(null);
+    const result = await readAndValidateFile(file);
+    if (result.ok) {
+      setSnapshot(result.data);
+    } else {
+      setImportError(result.error);
+    }
+    // Reset so the same file can be re-selected
+    e.target.value = "";
+  }, []);
 
   if (isLoading) {
     return (
@@ -267,20 +374,102 @@ export function BayesNetGraph({
     <div style={panelStyle}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-sm)" }}>
         <h3 style={{ fontSize: "1rem", fontWeight: 600 }}>
-          Bayesian Network
+          Bayesian Network{snapshot ? " (imported)" : ""}
         </h3>
-        <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-          {markets.length} variable{markets.length !== 1 ? "s" : ""}
-          {conditionalEdges.length > 0 && ` · ${conditionalEdges.length} edge${conditionalEdges.length !== 1 ? "s" : ""}`}
-          {cliques.length > 0 && ` · ${cliques.length} clique${cliques.length !== 1 ? "s" : ""}`}
-          {engineStats && ` · JT width ${engineStats.cliques.junction_tree_width}`}
+
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+          {/* Export / Import buttons */}
+          <div style={{ display: "flex", gap: 4 }}>
+            <button
+              type="button"
+              onClick={handleExport}
+              style={smallButtonStyle}
+              title="Export network as JSON"
+            >
+              Export
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              style={smallButtonStyle}
+              title="Import network from JSON"
+            >
+              Import
+            </button>
+            {snapshot && (
+              <button
+                type="button"
+                onClick={() => { setSnapshot(null); setImportError(null); }}
+                style={{ ...smallButtonStyle, color: "var(--color-danger)" }}
+                title="Return to live network"
+              >
+                Clear
+              </button>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              style={{ display: "none" }}
+              onChange={handleImportFile}
+            />
+          </div>
+
+          <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+            {markets.length} variable{markets.length !== 1 ? "s" : ""}
+            {conditionalEdges.length > 0 && ` · ${conditionalEdges.length} edge${conditionalEdges.length !== 1 ? "s" : ""}`}
+            {cliques.length > 0 && ` · ${cliques.length} clique${cliques.length !== 1 ? "s" : ""}`}
+            {engineStats && !snapshot && ` · JT width ${engineStats.cliques.junction_tree_width}`}
+          </div>
         </div>
       </div>
+
+      {importError && (
+        <div style={{ fontSize: "0.75rem", color: "var(--color-danger)", marginBottom: "var(--space-sm)" }}>
+          Import failed: {importError}
+        </div>
+      )}
 
       <svg
         viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
         style={{ width: "100%", height: "auto", minHeight: 200, maxHeight: 400 }}
       >
+        <defs>
+          {/* Glow filter for evidence node */}
+          <filter id="evidence-glow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="blur" />
+            <feFlood floodColor="var(--color-primary)" floodOpacity="0.6" result="color" />
+            <feComposite in="color" in2="blur" operator="in" result="glow" />
+            <feMerge>
+              <feMergeNode in="glow" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          {/* Highlight filter for nodes reached by propagation wave */}
+          <filter id="propagation-highlight" x="-15%" y="-15%" width="130%" height="130%">
+            <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="var(--color-info)" floodOpacity="0.5" />
+          </filter>
+        </defs>
+        <style>{`
+          @keyframes evidence-pulse {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+          }
+          @keyframes propagation-arrive {
+            0% { opacity: 0; transform: scale(0.95); }
+            50% { opacity: 1; transform: scale(1.02); }
+            100% { opacity: 1; transform: scale(1); }
+          }
+          @keyframes edge-flow {
+            0% { stroke-dashoffset: 16; }
+            100% { stroke-dashoffset: 0; }
+          }
+          .evidence-node { animation: evidence-pulse 0.8s ease-in-out infinite; filter: url(#evidence-glow); }
+          .propagation-node { animation: propagation-arrive 0.3s ease-out forwards; filter: url(#propagation-highlight); }
+          .propagation-edge { animation: edge-flow 0.4s linear infinite; }
+        `}</style>
+
         {/* Clique overlays (behind edges/nodes) */}
         {cliques.map((c) => (
           <CliqueOverlay key={c.id} clique={c} nodes={nodes} />
@@ -291,14 +480,54 @@ export function BayesNetGraph({
           <EdgeLine key={`${e.from}-${e.to}-${i}`} from={e.from} to={e.to} nodes={nodes} />
         ))}
 
+        {/* Animated propagation edges */}
+        {animatingEdges.size > 0 && allEdges.map((e) => {
+          const ek = e.source < e.target ? `${e.source}::${e.target}` : `${e.target}::${e.source}`;
+          if (!animatingEdges.has(ek)) return null;
+          const a = nodes.find((n) => n.id === e.source);
+          const b = nodes.find((n) => n.id === e.target);
+          if (!a || !b) return null;
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist === 0) return null;
+          const ux = dx / dist;
+          const uy = dy / dist;
+          const sx = a.x + ux * (NODE_W / 2 + 4);
+          const sy = a.y + uy * (NODE_H / 2 + 4);
+          const ex = b.x - ux * (NODE_W / 2 + 8);
+          const ey = b.y - uy * (NODE_H / 2 + 8);
+          return (
+            <line
+              key={`anim-${ek}`}
+              x1={sx} y1={sy} x2={ex} y2={ey}
+              stroke="var(--color-info)"
+              strokeWidth={2.5}
+              strokeDasharray="8 8"
+              opacity={0.8}
+              className="propagation-edge"
+            />
+          );
+        })}
+
         {/* Market nodes */}
-        {nodes.map((node) => (
-          <NodeWithDetail
-            key={node.id}
-            node={node}
-            isFocus={node.id === focusMarketId}
-          />
-        ))}
+        {nodes.map((node) => {
+          const isEvidence = node.id === evidenceNodeId;
+          const isAnimating = animatingNodes.has(node.id);
+          const animClass = isEvidence
+            ? "evidence-node"
+            : isAnimating
+              ? "propagation-node"
+              : undefined;
+          return (
+            <NodeWithDetail
+              key={node.id}
+              node={node}
+              isFocus={node.id === focusMarketId}
+              animationClass={animClass}
+            />
+          );
+        })}
       </svg>
 
       {/* Legend */}
@@ -333,4 +562,15 @@ const panelStyle: React.CSSProperties = {
   borderRadius: "var(--radius-md)",
   border: "1px solid var(--color-border)",
   background: "var(--color-bg-surface)",
+};
+
+const smallButtonStyle: React.CSSProperties = {
+  padding: "2px 8px",
+  fontSize: "0.7rem",
+  borderRadius: "var(--radius-sm)",
+  border: "1px solid var(--color-border)",
+  background: "var(--color-bg)",
+  color: "var(--color-text)",
+  cursor: "pointer",
+  fontWeight: 500,
 };

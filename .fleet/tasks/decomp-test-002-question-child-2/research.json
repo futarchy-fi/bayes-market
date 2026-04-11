@@ -1,0 +1,137 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The CPT panel should render as a new inline section within MarketDetail.tsx, as a sibling to AssumptionPanel, TradingPanel, etc. MarketDetail renders all panels inline in a CSS grid with gap spacing (display: grid, gap: var(--space-lg)). There is NO modal/dialog/overlay system anywhere in the codebase — zero matches for modal, dialog, overlay, or any portal rendering. Inline panels all use a consistent panelStyle (padding, border, rounded corners, background). A floating overlay anchored to SVG nodes would require building an entirely new positioning and portal system from scratch. Following the existing inline pattern is the clear path.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/routes/MarketDetail.tsx:50-62 (inline panel rendering in grid layout)",
+        "frontend/src/routes/MarketDetail.tsx:92 (JunctionTreePanel also inline)",
+        "codebase-wide search: zero matches for 'modal', 'dialog', 'overlay', 'Portal'"
+      ],
+      "uncertainty": "Whether the user experience of a CPT table would benefit from a wider layout than the current panel column allows — but this is a styling concern, not an architectural one."
+    },
+    {
+      "question_id": "q2",
+      "answer": "BayesNetGraph (the static SVG graph used in MarketDetail) has NO click handlers on nodes — they are purely display. However, ForceDirectedGraph (an interactive D3-based variant) already has an onNodeClick prop (ForceDirectedGraph.tsx:24). ForceDirectedGraph is NOT currently rendered in MarketDetail — only the static BayesNetGraph is used (MarketDetail.tsx:62). For the CPT panel, the simplest approach is to show it for the focusMarketId (the currently-viewed market) without requiring node clicks at all, since the panel is scoped to the market detail page. If node-click-to-open is desired later, switching to ForceDirectedGraph (which already supports onNodeClick) or adding a click handler to BayesNetGraph nodes would both be viable.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:56-127 (node rendering, no click handlers)",
+        "frontend/src/features/graph/ForceDirectedGraph.tsx:24 (onNodeClick prop exists)",
+        "frontend/src/features/graph/ForceDirectedGraph.tsx:232-235 (prop destructuring)",
+        "frontend/src/routes/MarketDetail.tsx:62 (uses ForceDirectedGraph, not BayesNetGraph directly)"
+      ],
+      "uncertainty": "Whether the feature spec intends for clicking non-focus nodes to navigate to that market or open an in-place CPT panel for it."
+    },
+    {
+      "question_id": "q3",
+      "answer": "There is NO bulk CPT endpoint. The backend stores conditional marginals in CONDITIONAL_MARGINALS (server.py:223) as dict[str, dict[str, dict[str, float]]] keyed by marketId -> contextKey -> outcomeId -> probability. But this is only served: (1) individually via GET /v1/markets/{id} with optional context query params for one specific conditioning configuration at a time, (2) internally during P&L calculations and probability edit validation. To display a full CPT, the frontend would need either: (a) N API calls (one per parent configuration), (b) a new bulk endpoint that returns all entries from CONDITIONAL_MARGINALS[marketId], or (c) deriving the CPT from clique information in engine-stats. Option (b) — a new lightweight endpoint — would be most efficient.",
+      "confidence": 0.92,
+      "evidence": [
+        "backend/server.py:223 (CONDITIONAL_MARGINALS data structure)",
+        "backend/server.py:2631-2643 (get_market_detail with optional context, single query)",
+        "backend/server.py:3303-3311 (context_state_key serialization format)",
+        "backend/server.py:5247 (engine-stats endpoint, returns cliques but not marginals)",
+        "frontend/src/lib/api/client.ts:150-156 (getEngineStats), 191-204 (submitProbabilityEdit)"
+      ],
+      "uncertainty": "Whether building a bulk CPT endpoint is in scope, or if the panel should work with the existing per-context query approach and show only the currently-conditioned marginals."
+    },
+    {
+      "question_id": "q4",
+      "answer": "The backend handles normalization automatically. In lmsr.py:94-131, rescale_probability_edit() takes ONE target outcome at a target probability and proportionally scales all other outcomes so the distribution sums to 1.0, with rounding drift correction. The frontend sends individual edits (one outcomeId + probability per request) via ProbabilityEditPayload, and the backend rescales the rest. The frontend does NOT need to track or submit all outcomes simultaneously. Editing P(X=a|context) will automatically adjust P(X=b|context), P(X=c|context) etc. on the backend side.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/lmsr.py:94-131 (rescale_probability_edit auto-normalizes)",
+        "backend/lmsr.py:128-130 (rounding drift correction ensures sum to 1.0)",
+        "backend/server.py:3351-3393 (apply_probability_target uses rescale)",
+        "frontend/src/lib/api/types.ts:312-322 (ProbabilityEditPayload: single outcome target)"
+      ],
+      "uncertainty": "None — the code is explicit that the backend normalizes."
+    },
+    {
+      "question_id": "q5",
+      "answer": "The Market type (types.ts:25-39) does NOT include parent variable IDs or any dependency information. Dependencies are implicit via two mechanisms: (1) Junction tree cliques from engine-stats — the CliqueSummary.nodes array shows which variables share a clique (co-membership implies a dependency), and (2) conditional edges derived from conditional marginals (stored server-side as context keys like 'varId1=outcomeId1|varId2=outcomeId2'). On the frontend, deriveEdges.ts provides deriveEdgesFromCliques() to extract undirected edges from clique co-membership, and mergeEdges() to combine those with directional conditional edges. Parent-child directionality specifically comes from the conditional edges (from → to format), NOT from clique edges which are undirected.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/lib/api/types.ts:25-39 (Market type — no parent/dependency fields)",
+        "frontend/src/features/graph/deriveEdges.ts:3-6 (GraphEdge: source/target)",
+        "frontend/src/features/graph/deriveEdges.ts:8-33 (deriveEdgesFromCliques — undirected)",
+        "frontend/src/features/graph/deriveEdges.ts:35-62 (mergeEdges — conditional edges are directional from→to)",
+        "backend/inference/current_model.py:179-209 (_build_cliques from conditional marginals)"
+      ],
+      "uncertainty": "Whether 'conditional edges' always represent true parent→child DAG directionality, or just 'this variable was conditioned on that variable' which could differ from a DAG parent relationship."
+    },
+    {
+      "question_id": "q6",
+      "answer": "The CPT panel should focus on conditional probabilities. VariableRow already handles marginal (unconditional) probability editing inline within AssumptionPanel — it shows a slider for adjusting P(outcome) and an 'Assume' button for setting conditions. Duplicating marginal editing in the CPT panel would create two edit surfaces for the same data, causing UX confusion. For nodes without conditional parents, the panel could either: (a) show the marginal distribution as read-only with a note to use the existing editor, (b) show a single-row CPT (which is equivalent to the marginal) but still use the CPT editing UI, or (c) be hidden/disabled. Option (b) is most consistent — a CPT with no conditioning variables is just the marginal.",
+      "confidence": 0.8,
+      "evidence": [
+        "frontend/src/features/assumptions/VariableRow.tsx:8-12 (props), 129-156 (inline edit mode with slider)",
+        "frontend/src/features/trading/ConditionalEditor.tsx:12-14 (handles conditional edits)",
+        "frontend/src/routes/MarketDetail.tsx:53-56 (AssumptionPanel renders VariableRows)"
+      ],
+      "uncertainty": "This is a design/requirements decision that depends on UX preference. The codebase doesn't dictate whether the CPT panel should replace or supplement existing editors."
+    },
+    {
+      "question_id": "q7",
+      "answer": "The 'sum to 1.0' validation applies per-outcome-set within a single conditioning context, and the BACKEND handles it automatically. The frontend sends a single (outcomeId, probability) pair per edit, and the backend's rescale_probability_edit (lmsr.py:94-131) redistributes remaining probability across other outcomes so they sum to 1.0. The sum-to-1.0 check (server.py:2996, math.isclose with abs_tol=1e-9) validates the result post-rescaling. The actual backend constraint is 0.0 < p < 1.0 (strictly exclusive, NOT 0.01-0.99 as mentioned in the question — the 0.01/0.99 bounds are a frontend UI guardrail in the slider, not a backend constraint). For a table view, each cell edit would trigger a single API call, and the backend returns the full updated distribution.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/lmsr.py:58-59 (constraint: 0.0 < p < 1.0, not 0.01-0.99)",
+        "backend/lmsr.py:94-131 (rescale_probability_edit normalizes distribution)",
+        "backend/server.py:2996 (math.isclose sum check, abs_tol=1e-9)",
+        "backend/server.py:3376-3382 (400 error if p not in (0,1))",
+        "frontend/src/features/trading/ConditionalEditor.tsx:103-111 (slider min=0.01, max=0.99 — UI guardrail)"
+      ],
+      "uncertainty": "None — the normalization flow is well-documented in the code."
+    },
+    {
+      "question_id": "q8",
+      "answer": "There are TWO types of edges in the system with different properties: (1) Clique-derived edges (deriveEdges.ts:8-33): UNDIRECTED, derived from CliqueSummary.nodes co-membership. Two variables sharing a clique get an edge. Deduplicated by sorted pair key. These are accessible via the engine-stats API → deriveEdgesFromCliques(). (2) Conditional edges: DIRECTIONAL (from → to), passed as props to BayesNetGraph (BayesNetGraph.tsx:25-26: conditionalEdges?: GraphEdge[]) and ForceDirectedGraph (ForceDirectedGraph.tsx:23). These represent 'variable X was conditioned on variable Y'. The mergeEdges() function (deriveEdges.ts:39-62) combines both types into a unified GraphEdge[] array. Both types are accessible as component props — NOT computed internally. The parent calling these graph components must supply conditionalEdges and the components internally derive clique edges from engine-stats.",
+      "confidence": 0.92,
+      "evidence": [
+        "frontend/src/features/graph/deriveEdges.ts:3-6 (GraphEdge interface: source, target)",
+        "frontend/src/features/graph/deriveEdges.ts:8-33 (deriveEdgesFromCliques — undirected, from cliques)",
+        "frontend/src/features/graph/deriveEdges.ts:35-62 (mergeEdges — conditional edges are from→to directional)",
+        "frontend/src/features/graph/BayesNetGraph.tsx:16-27 (GraphEdge with from/to, conditionalEdges prop)",
+        "frontend/src/features/graph/ForceDirectedGraph.tsx:15-25 (same pattern, plus onNodeClick)"
+      ],
+      "uncertainty": "Whether the conditional edge direction consistently maps to parent→child in the Bayesian network sense, or just reflects the order of the conditional edit (which variable was the target vs context)."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No new modal/overlay system needed. The CPT panel follows the existing inline panel pattern with consistent panelStyle (padding, border, rounded corners). All 6 existing panels (AssumptionPanel, ResolveMarketPanel, EventTradePanel, DiscussionThread, ForceDirectedGraph, JunctionTreePanel) are rendered inline in a CSS grid in MarketDetail.tsx."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "The existing ProbabilityEditPayload (single outcome + context array) works for individual CPT cell edits. The backend auto-normalizes other outcomes via rescale_probability_edit. No new endpoint needed for editing. However, a new endpoint MAY be needed for READING the full CPT (fetching all conditional marginals for a market at once), since the current GET /v1/markets/{id} only returns marginals for one specific context at a time."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The backend enforces sum-to-1.0 within each conditioning context (math.isclose with abs_tol=1e-9). But crucially, the backend handles this normalization automatically — the frontend does NOT need to enforce it before submission. The frontend should still provide visual feedback (showing how other outcomes adjust) but doesn't need pre-submission validation logic."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.6,
+      "impact": "Graph edges come from TWO sources: (1) clique co-membership (undirected, from engine-stats API via deriveEdgesFromCliques), and (2) conditional edges (directional from→to, passed as props). Clique edges are derived from CONDITIONAL_MARGINALS on the backend — this part is correct. However, conditional edges are also needed for directionality, and it's unclear exactly where/how the from→to conditional edges are fetched from the API before being passed as props. The directionality comes from the conditional edit structure (target variable conditioned on context variables), not from an explicit parent-child declaration."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "The simplest and most consistent approach: show the CPT panel for focusMarketId only. This avoids cross-market data fetching, complex open/close state, and multi-market conditional marginal queries. The panel would display conditional probabilities for the currently-viewed market, with parent variables (conditioning context) derived from the market's clique membership or conditional edges."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

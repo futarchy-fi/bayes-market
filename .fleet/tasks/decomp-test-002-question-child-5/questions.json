@@ -1,0 +1,117 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should node position changes be undoable even though the graph currently uses a static circular layout with no drag support? Do we need to implement drag-to-reposition first, or is the undo/redo system only for future position editing?",
+      "category": "requirements",
+      "why_it_matters": "BayesNetGraph.tsx computes positions via layoutNodes() with no user interaction. If there's no way to change positions yet, building undo for position changes is premature unless drag support is also in scope."
+    },
+    {
+      "id": "q2",
+      "question": "For CPT probability edits, the current flow submits directly to the backend via useProbabilityEdit(). The task says 'before server submission' — should the undo/redo system intercept edits and batch them locally before a manual submit, or should it track already-submitted edits and reverse them with compensating API calls?",
+      "category": "requirements",
+      "why_it_matters": "This fundamentally changes the architecture. A local-only buffer requires a new 'draft/commit' flow in ConditionalEditor and VariableRow. Tracking submitted edits means the scope overlaps with server mutations despite the task saying 'server mutations are not reversible'."
+    },
+    {
+      "id": "q3",
+      "question": "What constitutes a 'layout change' that should be undoable? The current layout is auto-computed (circular/grid). Does this refer to switching between layout algorithms, or manual node repositioning, or zoom/pan state?",
+      "category": "requirements",
+      "why_it_matters": "The scope of 'layout changes' is ambiguous. Each interpretation requires different command types and state tracking."
+    },
+    {
+      "id": "q4",
+      "question": "Should the undo history persist across page navigations (e.g., leaving MarketDetail and returning), or is it ephemeral per component mount?",
+      "category": "design",
+      "why_it_matters": "Persistent history would require serialization to localStorage or session storage. Ephemeral history is simpler but users lose undo ability on navigation. This affects where HistoryContext is placed in the component tree."
+    },
+    {
+      "id": "q5",
+      "question": "Should evidence toggle (assumption add/remove) undo restore the exact previous assumption state, or just remove the last assumption? AssumptionContext.addAssumption() replaces any existing assumption on the same variable.",
+      "category": "design",
+      "why_it_matters": "If a user assumes outcome A, then assumes outcome B on the same variable, undoing should restore A (not just clear B). This requires capturing the previous state in the command, not just the action type."
+    },
+    {
+      "id": "q6",
+      "question": "Should undo/redo be scoped per-market (one history stack per MarketDetail) or global across the app?",
+      "category": "design",
+      "why_it_matters": "The AssumptionProvider is scoped to MarketDetail. If HistoryContext is also scoped there, each market gets its own stack. A global stack would need to track which market each action belongs to and handle cross-market interactions."
+    },
+    {
+      "id": "q7",
+      "question": "Is there a maximum history depth, or should the stack grow unbounded?",
+      "category": "design",
+      "why_it_matters": "Unbounded history can consume significant memory, especially if commands store full state snapshots. A cap (e.g., 50 actions) keeps memory predictable and is standard UX."
+    },
+    {
+      "id": "q8",
+      "question": "Where should the toolbar buttons be placed? There's no existing graph toolbar component. Should they go in the MarketDetail header area, inline with BayesNetGraph, or as a floating overlay?",
+      "category": "codebase",
+      "why_it_matters": "MarketDetail currently has no toolbar section. The placement decision affects component hierarchy and whether a new GraphToolbar component is needed or if buttons integrate into an existing section."
+    },
+    {
+      "id": "q9",
+      "question": "Should Ctrl+Z/Ctrl+Shift+Z be active globally or only when the graph/market view is focused? The app has text inputs (account ID, agent ID, probability sliders) where Ctrl+Z has native browser meaning.",
+      "category": "design",
+      "why_it_matters": "Intercepting Ctrl+Z globally would break native undo in text inputs. The keyboard handler needs to distinguish between graph context and form input context to avoid hijacking browser behavior."
+    },
+    {
+      "id": "q10",
+      "question": "Should grouped/compound actions (e.g., editing multiple probabilities in ConditionalEditor with context conditions) be undone as a single unit or individually?",
+      "category": "design",
+      "why_it_matters": "ConditionalEditor can submit an edit with multiple context conditions. If these are treated as atomic, one undo reverts everything. If granular, the user can partially undo which may leave the CPT in an inconsistent state."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The undo/redo system uses the command pattern with execute/undo method pairs on each command object, rather than full state snapshots",
+      "confidence": 0.85,
+      "if_wrong": "State snapshot approach (e.g., using immer patches) would simplify implementation but increase memory usage and change the core data structure design"
+    },
+    {
+      "id": "a2",
+      "assumption": "HistoryContext will be placed inside AssumptionProvider at the MarketDetail level, scoped per-market",
+      "confidence": 0.8,
+      "if_wrong": "A global history context would need to wrap the entire app in providers.tsx and track market IDs per action"
+    },
+    {
+      "id": "a3",
+      "assumption": "Keyboard shortcuts should only fire when focus is not inside a text input, textarea, or contenteditable element",
+      "confidence": 0.9,
+      "if_wrong": "If shortcuts should always fire, native browser undo in form fields would break, causing a degraded editing experience"
+    },
+    {
+      "id": "a4",
+      "assumption": "Evidence toggle undo means restoring the previous assumption state for that variable (not just clearing the current one)",
+      "confidence": 0.75,
+      "if_wrong": "Simpler implementation possible if undo just clears the assumption, but less useful UX"
+    },
+    {
+      "id": "a5",
+      "assumption": "Node position changes and layout changes refer to future capabilities that need stub commands, since the graph is currently static with no user-driven positioning",
+      "confidence": 0.6,
+      "if_wrong": "If drag-to-reposition is expected to ship alongside undo/redo, the scope is significantly larger than described"
+    },
+    {
+      "id": "a6",
+      "assumption": "History is ephemeral (cleared on unmount/navigation), not persisted to localStorage",
+      "confidence": 0.7,
+      "if_wrong": "Would need serialization/deserialization of command objects and localStorage management"
+    },
+    {
+      "id": "a7",
+      "assumption": "A reasonable max history depth of 50 actions will be used",
+      "confidence": 0.65,
+      "if_wrong": "Unbounded history could cause memory issues; very small cap could frustrate power users"
+    },
+    {
+      "id": "a8",
+      "assumption": "No new dependencies (like immer or zustand) need to be added — implementation uses React Context + useReducer",
+      "confidence": 0.8,
+      "if_wrong": "Adding a state management library would change the architectural approach and require dependency approval"
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

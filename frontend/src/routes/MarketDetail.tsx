@@ -1,18 +1,26 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
-import { useMarket, useMarketEvents, useAccountRisk } from "@/lib/query/hooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { useMarket, useMarkets, useMarketEvents, useAccountRisk, useEngineStats, queryKeys } from "@/lib/query/hooks";
 import { useSession } from "@/features/session/context";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ProbabilityBar } from "@/components/ui/ProbabilityBar";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { formatCurrency, timeUntil, truncateHash, formatRelativeTime } from "@/lib/utils/format";
-import { AssumptionProvider } from "@/features/assumptions/AssumptionContext";
+import { AssumptionProvider, useAssumptions } from "@/features/assumptions/AssumptionContext";
 import { AssumptionPanel } from "@/features/assumptions/AssumptionPanel";
+import { HistoryProvider } from "@/features/history/HistoryContext";
+import { UndoRedoToolbar } from "@/features/history/UndoRedoToolbar";
+import { ForceDirectedGraph } from "@/features/graph/ForceDirectedGraph";
 import { BayesNetGraph } from "@/features/graph/BayesNetGraph";
+import { GraphToolbar, type GraphView } from "@/features/graph/GraphToolbar";
+import { deriveEdgesFromCliques } from "@/features/graph/deriveEdges";
+import { buildNetworkExport, downloadJson } from "@/features/graph/networkExport";
 import { JunctionTreePanel } from "@/features/graph/JunctionTreePanel";
 import { DiscussionThread } from "@/features/market/DiscussionThread";
 import { ResolveMarketPanel } from "@/features/market/ResolveMarketPanel";
 import { EventTradePanel } from "@/features/trading/EventTradePanel";
+import { CptPanel } from "@/features/trading/CptPanel";
 import type { MarketEvent } from "@/lib/api/types";
 
 export default function MarketDetail() {
@@ -27,6 +35,35 @@ export default function MarketDetail() {
   if (!data) return null;
 
   const m = data.market;
+
+  // Track which market's CPT to display when a graph node is clicked
+  const [selectedMarketId, setSelectedMarketId] = useState<string>(m.id);
+  const selectedMarketQuery = useMarket(selectedMarketId, { enabled: selectedMarketId !== m.id });
+  const selectedMarket = selectedMarketId === m.id ? m : selectedMarketQuery.data?.market ?? m;
+
+  const handleNodeClick = useCallback((nodeId: string) => {
+    setSelectedMarketId(nodeId);
+  }, []);
+
+  // Graph view toggle and toolbar state
+  const [graphView, setGraphView] = useState<GraphView>("force");
+  const queryClient = useQueryClient();
+  const marketsQuery = useMarkets();
+  const engineStatsQuery = useEngineStats(m.id, { enabled: true });
+  const allMarkets = marketsQuery.data?.markets ?? [];
+  const cliques = engineStatsQuery.data?.cliques.cliques ?? [];
+
+  const handleExport = useCallback(() => {
+    const cliqueEdges = deriveEdgesFromCliques(cliques);
+    const nodes = allMarkets.map((mk) => ({ id: mk.id, x: 0, y: 0 }));
+    const data = buildNetworkExport(allMarkets, nodes, cliqueEdges, [], cliques);
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    downloadJson(data, `bayes-network-${ts}.json`);
+  }, [allMarkets, cliques]);
+
+  const handleImportSuccess = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.marketLists() });
+  }, [queryClient]);
 
   return (
     <div style={{ display: "grid", gap: "var(--space-lg)" }}>
@@ -49,17 +86,45 @@ export default function MarketDetail() {
 
       <ResolveMarketPanel market={m} />
 
-      {m.status === "active" && (
-        <AssumptionProvider>
-          <AssumptionPanel market={m} />
-        </AssumptionProvider>
+      {m.status === "active" ? (
+        <HistoryProvider>
+          <AssumptionProvider>
+            <UndoRedoToolbar />
+            <AssumptionPanel market={m} />
+            <CptPanel market={selectedMarket} />
+            <EventTradePanel market={m} />
+            <DiscussionThread market={m} />
+            <GraphToolbar
+              view={graphView}
+              onViewChange={setGraphView}
+              onExport={handleExport}
+              onImportSuccess={handleImportSuccess}
+            />
+            {graphView === "force" ? (
+              <ConnectedForceGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
+            ) : (
+              <BayesNetGraph focusMarketId={m.id} />
+            )}
+          </AssumptionProvider>
+        </HistoryProvider>
+      ) : (
+        <>
+          <CptPanel market={selectedMarket} />
+          <EventTradePanel market={m} />
+          <DiscussionThread market={m} />
+          <GraphToolbar
+            view={graphView}
+            onViewChange={setGraphView}
+            onExport={handleExport}
+            onImportSuccess={handleImportSuccess}
+          />
+          {graphView === "force" ? (
+            <ForceDirectedGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
+          ) : (
+            <BayesNetGraph focusMarketId={m.id} />
+          )}
+        </>
       )}
-
-      <EventTradePanel market={m} />
-
-      <DiscussionThread market={m} />
-
-      <BayesNetGraph focusMarketId={m.id} />
 
       {/* Event Journal */}
       <div>
@@ -194,3 +259,9 @@ const payloadStyle: React.CSSProperties = {
   overflow: "auto",
   maxHeight: 200,
 };
+
+/** Bridge component: reads AssumptionContext and passes assumptions to ForceDirectedGraph */
+function ConnectedForceGraph({ focusMarketId, onNodeClick }: { focusMarketId: string; onNodeClick?: (id: string) => void }) {
+  const { assumptions } = useAssumptions();
+  return <ForceDirectedGraph focusMarketId={focusMarketId} onNodeClick={onNodeClick} assumptions={assumptions} />;
+}

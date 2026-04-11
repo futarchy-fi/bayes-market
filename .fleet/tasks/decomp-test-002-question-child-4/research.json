@@ -1,0 +1,117 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The export should capture the full network (all markets + all conditional edges + clique data). BayesNetGraph fetches ALL markets via useMarkets() (line 242) and engine stats for cliques via useEngineStats() (line 243). The component renders the entire network, not just a single market. The focusMarketId prop only controls which node is highlighted, not which data is fetched. Since the graph already has the full network loaded, exporting the whole network is the natural scope.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:242 — useMarkets() fetches all markets",
+        "frontend/src/features/graph/BayesNetGraph.tsx:243 — useEngineStats() fetches cliques",
+        "frontend/src/features/graph/BayesNetGraph.tsx:246-247 — nodes derived from all markets, cliques from engine stats"
+      ],
+      "uncertainty": "The task description doesn't explicitly say 'full network' but the component's data model is network-wide, making full-network export the obvious choice."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Conditional edges come from TWO sources: (1) Clique co-membership — deriveEdgesFromCliques() in deriveEdges.ts derives edges from CliqueSummary data fetched via the /v1/markets/{id}/engine-stats API. (2) The conditionalEdges prop passed to BayesNetGraph, which represents edges from conditional probability edits. Currently, MarketDetail does NOT pass conditionalEdges (it uses ForceDirectedGraph, not BayesNetGraph). The BayesNetGraph component merges both sources via mergeEdges() at line 257. Clique-derived edges are server-backed (from engine-stats API). The conditionalEdges prop edges would come from ConditionalEditor UI interactions, but are not currently wired up in any route.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/features/graph/deriveEdges.ts:13-33 — deriveEdgesFromCliques() derives edges from clique node co-membership",
+        "frontend/src/features/graph/deriveEdges.ts:39-62 — mergeEdges() combines clique edges with conditional edges",
+        "frontend/src/features/graph/BayesNetGraph.tsx:256-258 — allEdges = mergeEdges(deriveEdgesFromCliques(cliques), conditionalEdges)",
+        "frontend/src/routes/MarketDetail.tsx:65 — ForceDirectedGraph used, not BayesNetGraph; no conditionalEdges passed"
+      ],
+      "uncertainty": "BayesNetGraph is not currently rendered in any route (only in tests). The conditionalEdges prop mechanism exists but is unused. For export, clique-derived edges are the primary source since they come from the API."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Currently, positions are computed dynamically by layoutNodes() using a circular arrangement (center at 300,200, radius = max(120, n*40)). There is no manual repositioning or drag support. Since the task description explicitly mentions including layout positions, we should include them in the export. However, since they're deterministic from the market list order, they provide no unique information today. Including them adds minimal schema complexity (just x,y per node) and future-proofs for manual layout. The layout function is pure — given the same markets in the same order, it produces identical positions.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:36-57 — layoutNodes() computes circular positions deterministically",
+        "frontend/src/features/graph/BayesNetGraph.tsx:246 — nodes computed via useMemo from markets"
+      ],
+      "uncertainty": "The task says to include positions. The only question is whether to export the computed positions as-is or allow an optional positions field. Given the task wording, exporting computed positions is the right call."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Import should be visual/read-only. The API has a createMarket() function (client.ts:103) but it creates individual markets with specific fields (title, description, outcomes, expires_at, liquidity). There is no bulk creation endpoint, and creating server-side markets would require: (1) authentication/session, (2) handling each market individually, (3) no way to set initial probabilities or marginals via the create endpoint, (4) no way to recreate edges/cliques (those are engine-computed). A visual-only import that loads the exported snapshot for viewing is far more practical and aligns with the export being a 'snapshot' of network state.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/lib/api/client.ts:103-112 — createMarket() is individual, not bulk",
+        "frontend/src/lib/api/types.ts:94-101 — CreateMarketPayload has title/description/outcomes/expires_at/liquidity only",
+        "frontend/src/lib/api/types.ts:25-39 — Market type has marginals, volume etc. that can't be set via create"
+      ],
+      "uncertainty": "If the user wants import to create real markets, it would be a much larger scope requiring backend changes. The visual-only approach is the pragmatic default."
+    },
+    {
+      "question_id": "q5",
+      "answer": "The BayesNetGraph panel already has a flex header row (line 319) with title on the left and stats on the right. Export/import buttons should go in this existing header row, between the title and stats, or as a small button group to the right of the stats. No new toolbar component is needed. The existing flex layout with justifyContent:'space-between' can be extended to a 3-column layout (title | buttons | stats) or buttons can be appended after the stats div. Note: BayesNetGraph is NOT currently rendered in MarketDetail (ForceDirectedGraph is used instead), so the button placement depends on which component is targeted.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:318-329 — panel header with flex row, title left, stats right",
+        "frontend/src/features/graph/BayesNetGraph.tsx:458-463 — panelStyle with standard panel styling",
+        "frontend/src/routes/MarketDetail.tsx:65 — ForceDirectedGraph is actually used, not BayesNetGraph"
+      ],
+      "uncertainty": "Need to decide: add buttons to BayesNetGraph (which isn't currently rendered), ForceDirectedGraph (which is rendered), or both. The task title says 'Network JSON export/import' which implies the BayesNetGraph component."
+    },
+    {
+      "question_id": "q6",
+      "answer": "Hand-rolled TypeScript validation is the right approach. The project has zero schema validation libraries in its dependencies (no zod, ajv, yup, joi, etc.). The frontend dependencies are minimal: react, react-router-dom, @tanstack/react-query, and d3 libraries. Adding a validation library for a single import feature would be over-engineering. The JSON schema is relatively simple (markets array, edges array, metadata) and can be validated with type guards and a few checks (version field, required arrays, market shape). TypeScript type guards provide compile-time safety and the validation logic would be ~30-50 lines.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/package.json — no validation libraries in dependencies",
+        "No imports of zod/ajv/yup anywhere in the codebase"
+      ],
+      "uncertainty": "If the schema grows significantly in the future, a validation library might be warranted, but for the current scope it's unnecessary."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Confirmed: BayesNetGraph fetches all markets and engine stats. Export should capture the full network state."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Confirmed: No bulk market creation API exists. createMarket() is individual and can't set marginals/cliques. Visual-only import is the practical approach."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Confirmed: BayesNetGraph has an existing flex header row (title + stats) that can accommodate buttons without a new toolbar component."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Confirmed: No validation libraries in the project. Hand-rolled TypeScript type guards are sufficient for the import schema."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Confirmed: layoutNodes() computes positions dynamically. Including them in export adds minimal complexity and future-proofs for manual layout."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Confirmed: Clique-derived edges come from engine-stats API via deriveEdgesFromCliques(). The conditionalEdges prop is defined but not currently wired up in any route. Export should derive edges from cliques (API data) and include any conditional edges if present."
+    }
+  ],
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.85,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All 6 questions answered with confidence >= 0.85. All 6 assumptions verified as CORRECT with high confidence. No research gaps remain. The implementation path is clear: full-network export with computed positions, visual-only import, buttons in existing BayesNetGraph header, hand-rolled TypeScript validation. No blocking uncertainties warrant spawning children."
+  },
+  "spawn_children": false,
+  "children": []
+}

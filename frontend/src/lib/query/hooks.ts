@@ -19,6 +19,7 @@ export const queryKeys = {
   marketEvents: (id: string) => ["markets", id, "events"] as const,
   marketComments: (id: string) => ["markets", id, "comments"] as const,
   engineStats: (id: string) => ["markets", id, "engine-stats"] as const,
+  marketCpt: (id: string) => ["markets", id, "cpt"] as const,
   marketAnalytics: (id: string, interval?: AnalyticsInterval) =>
     [...queryKeys.market(id), "analytics", { interval: interval ?? null }] as const,
   account: (id: string) => ["accounts", id] as const,
@@ -83,6 +84,14 @@ export function useEngineStats(marketId: string, opts?: { enabled?: boolean }) {
     queryKey: queryKeys.engineStats(marketId),
     queryFn: () => api.getEngineStats(marketId),
     enabled: opts?.enabled ?? true,
+  });
+}
+
+export function useCpt(marketId: string, opts?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: queryKeys.marketCpt(marketId),
+    queryFn: () => api.getMarketCpt(marketId),
+    enabled: marketId.length > 0 && (opts?.enabled ?? true),
   });
 }
 

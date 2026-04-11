@@ -1,0 +1,15 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.7,
+  "plan_adherence_notes": "All 6 planned steps were completed (backend endpoint, API client + types, useCpt hook, CptPanel component, inline editing, MarketDetail integration). However, two significant gaps: (1) 13 MarketDetail tests now fail because the test mock for @/lib/query/hooks does not include the new useCpt export — the implementation added CptPanel to MarketDetail without updating the existing test file's mock. (2) useProbabilityEdit invalidates queryKeys.market() and queryKeys.account() on success but does NOT invalidate queryKeys.marketCpt(), so after editing a CPT cell the table will not refresh to show backend-normalized values. The useCpt hook also has no refetchInterval, making this a functional bug where edits appear to succeed but the UI shows stale data.",
+  "research_quality": 0.9,
+  "question_completeness": 0.7,
+  "missed_questions": [
+    "How will existing MarketDetail tests need to be updated when adding new hooks (useCpt) consumed by components rendered in MarketDetail?",
+    "After a CPT cell edit succeeds, how does the CPT query cache get invalidated so the table shows backend-normalized values? useProbabilityEdit only invalidates market and account queries, not the CPT query.",
+    "How should the CPT panel handle combinatorial explosion when a market has many parents with many outcomes (e.g., 3 binary parents = 8 rows, but 4 ternary parents = 81 rows)?",
+    "What accessibility considerations are needed for the interactive table (keyboard navigation between cells, screen reader labels for probability bars)?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "Two blocking issues: (1) 13 existing MarketDetail tests fail because the @/lib/query/hooks mock is missing useCpt — this is a regression. The test file at frontend/src/__tests__/MarketDetail.test.tsx line 25 needs useCpt: vi.fn() added to the mock, and the beforeEach setup needs to configure it to return { data: null, isLoading: false }. (2) CPT cache invalidation is missing — after a successful probability edit via CptPanel, the CPT data is not refetched. Fix: either add queryKeys.marketCpt(marketId) to the invalidateQueries calls in useProbabilityEdit (hooks.ts:159-161), or add a refetchInterval to useCpt, or invalidate in the mutation's onSuccess callback within CptPanel itself. The implementation otherwise follows the plan well: the backend endpoint correctly reads CONDITIONAL_MARGINALS, the types are clean, the panel renders a proper table with inline editing, and the MarketDetail integration is in the right position."
+}

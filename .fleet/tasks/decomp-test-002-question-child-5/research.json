@@ -1,0 +1,171 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Node position changes should NOT be undoable for BayesNetGraph since it uses a static circular layout (layoutNodes() at BayesNetGraph.tsx:39-60) with no drag support. However, ForceDirectedGraph.tsx DOES have full drag support via D3 (lines 313-359) with fx/fy pinning during drag. If undo/redo applies to ForceDirectedGraph, drag-based repositioning is already implemented. For BayesNetGraph, position undo is premature — the layout is purely computed. The undo/redo system should target ForceDirectedGraph's drag interactions if node position changes are in scope, or defer position undo entirely since dragged positions reset when the force simulation releases (fx/fy set to null on drag end).",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:39-60",
+        "frontend/src/features/graph/ForceDirectedGraph.tsx:313-359",
+        "frontend/src/features/graph/useForceGraph.ts:79-86"
+      ],
+      "uncertainty": "Whether the task intends undo/redo for ForceDirectedGraph drag interactions or only for BayesNetGraph. ForceDirectedGraph drag currently releases pinning on drag-end (fx=null, fy=null), so positions aren't persisted anyway."
+    },
+    {
+      "question_id": "q2",
+      "answer": "The current flow submits edits immediately to the server — useProbabilityEdit() (hooks.ts:154-164) fires a POST to /v1/markets/{id}/orders/probability-edit and invalidates queries on success. There is no draft/commit pattern for probability edits. The AssumptionContext acts as a lightweight draft for assumptions/context but edits themselves are immediately committed. Given the task says 'server mutations are not reversible', the undo/redo system should intercept edits BEFORE submission and buffer them locally in a draft state. This requires a new draft/commit flow where edits are staged locally, undoable/redoable in the buffer, and only committed to the server on explicit user action. The alternative (compensating API calls) contradicts the stated scope.",
+      "confidence": 0.75,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:154-164",
+        "frontend/src/lib/api/client.ts:200-213",
+        "frontend/src/features/trading/ConditionalEditor.tsx:57-70",
+        "frontend/src/features/assumptions/VariableRow.tsx:42-60",
+        "frontend/src/features/assumptions/AssumptionContext.tsx:23-52"
+      ],
+      "uncertainty": "Whether 'before server submission' means a full draft buffer (staging edits locally) or simply allowing undo of the intent before the user clicks submit. The current submit is a single button press — there's no multi-step confirmation where undo would naturally fit in the existing flow."
+    },
+    {
+      "question_id": "q3",
+      "answer": "In the current codebase, 'layout' has two meanings: (1) BayesNetGraph uses a static circular layout computed by layoutNodes() with no user interaction, and (2) ForceDirectedGraph uses a physics-based force-directed layout with D3 forces (charge:-300, link distance:120, collide:50). There is NO layout algorithm switching — each component uses exactly one algorithm. The comment 'Arrange in a circle for small N, grid for larger' in BayesNetGraph.tsx:40 suggests future intent but only circular is implemented. 'Layout changes' most likely refers to manual node repositioning via ForceDirectedGraph's drag behavior, NOT algorithm switching or zoom/pan state. Zoom/pan is handled by D3 zoom (ForceDirectedGraph.tsx:284-311) with double-click reset — this is view state, not graph state, and typically wouldn't be undoable.",
+      "confidence": 0.7,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:39-60",
+        "frontend/src/features/graph/ForceDirectedGraph.tsx:284-311",
+        "frontend/src/features/graph/ForceDirectedGraph.tsx:313-359",
+        "frontend/src/features/graph/useForceGraph.ts:99-124"
+      ],
+      "uncertainty": "The term 'layout change' is ambiguous in the task description. It could mean algorithm switching (not implemented), manual repositioning (ForceDirectedGraph drag), or zoom/pan state. Without explicit requirements, this is a design decision."
+    },
+    {
+      "question_id": "q4",
+      "answer": "History should be ephemeral per component mount. The AssumptionProvider is already scoped to MarketDetail (MarketDetail.tsx:54-56) and uses React state that resets on unmount. There is no localStorage persistence for assumptions. The only localStorage usage in the app is for session state (session/context.tsx). Implementing persistent undo history would require serializing command objects, which adds significant complexity (especially for commands referencing React state or API results). Given the app's current patterns, ephemeral history scoped to the MarketDetail mount lifecycle is the natural fit.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/routes/MarketDetail.tsx:54-56",
+        "frontend/src/features/assumptions/AssumptionContext.tsx:23-52",
+        "frontend/src/features/session/context.tsx:4-21",
+        "frontend/src/app/providers.tsx:17-25"
+      ],
+      "uncertainty": "Whether users navigate between markets frequently enough that losing undo history is a real pain point. The current app is a single-market-at-a-time view."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes, undo should restore the exact previous assumption state. Looking at AssumptionContext.tsx:26-31, addAssumption() filters out any existing assumption with the same variableId then appends the new one. So if a user assumes outcome A, then assumes outcome B on the same variable, the A assumption is replaced. Undoing should restore A, not just clear B. The command pattern must capture the PREVIOUS state (the replaced assumption) in the command object at execute time, so undo can restore it. This is confirmed by the implementation: addAssumption replaces rather than toggles, so the previous value is lost unless explicitly captured.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/assumptions/AssumptionContext.tsx:26-31",
+        "frontend/src/features/assumptions/AssumptionContext.tsx:33-35",
+        "frontend/src/features/assumptions/VariableRow.tsx:30-40"
+      ],
+      "uncertainty": "None significant — the behavior is clear from the code. The command must store previousAssumption at execute time."
+    },
+    {
+      "question_id": "q6",
+      "answer": "Undo/redo should be scoped per-market (one history stack per MarketDetail mount). The AssumptionProvider is already scoped to MarketDetail (lines 54-56), not global. The app's provider hierarchy is: QueryClientProvider > SessionProvider > RouterProvider (providers.tsx:17-25). There's no global state management beyond session and query cache. A per-market scope aligns with the existing architecture — each MarketDetail instance is independent. A global stack would require tracking market IDs per action and handling the complexity of cross-market undo in a single-market-at-a-time view, which adds no user value.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/routes/MarketDetail.tsx:54-56",
+        "frontend/src/app/providers.tsx:17-25",
+        "frontend/src/app/router.tsx:18"
+      ],
+      "uncertainty": "None significant — per-market scoping is clearly the right choice given the architecture."
+    },
+    {
+      "question_id": "q7",
+      "answer": "A bounded history depth is appropriate. There's no existing pattern in the codebase to reference, but standard UX practice suggests 50-100 actions. Given that commands store state snapshots (previous assumption values, previous probabilities), memory is a concern. If the command pattern is used (storing only deltas/previous values), each command is small — an assumption command stores ~3 fields. A cap of 50 actions is reasonable and standard. The codebase uses no state management library that would provide built-in history limits.",
+      "confidence": 0.8,
+      "evidence": [
+        "frontend/src/features/assumptions/AssumptionContext.tsx:3-8"
+      ],
+      "uncertainty": "The exact number is a design choice. 50 is reasonable but could be adjusted based on actual memory profiling."
+    },
+    {
+      "question_id": "q8",
+      "answer": "BayesNetGraph already has a toolbar-like header area (BayesNetGraph.tsx:373-425) with Export/Import/Clear buttons and stats. This is the natural location to add undo/redo buttons alongside the existing controls. However, the task references the ForceDirectedGraph which has only a simple header (ForceDirectedGraph.tsx:397-407). The undo/redo buttons should be placed in whichever graph component's header area makes sense for the scope. Since undo/redo covers more than just graph edits (assumptions, probability edits), placing the buttons at the MarketDetail level — perhaps as a small floating toolbar or inline in the MarketDetail header area near the market title — would be more appropriate. No dedicated GraphToolbar component exists currently.",
+      "confidence": 0.7,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:373-425",
+        "frontend/src/features/graph/ForceDirectedGraph.tsx:397-407",
+        "frontend/src/routes/MarketDetail.tsx:34-44"
+      ],
+      "uncertainty": "Placement depends on whether undo/redo is graph-specific or market-wide. If market-wide, buttons should be in the MarketDetail header. If graph-only, they go in the graph toolbar."
+    },
+    {
+      "question_id": "q9",
+      "answer": "Keyboard shortcuts must be context-aware and NOT fire when focus is inside text inputs. The codebase has multiple Ctrl+Z conflict points: (1) DiscussionThread.tsx:94 — textarea for comments, (2) CreateMarketForm.tsx:73,85 — title input and description textarea, (3) MarketList.tsx:133 — search input, (4) App.tsx:25-36 — Account ID and Agent ID inputs in the header. The keyboard handler must check event.target.tagName for INPUT/TEXTAREA/SELECT and skip if matched. Standard pattern: listen on document, check if activeElement is an input/textarea/contenteditable, and only fire undo/redo if not.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/market/DiscussionThread.tsx:94",
+        "frontend/src/features/market/CreateMarketForm.tsx:73",
+        "frontend/src/features/market/CreateMarketForm.tsx:85",
+        "frontend/src/routes/MarketList.tsx:133",
+        "frontend/src/app/App.tsx:25-36"
+      ],
+      "uncertainty": "None — this is a well-established pattern. The only question is whether to also check for contenteditable elements, but none exist in the current codebase."
+    },
+    {
+      "question_id": "q10",
+      "answer": "Compound actions should be undone as a single atomic unit. ConditionalEditor.tsx:57-70 shows that a probability edit with multiple context conditions is submitted as a single mutation with one idempotencyKey. CptPanel.tsx:42-66 similarly submits one edit per cell interaction. Since each user 'submit' action produces exactly one API call with one payload, the natural undo granularity is one command per submit action. Partially undoing context conditions within a single edit would be confusing and could leave the CPT in an inconsistent state. The command pattern naturally supports this — each execute() call corresponds to one user action.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/trading/ConditionalEditor.tsx:57-70",
+        "frontend/src/features/trading/CptPanel.tsx:42-66",
+        "frontend/src/features/assumptions/VariableRow.tsx:42-60"
+      ],
+      "uncertainty": "Whether there are scenarios where batch operations (e.g., clearing all assumptions via clearAll()) should be treated differently. clearAll() removes all assumptions at once — should undo restore all of them or just the last one?"
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Command pattern with execute/undo pairs is the right approach. Each command stores the previous state needed for undo (e.g., previous assumption for a variable). Full state snapshots would be wasteful since most commands affect a small portion of state."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "AssumptionProvider is already scoped to MarketDetail (lines 54-56). HistoryContext should wrap at the same level or just above it within MarketDetail. However, note that AssumptionProvider currently only wraps AssumptionPanel — HistoryContext needs to wrap more components (CptPanel, EventTradePanel, graph) if those edits are also undoable. This may require restructuring the provider scope in MarketDetail."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Confirmed — multiple text inputs and textareas exist (DiscussionThread textarea, CreateMarketForm fields, App.tsx header inputs, MarketList search). The keyboard handler must filter by activeElement tag name."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "addAssumption() at AssumptionContext.tsx:26-31 replaces existing assumptions on the same variableId. The command must capture the previous assumption (if any) at execute time so undo can restore it, not just clear the current one."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.6,
+      "impact": "BayesNetGraph is static with no user interaction for positions. ForceDirectedGraph HAS drag support (lines 313-359) but positions reset on drag-end (fx/fy nulled). Whether 'node position changes' refers to ForceDirectedGraph drag or a new feature in BayesNetGraph is unclear. Stub commands may be needed for BayesNetGraph, but ForceDirectedGraph could have real position undo if drag positions were persisted."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "No localStorage persistence exists for state beyond session. Ephemeral history matching the component lifecycle is the right approach — cleared on unmount/navigation."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.8,
+      "impact": "50 actions is a reasonable default. Commands store small payloads (assumption objects, probability values), so memory impact is minimal even at 50. This can be a configurable constant."
+    },
+    {
+      "assumption_id": "a8",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "The codebase uses React Context + hooks throughout (AssumptionContext, SessionContext). No state management library is present. React Context + useReducer is the natural fit for HistoryContext. Adding immer or zustand would be an unnecessary dependency for this feature."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

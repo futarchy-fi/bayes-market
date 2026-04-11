@@ -1,0 +1,54 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Add selectedMarketId state to MarketDetail and wire ForceDirectedGraph onNodeClick to update it, passing selectedMarketId to CptPanel so clicking a graph node shows that node's CPT",
+      "files_created": [],
+      "files_modified": ["frontend/src/routes/MarketDetail.tsx"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Integrate useAnimationPropagation into ForceDirectedGraph: import the hook, apply CSS animation classes to SVG node/edge elements based on animatingNodes/animatingEdges sets, port CSS keyframes (evidence-pulse, propagation-arrive, edge-flow) and SVG filter definitions from BayesNetGraph",
+      "files_created": [],
+      "files_modified": ["frontend/src/features/graph/ForceDirectedGraph.tsx"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Create GraphToolbar component with export button (calls downloadJson from networkExport), import button (hidden file input + readAndValidateFile from networkImport), and graph view toggle (force-directed vs circular)",
+      "files_created": ["frontend/src/features/graph/GraphToolbar.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Integrate GraphToolbar into MarketDetail page: render above the graph area, connect import success to React Query cache invalidation for graph data refresh, wire view toggle state to conditionally render ForceDirectedGraph or BayesNetGraph",
+      "files_created": [],
+      "files_modified": ["frontend/src/routes/MarketDetail.tsx"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Connect assumption changes to trigger propagation animation in ForceDirectedGraph: listen to assumptions prop changes and call triggerAnimation with the evidence node ID when assumptions are added/changed",
+      "files_created": [],
+      "files_modified": [
+        "frontend/src/features/graph/ForceDirectedGraph.tsx",
+        "frontend/src/routes/MarketDetail.tsx"
+      ],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Verify useUndoRedoKeyboard is active within ForceDirectedGraph context, ensure keyboard shortcuts (Ctrl+Z, Ctrl+Shift+Z) work when graph is focused, add integration tests for the full workflow",
+      "files_created": ["frontend/src/__tests__/GraphIntegration.test.tsx"],
+      "files_modified": [
+        "frontend/src/__tests__/BayesNetGraph.test.tsx",
+        "frontend/src/__tests__/MarketDetail.test.tsx"
+      ],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}

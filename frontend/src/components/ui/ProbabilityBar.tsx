@@ -9,9 +9,11 @@ const OUTCOME_COLORS = [
 interface ProbabilityBarProps {
   outcomes: MarketOutcome[];
   marginals: Record<string, number>;
+  /** When true, briefly highlights the bar to signal a propagation wave arrival */
+  highlight?: boolean;
 }
 
-export function ProbabilityBar({ outcomes, marginals }: ProbabilityBarProps) {
+export function ProbabilityBar({ outcomes, marginals, highlight }: ProbabilityBarProps) {
   return (
     <div>
       <div
@@ -21,6 +23,8 @@ export function ProbabilityBar({ outcomes, marginals }: ProbabilityBarProps) {
           borderRadius: "var(--radius-sm)",
           overflow: "hidden",
           background: "var(--color-bg)",
+          boxShadow: highlight ? "0 0 8px var(--color-info)" : "none",
+          transition: "box-shadow 0.3s ease",
         }}
       >
         {outcomes.map((o, i) => {

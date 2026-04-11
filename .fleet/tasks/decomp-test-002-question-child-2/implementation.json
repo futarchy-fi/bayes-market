@@ -1,0 +1,48 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Add backend endpoint GET /v1/markets/{id}/cpt in server.py that reads CONDITIONAL_MARGINALS[marketId] and returns all context->outcome->probability entries as JSON, including outcome labels and parent variable names.",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Add frontend API client function getMarketCpt(marketId) in client.ts and corresponding TypeScript types (CptEntry, CptParent, CptResponse) in types.ts.",
+      "files_created": [],
+      "files_modified": ["frontend/src/lib/api/client.ts", "frontend/src/lib/api/types.ts"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Create useCpt hook that fetches CPT data via getMarketCpt with react-query caching and auto-refresh.",
+      "files_created": [],
+      "files_modified": ["frontend/src/lib/query/hooks.ts"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Create CptPanel React component that renders the CPT as an HTML table with parent configurations as rows and outcomes as columns, using existing panelStyle. Handles single-row (no parents) case.",
+      "files_created": ["frontend/src/features/trading/CptPanel.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Add inline editing to CptPanel cells: clicking a probability cell activates a slider/input, submits via useProbabilityEdit with the appropriate context array, and refreshes the table to show backend-normalized values.",
+      "files_created": [],
+      "files_modified": ["frontend/src/features/trading/CptPanel.tsx"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Integrate CptPanel into MarketDetail.tsx as a sibling panel in the CSS grid layout, positioned after AssumptionPanel and before EventTradePanel.",
+      "files_created": [],
+      "files_modified": ["frontend/src/routes/MarketDetail.tsx"],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
