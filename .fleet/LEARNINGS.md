@@ -342,17 +342,19 @@ if (!valParsed || valParsed.verdict !== "approve") {
 
 ### [2026-04-11] Continued test coverage sprint
 
-**Success:** Six test coverage workflows completed via epistemicExecutor:
+**Success:** Eight test coverage workflows completed via epistemicExecutor:
 - task-discussion-thread-002: DiscussionThread.test.tsx (14 tests)
 - task-bayes-net-graph-001: BayesNetGraph.test.tsx (13 tests)
 - task-junction-tree-001: JunctionTreePanel.test.tsx (13 tests)
 - task-portfolio-coverage-001: Portfolio.test.tsx expanded (20→310 lines, +9 tests)
 - task-create-market-coverage-001: CreateMarketForm.test.tsx expanded (44→346 lines, +16 tests)
 - task-system-coverage-001: System.test.tsx expanded (82→209 lines, +9 tests)
+- task-market-detail-coverage-001: MarketDetail.test.tsx expanded (108→446 lines, +8 tests)
 
 **Session stats:**
-- Frontend tests: 304 → 378 (+74 tests)
-- Total: 741 tests (378 frontend + 363 backend)
+- Frontend tests: 304 → 386 (+82 tests)
+- Total: 749 tests (386 frontend + 363 backend)
+- All 8 workflows completed successfully with auto-merge
 
 **Key learning:** Task queue mismatch causes workflows to hang at WorkflowTaskScheduled. Worker listens on `fleet-tasks`, not `fleet-bead`. Always verify task queue matches worker config.
 
