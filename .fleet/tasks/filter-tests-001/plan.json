@@ -1,0 +1,52 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Test boolean return values only, not TypeScript type narrowing",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Using tsd/expect-type for compile-time type guard assertions — project doesn't use these tools and type narrowing is a compile-time guarantee, not a runtime behavior"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Include edge cases (null, undefined, empty string, whitespace) for all functions",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Happy-path only — the code explicitly handles these edge cases (null in type guards, trim() in normalizeMarketListFilters), so they should be covered"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Include round-trip tests (marketListSearchParams → readMarketListFiltersFromSearchParams) asserting on normalized form",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Skip round-trip tests — these catch serialization mismatches that isolated unit tests miss, and the asymmetry (status 'all' is stripped, whitespace is trimmed) makes them especially valuable"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Single test file at frontend/src/__tests__/marketListFilters.test.ts following format.test.ts one-liner style with explicit vitest imports",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": ["Separate test files per function — overkill for six small pure functions; one file with describe blocks per function matches existing convention"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create frontend/src/__tests__/marketListFilters.test.ts with describe blocks for all six functions: isMarketListStatusFilter (valid statuses + 'all', invalid strings, null), isMarketListSort (valid sorts, invalid strings, null), normalizeMarketListFilters (strips 'all' status, keeps valid status/sort, trims q, empty/whitespace q, default empty input), marketListQueryKey (returns null for missing fields, returns values for present fields), marketListSearchParams (encodes normalized filters to URLSearchParams, omits empty fields), readMarketListFiltersFromSearchParams (decodes valid params, ignores invalid status/sort values, handles missing params)",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add round-trip tests in a separate describe block: encode with marketListSearchParams then decode with readMarketListFiltersFromSearchParams — test all-filters-set case, empty/defaults case, and 'all' status normalization case",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Run vitest to verify all tests pass: cd frontend && npx vitest run src/__tests__/marketListFilters.test.ts",
+      "depends_on": [2]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
