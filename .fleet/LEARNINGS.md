@@ -315,3 +315,42 @@ if (!valParsed || valParsed.verdict !== "approve") {
 
 **Key insight:** The permissive "fail only on explicit reject" allowed silent failures to merge. Strict "require explicit approve" catches both missing validation output and any non-approval verdict.
 
+---
+
+### [2026-04-11] Workflows reliably produce test coverage at scale
+
+**Success:** After fixing validation bypass, ran 15+ epistemicExecutor workflows in sequence, all producing real deliverables:
+- Frontend tests: 54 → 204 (278% increase)
+- New test files: Analytics, marketListFilters, ui-components, session, TradingPanel, AnalyticsSummaryCards, chartUtils, AssumptionContext, ProbabilityBar, TraderLeaderboard, AnalyticsFilters, VolumeChart
+- Total: 567 tests (204 frontend + 363 backend)
+
+**What worked:**
+1. Clear, focused task descriptions with specific file paths
+2. Pattern references ("Follow patterns from X.test.tsx")
+3. One component/module per workflow
+4. Validation fix ensuring only approved work merges
+
+**Key insight:** Small, focused tasks (one test file each) have near-100% success rate. Complex multi-file tasks occasionally fail validation. Prefer decomposition.
+
+**Final session stats (2026-04-11):**
+- Frontend tests: 54 → 281 (420% increase)
+- Test files: 9 → 27 (22 new files added)
+- Total: 644 tests (281 frontend + 363 backend)
+- ~25 workflows executed, all successful after validation fix
+
+---
+
+### [2026-04-11] Continued test coverage sprint
+
+**Success:** Three more feature components tested via epistemicExecutor:
+- task-discussion-thread-002: DiscussionThread.test.tsx (14 tests)
+- task-bayes-net-graph-001: BayesNetGraph.test.tsx (13 tests)
+- task-junction-tree-001: JunctionTreePanel.test.tsx (13 tests)
+
+**Session stats:**
+- Frontend tests: 304 → 344 (+40 tests)
+- Test files: 29 → 32 (+3 files)
+- Total: 707 tests (344 frontend + 363 backend)
+
+**Key learning:** Task queue mismatch causes workflows to hang at WorkflowTaskScheduled. Worker listens on `fleet-tasks`, not `fleet-bead`. Always verify task queue matches worker config.
+
