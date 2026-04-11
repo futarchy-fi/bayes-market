@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The GET /v1/markets/{id}/analytics endpoint already exists in server.py (line 2257, routed at line 5393), returns total_volume, trade_count, price_history, and top_traders, and has 6 integration tests. The frontend client.ts already has getMarketAnalytics() (line 171) and types.ts defines MarketAnalyticsResponse. Is there a specific gap or enhancement beyond what's already implemented?",
+      "category": "requirements",
+      "why_it_matters": "The task description says the endpoint doesn't exist, but it clearly does. If the work is already done, we'd be duplicating existing code. Need to identify what, if anything, is actually missing."
+    },
+    {
+      "id": "q2",
+      "question": "Are there any frontend components or pages that call getMarketAnalytics() but fail because the response shape doesn't match expectations? The analytics feature directory has AnalyticsSummaryCards, PriceChart, VolumeChart, TraderLeaderboard, and AnalyticsFilters - are any of these broken or incomplete?",
+      "category": "codebase",
+      "why_it_matters": "If the endpoint exists but the frontend components don't render correctly, the real task might be fixing a contract mismatch rather than building from scratch."
+    },
+    {
+      "id": "q3",
+      "question": "The existing tests (test_market_analytics_returns_multi_outcome_price_series, test_market_analytics_buckets_mixed_activity, test_market_analytics_ranks_traders_deterministically, etc.) cover price series, volume bucketing, trader ranking, invalid intervals, unknown markets, and method-not-allowed. Are there additional test scenarios needed beyond these 6 existing tests?",
+      "category": "requirements",
+      "why_it_matters": "Adding redundant tests wastes effort. Need to know if specific edge cases or scenarios are missing from coverage."
+    },
+    {
+      "id": "q4",
+      "question": "The task mentions 'wire up the frontend client.ts to actually call it' - but getMarketAnalytics() is already defined in client.ts and the analytics feature components exist. Is there a missing React query hook or route that should connect these components to the API call?",
+      "category": "codebase",
+      "why_it_matters": "The wiring might be partially done but missing a key integration point like a query hook, route definition, or page component that ties the analytics components to the API."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The analytics endpoint, frontend client, types, and tests are all fully functional and correctly wired together already.",
+      "confidence": 0.85,
+      "if_wrong": "There may be subtle bugs, contract mismatches, or missing integration points that need to be identified and fixed."
+    },
+    {
+      "id": "a2",
+      "assumption": "The task description was written before the analytics implementation was completed, and the work has since been done.",
+      "confidence": 0.8,
+      "if_wrong": "The existing code may be a stub or partial implementation that doesn't actually work end-to-end."
+    },
+    {
+      "id": "a3",
+      "assumption": "No database migration or persistent storage changes are needed since the system uses in-memory data structures.",
+      "confidence": 0.95,
+      "if_wrong": "If persistence was added recently, the analytics queries would need to be adapted to use a database layer."
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 1,
+    "complexity_reason": "All four deliverables (endpoint, response shape, tests, frontend client) already exist in the codebase. If any work remains, it is likely a small integration fix or minor enhancement, not a multi-file implementation.",
+    "uncertainty_score": 2,
+    "uncertainty_reason": "The main uncertainty is whether the existing implementation is truly complete and functional, or if there are subtle gaps the task description is referring to. The code appears complete based on exploration.",
+    "independent_subproblems": [
+      "Verify existing endpoint returns correct response shape",
+      "Verify frontend client and components integrate correctly"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity is 1 (everything appears implemented), uncertainty is 2 (need to verify completeness). Only 2 subproblems and they are small verification tasks, not independent implementations. No need to spawn children."
+  },
+  "spawn_children": false,
+  "children": []
+}

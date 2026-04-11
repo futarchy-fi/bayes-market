@@ -1,0 +1,102 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Response shape: { total_volume, trade_count, price_history: [{timestamp, marginals}], top_traders: [{account_id, volume, trade_count}], interval, market_id }. This mirrors the existing market summary fields (volume, marginals) but adds time-series and per-trader aggregations computed from ORDERS and EVENTS.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Returning raw trade logs instead of aggregated analytics — too much data for a summary endpoint",
+        "Separate endpoints for volume, price history, and traders — over-engineering for a single analytics view"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Support an optional ?interval= query parameter (1h, 6h, 1d, 7d) for price_history bucketing, defaulting to 1h. Bucket EVENTS by timestamp into intervals and take the last marginals snapshot per bucket. Validate interval values and return 400 for invalid ones.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Fixed granularity with no query param — inflexible for different time horizons",
+        "Arbitrary integer intervals — harder to validate, unnecessary complexity"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Compute top_traders by aggregating ORDERS where marketId matches, grouping by side/account, summing cost (absolute value) as volume and counting trades. Return top 10 sorted by volume descending with deterministic tiebreaking on account_id.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Using ACCOUNT_EXPOSURE for trader ranking — exposure is position-based, not volume-based",
+        "No limit on traders returned — unbounded response size"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Add the endpoint as a sub-route under /v1/markets/{id}/analytics in route_request(), following the existing nested path pattern (like /v1/markets/{id}/events and /v1/markets/{id}/resolve). Return 404 for unknown markets and 405 for non-GET methods.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Top-level /v1/analytics?market_id=X — breaks REST conventions used by existing endpoints",
+        "Adding to a separate analytics module — unnecessary file when all handlers are in server.py"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Frontend: add MarketAnalyticsResponse type, getMarketAnalytics() client function, useMarketAnalytics() hook with query key, but do NOT create page components or routes — the task specifies endpoint + client wiring, not a full analytics page.",
+      "based_on": ["q2", "q4"],
+      "alternatives_rejected": [
+        "Building full analytics page with charts — exceeds task scope of endpoint + client wiring",
+        "Skipping frontend entirely — task explicitly says to wire up client.ts"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add get_market_analytics() handler in backend/server.py: compute total_volume from MARKETS[id]['volume'], trade_count from ORDERS filtered by marketId, price_history from EVENTS filtered by marketId bucketed by interval param, top_traders from ORDERS grouped by account with volume/trade aggregation. Support ?interval= query param with validation. Return 404 for unknown market.",
+      "depends_on": [],
+      "estimated_lines": 100,
+      "risk": "medium"
+    },
+    {
+      "step": 2,
+      "task": "Register route in route_request() at the /v1/markets/{id}/ section: add elif for 'analytics' segment mapping GET to get_market_analytics(market_id, query). Return 405 for non-GET. Update service_index_payload() to list the new endpoint.",
+      "depends_on": [1],
+      "estimated_lines": 15,
+      "risk": "low"
+    },
+    {
+      "step": 3,
+      "task": "Add MarketAnalyticsResponse type in frontend/src/lib/api/types.ts with fields matching the backend response shape: market_id, total_volume, trade_count, price_history array, top_traders array, interval.",
+      "depends_on": [],
+      "estimated_lines": 25,
+      "risk": "low"
+    },
+    {
+      "step": 4,
+      "task": "Add getMarketAnalytics(marketId, interval?) function in frontend/src/lib/api/client.ts following the existing request<T>() pattern. Add query key and useMarketAnalytics() hook in frontend/src/lib/query/hooks.ts following existing useMarket() pattern.",
+      "depends_on": [3],
+      "estimated_lines": 20,
+      "risk": "low"
+    },
+    {
+      "step": 5,
+      "task": "Add integration tests in tests/test_bayes_market_api.py: (1) analytics returns correct volume/trade_count for market with trades, (2) price_history buckets events by interval, (3) top_traders ranks by volume with deterministic tiebreaking, (4) returns 404 for unknown market, (5) returns 405 for POST, (6) returns 400 for invalid interval, (7) empty market returns zero volume and empty arrays.",
+      "depends_on": [1, 2],
+      "estimated_lines": 180,
+      "risk": "low"
+    }
+  ],
+  "decomposition_assessment": {
+    "total_steps": 5,
+    "estimated_total_lines": 340,
+    "high_risk_steps": 0,
+    "parallelizable_groups": [["step1", "step3"], ["step2", "step4"], ["step5"]],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Total estimated lines (340) is under 500 threshold. Zero high-risk steps (the medium-risk handler is straightforward aggregation over in-memory dicts). While steps 1+3 and 2+4 are parallelizable, the backend and frontend share a contract that benefits from sequential implementation to avoid mismatches. The task is a single cohesive feature with clear patterns to follow."
+  },
+  "spawn_children": false,
+  "children": []
+}

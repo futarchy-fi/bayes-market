@@ -8737,5 +8737,155 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         )
 
 
+class BayesMarketAnalyticsTests(unittest.TestCase):
+    """Integration tests for GET /v1/markets/{id}/analytics."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        server.reset_state()
+        cls.httpd = server.HTTPServer(("127.0.0.1", 0), server.BayesHandler)
+        cls.port = cls.httpd.server_address[1]
+        cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
+        cls.thread.start()
+        time.sleep(0.05)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.httpd.shutdown()
+        cls.thread.join(timeout=2)
+        cls.httpd.server_close()
+
+    def setUp(self) -> None:
+        server.reset_state()
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        body: dict | None = None,
+    ):
+        conn = HTTPConnection("127.0.0.1", self.port, timeout=5)
+        payload = None if body is None else json.dumps(body)
+        request_headers: dict[str, str] = {}
+        if body is not None:
+            request_headers["Content-Type"] = "application/json"
+        try:
+            conn.request(method, path, body=payload, headers=request_headers)
+            response = conn.getresponse()
+            response_body = response.read().decode()
+        finally:
+            conn.close()
+        return response.status, json.loads(response_body)
+
+    def _place_trade(self, market_id: str, account_id: str, outcome_id: str, probability: float) -> None:
+        body = build_unconditional_probability_edit_body(account_id, market_id, outcome_id, probability)
+        status, _ = self.request("POST", f"/v1/markets/{market_id}/orders/probability-edit", body)
+        assert status == 201, f"Expected 201, got {status}"
+
+    def test_analytics_returns_correct_volume_and_trade_count(self):
+        market_id = REFERENCE_NET_MARKET_IDS[0]
+        initial_volume = float(server.MARKETS[market_id]["volume"])
+
+        self._place_trade(market_id, "acct_analytics_1", "yes", 0.8)
+        self._place_trade(market_id, "acct_analytics_2", "no", 0.5)
+
+        status, payload = self.request("GET", f"/v1/markets/{market_id}/analytics")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["market_id"], market_id)
+        self.assertEqual(payload["trade_count"], 2)
+        self.assertIsInstance(payload["total_volume"], (int, float))
+        self.assertIn("meta", payload)
+        self.assertIn("interval", payload)
+        self.assertEqual(payload["interval"], "1h")
+
+    def test_analytics_price_history_buckets_events_by_interval(self):
+        market_id = REFERENCE_NET_MARKET_IDS[0]
+
+        self._place_trade(market_id, "acct_hist_1", "yes", 0.8)
+        self._place_trade(market_id, "acct_hist_2", "no", 0.5)
+
+        status, payload = self.request("GET", f"/v1/markets/{market_id}/analytics?interval=1d")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["interval"], "1d")
+        self.assertIsInstance(payload["price_history"], list)
+        # All events within one day should collapse into one bucket
+        if payload["price_history"]:
+            for entry in payload["price_history"]:
+                self.assertIn("timestamp", entry)
+                self.assertIn("marginals", entry)
+                self.assertIsInstance(entry["marginals"], dict)
+
+    def test_analytics_top_traders_ranked_by_volume_with_deterministic_tiebreaking(self):
+        market_id = REFERENCE_NET_MARKET_IDS[0]
+
+        self._place_trade(market_id, "acct_b", "yes", 0.8)
+        self._place_trade(market_id, "acct_a", "no", 0.5)
+        self._place_trade(market_id, "acct_b", "yes", 0.9)
+
+        status, payload = self.request("GET", f"/v1/markets/{market_id}/analytics")
+
+        self.assertEqual(status, 200)
+        top_traders = payload["top_traders"]
+        self.assertIsInstance(top_traders, list)
+        self.assertGreater(len(top_traders), 0)
+        self.assertLessEqual(len(top_traders), 10)
+
+        # acct_b made 2 trades, acct_a made 1
+        trader_map = {t["account_id"]: t for t in top_traders}
+        self.assertIn("acct_b", trader_map)
+        self.assertIn("acct_a", trader_map)
+        self.assertEqual(trader_map["acct_b"]["trade_count"], 2)
+        self.assertEqual(trader_map["acct_a"]["trade_count"], 1)
+
+        # Verify sorted by volume descending
+        for i in range(len(top_traders) - 1):
+            self.assertGreaterEqual(top_traders[i]["volume"], top_traders[i + 1]["volume"])
+            if top_traders[i]["volume"] == top_traders[i + 1]["volume"]:
+                self.assertLess(top_traders[i]["account_id"], top_traders[i + 1]["account_id"])
+
+    def test_analytics_returns_404_for_unknown_market(self):
+        status, payload = self.request("GET", "/v1/markets/nonexistent_market/analytics")
+
+        self.assertEqual(status, 404)
+        self.assertEqual(payload["error"]["code"], "market_not_found")
+
+    def test_analytics_returns_405_for_post(self):
+        market_id = REFERENCE_NET_MARKET_IDS[0]
+
+        status, payload = self.request("POST", f"/v1/markets/{market_id}/analytics", {})
+
+        self.assertEqual(status, 405)
+        self.assertEqual(payload["error"]["code"], "method_not_allowed")
+
+    def test_analytics_returns_400_for_invalid_interval(self):
+        market_id = REFERENCE_NET_MARKET_IDS[0]
+
+        status, payload = self.request("GET", f"/v1/markets/{market_id}/analytics?interval=2h")
+
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"]["code"], "invalid_interval")
+
+    def test_analytics_empty_market_returns_zero_volume_and_empty_arrays(self):
+        # Create a fresh market with no trades
+        create_body = build_create_market_body(
+            title="Empty Analytics Market",
+            description="No trades yet",
+        )
+        create_status, create_payload = self.request("POST", "/v1/markets", create_body)
+        self.assertEqual(create_status, 201)
+        new_market_id = create_payload["market"]["id"]
+
+        status, payload = self.request("GET", f"/v1/markets/{new_market_id}/analytics")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["market_id"], new_market_id)
+        self.assertEqual(payload["total_volume"], 0.0)
+        self.assertEqual(payload["trade_count"], 0)
+        self.assertEqual(payload["price_history"], [])
+        self.assertEqual(payload["top_traders"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
