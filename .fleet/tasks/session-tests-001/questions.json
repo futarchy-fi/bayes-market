@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should localStorage be mocked via vi.stubGlobal or by using a jsdom localStorage spy? The jsdom environment provides a working localStorage, so we could either spy on the real one or replace it entirely.",
+      "category": "design",
+      "why_it_matters": "Affects how we test loadSession/saveSession interactions and whether corrupt storage tests need manual prototype manipulation or simple mock returns."
+    },
+    {
+      "id": "q2",
+      "question": "Should the test file use renderWithProviders from helpers.tsx (which wraps SessionProvider along with QueryClient and MemoryRouter), or render SessionProvider directly for isolated context testing?",
+      "category": "design",
+      "why_it_matters": "renderWithProviders already wraps SessionProvider, so using it for useSession tests would add unnecessary providers. Direct rendering gives cleaner isolation but deviates from the project's established pattern."
+    },
+    {
+      "id": "q3",
+      "question": "For the 'useSession error outside provider' test, should we suppress the expected React error boundary console.error output to keep test output clean?",
+      "category": "design",
+      "why_it_matters": "React logs errors to console when rendering fails. Without suppression, passing tests produce noisy error output that could confuse developers reading test results."
+    },
+    {
+      "id": "q4",
+      "question": "The isConfigured flag only checks accountId.length > 0 and ignores agentId. Should the tests explicitly verify this behavior (agentId alone does NOT make isConfigured true)?",
+      "category": "requirements",
+      "why_it_matters": "The task description says 'test isConfigured flag' but doesn't specify edge cases. Documenting the current accountId-only logic via tests ensures intentional behavior is preserved."
+    },
+    {
+      "id": "q5",
+      "question": "Should tests for corrupt storage cover only invalid JSON, or also cover cases like valid JSON with missing fields (e.g. {accountId: 'x'} with no agentId)?",
+      "category": "requirements",
+      "why_it_matters": "loadSession uses nullish coalescing (parsed.accountId ?? '') which handles missing fields gracefully. Testing this boundary documents the fallback behavior for partial data."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "We should use vi.spyOn(Storage.prototype, 'getItem') and vi.spyOn(Storage.prototype, 'setItem') to mock localStorage, since jsdom provides a real Storage implementation that we can spy on.",
+      "confidence": 0.85,
+      "if_wrong": "Would need to use vi.stubGlobal to replace localStorage entirely, which is more invasive but gives more control."
+    },
+    {
+      "id": "a2",
+      "assumption": "For isolated SessionProvider/useSession tests, we should render SessionProvider directly (not via renderWithProviders) since we're testing the provider itself, not components that consume it.",
+      "confidence": 0.9,
+      "if_wrong": "We'd use renderWithProviders and test indirectly, but this would be less precise and couple tests to unrelated providers."
+    },
+    {
+      "id": "a3",
+      "assumption": "The test file should be placed at frontend/src/__tests__/session.test.tsx as specified in the task description, matching the existing flat test file structure in __tests__/.",
+      "confidence": 0.95,
+      "if_wrong": "Minor path adjustment needed, but all existing tests follow this pattern."
+    },
+    {
+      "id": "a4",
+      "assumption": "We should use @testing-library/react's renderHook for testing useSession directly (both happy path and error outside provider), since it's available in @testing-library/react v16.",
+      "confidence": 0.9,
+      "if_wrong": "Would need to create a small test component that calls useSession and render that instead."
+    },
+    {
+      "id": "a5",
+      "assumption": "Tests should clear localStorage between tests (beforeEach) to ensure isolation, matching the pattern of clearing mocks seen in other test files.",
+      "confidence": 0.95,
+      "if_wrong": "Tests might have ordering dependencies and flaky behavior."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
