@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the test cover the formatResolutionProbabilities helper function directly, or only test it indirectly through the resolved-market rendering path?",
+      "category": "requirements",
+      "why_it_matters": "formatResolutionProbabilities is a private module-level function. Testing it directly requires exporting it or testing through the component's resolved state display. The approach affects test granularity."
+    },
+    {
+      "id": "q2",
+      "question": "Should the test simulate the full two-step confirmation flow (click Resolve -> click Yes, Resolve) as an integration-style interaction test, or test each state in isolation via mock overrides?",
+      "category": "design",
+      "why_it_matters": "The component has a two-step confirm flow. Existing tests in TradingPanel test interactions end-to-end (click -> verify mutate called). Following that pattern means testing the full flow, but the confirmation step adds intermediate UI assertions."
+    },
+    {
+      "id": "q3",
+      "question": "Are there any additional guard conditions beyond status checks and missing accountId that should be tested (e.g., role-based access, market ownership)?",
+      "category": "requirements",
+      "why_it_matters": "The component currently guards on market.status and session.accountId. If authorization logic exists upstream (in MarketDetail route), we should verify the component's own guards match expectations and not duplicate upstream checks."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The component is at frontend/src/features/market/ResolveMarketPanel.tsx (not in trading/)",
+      "confidence": 1.0,
+      "if_wrong": "Would need to adjust import path in test file"
+    },
+    {
+      "id": "a2",
+      "assumption": "Test file should be created at frontend/src/__tests__/ResolveMarketPanel.test.tsx following existing convention",
+      "confidence": 0.95,
+      "if_wrong": "Would need to place tests in a different location"
+    },
+    {
+      "id": "a3",
+      "assumption": "Should mock useResolveMarket and useSession following the exact pattern in TradingPanel.test.tsx (vi.mock + vi.mocked + defaultMutationState helper)",
+      "confidence": 0.95,
+      "if_wrong": "Would need different mocking strategy"
+    },
+    {
+      "id": "a4",
+      "assumption": "The test should cover: guard clauses (draft status, resolved status, no session), rendering the resolve form, outcome selection, two-step confirmation flow, mutation payload verification, pending/success/error states",
+      "confidence": 0.9,
+      "if_wrong": "May need to add or remove test cases"
+    },
+    {
+      "id": "a5",
+      "assumption": "The onChange handler for select resets confirming state - this interaction should be tested",
+      "confidence": 0.85,
+      "if_wrong": "May be considered an implementation detail not worth testing"
+    },
+    {
+      "id": "a6",
+      "assumption": "renderWithProviders from ./helpers is sufficient - no additional providers needed for this component",
+      "confidence": 0.95,
+      "if_wrong": "Would need to extend the test helper or create a custom wrapper"
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
