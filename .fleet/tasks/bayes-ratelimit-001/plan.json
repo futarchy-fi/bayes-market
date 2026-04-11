@@ -1,0 +1,77 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "No new implementation code needed — rate_limit_headers() at server.py:682-707 already builds all four X-RateLimit-* headers (Limit, Remaining, Reset, Policy) and handle_api() at server.py:4597-4612 already applies them to both success (<400) and 429 responses on all rate-limited write endpoints.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Rewrite or extend rate_limit_headers() — unnecessary since it already covers all required headers",
+        "Add middleware/decorator approach — unnecessary since handle_api() already handles it centrally"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "No additional test coverage needed — the breadth test at test_bayes_market_api.py:6888 already covers all 5 existing rate-limited POST routes (create-market, probability-edit, market-resolve, comment-post, event-trade). Close/reopen endpoints do not exist in this codebase.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Add tests for close/reopen endpoints — these routes do not exist per resolve_write_route_category() at server.py:551-571"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Include X-RateLimit-Policy as a fourth header in scope — it is part of the existing contract, already implemented and tested. Removing it would be a regression.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Strip Policy header to match the 3-header task description — would break existing contract and tests"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep conditional header emission behavior (headers only when RATE_LIMIT_PER_MIN > 0 AND agent_id is non-empty) — this is deliberately designed and explicitly tested.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Always emit headers even when rate limiting is disabled — contradicts existing design and test expectations"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Run existing rate-limit header test suite to verify all tests pass: python -m pytest tests/test_bayes_market_api.py -k 'rate_limit_header' -v",
+      "depends_on": [],
+      "estimated_lines": 0,
+      "risk": "low"
+    },
+    {
+      "step": 2,
+      "task": "Verify the 5 rate-limited routes in resolve_write_route_category() match the 5 routes tested in test_protected_post_routes_emit_rate_limit_headers_on_first_success — confirm no coverage gaps.",
+      "depends_on": [1],
+      "estimated_lines": 0,
+      "risk": "low"
+    },
+    {
+      "step": 3,
+      "task": "If steps 1-2 confirm full coverage with all tests passing, mark task as complete with no code changes. If any gap is found, create a targeted fix (unlikely based on research).",
+      "depends_on": [1, 2],
+      "estimated_lines": 0,
+      "risk": "low"
+    }
+  ],
+
+  "decomposition_assessment": {
+    "total_steps": 3,
+    "estimated_total_lines": 0,
+    "high_risk_steps": 0,
+    "parallelizable_groups": [["step1", "step2"]],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "The feature is already fully implemented and tested. All steps are verification-only with 0 estimated lines of code change. No high-risk steps, total estimated lines well below 500, and only one parallelizable group. This is a validation task, not an implementation task."
+  },
+
+  "spawn_children": false,
+  "children": []
+}
