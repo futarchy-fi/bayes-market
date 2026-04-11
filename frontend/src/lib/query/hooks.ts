@@ -18,6 +18,7 @@ export const queryKeys = {
   marketEvents: (id: string) => ["markets", id, "events"] as const,
   marketComments: (id: string) => ["markets", id, "comments"] as const,
   engineStats: (id: string) => ["markets", id, "engine-stats"] as const,
+  marketAnalytics: (id: string, interval?: string) => ["markets", id, "analytics", interval ?? "1h"] as const,
   accountRisk: (id: string) => ["accounts", id, "risk"] as const,
   accountExposure: (id: string) => ["accounts", id, "exposure"] as const,
   health: () => ["health"] as const,
@@ -305,6 +306,15 @@ export function useEngineStats(marketId: string, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.engineStats(marketId),
     queryFn: () => api.getEngineStats(marketId),
+    enabled: opts?.enabled ?? true,
+  });
+}
+
+export function useMarketAnalytics(marketId: string, opts?: { interval?: string; enabled?: boolean }) {
+  const interval = opts?.interval;
+  return useQuery({
+    queryKey: queryKeys.marketAnalytics(marketId, interval),
+    queryFn: () => api.getMarketAnalytics(marketId, interval),
     enabled: opts?.enabled ?? true,
   });
 }
