@@ -1,0 +1,110 @@
+{
+  "phase": "research",
+  "note": "questions.json was not produced by Phase 1 analysis. Questions were derived from the task title 'Create a simple math utilities module' and codebase context.",
+  "answers": [
+    {
+      "question_id": "q1",
+      "question": "Where should the math utilities module be placed?",
+      "answer": "src/math_utils.py — the src/ directory is the established location for standalone utility modules in this project. Both greeting.py and config.py live there, and tests reference src/ via sys.path.insert.",
+      "confidence": 0.95,
+      "evidence": [
+        "src/greeting.py:1 — existing utility module in src/",
+        "src/config.py:1 — another utility module in src/",
+        "tests/test_greeting.py:4 — sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))",
+        "tests/test_config.py:5 — same path pattern"
+      ],
+      "uncertainty": "The task title doesn't explicitly specify the path, but the existing pattern is clear.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "question": "What functions should a 'simple math utilities module' include?",
+      "answer": "Common general-purpose math functions: add, subtract, multiply, divide (with zero-division handling), factorial, fibonacci, is_prime, gcd, lcm. The word 'simple' suggests basic building-block functions, not domain-specific math like the LMSR functions in backend/lmsr.py.",
+      "confidence": 0.8,
+      "evidence": [
+        "backend/lmsr.py — domain-specific market math exists separately, so this module should be general-purpose",
+        "src/greeting.py — existing src/ modules are simple, self-contained utilities"
+      ],
+      "uncertainty": "The exact set of functions is not specified — 'simple math utilities' is ambiguous. Could range from just arithmetic to include number theory functions.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "question": "Are there existing math utilities in the codebase that this should integrate with or avoid duplicating?",
+      "answer": "The backend uses Python's stdlib math module directly (import math in lmsr.py, server.py, inference/current_model.py). There are no general-purpose math utility wrappers. The LMSR module has domain-specific probability/scoring math. This new module should be independent — general-purpose math helpers that don't overlap with the domain-specific backend math.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/lmsr.py:6 — import math (uses math.log, math.isfinite, math.isclose)",
+        "backend/server.py:11 — import math",
+        "backend/inference/current_model.py:7 — import math"
+      ],
+      "uncertainty": "None — no existing general math utils module exists.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "question": "Should the module use external dependencies or stdlib only?",
+      "answer": "Stdlib only. The existing src/ modules (greeting.py, config.py) use only stdlib. There is no requirements.txt or pyproject.toml in the project root. The math stdlib module provides everything needed for simple math utilities.",
+      "confidence": 0.95,
+      "evidence": [
+        "src/greeting.py — no imports at all",
+        "src/config.py:1 — only imports os (stdlib)",
+        ".gitignore — no dependency management files present in project root"
+      ],
+      "uncertainty": "None — pattern is very clear.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "question": "What testing patterns should the tests follow?",
+      "answer": "Tests should go in tests/test_math_utils.py, following the existing pattern: sys.path.insert for src/, import the module, simple assert-based test functions with test_ prefix. No test framework beyond what's available (likely pytest given the style, but tests are written to also work with plain assert).",
+      "confidence": 0.95,
+      "evidence": [
+        "tests/test_greeting.py:1-4 — sys.path.insert pattern, simple assert tests",
+        "tests/test_config.py:1-5 — same pattern with more complex test cases",
+        "tests/test_greeting.py:9-18 — test functions use plain assert statements"
+      ],
+      "uncertainty": "The test runner isn't explicitly configured for src/ modules, but the pattern is consistent.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "assumption": "The module should be placed at src/math_utils.py following the established pattern for utility modules in this project.",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "All existing src/ modules follow this convention. Low risk."
+    },
+    {
+      "assumption_id": "a2",
+      "assumption": "The module should include basic arithmetic (add, subtract, multiply, divide) and common number theory functions (factorial, fibonacci, is_prime, gcd, lcm).",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.7,
+      "impact": "The exact function set isn't specified. Starting with common basics is safe — functions can be added or removed. The word 'simple' suggests we should not over-engineer."
+    },
+    {
+      "assumption_id": "a3",
+      "assumption": "Only stdlib should be used (no numpy, sympy, etc).",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Consistent with all existing src/ modules. No dependency management in place."
+    },
+    {
+      "assumption_id": "a4",
+      "assumption": "Tests should go at tests/test_math_utils.py following the existing sys.path.insert + assert pattern.",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Consistent with test_greeting.py and test_config.py patterns."
+    },
+    {
+      "assumption_id": "a5",
+      "assumption": "Division by zero should be handled gracefully (raise ValueError or return None) rather than letting ZeroDivisionError propagate.",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.6,
+      "impact": "Design choice — either approach is valid. Raising ValueError with a descriptive message is more consistent with the validation pattern in backend/lmsr.py."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
