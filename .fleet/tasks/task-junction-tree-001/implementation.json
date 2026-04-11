@@ -1,0 +1,83 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Create test file with imports: vi, render utilities from helpers.tsx, screen from @testing-library/react, JunctionTreePanel, and useEngineStats",
+      "files_created": ["frontend/src/__tests__/JunctionTreePanel.test.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Set up vi.mock('@/lib/query/hooks') with factory returning mockUseEngineStats",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/JunctionTreePanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Create test fixtures: fullDiagnosticsData, minimalDiagnosticsData, errorCountData",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/JunctionTreePanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Write test: loading state shows loading indicator",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/JunctionTreePanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Write test: renders clique tree stats (num_cliques, max_clique_size, junction_tree_width)",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/JunctionTreePanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Write test: renders inference diagnostics (request_count, error_count, cache hit rate, latency percentiles)",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/JunctionTreePanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Write test: optional compile_time_ms renders/hides Compile Time MetricBox",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/JunctionTreePanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 8,
+      "task": "Write test: optional memory_bytes renders formatted Memory MetricBox (512B, 2.0KB, 1.0MB)",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/JunctionTreePanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 9,
+      "task": "Write test: optional last_updated renders/hides timestamp line",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/JunctionTreePanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 10,
+      "task": "Write test: error_count > 0 triggers danger color styling on error count MetricBox",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/JunctionTreePanel.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 11,
+      "task": "Run vitest on the new test file to verify all tests pass",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
