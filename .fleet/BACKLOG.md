@@ -22,7 +22,11 @@ Pick ONE at a time. These test the system with real work:
 
 ## Priority 3: Architecture gaps
 - [x] **Progressive decomposition prompts** — Update phase prompts to use 4-step decomposition protocol
-  - DONE via task-progressive-decomp-001: validation_criteria and self-review added to analysisDecompose.ts buildPrompt
+  - PARTIAL via task-progressive-decomp-001: validation_criteria and self-review added to analysisDecompose.ts
+  - **FIXED 2026-04-11 16:00**: Added decomposition_assessment object to question/research/plan prompts in epistemicExecutor.ts
+  - Agents must now calculate complexity_score, uncertainty_score, identify independent_subproblems
+  - Clear decision rules: complexity >= 4 + 2+ subproblems → SPAWN_CHILDREN
+  - Verified: task-decomp-test-002 spawned 5 children for complex BN visualization task
 - [x] **Inject child results after thaw** — Parent needs context about what children did when it wakes up
   - DONE: task-child-context-injection-001 completed in 18m33s, merged to temporal-fleet main
   - Added: childSummaries.ts activity (50 lines), 102 lines tests, updates to parentLifecycle/recursiveLifecycle
