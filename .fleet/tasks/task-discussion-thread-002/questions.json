@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should formatRelativeTime be mocked or should we use fixed timestamps far enough in the past to produce deterministic output (e.g., '1d ago')? The Analytics test doesn't face this issue since it doesn't render relative times.",
+      "category": "design",
+      "why_it_matters": "formatRelativeTime depends on Date.now(), so without mocking time or the function, timestamp assertions will be flaky across test runs."
+    },
+    {
+      "id": "q2",
+      "question": "The task says 'Use mocks for useMarketComments, usePostMarketComment, useSession' — the codebase pattern (TradingPanel, EventTradePanel, etc.) mocks @/features/session/context with vi.importActual spread and @/lib/query/hooks with vi.fn() stubs. Should we follow this exact pattern or mock the API client layer like Analytics.test.tsx does?",
+      "category": "codebase",
+      "why_it_matters": "The component uses hooks directly (not the API client), so mocking hooks is the right approach and matches the task description, but confirming alignment with the established pattern ensures consistency."
+    },
+    {
+      "id": "q3",
+      "question": "For test 10 (submit posts comment and clears form on success), the component calls crypto.randomUUID() for the idempotency key. Is crypto.randomUUID available in the vitest/jsdom environment, or does it need to be stubbed?",
+      "category": "codebase",
+      "why_it_matters": "If jsdom doesn't provide crypto.randomUUID, the submit handler will throw, breaking the test. We may need to mock it globally or via vi.stubGlobal."
+    },
+    {
+      "id": "q4",
+      "question": "The mutation mock needs to simulate the onSuccess callback to verify form clearing. The existing pattern (TradingPanel) uses mockMutate.mockImplementation to capture and invoke the onSuccess callback. Should we follow the same pattern where mutate is mocked to synchronously call options.onSuccess?",
+      "category": "design",
+      "why_it_matters": "The form-clear assertion (test 10) depends on the onSuccess callback firing. Getting the mock implementation right is critical for this test to work."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The mocking pattern should follow TradingPanel.test.tsx / EventTradePanel.test.tsx style: mock @/features/session/context with vi.importActual spread + useSession: vi.fn(), and mock @/lib/query/hooks with the specific hooks as vi.fn().",
+      "confidence": 0.95,
+      "if_wrong": "Would need to restructure the entire mock setup — either mocking the API client layer or using a different hook mocking strategy."
+    },
+    {
+      "id": "a2",
+      "assumption": "The useMarketComments hook mock should return an object matching react-query's UseQueryResult shape: { isLoading, isError, error, data } with data being MarketCommentsResponse | undefined.",
+      "confidence": 0.95,
+      "if_wrong": "The component accesses comments.data.comments and comments.data.pagination.returned — if the mock shape is wrong, tests will throw unexpected errors."
+    },
+    {
+      "id": "a3",
+      "assumption": "The usePostMarketComment hook mock should return an object matching react-query's UseMutationResult shape: { mutate, isPending, isError, error } with mutate being a vi.fn().",
+      "confidence": 0.95,
+      "if_wrong": "The component checks mutation.isPending and mutation.isError — wrong shape would cause runtime errors in tests."
+    },
+    {
+      "id": "a4",
+      "assumption": "renderWithProviders from helpers.tsx can be used directly since it wraps with SessionProvider, but since we mock useSession at the module level, the real SessionProvider is still rendered (it just won't be used by the component).",
+      "confidence": 0.9,
+      "if_wrong": "If SessionProvider interferes with the mocked useSession, we may need a simpler render wrapper or skip the session provider."
+    },
+    {
+      "id": "a5",
+      "assumption": "crypto.randomUUID() is available in vitest's environment (either via Node's crypto or jsdom polyfill), or can be trivially stubbed with vi.stubGlobal.",
+      "confidence": 0.8,
+      "if_wrong": "Would need to add a global mock for crypto.randomUUID in the test setup."
+    },
+    {
+      "id": "a6",
+      "assumption": "For the read-only test, any non-'active' status (e.g., 'resolved') should trigger the read-only message. The component checks market.status !== 'active'.",
+      "confidence": 1.0,
+      "if_wrong": "N/A — this is directly visible in the component source code."
+    },
+    {
+      "id": "a7",
+      "assumption": "formatRelativeTime can be handled by either mocking vi.spyOn or by using a fixed date via vi.useFakeTimers, rather than mocking the utility module.",
+      "confidence": 0.85,
+      "if_wrong": "Would need to mock @/lib/utils/format module to control the timestamp output."
+    },
+    {
+      "id": "a8",
+      "assumption": "The comment count badge uses pagination.returned (not comments.length), so the mock data must have consistent pagination.returned values.",
+      "confidence": 1.0,
+      "if_wrong": "N/A — directly visible in component source: comments.data.pagination.returned."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
