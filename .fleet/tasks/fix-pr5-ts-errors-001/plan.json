@@ -1,0 +1,83 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Create a shared createMockQueryResult<T> helper in helpers.tsx and consolidate all 4 test files (Portfolio, MarketDetail, DiscussionThread, ConditionalEditor) to use it. Also create a shared createMockMutationResult helper for the 3 files with duplicate defaultMutationState().",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Fix only Portfolio.test.tsx (other files also fail build since tsconfig includes src/__tests__/)",
+        "Fix each file independently with inline mocks (leads to continued drift)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Add a targeted type declaration for process.env in a test-globals.d.ts file under src/, not @types/node. Only chartUtils.test.ts uses process.env.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Add @types/node to devDependencies (pulls in all Node.js types, may conflict with DOM types)",
+        "Use import.meta.env (doesn't support TZ)",
+        "Add declaration to vite-env.d.ts (mixes Vite concerns with test concerns)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Use non-null assertions (!) for array indexed access in ProbabilityBar.test.tsx and api-client.test.ts. This matches the established codebase convention (40+ existing uses across 13+ test files).",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Type guards (inconsistent with 40+ existing non-null assertion usages in test files, unnecessarily verbose)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Run pnpm install first, then pnpm build to get the actual full error list before making changes. The research couldn't verify the complete error set without node_modules.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Fix only the known errors and hope for the best (risky, a5 assumption had only 0.75 confidence)"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Run `pnpm install` in the frontend directory to get node_modules, then run `pnpm build` (or `tsc -b --noEmit`) to capture the complete list of TypeScript errors that need fixing.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Create shared createMockQueryResult<T> helper in frontend/src/__tests__/helpers.tsx. Base it on MarketDetail.test.tsx's most complete mock (25 props) and add any missing properties identified from the actual UseQueryResult type in node_modules/@tanstack/react-query. Also create a shared createMockMutationResult helper.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Refactor Portfolio.test.tsx, MarketDetail.test.tsx, DiscussionThread.test.tsx, and ConditionalEditor.test.tsx to import and use the shared createMockQueryResult and createMockMutationResult helpers from helpers.tsx, removing their local duplicates.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Create frontend/src/test-globals.d.ts with a minimal `declare var process: { env: Record<string, string | undefined> }` declaration to fix the chartUtils.test.ts process.env.TZ type error.",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Add non-null assertions (!) to array indexed access in ProbabilityBar.test.tsx and api-client.test.ts where noUncheckedIndexedAccess causes 'possibly undefined' errors.",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Run `pnpm build` again to verify all TypeScript errors are resolved. If new errors surfaced, fix them iteratively until the build passes clean.",
+      "depends_on": [3, 4, 5]
+    },
+    {
+      "step": 7,
+      "task": "Run `pnpm test` to verify all tests still pass after the refactoring.",
+      "depends_on": [6]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
