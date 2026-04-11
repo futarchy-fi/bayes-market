@@ -1,15 +1,26 @@
-[Task bayes-t548-v2-execute-t548-v2-r1-multi-variable-cliques] PHASE 3b: IMPLEMENT
+[Task bayes-t548-v2-execute-t548-v2-r1-multi-variable-cliques] PHASE 4: VALIDATE
 Title: Multi-variable clique building and treewidth computation
 
-Read your plan at .fleet/tasks/bayes-t548-v2-execute-t548-v2-r1-multi-variable-cliques/plan.json.
+Review the work done in this branch. Check:
+1. Did execution follow the plan? (read plan.json, check the diff)
+2. Did the plan follow from the research? (read research.json)
+3. Were there obvious gaps in questions? (read questions.json)
+4. Run tests if available.
 
-NOW IMPLEMENT the plan. Modify production source files. Run tests.
-Do NOT just write JSON artifacts. Modify .py/.ts/.js source files.
-Follow the steps in plan.json and write real, working code.
+Write your output to .fleet/tasks/bayes-t548-v2-execute-t548-v2-r1-multi-variable-cliques/validation.json:
+{
+  "phase": "validate",
+  "plan_adherence": 0.0-1.0,
+  "plan_adherence_notes": "...",
+  "research_quality": 0.0-1.0,
+  "question_completeness": 0.0-1.0,
+  "missed_questions": ["..."],
+  "verdict": "approve|changes_requested|reject",
+  "reason": "...",
+  "spawn_children": false,
+  "children": []
+}
 
-DEPENDENCIES: If tests require packages (node_modules, venv), install them first:
-  - Node: if package.json exists, run 'pnpm install' or 'npm install'
-  - Python: if requirements.txt exists, run 'pip install -r requirements.txt'
-Worktrees are fresh checkouts without dependencies pre-installed.
+SCOPE: Write ONLY to .fleet/tasks/ files. Do NOT modify production code.
 
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "execute: bayes-t548-v2-execute-t548-v2-r1-multi-variable-cliques"
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "validate: bayes-t548-v2-execute-t548-v2-r1-multi-variable-cliques"
