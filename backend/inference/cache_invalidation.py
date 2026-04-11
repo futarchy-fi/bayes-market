@@ -25,6 +25,7 @@ class CacheInvalidationManager:
     """
 
     def __init__(self) -> None:
+        """Initialize an empty hash store and zero hit/miss counters."""
         self._hashes: dict[str, str] = {}
         self._cache_hits: int = 0
         self._cache_misses: int = 0
@@ -36,6 +37,11 @@ class CacheInvalidationManager:
 
         Returns an :class:`InvalidationResult` indicating whether recompilation
         is needed and whether conditional marginals should be cleared.
+
+        :param market_id: Unique identifier for the market being checked.
+        :param new_source_state_hash: Hash of the current market source state.
+        :returns: An :class:`InvalidationResult` with recompilation and
+            marginal-clearing flags.
         """
         previous = self._hashes.get(market_id)
         if previous is not None and previous == new_source_state_hash:
@@ -58,10 +64,12 @@ class CacheInvalidationManager:
 
     @property
     def cache_hits(self) -> int:
+        """Return the number of cache hits since last reset."""
         return self._cache_hits
 
     @property
     def cache_misses(self) -> int:
+        """Return the number of cache misses since last reset."""
         return self._cache_misses
 
     def reset(self) -> None:
