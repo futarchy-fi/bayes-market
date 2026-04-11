@@ -1,0 +1,86 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "EventTrade remains side-effect-free for cache invalidation, consistent with the freeze doc. The task's 'when trades occur' refers to ProbabilityEdit trades that mutate marginals.",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Add refresh_market_compile_snapshot call to EventTrade route handler"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Invalidation is market-scoped only (per-market). No cross-market dependency tracking, which belongs to T554.",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Implement cross-market dependency graph and propagation"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Clear a market's CONDITIONAL_MARGINALS entries when an unconditional ProbabilityEdit changes that market's marginals. Cached conditionals reference stale base probabilities after unconditional edits.",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Leave CONDITIONAL_MARGINALS to grow unboundedly and serve potentially stale data"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Add a CacheInvalidationManager to backend/inference/ that encapsulates invalidation logic (hash comparison, conditional marginals cleanup, counter tracking). server.py calls into it rather than owning the logic inline.",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Keep all invalidation logic inline in server.py refresh_market_compile_snapshot"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Use source_state_hash comparison to detect no-op mutations and skip redundant recompilation. Increment cache_hits when hash matches (skip recompile), cache_misses when hash differs (must recompile).",
+      "based_on": ["q5"],
+      "alternatives_rejected": ["Always recompile unconditionally, leaving cache_hits/cache_misses as permanent stubs"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Add unit tests in test_bayes_market_inference_module.py for the invalidation logic, and integration tests in test_bayes_market_api.py verifying invalidation through HTTP endpoints. No separate test file.",
+      "based_on": ["q6"],
+      "alternatives_rejected": ["Create a dedicated test_cache_invalidation.py file"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create backend/inference/cache_invalidation.py with a CacheInvalidationManager class that: (a) stores previous source_state_hash per market, (b) compares new hash vs old to decide cache_hit vs cache_miss, (c) returns an InvalidationResult indicating whether recompilation is needed and whether conditional marginals should be cleared, (d) tracks cache_hits and cache_misses counters.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Export the new CacheInvalidationManager from backend/inference/__init__.py so it's part of the module's public API.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Refactor server.py refresh_market_compile_snapshot to use CacheInvalidationManager: before recompiling, check if source_state_hash changed. If unchanged, increment cache_hits and skip recompile. If changed, increment cache_misses, recompile, and clear that market's CONDITIONAL_MARGINALS entries. Update ensure_market_engine_state to instantiate/store the manager.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Wire cache_hits and cache_misses from CacheInvalidationManager into the engine-stats response in get_market_engine_stats(), replacing the current stub zeros.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Add unit tests in test_bayes_market_inference_module.py: (a) hash match returns cache_hit and skips recompile, (b) hash mismatch returns cache_miss and triggers recompile, (c) conditional marginals are flagged for clearing on unconditional edit, (d) counter tracking is correct across multiple invalidation calls.",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Add integration tests in test_bayes_market_api.py: (a) after ProbabilityEdit, engine-stats shows updated compile state and incremented cache_misses, (b) duplicate ProbabilityEdit with same values increments cache_hits and doesn't change compile_id, (c) after unconditional ProbabilityEdit, conditional marginals for that market are cleared, (d) EventTrade still does not trigger cache invalidation.",
+      "depends_on": [3, 4]
+    },
+    {
+      "step": 7,
+      "task": "Run full test suite to verify no regressions. Fix any failures.",
+      "depends_on": [5, 6]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
