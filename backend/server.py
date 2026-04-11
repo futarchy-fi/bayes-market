@@ -210,7 +210,7 @@ MARKET_SUMMARY_FIELDS = (
 )
 
 ACCOUNT_RISK_LIMIT = 100.0
-max_position_size = 100.0
+max_position_size = 1000.0
 ACCOUNT_SERVICE_INDEX_ROUTES = (
     "/v1/accounts/{id}/risk",
     "/v1/accounts/{id}/exposure",
@@ -280,6 +280,14 @@ _RATE_LIMIT_LOCK = threading.Lock()
 WS_CONNECTIONS: dict[str, set[Any]] = {}
 _WS_LOCK = threading.Lock()
 _WS_SEQ = 0
+
+
+def get_market_max_position_size(market_id: str) -> float:
+    """Return the per-market position size limit, falling back to the global default."""
+    market = MARKETS.get(market_id)
+    if market is not None and "maxPositionSize" in market:
+        return float(market["maxPositionSize"])
+    return max_position_size
 
 
 def _next_ws_seq() -> int:
@@ -1822,6 +1830,7 @@ def serialize_account_exposure_position(position: dict[str, Any]) -> dict[str, A
         "netSize": net_size,
         "absSize": round_risk_value(abs(net_size)),
         "lastTradePrice": last_trade_price,
+        "maxPositionSize": round_risk_value(get_market_max_position_size(market_id)),
         "updatedAt": str(position["updatedAt"]),
         "lastOrderId": position.get("lastOrderId"),
         "lastCommandId": position.get("lastCommandId"),
@@ -1882,7 +1891,6 @@ def serialize_account_exposure_positions(account: dict[str, Any]) -> list[dict[s
 def serialize_account_exposure(account: dict[str, Any]) -> dict[str, Any]:
     """Project one stored exposure account into the public account.exposure shape."""
     return {
-        "maxPositionSize": round_risk_value(max_position_size),
         "updatedAt": str(account["updatedAt"]),
         "positions": serialize_account_exposure_positions(account),
     }
@@ -2018,6 +2026,7 @@ def create_market(body: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
     outcomes = body.get("outcomes")
     expires_at = body.get("expires_at")
     liquidity = body.get("liquidity", 10000.0)
+    max_pos_size = body.get("maxPositionSize")
 
     if not title or not isinstance(title, str):
         raise ApiError(400, "invalid_payload", "title is required and must be a string")
@@ -2028,6 +2037,9 @@ def create_market(body: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
             raise ApiError(400, "invalid_payload", "each outcome must have id and name")
     if not expires_at or not isinstance(expires_at, str):
         raise ApiError(400, "invalid_payload", "expires_at is required (ISO 8601 string)")
+    if max_pos_size is not None:
+        if not isinstance(max_pos_size, (int, float)) or max_pos_size <= 0:
+            raise ApiError(400, "invalid_payload", "maxPositionSize must be a positive number")
 
     # Check for duplicate outcome IDs
     outcome_ids = [o["id"] for o in outcomes]
@@ -2082,6 +2094,8 @@ def create_market(body: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
         "created_at": now,
         "expires_at": expires_at,
     }
+    if max_pos_size is not None:
+        market["maxPositionSize"] = float(max_pos_size)
 
     MARKETS[market_id] = market
     ensure_market_engine_state(market_id)
@@ -4074,7 +4088,8 @@ def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[
             )
 
         preview = preview_event_trade_position_net_change(account_id, market_id, normalized_payload)
-        if abs(preview["resultingNetSize"]) > round_exposure_value(max_position_size):
+        market_limit = get_market_max_position_size(market_id)
+        if abs(preview["resultingNetSize"]) > round_exposure_value(market_limit):
             literal = normalized_payload["formula"][0][0]
             raise ApiError(
                 400,
@@ -4088,7 +4103,7 @@ def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[
                     "requestedSize": round_exposure_value(normalized_payload["size"]),
                     "currentNetSize": preview["currentNetSize"],
                     "resultingNetSize": preview["resultingNetSize"],
-                    "maxPositionSize": round_exposure_value(max_position_size),
+                    "maxPositionSize": round_exposure_value(market_limit),
                 },
             )
 

@@ -365,7 +365,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             },
         }
 
-        self.assertEqual(server.max_position_size, 100.0)
+        self.assertEqual(server.max_position_size, 1000.0)
         self.assertIn("acct_test", server.ACCOUNT_EXPOSURE)
 
         server.reset_state()
@@ -3008,6 +3008,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     "netSize": 5.0,
                     "absSize": 5.0,
                     "lastTradePrice": retained_trade["order"]["price"],
+                    "maxPositionSize": 1000.0,
                     "updatedAt": retained_trade["order"]["filledAt"],
                     "lastOrderId": retained_trade["order"]["id"],
                     "lastCommandId": retained_trade["order"]["commandId"],
@@ -3127,6 +3128,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     "netSize": 8.0,
                     "absSize": 8.0,
                     "lastTradePrice": trade_payload["order"]["price"],
+                    "maxPositionSize": 1000.0,
                     "updatedAt": trade_payload["order"]["filledAt"],
                     "lastOrderId": trade_payload["order"]["id"],
                     "lastCommandId": trade_payload["order"]["commandId"],
@@ -4044,18 +4046,18 @@ class BayesMarketEventTradeTests(unittest.TestCase):
             {
                 "label": "positive-cap-buy",
                 "account_id": "acct_event_trade_exact_positive",
-                "starting_net_size": 99.5,
+                "starting_net_size": 999.5,
                 "side": "buy",
                 "size": 0.5,
-                "expected_net_size": 100.0,
+                "expected_net_size": 1000.0,
             },
             {
                 "label": "negative-cap-sell",
                 "account_id": "acct_event_trade_exact_negative",
-                "starting_net_size": -99.5,
+                "starting_net_size": -999.5,
                 "side": "sell",
                 "size": 0.5,
-                "expected_net_size": -100.0,
+                "expected_net_size": -1000.0,
             },
         ):
             with self.subTest(case=case["label"]):
@@ -4137,7 +4139,6 @@ class BayesMarketEventTradeTests(unittest.TestCase):
                 "account": {
                     "id": account_id,
                     "exposure": {
-                        "maxPositionSize": 100.0,
                         "updatedAt": buy_payload["order"]["filledAt"],
                         "positions": [
                             {
@@ -4146,6 +4147,7 @@ class BayesMarketEventTradeTests(unittest.TestCase):
                                 "netSize": 12.5,
                                 "absSize": 12.5,
                                 "lastTradePrice": 0.65,
+                                "maxPositionSize": 1000.0,
                                 "updatedAt": buy_payload["order"]["filledAt"],
                                 "lastOrderId": buy_payload["order"]["id"],
                                 "lastCommandId": buy_payload["order"]["commandId"],
@@ -4162,7 +4164,6 @@ class BayesMarketEventTradeTests(unittest.TestCase):
                 "account": {
                     "id": account_id,
                     "exposure": {
-                        "maxPositionSize": 100.0,
                         "updatedAt": sell_payload["order"]["filledAt"],
                         "positions": [
                             {
@@ -4171,6 +4172,7 @@ class BayesMarketEventTradeTests(unittest.TestCase):
                                 "netSize": 8.5,
                                 "absSize": 8.5,
                                 "lastTradePrice": 0.65,
+                                "maxPositionSize": 1000.0,
                                 "updatedAt": sell_payload["order"]["filledAt"],
                                 "lastOrderId": sell_payload["order"]["id"],
                                 "lastCommandId": sell_payload["order"]["commandId"],
@@ -4191,7 +4193,7 @@ class BayesMarketEventTradeTests(unittest.TestCase):
         setup_payload, setup_status = server.route_request(
             "POST",
             "/v1/markets/m1/orders/event-trade",
-            build_event_trade_body(account_id, "m1", "yes", size=99.0, side="buy"),
+            build_event_trade_body(account_id, "m1", "yes", size=999.0, side="buy"),
         )
         baseline_exposure_payload, baseline_exposure_status = server.route_request(
             "GET",
@@ -4228,9 +4230,9 @@ class BayesMarketEventTradeTests(unittest.TestCase):
                 "outcomeId": "yes",
                 "side": "buy",
                 "requestedSize": 2.0,
-                "currentNetSize": 99.0,
-                "resultingNetSize": 101.0,
-                "maxPositionSize": 100.0,
+                "currentNetSize": 999.0,
+                "resultingNetSize": 1001.0,
+                "maxPositionSize": 1000.0,
             },
         )
         post_rejection_exposure_payload, post_rejection_exposure_status = server.route_request(
@@ -4270,8 +4272,157 @@ class BayesMarketEventTradeTests(unittest.TestCase):
         self.assertEqual(retry_payload["result"]["status"], "accepted")
         self.assertEqual(retry_payload["order"]["idempotencyKey"], idempotency_key)
         self.assertNotIn("replayed", retry_payload["meta"])
-        self.assertEqual(server.ACCOUNT_EXPOSURE[account_id]["positions"]["m1|yes"]["netSize"], 91.0)
+        self.assertEqual(server.ACCOUNT_EXPOSURE[account_id]["positions"]["m1|yes"]["netSize"], 991.0)
         self.assertEqual(server.IDEMPOTENCY_KEYS[scope_key], retry_payload["result"]["commandId"])
+
+    def test_create_market_with_custom_max_position_size(self):
+        """Creating a market with maxPositionSize stores and returns it."""
+        server.reset_state()
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets",
+            {
+                "title": "Custom Limit Market",
+                "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+                "expires_at": "2026-12-31T23:59:59Z",
+                "maxPositionSize": 500.0,
+            },
+        )
+
+        self.assertEqual(status, 201)
+        market_id = payload["market"]["id"]
+        self.assertEqual(server.MARKETS[market_id]["maxPositionSize"], 500.0)
+        self.assertEqual(server.get_market_max_position_size(market_id), 500.0)
+
+    def test_create_market_without_max_position_size_inherits_default(self):
+        """A market created without maxPositionSize falls back to the global default."""
+        server.reset_state()
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets",
+            {
+                "title": "Default Limit Market",
+                "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+                "expires_at": "2026-12-31T23:59:59Z",
+            },
+        )
+
+        self.assertEqual(status, 201)
+        market_id = payload["market"]["id"]
+        self.assertNotIn("maxPositionSize", server.MARKETS[market_id])
+        self.assertEqual(server.get_market_max_position_size(market_id), 1000.0)
+
+    def test_create_market_rejects_invalid_max_position_size(self):
+        """maxPositionSize must be a positive number if provided."""
+        server.reset_state()
+        for invalid_value in (0, -5, "abc"):
+            with self.subTest(value=invalid_value):
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(
+                        "POST",
+                        "/v1/markets",
+                        {
+                            "title": f"Invalid Limit Market {invalid_value}",
+                            "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+                            "expires_at": "2026-12-31T23:59:59Z",
+                            "maxPositionSize": invalid_value,
+                        },
+                    )
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertIn("maxPositionSize", error.message)
+
+    def test_event_trade_per_market_limit_exceeded(self):
+        """A trade that exceeds a custom per-market limit is rejected with the per-market limit in the error."""
+        server.reset_state()
+        # Create market with a tight limit
+        create_payload, create_status = server.route_request(
+            "POST",
+            "/v1/markets",
+            {
+                "title": "Tight Limit Market",
+                "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+                "expires_at": "2026-12-31T23:59:59Z",
+                "maxPositionSize": 50.0,
+            },
+        )
+        self.assertEqual(create_status, 201)
+        market_id = create_payload["market"]["id"]
+        account_id = "acct_per_market_limit"
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request(
+                "POST",
+                f"/v1/markets/{market_id}/orders/event-trade",
+                build_event_trade_body(account_id, market_id, "yes", size=51.0, side="buy"),
+            )
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "position_limit_exceeded")
+        self.assertEqual(error.details["maxPositionSize"], 50.0)
+        self.assertEqual(error.details["resultingNetSize"], 51.0)
+
+    def test_event_trade_under_per_market_limit_succeeds(self):
+        """A trade within a custom per-market limit succeeds."""
+        server.reset_state()
+        create_payload, create_status = server.route_request(
+            "POST",
+            "/v1/markets",
+            {
+                "title": "Moderate Limit Market",
+                "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+                "expires_at": "2026-12-31T23:59:59Z",
+                "maxPositionSize": 200.0,
+            },
+        )
+        self.assertEqual(create_status, 201)
+        market_id = create_payload["market"]["id"]
+        account_id = "acct_per_market_ok"
+
+        payload, status = server.route_request(
+            "POST",
+            f"/v1/markets/{market_id}/orders/event-trade",
+            build_event_trade_body(account_id, market_id, "yes", size=150.0, side="buy"),
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["result"]["status"], "accepted")
+
+    def test_exposure_endpoint_shows_per_market_max_position_size_in_positions(self):
+        """The exposure endpoint includes maxPositionSize in each position object."""
+        server.reset_state()
+        create_payload, create_status = server.route_request(
+            "POST",
+            "/v1/markets",
+            {
+                "title": "Exposure Limit Market",
+                "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+                "expires_at": "2026-12-31T23:59:59Z",
+                "maxPositionSize": 300.0,
+            },
+        )
+        self.assertEqual(create_status, 201)
+        market_id = create_payload["market"]["id"]
+        account_id = "acct_exposure_limit"
+
+        trade_payload, trade_status = server.route_request(
+            "POST",
+            f"/v1/markets/{market_id}/orders/event-trade",
+            build_event_trade_body(account_id, market_id, "yes", size=25.0, side="buy"),
+        )
+        self.assertEqual(trade_status, 201)
+
+        exposure_payload, exposure_status = server.route_request(
+            "GET",
+            f"/v1/accounts/{account_id}/exposure",
+        )
+
+        self.assertEqual(exposure_status, 200)
+        positions = exposure_payload["account"]["exposure"]["positions"]
+        self.assertEqual(len(positions), 1)
+        self.assertEqual(positions[0]["maxPositionSize"], 300.0)
+        self.assertNotIn("maxPositionSize", exposure_payload["account"]["exposure"])
 
     def test_event_trade_replays_idempotent_submission(self):
         body = build_event_trade_body(
@@ -4316,7 +4467,6 @@ class BayesMarketEventTradeTests(unittest.TestCase):
                 "account": {
                     "id": "acct_event_trade",
                     "exposure": {
-                        "maxPositionSize": 100.0,
                         "updatedAt": first_payload["order"]["filledAt"],
                         "positions": [
                             {
@@ -4325,6 +4475,7 @@ class BayesMarketEventTradeTests(unittest.TestCase):
                                 "netSize": 12.5,
                                 "absSize": 12.5,
                                 "lastTradePrice": 0.65,
+                                "maxPositionSize": 1000.0,
                                 "updatedAt": first_payload["order"]["filledAt"],
                                 "lastOrderId": first_payload["order"]["id"],
                                 "lastCommandId": first_payload["order"]["commandId"],
@@ -4782,7 +4933,6 @@ class BayesMarketExposureProjectionTests(unittest.TestCase):
         self.assertEqual(
             payload["account"]["exposure"],
             {
-                "maxPositionSize": 100.0,
                 "updatedAt": account_timestamp,
                 "positions": [
                     {
@@ -4791,6 +4941,7 @@ class BayesMarketExposureProjectionTests(unittest.TestCase):
                         "netSize": 1.234568,
                         "absSize": 1.234568,
                         "lastTradePrice": 0.35,
+                        "maxPositionSize": 1000.0,
                         "updatedAt": "2026-04-09T11:00:00Z",
                         "lastOrderId": "ord_1",
                         "lastCommandId": "cmd_1",
@@ -4801,6 +4952,7 @@ class BayesMarketExposureProjectionTests(unittest.TestCase):
                         "netSize": -3.456789,
                         "absSize": 3.456789,
                         "lastTradePrice": 0.25,
+                        "maxPositionSize": 1000.0,
                         "updatedAt": "2026-04-09T09:00:00Z",
                         "lastOrderId": "ord_2",
                         "lastCommandId": "cmd_2",
@@ -7680,6 +7832,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
                     "netSize": 4.0,
                     "absSize": 4.0,
                     "lastTradePrice": retained_trade_payload["order"]["price"],
+                    "maxPositionSize": 1000.0,
                     "updatedAt": retained_trade_payload["order"]["filledAt"],
                     "lastOrderId": retained_trade_payload["order"]["id"],
                     "lastCommandId": retained_trade_payload["order"]["commandId"],
