@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should we mock useSession at the module level (vi.mock('@/features/session/context')) to control isConfigured, or should we manipulate localStorage/SessionProvider state to drive the configured vs unconfigured paths?",
+      "category": "design",
+      "why_it_matters": "The existing helpers.tsx wraps with a real SessionProvider that reads from localStorage (default empty = unconfigured). Mocking at module level gives direct control over isConfigured and session values but diverges from the helper pattern. Using localStorage manipulation is more integrated but less explicit."
+    },
+    {
+      "id": "q2",
+      "question": "For testing form submission with useProbabilityEdit, should we mock the entire '@/lib/query/hooks' module or mock the underlying '@/lib/api/client' (like MarketDetail.test.tsx does)?",
+      "category": "design",
+      "why_it_matters": "The task description says 'Mock useProbabilityEdit and useSession'. Mocking '@/lib/api/client' lets react-query's real useMutation run (testing integration more deeply). Mocking '@/lib/query/hooks' directly gives full control over mutation state (isPending, isSuccess, isError) but loses integration coverage."
+    },
+    {
+      "id": "q3",
+      "question": "Does jsdom/vitest provide crypto.randomUUID()? The handleSubmit function calls crypto.randomUUID() for idempotencyKey.",
+      "category": "codebase",
+      "why_it_matters": "If crypto.randomUUID is not available in the jsdom test environment, form submission tests will throw. We may need to mock or polyfill it."
+    },
+    {
+      "id": "q4",
+      "question": "Should we test the success message rendering ('Order accepted: {orderId}') and error message rendering as separate test cases, or combine them with the form submission test?",
+      "category": "design",
+      "why_it_matters": "The component shows mutation.data.order.orderId on success and mutation.error.message on error. These are distinct UI states that could be tested separately for clarity, or combined for conciseness."
+    },
+    {
+      "id": "q5",
+      "question": "Should slider interaction tests use fireEvent.change or userEvent to simulate probability changes?",
+      "category": "design",
+      "why_it_matters": "The existing test files use screen queries and waitFor but don't import @testing-library/user-event. Using fireEvent.change is simpler and consistent with current tests. userEvent is more realistic but would add a new dependency pattern."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "We should mock useSession at module level (vi.mock) for the unconfigured test, and mock it to return isConfigured:true with a session for the configured/submission tests. This follows the task description's explicit instruction to 'Mock useProbabilityEdit and useSession'.",
+      "confidence": 0.85,
+      "if_wrong": "We'd need to use the real SessionProvider with localStorage manipulation instead, which is more complex but tests integration more deeply."
+    },
+    {
+      "id": "a2",
+      "assumption": "We should mock useProbabilityEdit from '@/lib/query/hooks' to return controlled mutation state objects, rather than mocking the underlying API client. This matches the task description's instruction and gives direct control over isPending/isSuccess/isError states.",
+      "confidence": 0.8,
+      "if_wrong": "We'd mock '@/lib/api/client' instead and test through real react-query mutation lifecycle, which is more integrated but harder to control mutation states for specific test cases."
+    },
+    {
+      "id": "a3",
+      "assumption": "crypto.randomUUID() is available in the jsdom/vitest environment (Node 19+ includes it, and vitest typically runs on modern Node).",
+      "confidence": 0.7,
+      "if_wrong": "We'll need to add a global mock for crypto.randomUUID in the test file or setup."
+    },
+    {
+      "id": "a4",
+      "assumption": "We should use fireEvent.change for slider/select interactions, consistent with existing test patterns that don't use userEvent.",
+      "confidence": 0.9,
+      "if_wrong": "Would need to install and import @testing-library/user-event."
+    },
+    {
+      "id": "a5",
+      "assumption": "Since we're mocking useSession, we don't need renderWithProviders (which includes SessionProvider). We can use a simpler render with just QueryClientProvider, or use renderWithProviders and let the mock override the real provider.",
+      "confidence": 0.75,
+      "if_wrong": "If vi.mock for useSession doesn't override the context-based hook when SessionProvider is in the tree, we may need a different approach."
+    },
+    {
+      "id": "a6",
+      "assumption": "The test file structure should follow existing patterns: describe block with 'TradingPanel', beforeEach for mock resets, individual it blocks for each scenario.",
+      "confidence": 0.95,
+      "if_wrong": "Minimal impact — just organizational preference."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
