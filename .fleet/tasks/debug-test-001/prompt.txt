@@ -1,27 +1,15 @@
-[Task debug-test-001] PHASE 1: QUESTION GENERATION
+[Task debug-test-001] PHASE 3b: IMPLEMENT
 Title: Create a simple counter module
-Description: Create src/counter.py with a Counter class that has increment(), decrement(), and get_value() methods. Include tests.
-Repo: /home/kelvin/bayes-market
 
-Explore the codebase. Identify what you need to know before building.
+Read your plan at .fleet/tasks/debug-test-001/plan.json.
 
-Write your output to .fleet/tasks/debug-test-001/questions.json:
-{
-  "phase": "question",
-  "questions": [
-    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
-  ],
-  "assumptions": [
-    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
-  ],
-  "spawn_children": false,
-  "children": []
-}
+NOW IMPLEMENT the plan. Modify production source files. Run tests.
+Do NOT just write JSON artifacts. Modify .py/.ts/.js source files.
+Follow the steps in plan.json and write real, working code.
 
-DECOMPOSITION: Set spawn_children=true if you need to investigate sub-questions
-that are too deep or tangential for this task. Each child runs a FULL 4-phase
-epistemic workflow (question→research→execute→validate). Only decompose when
-a sub-question truly warrants its own investigation cycle.
-Child format: { "id": "...", "title": "...", "description": "..." }
+DEPENDENCIES: If tests require packages (node_modules, venv), install them first:
+  - Node: if package.json exists, run 'pnpm install' or 'npm install'
+  - Python: if requirements.txt exists, run 'pip install -r requirements.txt'
+Worktrees are fresh checkouts without dependencies pre-installed.
 
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: debug-test-001"
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "execute: debug-test-001"
