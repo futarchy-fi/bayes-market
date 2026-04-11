@@ -1,27 +1,26 @@
-[Task type-hints-001] PHASE 1: QUESTION GENERATION
+[Task type-hints-001] PHASE 3a: PLAN
 Title: Add type hints to config.py
-Description: Review backend/inference/config.py and ensure all functions and class attributes have proper Python type hints. Add any missing type annotations. Do not change functionality - only improve type safety.
-Repo: /home/kelvin/bayes-market
 
-Explore the codebase. Identify what you need to know before building.
+Read .fleet/tasks/type-hints-001/questions.json and .fleet/tasks/type-hints-001/research.json
+for context on what was asked and answered.
 
-YOU MUST create .fleet/tasks/type-hints-001/questions.json with this structure:
+YOU MUST create .fleet/tasks/type-hints-001/plan.json with this structure:
 {
-  "phase": "question",
-  "questions": [
-    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  "phase": "plan",
+  "decisions": [
+    { "id": "d1", "decision": "...", "based_on": ["q1"], "alternatives_rejected": ["..."], "reversibility": "easy|medium|hard" }
   ],
-  "assumptions": [
-    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  "steps": [
+    { "step": 1, "task": "...", "depends_on": [] }
   ],
   "spawn_children": false,
   "children": []
 }
 
-DO NOT STOP until questions.json exists and contains at least one question.
+DO NOT STOP until plan.json exists and contains at least one step.
 Verify: ls -la .fleet/tasks/type-hints-001/ to confirm the file was written.
 
-DECOMPOSITION: Set spawn_children=true only if sub-questions warrant their own
-full 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
+DECOMPOSITION: Set spawn_children=true for independent sub-tasks that warrant
+their own 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
 
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: type-hints-001"
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "plan: type-hints-001"
