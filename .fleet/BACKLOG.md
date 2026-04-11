@@ -37,9 +37,9 @@ Pick ONE at a time. These test the system with real work:
   - parentLifecycle/recursiveLifecycle now use executeChildrenInParallel with round-based DAG execution
 
 ## Priority 4: Polish when idle
-- [ ] Clean up old worktrees: `git worktree list` and remove stale ones
-- [ ] Review LEARNINGS.md, extract patterns into prompts or workflow code
-- [ ] Check for stuck workflows: `temporal workflow list --query 'ExecutionStatus="Running"'` >30min same phase
+- [x] Clean up old worktrees: `git worktree list` and remove stale ones — checked 2026-04-11, only base worktrees exist
+- [x] Review LEARNINGS.md, extract patterns into prompts or workflow code — reviewed 2026-04-11, patterns well-documented
+- [x] Check for stuck workflows: `temporal workflow list --query 'ExecutionStatus="Running"'` >30min same phase — checked 2026-04-11, none stuck
 - [ ] Compact any crew sessions approaching context limit
 
 ## Done
