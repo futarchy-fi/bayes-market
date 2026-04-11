@@ -1,0 +1,51 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Create useAnimationPropagation hook: manages animation state, BFS traversal, staggered timeouts, cancellation via cleanup ref",
+      "files_created": ["frontend/src/features/graph/useAnimationPropagation.ts"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Add SVG filter definitions (<defs>) and CSS keyframe animations for evidence glow, propagation highlight, and edge flow",
+      "files_created": [],
+      "files_modified": ["frontend/src/features/graph/BayesNetGraph.tsx"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Increase PADDING constant from 40 to 60 to prevent glow filter clipping at viewBox edges",
+      "files_created": [],
+      "files_modified": ["frontend/src/features/graph/BayesNetGraph.tsx"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Wire up assumption change detection: useEffect watching assumptions, detect added/removed, identify evidence node, trigger/cancel animation",
+      "files_created": [],
+      "files_modified": ["frontend/src/features/graph/BayesNetGraph.tsx"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Integrate animation state into rendering: apply CSS classes to nodes, render animated propagation edges with dash-flow animation",
+      "files_created": [],
+      "files_modified": ["frontend/src/features/graph/BayesNetGraph.tsx"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Add probability bar coordination: highlight prop on ProbabilityBar with box-shadow transition, CSS transitions on inline SVG bars in MarketNode",
+      "files_created": [],
+      "files_modified": [
+        "frontend/src/components/ui/ProbabilityBar.tsx",
+        "frontend/src/features/graph/BayesNetGraph.tsx"
+      ],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
