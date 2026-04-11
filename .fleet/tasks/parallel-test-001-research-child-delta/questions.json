@@ -1,0 +1,45 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact conventions does test_alpha.py follow (docstring, imports, function signature, return format)?",
+      "category": "codebase",
+      "why_it_matters": "Must replicate the exact style for consistency"
+    },
+    {
+      "id": "q2",
+      "question": "Does a test_delta.py already exist in the backend directory?",
+      "category": "codebase",
+      "why_it_matters": "Avoid overwriting existing work"
+    },
+    {
+      "id": "q3",
+      "question": "Are there any __init__.py exports or other references that need updating when adding a new greeting module?",
+      "category": "codebase",
+      "why_it_matters": "Ensure the new module integrates correctly with the package"
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The file follows the exact pattern: module docstring, `from __future__ import annotations`, function `greet_delta() -> str` returning `'Hello Delta'` with a docstring",
+      "confidence": 0.99,
+      "if_wrong": "Would need to adjust to whatever deviation exists"
+    },
+    {
+      "id": "a2",
+      "assumption": "No test_delta.py exists yet",
+      "confidence": 0.99,
+      "if_wrong": "Would need to update rather than create"
+    },
+    {
+      "id": "a3",
+      "assumption": "No __init__.py changes are needed — test_alpha.py and test_beta.py are not exported from __init__.py",
+      "confidence": 0.9,
+      "if_wrong": "Would need to add an export entry"
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
