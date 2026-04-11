@@ -97,6 +97,17 @@ def build_market_close_body(
     return body
 
 
+def build_market_reopen_body(
+    account_id: str,
+    *,
+    idempotency_key: str | None = None,
+) -> dict[str, object]:
+    body: dict[str, object] = {"accountId": account_id}
+    if idempotency_key is not None:
+        body["idempotencyKey"] = idempotency_key
+    return body
+
+
 def expected_market_resolution_payload(market_id: str, outcome_id: str) -> dict[str, object]:
     return {
         "kind": "ResolveMarket",
@@ -108,6 +119,56 @@ def expected_market_resolution_payload(market_id: str, outcome_id: str) -> dict[
 def expected_market_close_payload() -> dict[str, object]:
     return {
         "kind": "CloseMarket",
+    }
+
+
+def expected_market_reopen_payload() -> dict[str, object]:
+    return {
+        "kind": "ReopenMarket",
+    }
+
+
+def seed_closed_market_reopen_fixture(account_id: str) -> dict[str, object]:
+    unconditional_payload, unconditional_status = server.route_request(
+        "POST",
+        "/v1/markets/m1/orders/probability-edit",
+        build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
+    )
+    conditional_payload, conditional_status = server.route_request(
+        "POST",
+        "/v1/markets/m1/orders/probability-edit",
+        {
+            **build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.7),
+            "context": [{"variableId": server.MARKETS["m2"]["variableId"], "outcomeId": "yes"}],
+        },
+    )
+    trade_payload, trade_status = server.route_request(
+        "POST",
+        "/v1/markets/m1/orders/event-trade",
+        build_event_trade_body(account_id, "m1", "yes", size=8.0),
+    )
+
+    expected_reopened_market = deepcopy(server.MARKETS["m1"])
+    expected_conditional_marginals = deepcopy(server.CONDITIONAL_MARGINALS.get("m1", {}))
+    expected_account_risk = deepcopy(server.ACCOUNT_RISK[account_id])
+    expected_account_exposure = deepcopy(server.ACCOUNT_EXPOSURE[account_id])
+
+    server.MARKETS["m1"]["status"] = "closed"
+    server.MARKETS["m1"]["resolution"] = "yes"
+    server.MARKETS["m1"]["resolutionProbabilities"] = {"yes": 1.0, "no": 0.0}
+
+    return {
+        "setup_statuses": (unconditional_status, conditional_status, trade_status),
+        "setup_payloads": {
+            "unconditional": unconditional_payload,
+            "conditional": conditional_payload,
+            "trade": trade_payload,
+        },
+        "expected_reopened_market": expected_reopened_market,
+        "expected_conditional_marginals": expected_conditional_marginals,
+        "expected_account_risk": expected_account_risk,
+        "expected_account_exposure": expected_account_exposure,
+        "closed_market": deepcopy(server.MARKETS["m1"]),
     }
 
 
@@ -726,6 +787,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertIn("/v1/markets/{id}/events", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/engine-stats", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/close", payload["routes"]["markets"])
+        self.assertIn("POST /v1/markets/{id}/reopen", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/resolve", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/orders/event-trade", payload["routes"]["orders"])
 
@@ -4760,6 +4822,360 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
                 assert_market_close_rejection_state_unchanged(self, "m1", before_rejection_state)
                 assert_domain_state_unchanged(self, replay_snapshot)
+
+    def test_market_reopen_requires_account_id(self):
+        cases = (
+            ("missing", None),
+            ("blank", "   "),
+        )
+
+        for label, account_id in cases:
+            with self.subTest(label=label):
+                body = build_market_reopen_body("ops_admin")
+                if account_id is None:
+                    del body["accountId"]
+                else:
+                    body["accountId"] = account_id
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/reopen", body)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_reopen")
+                self.assertEqual(error.message, "accountId is required")
+                self.assertEqual(error.details["field"], "accountId")
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_reopen_rejects_malformed_idempotency_key(self):
+        invalid_values = ("", "   ", 123)
+
+        for value in invalid_values:
+            with self.subTest(value=value):
+                body = build_market_reopen_body("ops_admin")
+                body["idempotencyKey"] = value
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/reopen", body)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_reopen")
+                self.assertEqual(error.message, "idempotencyKey must be a non-empty string when provided")
+                self.assertEqual(error.details["field"], "idempotencyKey")
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_reopen_rejects_non_object_payload(self):
+        invalid_payloads = (
+            ["ops_admin"],
+            "ops_admin",
+            123,
+        )
+
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/reopen", payload)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_body")
+                self.assertEqual(error.message, "payload must be an object")
+                self.assertEqual(error.details, {})
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_reopen_accepts_closed_market(self):
+        account_id = "acct_reopen_stateful"
+        idempotency_key = "idem-reopen-m1"
+        fixture = seed_closed_market_reopen_fixture(account_id)
+
+        self.assertEqual(fixture["setup_statuses"], (201, 201, 201))
+        self.assertEqual(fixture["closed_market"]["status"], "closed")
+        self.assertEqual(fixture["closed_market"]["resolution"], "yes")
+        self.assertEqual(fixture["closed_market"]["resolutionProbabilities"], {"yes": 1.0, "no": 0.0})
+        self.assertTrue(fixture["expected_conditional_marginals"])
+
+        before_command_count = len(server.COMMANDS)
+        before_event_count = len(server.EVENTS)
+        before_order_count = len(server.ORDERS)
+        before_terminal_outcome_count = len(server.TERMINAL_OUTCOMES)
+        before_market_event_sequence = server.MARKET_EVENT_SEQUENCES.get("m1", 0)
+        before_market_event_hash = server.LAST_EVENT_HASHES.get("m1", server.GENESIS_EVENT_HASH)
+
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/reopen",
+            build_market_reopen_body("ops_admin", idempotency_key=idempotency_key),
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"], fixture["expected_reopened_market"])
+        self.assertEqual(server.MARKETS["m1"], fixture["expected_reopened_market"])
+        self.assertEqual(server.MARKETS["m1"]["status"], "active")
+        self.assertNotIn("resolution", payload["market"])
+        self.assertNotIn("resolutionProbabilities", payload["market"])
+        self.assertNotIn("resolution", server.MARKETS["m1"])
+        self.assertNotIn("resolutionProbabilities", server.MARKETS["m1"])
+        self.assertEqual(server.MARKETS["m1"]["marginals"], fixture["expected_reopened_market"]["marginals"])
+        self.assertEqual(server.CONDITIONAL_MARGINALS.get("m1", {}), fixture["expected_conditional_marginals"])
+        self.assertEqual(server.ACCOUNT_RISK[account_id], fixture["expected_account_risk"])
+        self.assertEqual(server.ACCOUNT_EXPOSURE[account_id], fixture["expected_account_exposure"])
+        self.assertEqual(len(server.ORDERS), before_order_count)
+        self.assertEqual(len(server.COMMANDS), before_command_count + 1)
+        self.assertEqual(len(server.EVENTS), before_event_count + 1)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), before_terminal_outcome_count + 1)
+        self.assertEqual(payload["result"]["status"], "accepted")
+        self.assertEqual(payload["result"]["eventType"], "CommandAccepted")
+        self.assertEqual(payload["meta"]["idempotencyKeyEcho"], idempotency_key)
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        self.assertEqual(
+            command,
+            {
+                "schemaVersion": "bayes-command/v1",
+                "commandId": command["commandId"],
+                "marketId": "m1",
+                "accountId": "ops_admin",
+                "commandType": "AdminOp",
+                "submittedAt": command["submittedAt"],
+                "payload": expected_market_reopen_payload(),
+                "meta": {"source": "api"},
+                "idempotencyKey": idempotency_key,
+            },
+        )
+        self.assertTrue(command["submittedAt"].endswith("Z"))
+        self.assertEqual(command["commandType"], "AdminOp")
+        self.assertEqual(command["payload"], expected_market_reopen_payload())
+        event = server.EVENTS[payload["result"]["eventId"]]
+        reopened_at = event["payload"]["reopen"]["reopenedAt"]
+        self.assertEqual(event["schemaVersion"], "bayes-event/v1")
+        self.assertEqual(event["marketId"], "m1")
+        self.assertEqual(event["seq"], before_market_event_sequence + 1)
+        self.assertEqual(event["commandId"], command["commandId"])
+        self.assertEqual(event["eventType"], "CommandAccepted")
+        self.assertEqual(event["prevEventHash"], before_market_event_hash)
+        self.assertFalse(event["approxFlag"])
+        self.assertTrue(event["emittedAt"].endswith("Z"))
+        self.assertTrue(reopened_at.endswith("Z"))
+        self.assertEqual(
+            event["payload"],
+            {
+                "reopen": {
+                    "reopenedAt": reopened_at,
+                },
+                "effects": {
+                    "marginalDelta": [],
+                    "assetDelta": [],
+                },
+                "pricing": {
+                    "cost": 0.0,
+                    "fee": 0.0,
+                },
+                "replayStateHash": server.market_replay_state_hash("m1"),
+            },
+        )
+        self.assertEqual(server.MARKET_EVENT_SEQUENCES["m1"], before_market_event_sequence + 1)
+        self.assertEqual(server.LAST_EVENT_HASHES["m1"], event["eventHash"])
+        expected_response = {
+            "market": deepcopy(fixture["expected_reopened_market"]),
+            "result": {
+                "terminal": True,
+                "status": "accepted",
+                "eventType": "CommandAccepted",
+                "eventId": event["eventId"],
+                "commandId": command["commandId"],
+                "emittedAt": event["emittedAt"],
+            },
+            "meta": {
+                "timestamp": payload["meta"]["timestamp"],
+                "idempotencyKeyEcho": idempotency_key,
+            },
+        }
+        self.assertEqual(payload, expected_response)
+        self.assertEqual(
+            server.TERMINAL_OUTCOMES[command["commandId"]],
+            {
+                "eventId": event["eventId"],
+                "eventType": "CommandAccepted",
+                "eventPayload": event["payload"],
+                "status": 201,
+                "response": expected_response,
+            },
+        )
+
+        accepted_state = snapshot_domain_state()
+        replayed_payload, replayed_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/reopen",
+            build_market_reopen_body("ops_admin", idempotency_key=idempotency_key),
+        )
+
+        expected_replayed_response = deepcopy(expected_response)
+        expected_replayed_response["meta"]["replayed"] = True
+        self.assertEqual(replayed_status, 201)
+        self.assertEqual(replayed_payload, expected_replayed_response)
+        assert_domain_state_unchanged(self, accepted_state)
+
+    def test_market_reopen_rejects_non_closed_market_with_persisted_terminal_replay(self):
+        cases = (
+            ("active", "m1", None),
+            ("draft", "m1", "draft"),
+            ("resolved", "m3", None),
+        )
+
+        for status_label, market_id, overridden_status in cases:
+            with self.subTest(status=status_label):
+                server.reset_state()
+                if overridden_status is not None:
+                    server.MARKETS[market_id]["status"] = overridden_status
+
+                self.assertEqual(server.MARKETS[market_id]["status"], status_label)
+                idempotency_key = f"idem-{status_label}-reopen"
+                body = build_market_reopen_body("ops_admin", idempotency_key=idempotency_key)
+                baseline_state = {
+                    "markets": deepcopy(server.MARKETS),
+                    "conditional_marginals": deepcopy(server.CONDITIONAL_MARGINALS),
+                    "orders": deepcopy(server.ORDERS),
+                    "account_risk": deepcopy(server.ACCOUNT_RISK),
+                    "account_exposure": deepcopy(server.ACCOUNT_EXPOSURE),
+                }
+                before_command_count = len(server.COMMANDS)
+                before_event_count = len(server.EVENTS)
+                before_terminal_outcome_count = len(server.TERMINAL_OUTCOMES)
+                before_market_event_sequence = server.MARKET_EVENT_SEQUENCES.get(market_id, 0)
+                before_market_event_hash = server.LAST_EVENT_HASHES.get(market_id, server.GENESIS_EVENT_HASH)
+
+                first_payload, first_status = server.route_request("POST", f"/v1/markets/{market_id}/reopen", body)
+
+                command_id = first_payload["result"]["commandId"]
+                event_id = first_payload["result"]["eventId"]
+                command = server.COMMANDS[command_id]
+                event = server.EVENTS[event_id]
+                expected_response = {
+                    "error": {
+                        "code": "market_not_reopenable",
+                        "message": "Market can only be reopened from closed status",
+                        "details": {
+                            "marketId": market_id,
+                            "status": status_label,
+                            "allowedStatuses": ["closed"],
+                            "commandId": command_id,
+                        },
+                    },
+                    "result": {
+                        "terminal": True,
+                        "status": "rejected",
+                        "eventType": "CommandRejected",
+                        "eventId": event_id,
+                        "commandId": command_id,
+                        "emittedAt": event["emittedAt"],
+                        "reasonCode": "market_not_reopenable",
+                        "reason": "Market can only be reopened from closed status",
+                        "retryHint": "reopen a closed market",
+                    },
+                    "meta": {
+                        "timestamp": first_payload["meta"]["timestamp"],
+                        "idempotencyKeyEcho": idempotency_key,
+                    },
+                }
+
+                self.assertEqual(first_status, 409)
+                self.assertEqual(first_payload, expected_response)
+                self.assertEqual(len(server.COMMANDS), before_command_count + 1)
+                self.assertEqual(len(server.EVENTS), before_event_count + 1)
+                self.assertEqual(len(server.TERMINAL_OUTCOMES), before_terminal_outcome_count + 1)
+                self.assertEqual(server.MARKETS, baseline_state["markets"])
+                self.assertEqual(server.CONDITIONAL_MARGINALS, baseline_state["conditional_marginals"])
+                self.assertEqual(server.ORDERS, baseline_state["orders"])
+                self.assertEqual(server.ACCOUNT_RISK, baseline_state["account_risk"])
+                self.assertEqual(server.ACCOUNT_EXPOSURE, baseline_state["account_exposure"])
+                self.assertEqual(
+                    command,
+                    {
+                        "schemaVersion": "bayes-command/v1",
+                        "commandId": command_id,
+                        "marketId": market_id,
+                        "accountId": "ops_admin",
+                        "commandType": "AdminOp",
+                        "submittedAt": command["submittedAt"],
+                        "payload": expected_market_reopen_payload(),
+                        "meta": {"source": "api"},
+                        "idempotencyKey": idempotency_key,
+                    },
+                )
+                self.assertTrue(command["submittedAt"].endswith("Z"))
+                self.assertEqual(event["schemaVersion"], "bayes-event/v1")
+                self.assertEqual(event["marketId"], market_id)
+                self.assertEqual(event["seq"], before_market_event_sequence + 1)
+                self.assertEqual(event["commandId"], command_id)
+                self.assertEqual(event["eventType"], "CommandRejected")
+                self.assertEqual(event["prevEventHash"], before_market_event_hash)
+                self.assertFalse(event["approxFlag"])
+                self.assertTrue(event["emittedAt"].endswith("Z"))
+                self.assertEqual(
+                    event["payload"],
+                    {
+                        "reasonCode": "market_not_reopenable",
+                        "reason": "Market can only be reopened from closed status",
+                        "retryHint": "reopen a closed market",
+                    },
+                )
+                self.assertEqual(server.MARKET_EVENT_SEQUENCES[market_id], before_market_event_sequence + 1)
+                self.assertEqual(server.LAST_EVENT_HASHES[market_id], event["eventHash"])
+                self.assertEqual(
+                    server.TERMINAL_OUTCOMES[command_id],
+                    {
+                        "eventId": event_id,
+                        "eventType": "CommandRejected",
+                        "eventPayload": event["payload"],
+                        "status": 409,
+                        "response": expected_response,
+                    },
+                )
+                self.assertEqual(
+                    server.IDEMPOTENCY_KEYS[server.idempotency_scope_key(market_id, "ops_admin", idempotency_key)],
+                    command_id,
+                )
+
+                second_payload, second_status = server.route_request("POST", f"/v1/markets/{market_id}/reopen", body)
+                expected_replayed_response = deepcopy(expected_response)
+                expected_replayed_response["meta"]["replayed"] = True
+
+                self.assertEqual(second_status, 409)
+                self.assertEqual(second_payload, expected_replayed_response)
+                self.assertEqual(len(server.COMMANDS), before_command_count + 1)
+                self.assertEqual(len(server.EVENTS), before_event_count + 1)
+                self.assertEqual(len(server.TERMINAL_OUTCOMES), before_terminal_outcome_count + 1)
+                self.assertEqual(server.MARKETS, baseline_state["markets"])
+                self.assertEqual(server.CONDITIONAL_MARGINALS, baseline_state["conditional_marginals"])
+                self.assertEqual(server.ORDERS, baseline_state["orders"])
+                self.assertEqual(server.ACCOUNT_RISK, baseline_state["account_risk"])
+                self.assertEqual(server.ACCOUNT_EXPOSURE, baseline_state["account_exposure"])
+
+    def test_market_reopen_reuses_admin_op_idempotency_namespace(self):
+        server.MARKETS["m1"]["status"] = "closed"
+        idempotency_key = "idem-admin-op-shared"
+
+        _, resolve_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_admin", "yes", idempotency_key=idempotency_key),
+        )
+        reopen_payload, reopen_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/reopen",
+            build_market_reopen_body("ops_admin", idempotency_key=idempotency_key),
+        )
+
+        self.assertEqual(resolve_status, 201)
+        self.assertEqual(reopen_status, 409)
+        self.assertEqual(reopen_payload["error"]["code"], "idempotency_conflict")
+        self.assertEqual(reopen_payload["error"]["details"]["idempotencyKey"], idempotency_key)
+        self.assertEqual(reopen_payload["error"]["details"]["marketId"], "m1")
+        self.assertEqual(reopen_payload["error"]["details"]["accountId"], "ops_admin")
 
     def test_market_resolution_accepts_final_probabilities_body_and_canonicalizes_command_payload(self):
         final_probabilities = {"yes": 0.0, "no": 0.0, "delayed": 1.0}
@@ -8914,6 +9330,64 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         command = server.COMMANDS[payload["result"]["commandId"]]
         self.assertEqual(command["commandType"], "AdminOp")
         self.assertEqual(command["payload"], expected_market_resolution_payload("m1", "yes"))
+
+    def test_market_reopen_route_uses_market_scoped_path(self):
+        server.MARKETS["m1"]["status"] = "closed"
+
+        status, payload = self.request(
+            "POST",
+            "/v1/markets/m1/reopen",
+            build_market_reopen_body("ops_http"),
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["id"], "m1")
+        self.assertEqual(payload["market"]["status"], "active")
+        self.assertEqual(payload["result"]["status"], "accepted")
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        self.assertEqual(command["commandType"], "AdminOp")
+        self.assertEqual(command["payload"], expected_market_reopen_payload())
+
+    def test_market_reopen_http_replays_rejected_terminal_outcome(self):
+        body = build_market_reopen_body("ops_http", idempotency_key="idem-http-reopen-active")
+
+        first_status, first_payload = self.request("POST", "/v1/markets/m1/reopen", body)
+        second_status, second_payload = self.request("POST", "/v1/markets/m1/reopen", body)
+        events_status, events_payload = self.request("GET", "/v1/markets/m1/events")
+
+        self.assertEqual(first_status, 409)
+        self.assertEqual(second_status, 409)
+        self.assertEqual(events_status, 200)
+        self.assertEqual(first_payload["error"]["code"], "market_not_reopenable")
+        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
+        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(events_payload["events"], [server.EVENTS[first_payload["result"]["eventId"]]])
+        self.assertEqual(events_payload["chain"]["headSeq"], 1)
+
+    def test_market_reopen_http_conflicts_with_prior_admin_op_payload(self):
+        server.MARKETS["m1"]["status"] = "closed"
+        idempotency_key = "idem-http-admin-op-shared"
+
+        resolve_status, resolve_payload = self.request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_http", "yes", idempotency_key=idempotency_key),
+        )
+        reopen_status, reopen_payload = self.request(
+            "POST",
+            "/v1/markets/m1/reopen",
+            build_market_reopen_body("ops_http", idempotency_key=idempotency_key),
+        )
+
+        self.assertEqual(resolve_status, 201)
+        self.assertEqual(reopen_status, 409)
+        self.assertEqual(reopen_payload["error"]["code"], "idempotency_conflict")
+        self.assertEqual(
+            reopen_payload["error"]["details"]["existingCommandId"],
+            resolve_payload["result"]["commandId"],
+        )
+        self.assertEqual(reopen_payload["meta"]["idempotencyKeyEcho"], idempotency_key)
 
     def test_market_resolve_route_accepts_final_probabilities_body(self):
         status, payload = self.request(

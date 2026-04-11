@@ -147,6 +147,7 @@ MARKET_SERVICE_INDEX_ROUTES = (
     "POST /v1/markets/{id}/comments",
     "/v1/markets/{id}/engine-stats",
     "POST /v1/markets/{id}/close",
+    "POST /v1/markets/{id}/reopen",
     "POST /v1/markets/{id}/resolve",
 )
 ORDER_SERVICE_INDEX_ROUTES = (
@@ -421,7 +422,7 @@ def resolve_write_route_category(method: str, raw_path: str) -> str | None:
     if len(parts) < 4 or parts[:2] != ["v1", "markets"]:
         return None
 
-    if len(parts) == 4 and parts[3] in {"resolve", "close"}:
+    if len(parts) == 4 and parts[3] in {"resolve", "close", "reopen"}:
         return MARKET_ADMIN_WRITE_CATEGORY
     if len(parts) == 4 and parts[3] == "comments":
         return TRADE_WRITE_CATEGORY
@@ -3610,6 +3611,20 @@ def normalize_market_close_payload(market_id: str, payload: dict[str, Any]) -> d
     }
 
 
+def normalize_market_reopen_payload(market_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize and validate a market-reopen request body."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    if not isinstance(payload, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
+
+    return {
+        "kind": "ReopenMarket",
+    }
+
+
 def normalize_probability_edit_payload(market_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Normalize and validate a probability-edit request body."""
     market = MARKETS.get(market_id)
@@ -3759,6 +3774,25 @@ def materialize_market_close_command(
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     """Build and persist an AdminOp command envelope for market close."""
+    return materialize_admin_op_command(
+        market_id=market_id,
+        normalized_payload=normalized_payload,
+        account_id=account_id,
+        command_id=command_id,
+        submitted_at=submitted_at,
+        idempotency_key=idempotency_key,
+    )
+
+
+def materialize_market_reopen_command(
+    market_id: str,
+    normalized_payload: dict[str, Any],
+    account_id: str,
+    command_id: str,
+    submitted_at: str,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Build and persist an AdminOp command envelope for market reopen."""
     return materialize_admin_op_command(
         market_id=market_id,
         normalized_payload=normalized_payload,
@@ -4188,6 +4222,46 @@ def close_market_command(command: dict[str, Any]) -> dict[str, Any]:
     return closure
 
 
+def transition_market_to_reopened(
+    market_id: str,
+    *,
+    reopened_at: str | None = None,
+) -> dict[str, Any]:
+    """Apply the replay-relevant mutation for an accepted reopen on a closed market."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    status = str(market["status"])
+    if status != "closed":
+        raise ApiError(
+            409,
+            "market_not_reopenable",
+            "Market can only be reopened from closed status",
+            {
+                "marketId": market_id,
+                "status": status,
+                "allowedStatuses": ["closed"],
+            },
+        )
+
+    market["status"] = "active"
+    market.pop("resolution", None)
+    market.pop("resolutionProbabilities", None)
+
+    transition_timestamp = utc_timestamp() if reopened_at is None else str(reopened_at)
+    return {
+        "market": deepcopy(market),
+        "reopenedAt": transition_timestamp,
+    }
+
+
+def reopen_market_command(command: dict[str, Any]) -> dict[str, Any]:
+    """Apply a market-reopen AdminOp and return the accepted event inputs."""
+    market_id = str(command["marketId"])
+    return transition_market_to_reopened(market_id)
+
+
 def build_market_resolution_acceptance_response(
     command: dict[str, Any],
     resolution: dict[str, Any],
@@ -4259,6 +4333,37 @@ def build_market_close_acceptance_response(
         status=201,
         response_fields={
             "market": deepcopy(closure["market"]),
+        },
+        scope_key=scope_key,
+    )
+
+
+def build_market_reopen_acceptance_response(
+    command: dict[str, Any],
+    reopened: dict[str, Any],
+    scope_key: tuple[str, str, str] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Emit and persist a terminal acceptance response for a market reopen."""
+    return build_terminal_response(
+        command,
+        event_type="CommandAccepted",
+        event_payload={
+            "reopen": {
+                "reopenedAt": str(reopened["reopenedAt"]),
+            },
+            "effects": {
+                "marginalDelta": [],
+                "assetDelta": [],
+            },
+            "pricing": {
+                "cost": 0.0,
+                "fee": 0.0,
+            },
+            "replayStateHash": market_replay_state_hash(str(command["marketId"])),
+        },
+        status=201,
+        response_fields={
+            "market": deepcopy(reopened["market"]),
         },
         scope_key=scope_key,
     )
@@ -4850,6 +4955,77 @@ def handle_market_close(market_id: str, payload: dict[str, Any] | None) -> tuple
         return build_market_close_acceptance_response(command, closure, scope_key)
 
 
+def handle_market_reopen(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
+    """Handle the full AdminOp-backed market-reopen lifecycle for one market."""
+    body = payload if payload is not None else {}
+    if not isinstance(body, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
+
+    account_id = body.get("accountId")
+    if not isinstance(account_id, str) or not account_id.strip():
+        raise ApiError(400, "invalid_market_reopen", "accountId is required", {"field": "accountId"})
+
+    idempotency_key = body.get("idempotencyKey")
+    if idempotency_key is not None:
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise ApiError(
+                400,
+                "invalid_market_reopen",
+                "idempotencyKey must be a non-empty string when provided",
+                {"field": "idempotencyKey"},
+            )
+        idempotency_key = idempotency_key.strip()
+
+    account_id = account_id.strip()
+    scope_key = idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
+
+    with get_market_write_lock(market_id):
+        normalized_payload = normalize_market_reopen_payload(market_id, body)
+        if scope_key is not None:
+            existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
+            if existing_command_id is not None:
+                existing_command = COMMANDS[existing_command_id]
+                if existing_command["payload"] != normalized_payload:
+                    return build_idempotency_conflict_response(
+                        existing_command_id,
+                        idempotency_key,
+                        market_id,
+                        account_id,
+                        "AdminOp",
+                    )
+                return replay_terminal_outcome(existing_command_id)
+
+        submitted_at = utc_timestamp()
+        command = materialize_market_reopen_command(
+            market_id=market_id,
+            normalized_payload=normalized_payload,
+            account_id=account_id,
+            command_id=generate_command_id(),
+            submitted_at=submitted_at,
+            idempotency_key=idempotency_key,
+        )
+        market = MARKETS[market_id]
+        market_status = str(market["status"])
+        if market_status != "closed":
+            return build_terminal_rejection_response(
+                command,
+                code="market_not_reopenable",
+                message="Market can only be reopened from closed status",
+                details={
+                    "marketId": market_id,
+                    "status": market_status,
+                    "allowedStatuses": ["closed"],
+                    "commandId": command["commandId"],
+                },
+                retry_hint="reopen a closed market",
+                status=409,
+                scope_key=scope_key,
+            )
+
+        reopened = reopen_market_command(command)
+        return build_market_reopen_acceptance_response(command, reopened, scope_key)
+
+
 def route_request(
     method: str,
     raw_path: str,
@@ -5016,6 +5192,33 @@ def route_request(
             started_at = time.perf_counter()
             try:
                 payload, status = handle_market_close(market_id, body)
+            except ApiError:
+                if market_id in MARKETS:
+                    record_market_engine_request(
+                        market_id,
+                        (time.perf_counter() - started_at) * 1000.0,
+                        error=True,
+                    )
+                raise
+
+            if market_id in MARKETS:
+                duration_ms = (time.perf_counter() - started_at) * 1000.0
+                record_market_engine_request(market_id, duration_ms, error=status >= 400)
+                if status == 201:
+                    refresh_market_compile_snapshot(market_id, compile_time_ms=duration_ms)
+            return payload, status
+
+        if len(parts) == 4 and parts[3] == "reopen":
+            if method != "POST":
+                raise ApiError(
+                    405,
+                    "method_not_allowed",
+                    f"{method} is not allowed for this resource",
+                    {"method": method, "path": path},
+                )
+            started_at = time.perf_counter()
+            try:
+                payload, status = handle_market_reopen(market_id, body)
             except ApiError:
                 if market_id in MARKETS:
                     record_market_engine_request(
