@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The task description says submitProbabilityEdit posts to /v1/markets/{id}/conditional-edit, but the actual code posts to /v1/markets/{id}/orders/probability-edit. Similarly, submitEventTrade is described as posting to /v1/markets/{id}/trade-event but actually posts to /v1/markets/{id}/orders/event-trade, and getServiceIndex is described as calling /v1 but actually calls /. Should tests match the actual code (not the task description)?",
+      "category": "requirements",
+      "why_it_matters": "If tests are written against the task description endpoints instead of actual code endpoints, every test for these three functions will assert the wrong URL and give false confidence."
+    },
+    {
+      "id": "q2",
+      "question": "The existing tests use minimal response stubs (e.g. { market: { id: 'm1' }, meta: {...} }) rather than full type-conformant objects. Should new tests follow this same minimal stub pattern, or should they use more complete response fixtures matching the TypeScript interfaces?",
+      "category": "design",
+      "why_it_matters": "Determines the verbosity and maintenance burden of each new test. Minimal stubs are faster to write and easier to maintain; full fixtures catch more type issues but add bulk."
+    },
+    {
+      "id": "q3",
+      "question": "For functions that accept optional pagination params (getMarketEvents, getMarketComments with fromSeq/limit), should we add separate tests for the no-params case AND the with-params case (like the existing getMarketAnalytics interval tests), or is one test per function sufficient?",
+      "category": "design",
+      "why_it_matters": "getMarketEvents and getMarketComments have identical pagination logic with query string construction. Testing both param and no-param cases doubles coverage but may be redundant given the pattern is already proven by getMarketAnalytics tests."
+    },
+    {
+      "id": "q4",
+      "question": "For POST functions requiring a session (submitProbabilityEdit, resolveMarket, submitEventTrade, submitMarketComment), should tests verify that the X-Bayes-Agent-Id header is set correctly from session.agentId, or just verify the URL and HTTP method?",
+      "category": "requirements",
+      "why_it_matters": "The session header is a critical auth mechanism. Testing it ensures authenticated endpoints cannot silently regress to sending unauthenticated requests. However, the existing tests don't cover any session-bearing functions yet, so there's no established pattern."
+    },
+    {
+      "id": "q5",
+      "question": "createMarket accepts an optional session parameter but is a POST. Should the test cover both the with-session and without-session cases, or just one?",
+      "category": "design",
+      "why_it_matters": "createMarket is unique among POST functions in that session is optional. Testing both paths ensures the Content-Type header is always set for POSTs regardless of session presence."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Tests should be written against the actual code endpoints, not the task description endpoints (which contain inaccuracies).",
+      "confidence": 0.98,
+      "if_wrong": "Tests would assert wrong URLs and all would pass vacuously against mocks but not reflect real behavior."
+    },
+    {
+      "id": "a2",
+      "assumption": "Follow the existing minimal stub pattern for response data — just enough fields to prove the function returns the response.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to create full fixture objects matching every field of the TypeScript response interfaces."
+    },
+    {
+      "id": "a3",
+      "assumption": "POST functions should be tested with assertions on method, URL, body (JSON.stringify of payload), and Content-Type header.",
+      "confidence": 0.95,
+      "if_wrong": "Tests would miss verifying that the request function correctly sets Content-Type for POST methods."
+    },
+    {
+      "id": "a4",
+      "assumption": "Session-bearing functions should verify the X-Bayes-Agent-Id header is passed through.",
+      "confidence": 0.9,
+      "if_wrong": "Auth header regression would go undetected by these unit tests."
+    },
+    {
+      "id": "a5",
+      "assumption": "Functions with optional query params (getMarketEvents, getMarketComments) should have two tests each: one without params and one with params, following the getMarketAnalytics pattern.",
+      "confidence": 0.85,
+      "if_wrong": "Could reduce to a single test per function if the team prefers minimal test count."
+    },
+    {
+      "id": "a6",
+      "assumption": "No new test utilities or helpers are needed — the existing mockFetch + jsonResponse pattern is sufficient for all 10 new functions.",
+      "confidence": 0.95,
+      "if_wrong": "Would need a session mock factory or response fixture builder."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

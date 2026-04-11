@@ -1,0 +1,104 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes, tests must match the actual code endpoints, not the task description. The actual endpoints are: submitProbabilityEdit → /v1/markets/{id}/orders/probability-edit (client.ts:197), submitEventTrade → /v1/markets/{id}/orders/event-trade (client.ts:268), getServiceIndex → / (client.ts:259). The task description endpoints are wrong.",
+      "confidence": 1.0,
+      "evidence": [
+        "frontend/src/lib/api/client.ts:197",
+        "frontend/src/lib/api/client.ts:268",
+        "frontend/src/lib/api/client.ts:259"
+      ],
+      "uncertainty": "None — the code is unambiguous."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Follow the existing minimal stub pattern. All 12 existing tests use minimal response objects with only the fields needed to prove the function was called correctly and returned data. For example, getMarket uses { market: { id: 'm1' }, meta: { apiVersion: '1.0', timestamp: '' } } rather than a full Market object. This is consistent, maintainable, and sufficient for unit tests that verify URL construction and request plumbing.",
+      "confidence": 0.97,
+      "evidence": [
+        "frontend/src/__tests__/api-client.test.ts:29",
+        "frontend/src/__tests__/api-client.test.ts:58",
+        "frontend/src/__tests__/api-client.test.ts:66",
+        "frontend/src/__tests__/api-client.test.ts:73",
+        "frontend/src/__tests__/api-client.test.ts:87",
+        "frontend/src/__tests__/api-client.test.ts:94"
+      ],
+      "uncertainty": "TypeScript strict mode could flag incomplete stubs, but the existing tests already use this pattern without issues, so it's safe."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Add two tests per function (no-params and with-params), following the established getMarketAnalytics pattern. The existing test file has getMarketAnalytics tested twice: once without params (line 72) and once with interval filter (line 79). getMarketEvents and getMarketComments have identical optional pagination params (fromSeq, limit) that construct query strings the same way. Two tests per function ensures the query string construction is verified for both the default and parameterized cases.",
+      "confidence": 0.92,
+      "evidence": [
+        "frontend/src/__tests__/api-client.test.ts:72-77",
+        "frontend/src/__tests__/api-client.test.ts:79-84",
+        "frontend/src/lib/api/client.ts:124-135",
+        "frontend/src/lib/api/client.ts:137-148"
+      ],
+      "uncertainty": "Could arguably test both fromSeq and limit separately, but one test with both params set should be sufficient to prove the URLSearchParams construction works."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Tests should verify the X-Bayes-Agent-Id header is set correctly. The request() function (client.ts:49-51) conditionally sets this header when session?.agentId is truthy. This is the only auth mechanism in the client — if it silently breaks, authenticated endpoints would send unauthenticated requests. The existing tests have no coverage of session-bearing functions, so these new tests fill a critical gap. Verify by checking the headers object passed to fetch includes X-Bayes-Agent-Id with the correct value.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/lib/api/client.ts:49-51",
+        "frontend/src/lib/api/client.ts:41-43",
+        "frontend/src/lib/api/types.ts:345-348"
+      ],
+      "uncertainty": "The exact assertion style for headers: the existing tests use expect.objectContaining({ headers: {} }) for GET requests. For POST+session, we need to assert both Content-Type and X-Bayes-Agent-Id headers are present."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Test both with-session and without-session cases for createMarket. createMarket (client.ts:102-109) is unique: it's a POST with optional session. Testing both ensures: (1) Content-Type: application/json is always set for POST regardless of session, (2) X-Bayes-Agent-Id is included when session is provided and omitted when it's not. This also verifies the request() function's session handling for the optional case, which is distinct from required-session functions.",
+      "confidence": 0.90,
+      "evidence": [
+        "frontend/src/lib/api/client.ts:102-109",
+        "frontend/src/lib/api/client.ts:44-47",
+        "frontend/src/lib/api/client.ts:49-51"
+      ],
+      "uncertainty": "Could argue one test is enough if we trust request() is tested elsewhere, but since no existing tests cover POST behavior at all, both cases add real value."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "Critical. Using task-description endpoints would produce tests that pass against mocks but assert wrong URLs. All three discrepancies confirmed in source code."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Low risk. All 12 existing tests use minimal stubs. Switching to full fixtures would be inconsistent and add unnecessary maintenance burden."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Medium. The request() function sets Content-Type for POST/PUT/PATCH (client.ts:45-47). Verifying this header in POST tests catches regressions in the content-type logic."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "High. Session auth is the only authentication mechanism (client.ts:49-51). No existing tests cover it. Testing X-Bayes-Agent-Id prevents silent auth regression."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.92,
+      "impact": "Low. Two tests per paginated function follows the getMarketAnalytics precedent and verifies query string construction in both cases."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Low. mockFetch + jsonResponse handles all cases. Session objects are simple { accountId, agentId } literals — no factory needed. POST body verification uses standard expect.objectContaining with body field."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
