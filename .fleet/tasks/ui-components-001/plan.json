@@ -1,0 +1,79 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Create a single test file `frontend/src/__tests__/ui-components.test.tsx` covering ProbabilityBar, Spinner/LoadingPage/ErrorMessage, and StatusBadge",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Separate test files per component (matches codebase convention but task spec is explicit about a single file)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use real implementations of `formatProbability` and `statusColor` — no mocking of utility functions",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Mocking utilities (adds complexity, no existing test in the codebase mocks utilities)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Use plain `render` from @testing-library/react, not `renderWithProviders`",
+      "based_on": ["q5"],
+      "alternatives_rejected": ["renderWithProviders (unnecessary — none of these components use context/router)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Test Spinner size prop via SVG width/height attributes; do not test internal SVG structure (circles, keyframes)",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Deep SVG structure testing (couples tests to markup implementation details)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "ProbabilityBar edge cases: multi-outcome happy path, missing marginals defaulting to 0, empty outcomes array. Skip color-wrapping and all-zero tests.",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Testing color wrapping beyond 8 outcomes (pure modulo arithmetic, not component behavior)", "Testing all-zero probabilities (formatProbability already tested)"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create `frontend/src/__tests__/ui-components.test.tsx` with describe blocks for ProbabilityBar, Spinner, LoadingPage, ErrorMessage, and StatusBadge",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Write ProbabilityBar tests: (a) renders outcome names and formatted probabilities, (b) uses title attributes with `name: probability` format, (c) missing marginal entries default to 0%, (d) empty outcomes array renders without crashing",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Write Spinner tests: (a) renders SVG element, (b) default size is 24x24, (c) custom size prop controls width/height attributes",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Write LoadingPage test: renders an SVG element (proving Spinner is present) with size 32",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Write ErrorMessage test: renders the provided message text, has danger-colored styling",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Write StatusBadge tests: (a) renders status text, (b) different statuses produce different border colors via statusColor, (c) text is in original case in DOM (CSS handles uppercase)",
+      "depends_on": [1]
+    },
+    {
+      "step": 7,
+      "task": "Run `npx vitest run src/__tests__/ui-components.test.tsx` and fix any failures",
+      "depends_on": [2, 3, 4, 5, 6]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
