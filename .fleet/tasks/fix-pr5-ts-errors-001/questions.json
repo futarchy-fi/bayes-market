@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should we create a shared UseQueryResult mock helper in helpers.tsx to fix Portfolio.test.tsx, or also consolidate the duplicate defaultQueryState helpers in MarketDetail.test.tsx and DiscussionThread.test.tsx (which have the same missing-props issue)?",
+      "category": "design",
+      "why_it_matters": "The exploration found 3 test files with inconsistent UseQueryResult mock approaches all missing the same 5 properties. Fixing only Portfolio.test.tsx leaves the other two broken. A shared helper in helpers.tsx would fix all three and prevent future drift, but the task description only mentions Portfolio.test.tsx."
+    },
+    {
+      "id": "q2",
+      "question": "For chartUtils.test.ts line 12 (process.env.TZ = 'UTC'), should we add @types/node to devDependencies or switch to import.meta.env (Vite's approach)?",
+      "category": "design",
+      "why_it_matters": "Adding @types/node is simpler but pulls in all Node.js type definitions which may conflict with the browser-targeted frontend. Using import.meta.env is more Vite-idiomatic but import.meta.env doesn't support TZ (it's not a real env var replacement). A third option is a targeted type declaration (declare var process: ...) in the test setup."
+    },
+    {
+      "id": "q3",
+      "question": "The tsconfig.json has noUncheckedIndexedAccess: true, which is the root cause of both the ProbabilityBar.test.tsx (Element|undefined) and api-client.test.ts (Object possibly undefined) errors. Should we fix these with non-null assertions (!) or proper type guards?",
+      "category": "design",
+      "why_it_matters": "Non-null assertions (bars[0]!) are concise but suppress the safety check. Type guards (if (bars[0]) { ... }) are safer but verbose in tests where we know the elements exist. The task description suggests either approach; the right choice affects code quality."
+    },
+    {
+      "id": "q4",
+      "question": "Are MarketDetail.test.tsx and DiscussionThread.test.tsx also failing the build, or are they excluded from type-checking?",
+      "category": "codebase",
+      "why_it_matters": "The exploration found these files have the same missing UseQueryResult properties as Portfolio.test.tsx. If they also fail the build, fixing only the 4 files in the task description won't achieve 'pnpm build passes'. Need to verify the actual full error list."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The 5 missing UseQueryResult properties (isFetched, isFetchedAfterMount, isInitialLoading, isPaused, isEnabled) are the complete set needed for React Query v5.60+",
+      "confidence": 0.85,
+      "if_wrong": "We'd still get type errors after adding these 5. Need to check the actual UseQueryResult type definition from the installed @tanstack/react-query version."
+    },
+    {
+      "id": "a2",
+      "assumption": "Non-null assertions (!) are acceptable in test files for array index access since we control the test DOM and mock data",
+      "confidence": 0.9,
+      "if_wrong": "Would need to use type guards or helper functions that narrow the type, adding more verbosity to tests."
+    },
+    {
+      "id": "a3",
+      "assumption": "Adding @types/node to devDependencies won't break the frontend build or introduce type conflicts with DOM types",
+      "confidence": 0.8,
+      "if_wrong": "Could cause type conflicts between Node.js and DOM globals. Would need a targeted type declaration instead."
+    },
+    {
+      "id": "a4",
+      "assumption": "pnpm build runs tsc --noEmit (or equivalent) which type-checks test files",
+      "confidence": 0.85,
+      "if_wrong": "If build only checks src/ (not __tests__/), these errors wouldn't block the build. But CI likely runs a separate type-check that includes tests."
+    },
+    {
+      "id": "a5",
+      "assumption": "The 29+ errors from the exploration are the complete set; no additional errors will surface after fixing these",
+      "confidence": 0.75,
+      "if_wrong": "Fixing these may uncover previously-shadowed errors. Will need to iterate until pnpm build passes cleanly."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
