@@ -1,0 +1,33 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the file content be exactly 'Hello World!' with no trailing newline, or should it end with a newline character?",
+      "category": "requirements",
+      "why_it_matters": "Different tools and linters expect files to end with a newline. A missing trailing newline could cause lint warnings or diff noise."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The frontend/ directory already exists and is the correct location for this file.",
+      "confidence": 1.0,
+      "if_wrong": "Would need to create the directory first."
+    },
+    {
+      "id": "a2",
+      "assumption": "The file content should be exactly 'Hello World!' followed by a trailing newline (standard text file convention).",
+      "confidence": 0.95,
+      "if_wrong": "Would need to write without trailing newline."
+    },
+    {
+      "id": "a3",
+      "assumption": "No .gitignore rules or build configuration will exclude .txt files from the frontend directory.",
+      "confidence": 0.95,
+      "if_wrong": "The file might not be tracked or deployed as expected."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
