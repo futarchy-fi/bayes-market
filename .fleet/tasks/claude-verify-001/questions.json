@@ -1,0 +1,27 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Does the src/ directory already exist and is it the correct location for verify.txt?",
+      "category": "codebase",
+      "why_it_matters": "Need to confirm the target directory exists before writing the file."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The src/ directory exists and is the correct place to write verify.txt",
+      "confidence": 0.99,
+      "if_wrong": "Would need to create the src/ directory first."
+    },
+    {
+      "id": "a2",
+      "assumption": "The file content should be exactly the string 'Claude is working' with no trailing newline requirements",
+      "confidence": 0.95,
+      "if_wrong": "Minimal impact - content format is straightforward."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
