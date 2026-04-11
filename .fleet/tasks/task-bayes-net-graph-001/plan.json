@@ -1,0 +1,114 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Mock @/lib/query/hooks at module level with vi.mock, following the pattern from VariableRow.test.tsx and 6 other test files",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Mock @/lib/api/client and wrap with QueryClient — would require async waitFor for all assertions and handling N concurrent useMarket queries"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use screen.getByText/queryByText for SVG text content and container.querySelectorAll for structural SVG queries (rect, circle, line attributes). Do not add data-testid to the component.",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Add data-testid attributes to BayesNetGraph.tsx — modifies production code unnecessarily"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Use single generic mockReturnValue for useMarket in most tests; use mockImplementation with per-ID switching only for the probability bars test (case 11)",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Per-ID mockImplementation in all tests — unnecessary complexity since node titles come from useMarkets via layoutNodes, not useMarket"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Use real formatProbability (pure function: (p*100).toFixed(1)+'%') — do not mock it",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Mock @/lib/utils/format — adds complexity for zero benefit on a 1-line pure function"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Test both stats bar clique count AND CliqueOverlay rendering edge case where single-node cliques return null",
+      "based_on": ["q5"],
+      "alternatives_rejected": ["Only test stats bar text — would miss the CliqueOverlay memberNodes.length < 2 edge case"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create test file skeleton at frontend/src/__tests__/BayesNetGraph.test.tsx with imports, vi.mock for @/lib/query/hooks (useMarkets, useMarket, useEngineStats), vi.mocked wrappers, and beforeEach with vi.clearAllMocks and default mock return values",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Define test fixture data: (a) mockMarkets array with 2-3 MarketSummary objects (mix of active/resolved statuses, one with title >28 chars for truncation), (b) mockEngineStats with cliques array (one 2-node clique, one 1-node clique for edge case), junction_tree_width, (c) mockMarketDetail with outcomes and marginals for useMarket return",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Write test case 1 (loading state): mock useMarkets to return isLoading:true, assert 'Loading network...' text renders",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Write test case 2 (empty state): mock useMarkets to return empty markets array, assert 'No markets to visualize.' text renders",
+      "depends_on": [2]
+    },
+    {
+      "step": 5,
+      "task": "Write test case 3 (renders market nodes): mock useMarkets with 2-3 markets, assert node titles appear as SVG text (including truncation for >28 chars), verify correct number of nodes via container.querySelectorAll",
+      "depends_on": [2]
+    },
+    {
+      "step": 6,
+      "task": "Write test case 4 (stats bar variable count): render with markets, assert '3 variables' (or correct pluralization) text in stats bar",
+      "depends_on": [2]
+    },
+    {
+      "step": 7,
+      "task": "Write test case 5 (edge count in stats bar): render with conditionalEdges prop containing edges, assert edge count text like '2 edges' appears",
+      "depends_on": [2]
+    },
+    {
+      "step": 8,
+      "task": "Write test case 6 (clique count in stats bar + CliqueOverlay edge case): mock useEngineStats with 2 cliques (one with 2 nodes, one with 1 node), assert stats bar shows '2 cliques', but only 1 'Clique' label renders in SVG (single-node clique returns null)",
+      "depends_on": [2]
+    },
+    {
+      "step": 9,
+      "task": "Write test case 7 (JT width): mock useEngineStats with junction_tree_width value, assert 'JT width X' text appears in stats bar",
+      "depends_on": [2]
+    },
+    {
+      "step": 10,
+      "task": "Write test case 8 (focus market highlight): render with focusMarketId matching one market, assert that node's rect has strokeWidth 2.5 via container.querySelector",
+      "depends_on": [2]
+    },
+    {
+      "step": 11,
+      "task": "Write test case 9 (status dots): render with active and resolved markets, verify circle elements with correct fill colors via container.querySelectorAll('circle')",
+      "depends_on": [2]
+    },
+    {
+      "step": 12,
+      "task": "Write test case 10 (legend items): assert 'Active' and 'Resolved' always present; 'Conditional dependency' only when conditionalEdges.length > 0; 'Junction tree clique' only when cliques.length > 0",
+      "depends_on": [2]
+    },
+    {
+      "step": 13,
+      "task": "Write test case 11 (probability bars): use mockImplementation for useMarket to return per-ID outcomes/marginals, assert formatted probability text (e.g. '75.0%') appears, verify bar rect elements exist",
+      "depends_on": [2]
+    },
+    {
+      "step": 14,
+      "task": "Run vitest on the new test file to verify all tests pass; fix any failures",
+      "depends_on": [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
