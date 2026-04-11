@@ -1,27 +1,32 @@
-Error: config profile `[Task bayes-market-h7b] PHASE 1: QUESTION GENERATION
+Error: config profile `[Task bayes-market-h7b] PHASE 2: RESEARCH & DECISION
 Title: Add request ID header for tracing
-Description: Add X-Request-ID header to all responses. Generate UUID if not provided in request, echo back if provided. Log request ID with all backend log messages.
-Repo: /home/kelvin/bayes-market
 
-Explore the codebase. Identify what you need to know before building.
+Read .fleet/tasks/bayes-market-h7b/questions.json for the questions to answer.
+Research each question in the codebase. Provide answers with confidence scores.
 
-Write your output to .fleet/tasks/bayes-market-h7b/questions.json:
+Write your output to .fleet/tasks/bayes-market-h7b/research.json:
 {
-  "phase": "question",
-  "questions": [
-    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "...",
+      "confidence": 0.0-1.0,
+      "evidence": ["file:line", ...],
+      "uncertainty": "what you're not sure about",
+      "decision_needed": false
+    }
   ],
-  "assumptions": [
-    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  "assumption_checks": [
+    { "assumption_id": "a1", "verdict": "CORRECT|WRONG|UNCERTAIN", "confidence": 0.0-1.0, "impact": "..." }
   ],
   "spawn_children": false,
   "children": []
 }
 
-DECOMPOSITION: Set spawn_children=true if you need to investigate sub-questions
-that are too deep or tangential for this task. Each child runs a FULL 4-phase
-epistemic workflow (question→research→execute→validate). Only decompose when
-a sub-question truly warrants its own investigation cycle.
-Child format: { "id": "...", "title": "...", "description": "..." }
+DECOMPOSITION: Set spawn_children=true if deeper investigation is needed.
+When to decompose: Low-confidence answers (< 0.5), complex questions requiring
+their own research cycle, or tangential investigations. Each child runs a FULL
+4-phase epistemic workflow. Child format: { "id": "...", "title": "...", "description": "..." }
 
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: bayes-market-h7b"` not found
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "research: bayes-market-h7b"` not found
