@@ -1,0 +1,96 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "There is NO barrel export (index.ts) in the assumptions feature directory. The directory contains only AssumptionContext.tsx, AssumptionBar.tsx, AssumptionPanel.tsx, and VariableRow.tsx. Tests should import directly from @/features/assumptions/AssumptionContext. The Assumption type, AssumptionProvider, and useAssumptions are all exported from that file.",
+      "confidence": 1.0,
+      "evidence": [
+        "frontend/src/features/assumptions/AssumptionContext.tsx:3-8 (Assumption interface export)",
+        "frontend/src/features/assumptions/AssumptionContext.tsx:23 (AssumptionProvider export)",
+        "frontend/src/features/assumptions/AssumptionContext.tsx:63 (useAssumptions export)",
+        "frontend/src/features/assumptions/ (directory listing: no index.ts present)"
+      ],
+      "uncertainty": "None - confirmed by directory listing."
+    },
+    {
+      "question_id": "q2",
+      "answer": "The simple wrapper pattern from session.test.tsx is sufficient. helpers.tsx provides renderWithProviders which wraps with QueryClientProvider, SessionProvider, and MemoryRouter — none of which are needed for AssumptionContext since it's a pure in-memory state container. AssumptionProvider is NOT included in renderWithProviders anyway, so a custom wrapper function (like session.test.tsx lines 8-10) is the correct approach.",
+      "confidence": 0.98,
+      "evidence": [
+        "frontend/src/__tests__/helpers.tsx:17-34 (TestProviders wraps with QueryClient, Session, MemoryRouter only)",
+        "frontend/src/__tests__/session.test.tsx:8-10 (simple wrapper pattern)",
+        "frontend/src/features/assumptions/AssumptionContext.tsx:23-61 (no external deps in provider)"
+      ],
+      "uncertainty": "There could be a project convention preferring renderWithProviders for all tests, but no evidence of this — session.test.tsx itself uses the simple pattern."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Testing referential stability of contextPayload is NOT necessary for this task. contextPayload is computed inline (not memoized) which means it creates a new array each render. While this could be a performance concern, the task scope is testing the context's functional correctness, not performance optimization. The lack of memoization is a separate concern that could be addressed in a dedicated optimization task if needed.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/features/assumptions/AssumptionContext.tsx:44-47 (contextPayload computed inline with assumptions.map())"
+      ],
+      "uncertainty": "Design judgment call — could argue either way. Testing it would document current behavior but might be over-testing implementation details."
+    },
+    {
+      "question_id": "q4",
+      "answer": "The project uses @/ path aliases in test files. The alias is configured in both tsconfig.json (paths: { '@/*': ['./src/*'] }) and vitest.config.ts (resolve.alias: { '@': path.resolve(__dirname, './src') }). ALL test files consistently use @/ aliases for imports rather than relative paths (confirmed across session.test.tsx, Portfolio.test.tsx, helpers.tsx, TradingPanel.test.tsx, Analytics.test.tsx, etc.).",
+      "confidence": 1.0,
+      "evidence": [
+        "frontend/tsconfig.json:19-21 (paths config)",
+        "frontend/vitest.config.ts:8-10 (resolve.alias config)",
+        "frontend/src/__tests__/session.test.tsx:3 (uses @/features/session/context)",
+        "frontend/src/__tests__/helpers.tsx:3-4 (uses @/ imports)",
+        "frontend/src/__tests__/Portfolio.test.tsx:4 (uses @/ import)"
+      ],
+      "uncertainty": "None — universally confirmed."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "session.test.tsx uses exactly this pattern: renderHook with a simple wrapper component. helpers.tsx's renderWithProviders doesn't include AssumptionProvider and isn't needed for this pure context."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "Both tsconfig.json and vitest.config.ts configure @/ to resolve to ./src/. All existing test files use this alias consistently. Import should be @/features/assumptions/AssumptionContext."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "AssumptionContext.tsx uses only React.useState and React.useCallback. No API calls, no localStorage, no side effects. No mocking needed."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "vitest.config.ts has globals: true (line 15). session.test.tsx explicitly imports describe/it/expect/vi from 'vitest' despite globals being available. Following the explicit import pattern is the right choice for consistency, though both approaches work."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "AssumptionContext.tsx line 28 shows: setPrev(prev => [...prev.filter(a => a.variableId !== assumption.variableId), assumption]). This filters out the existing entry by variableId and appends the new one. Test should verify exactly one entry with updated values."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "Task description explicitly specifies this path. All test files are in frontend/src/__tests__/."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "AssumptionContext.tsx line 65 shows: throw new Error('useAssumptions must be used within AssumptionProvider'). session.test.tsx lines 111-119 show the pattern for testing this with console.error suppression via vi.spyOn."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
