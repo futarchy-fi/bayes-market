@@ -1,0 +1,130 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Raise global max_position_size default from 100.0 to 1000.0 to match the task requirement of 'default: 1000 units'",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Keep 100.0 for existing markets and only apply 1000 to new — rejected because the task explicitly says default should be 1000 and the intent is to raise the global default"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Store maxPositionSize as an optional field in the market dict (MARKETS[id]['maxPositionSize']), falling back to the global default (1000.0) when absent",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Separate config store or lookup table for position limits — unnecessary complexity for a simple per-market field"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Accept maxPositionSize as an optional field in POST /v1/markets body, following the same pattern as liquidity",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Separate admin endpoint for setting per-market limits — adds API surface without benefit"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Keep the existing error shape for position_limit_exceeded (400 status with full context), only changing the limit source from global to per-market lookup",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Redesign error payload — the existing shape is already comprehensive and matches the task requirement"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Move maxPositionSize from the top-level of the exposure response into each position object, since the limit is now per-market",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Keep maxPositionSize only at top level — misleading when different markets have different limits",
+        "Add aggregate totalExposure field — not explicitly required by the task"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Leave INITIAL_MARKETS without explicit maxPositionSize field so they inherit the 1000.0 default, testing the fallback path",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Add explicit maxPositionSize to seed markets — masks the default fallback behavior and adds noise to seed data"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Update global max_position_size constant from 100.0 to 1000.0 at server.py:213",
+      "depends_on": [],
+      "estimated_lines": 2,
+      "risk": "low"
+    },
+    {
+      "step": 2,
+      "task": "Add maxPositionSize as optional field in create_market (server.py:2011-2092): accept from body, validate if present (must be positive number), store in market dict with default 1000.0",
+      "depends_on": [],
+      "estimated_lines": 10,
+      "risk": "low"
+    },
+    {
+      "step": 3,
+      "task": "Create helper function get_market_max_position_size(market_id) that returns MARKETS[market_id].get('maxPositionSize', max_position_size) — single source of truth for per-market limit lookup",
+      "depends_on": [1],
+      "estimated_lines": 5,
+      "risk": "low"
+    },
+    {
+      "step": 4,
+      "task": "Update position validation at server.py:4076-4093 to use get_market_max_position_size(market_id) instead of the global max_position_size constant for both the comparison and the error detail",
+      "depends_on": [3],
+      "estimated_lines": 5,
+      "risk": "medium"
+    },
+    {
+      "step": 5,
+      "task": "Update serialize_account_exposure (server.py:1882-1888) to remove top-level maxPositionSize field, and update serialize_account_exposure_position (server.py:1812-1828) to include per-market maxPositionSize from get_market_max_position_size",
+      "depends_on": [3],
+      "estimated_lines": 10,
+      "risk": "low"
+    },
+    {
+      "step": 6,
+      "task": "Update existing tests: change assertions from 100.0 to 1000.0 in market config tests (test line 368), update boundary test (test line 4042) to use values near 1000, update limit exceeded test (test line 4186) to test against 1000 limit",
+      "depends_on": [1, 4],
+      "estimated_lines": 30,
+      "risk": "medium"
+    },
+    {
+      "step": 7,
+      "task": "Add new tests: (a) create market with custom maxPositionSize, verify it's stored and returned; (b) trade that exceeds custom per-market limit returns 400 with correct limit in error; (c) trade under custom per-market limit succeeds; (d) exposure endpoint shows per-market maxPositionSize in position objects",
+      "depends_on": [2, 4, 5],
+      "estimated_lines": 80,
+      "risk": "low"
+    },
+    {
+      "step": 8,
+      "task": "Run full test suite, fix any regressions from the default change (100→1000) or serialization changes",
+      "depends_on": [6, 7],
+      "estimated_lines": 15,
+      "risk": "low"
+    }
+  ],
+
+  "decomposition_assessment": {
+    "total_steps": 8,
+    "estimated_total_lines": 157,
+    "high_risk_steps": 0,
+    "parallelizable_groups": [["step1", "step2"], ["step3"], ["step4", "step5"], ["step6", "step7"], ["step8"]],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Estimated 157 lines is well under the 500-line threshold. Zero high-risk steps (only 2 medium). All changes are localized to one file (server.py) plus its test file. The steps are tightly coupled — they all touch the same market dict and position validation flow, and the parallelizable groups have inter-dependencies. Single-agent execution is most efficient here."
+  },
+
+  "spawn_children": false,
+  "children": []
+}
