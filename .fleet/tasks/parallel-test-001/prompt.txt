@@ -1,32 +1,27 @@
-[Task parallel-test-001] PHASE 2: RESEARCH & DECISION
+[Task parallel-test-001] PHASE 4: VALIDATE
 Title: Test parallel-capable task decomposition
 
-Read .fleet/tasks/parallel-test-001/questions.json for the questions to answer.
-Research each question in the codebase. Provide answers with confidence scores.
+Review the work done in this branch. Check:
+1. Did execution follow the plan? (read plan.json, check the diff)
+2. Did the plan follow from the research? (read research.json)
+3. Were there obvious gaps in questions? (read questions.json)
+4. Run tests if available.
 
-YOU MUST create .fleet/tasks/parallel-test-001/research.json with this structure:
+YOU MUST create .fleet/tasks/parallel-test-001/validation.json with this structure:
 {
-  "phase": "research",
-  "answers": [
-    {
-      "question_id": "q1",
-      "answer": "...",
-      "confidence": 0.0-1.0,
-      "evidence": ["file:line", ...],
-      "uncertainty": "what you're not sure about"
-    }
-  ],
-  "assumption_checks": [
-    { "assumption_id": "a1", "verdict": "CORRECT|WRONG|UNCERTAIN", "confidence": 0.0-1.0, "impact": "..." }
-  ],
-  "spawn_children": false,
-  "children": []
+  "phase": "validate",
+  "plan_adherence": 0.0-1.0,
+  "plan_adherence_notes": "...",
+  "research_quality": 0.0-1.0,
+  "question_completeness": 0.0-1.0,
+  "missed_questions": ["..."],
+  "verdict": "approve|changes_requested|reject",
+  "reason": "..."
 }
 
-DO NOT STOP until research.json exists and contains answers to all questions.
+DO NOT STOP until validation.json exists with a verdict.
 Verify: ls -la .fleet/tasks/parallel-test-001/ to confirm the file was written.
 
-DECOMPOSITION: Set spawn_children=true for low-confidence answers (< 0.5) or
-complex questions needing their own research cycle.
+SCOPE: Write ONLY to .fleet/tasks/ files. Do NOT modify production code.
 
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "research: parallel-test-001"
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "validate: parallel-test-001"
