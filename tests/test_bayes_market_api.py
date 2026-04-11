@@ -10,8 +10,11 @@ import threading
 import time
 import unittest
 from copy import deepcopy
+from email.message import Message
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
+from unittest.mock import Mock, patch
+from urllib.parse import urlencode
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "backend" / "server.py"
 spec = importlib.util.spec_from_file_location("bayes_market_server", MODULE_PATH)
@@ -32,13 +35,18 @@ def build_unconditional_probability_edit_body(
     market_id: str,
     outcome_id: str,
     probability: float,
+    *,
+    idempotency_key: str | None = None,
 ) -> dict[str, object]:
-    return {
+    body: dict[str, object] = {
         "accountId": account_id,
         "variableId": server.MARKETS[market_id]["variableId"],
         "target": {"kind": "marginal", "outcomeId": outcome_id, "probability": probability},
         "context": [],
     }
+    if idempotency_key is not None:
+        body["idempotencyKey"] = idempotency_key
+    return body
 
 
 def build_event_trade_body(
@@ -59,6 +67,174 @@ def build_event_trade_body(
     if idempotency_key is not None:
         body["idempotencyKey"] = idempotency_key
     return body
+
+
+def build_market_resolution_body(
+    account_id: str,
+    outcome_id: str | None = None,
+    *,
+    final_probabilities: dict[str, float] | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, object]:
+    body: dict[str, object] = {"accountId": account_id}
+    if outcome_id is not None:
+        body["outcomeId"] = outcome_id
+    if final_probabilities is not None:
+        body["finalProbabilities"] = deepcopy(final_probabilities)
+    if idempotency_key is not None:
+        body["idempotencyKey"] = idempotency_key
+    return body
+
+
+def build_market_close_body(
+    account_id: str,
+    *,
+    idempotency_key: str | None = None,
+) -> dict[str, object]:
+    body: dict[str, object] = {"accountId": account_id}
+    if idempotency_key is not None:
+        body["idempotencyKey"] = idempotency_key
+    return body
+
+
+def build_market_reopen_body(
+    account_id: str,
+    *,
+    idempotency_key: str | None = None,
+) -> dict[str, object]:
+    body: dict[str, object] = {"accountId": account_id}
+    if idempotency_key is not None:
+        body["idempotencyKey"] = idempotency_key
+    return body
+
+
+def expected_market_resolution_payload(market_id: str, outcome_id: str) -> dict[str, object]:
+    return {
+        "kind": "ResolveMarket",
+        "outcomeId": outcome_id,
+        "finalProbabilities": server.build_market_resolution_marginals(server.MARKETS[market_id], outcome_id),
+    }
+
+
+def expected_market_close_payload() -> dict[str, object]:
+    return {
+        "kind": "CloseMarket",
+    }
+
+
+def expected_market_reopen_payload() -> dict[str, object]:
+    return {
+        "kind": "ReopenMarket",
+    }
+
+
+def seed_closed_market_reopen_fixture(account_id: str) -> dict[str, object]:
+    unconditional_payload, unconditional_status = server.route_request(
+        "POST",
+        "/v1/markets/m1/orders/probability-edit",
+        build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
+    )
+    conditional_payload, conditional_status = server.route_request(
+        "POST",
+        "/v1/markets/m1/orders/probability-edit",
+        {
+            **build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.7),
+            "context": [{"variableId": server.MARKETS["m2"]["variableId"], "outcomeId": "yes"}],
+        },
+    )
+    trade_payload, trade_status = server.route_request(
+        "POST",
+        "/v1/markets/m1/orders/event-trade",
+        build_event_trade_body(account_id, "m1", "yes", size=8.0),
+    )
+
+    expected_reopened_market = deepcopy(server.MARKETS["m1"])
+    expected_conditional_marginals = deepcopy(server.CONDITIONAL_MARGINALS.get("m1", {}))
+    expected_account_risk = deepcopy(server.ACCOUNT_RISK[account_id])
+    expected_account_exposure = deepcopy(server.ACCOUNT_EXPOSURE[account_id])
+
+    server.MARKETS["m1"]["status"] = "closed"
+    server.MARKETS["m1"]["resolution"] = "yes"
+    server.MARKETS["m1"]["resolutionProbabilities"] = {"yes": 1.0, "no": 0.0}
+
+    return {
+        "setup_statuses": (unconditional_status, conditional_status, trade_status),
+        "setup_payloads": {
+            "unconditional": unconditional_payload,
+            "conditional": conditional_payload,
+            "trade": trade_payload,
+        },
+        "expected_reopened_market": expected_reopened_market,
+        "expected_conditional_marginals": expected_conditional_marginals,
+        "expected_account_risk": expected_account_risk,
+        "expected_account_exposure": expected_account_exposure,
+        "closed_market": deepcopy(server.MARKETS["m1"]),
+    }
+
+
+def build_create_market_body(
+    *,
+    title: str = "Test Market",
+    description: str = "A test market",
+    outcomes: list[dict[str, str]] | None = None,
+    expires_at: str = "2026-12-31T23:59:59Z",
+    liquidity: float = 10000.0,
+) -> dict[str, object]:
+    return {
+        "title": title,
+        "description": description,
+        "outcomes": deepcopy(
+            outcomes if outcomes is not None else [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}]
+        ),
+        "expires_at": expires_at,
+        "liquidity": liquidity,
+    }
+
+
+def snapshot_domain_state() -> dict[str, object]:
+    return {
+        "markets": deepcopy(server.MARKETS),
+        "conditional_marginals": deepcopy(server.CONDITIONAL_MARGINALS),
+        "orders": deepcopy(server.ORDERS),
+        "commands": deepcopy(server.COMMANDS),
+        "events": deepcopy(server.EVENTS),
+        "terminal_outcomes": deepcopy(server.TERMINAL_OUTCOMES),
+        "idempotency_keys": deepcopy(server.IDEMPOTENCY_KEYS),
+        "account_risk": deepcopy(server.ACCOUNT_RISK),
+        "account_exposure": deepcopy(server.ACCOUNT_EXPOSURE),
+    }
+
+
+def assert_domain_state_unchanged(test_case: unittest.TestCase, snapshot: dict[str, object]) -> None:
+    test_case.assertEqual(server.MARKETS, snapshot["markets"])
+    test_case.assertEqual(server.CONDITIONAL_MARGINALS, snapshot["conditional_marginals"])
+    test_case.assertEqual(server.ORDERS, snapshot["orders"])
+    test_case.assertEqual(server.COMMANDS, snapshot["commands"])
+    test_case.assertEqual(server.EVENTS, snapshot["events"])
+    test_case.assertEqual(server.TERMINAL_OUTCOMES, snapshot["terminal_outcomes"])
+    test_case.assertEqual(server.IDEMPOTENCY_KEYS, snapshot["idempotency_keys"])
+    test_case.assertEqual(server.ACCOUNT_RISK, snapshot["account_risk"])
+    test_case.assertEqual(server.ACCOUNT_EXPOSURE, snapshot["account_exposure"])
+
+
+def snapshot_market_close_rejection_state(market_id: str) -> dict[str, object]:
+    return {
+        "market": deepcopy(server.MARKETS[market_id]),
+        "conditional_marginals": deepcopy(server.CONDITIONAL_MARGINALS),
+        "account_risk": deepcopy(server.ACCOUNT_RISK),
+        "account_exposure": deepcopy(server.ACCOUNT_EXPOSURE),
+    }
+
+
+def assert_market_close_rejection_state_unchanged(
+    test_case: unittest.TestCase,
+    market_id: str,
+    snapshot: dict[str, object],
+) -> None:
+    test_case.assertEqual(server.MARKETS[market_id], snapshot["market"])
+    test_case.assertEqual(server.CONDITIONAL_MARGINALS, snapshot["conditional_marginals"])
+    test_case.assertEqual(server.ACCOUNT_RISK, snapshot["account_risk"])
+    test_case.assertEqual(server.ACCOUNT_EXPOSURE, snapshot["account_exposure"])
 
 
 def pick_probability_distinct_from_current(market_id: str, outcome_id: str, rng: random.Random) -> float:
@@ -158,7 +334,13 @@ def build_random_context(target_market_id: str, rng: random.Random) -> list[dict
     return [
         {
             "variableId": server.MARKETS[market_id]["variableId"],
-            "outcomeId": rng.choice([outcome["id"] for outcome in server.MARKETS[market_id]["outcomes"]]),
+            "outcomeId": rng.choice(
+                [
+                    outcome["id"]
+                    for outcome in server.MARKETS[market_id]["outcomes"]
+                    if float(server.MARKETS[market_id]["marginals"][outcome["id"]]) > 0.0
+                ]
+            ),
         }
         for market_id in sorted(selected_market_ids, key=lambda market_id: server.MARKETS[market_id]["variableId"])
     ]
@@ -174,6 +356,13 @@ def assert_marginals_close(
     test_case.assertEqual(set(actual), set(expected))
     for outcome_id, expected_probability in expected.items():
         test_case.assertAlmostEqual(actual[outcome_id], expected_probability, delta=delta)
+
+
+def build_market_context_query_string(context: list[dict[str, str]]) -> str:
+    return urlencode(
+        [("context", f"{assignment['variableId']}={assignment['outcomeId']}") for assignment in context],
+        doseq=True,
+    )
 
 
 def expected_seeded_account_state(account_id: str, min_asset: float) -> dict[str, object]:
@@ -230,7 +419,43 @@ def seed_account_with_preview_multiplier(
     preview = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
     seeded_min_asset = server.round_risk_value(preview["impactScore"] * min_asset_multiplier)
     seed_account_min_asset(account_id, seeded_min_asset)
-    return preview["assetDelta"], seeded_min_asset
+    seeded_preview = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
+    return seeded_preview["assetDelta"], seeded_min_asset
+
+
+def expected_min_asset_violation_details(
+    account_id: str,
+    market_id: str,
+    preview_or_asset_delta: dict[str, object],
+) -> dict[str, object]:
+    asset_delta = preview_or_asset_delta["assetDelta"] if "assetDelta" in preview_or_asset_delta else preview_or_asset_delta
+    return {
+        "accountId": account_id,
+        "marketId": market_id,
+        "riskLimit": asset_delta["riskLimit"],
+        "beforeMinAsset": asset_delta["beforeMinAsset"],
+        "impactScore": asset_delta["impactScore"],
+        "afterMinAsset": asset_delta["afterMinAsset"],
+    }
+
+
+def assert_min_asset_violation_api_error(
+    test_case: unittest.TestCase,
+    error: Exception,
+    *,
+    account_id: str,
+    market_id: str,
+    preview_or_asset_delta: dict[str, object],
+) -> None:
+    test_case.assertIsInstance(error, server.ApiError)
+    api_error = error
+    test_case.assertEqual(api_error.status, 422)
+    test_case.assertEqual(api_error.code, "min_asset_violation")
+    test_case.assertEqual(api_error.message, "Edit would produce negative state-contingent assets")
+    test_case.assertEqual(
+        api_error.details,
+        expected_min_asset_violation_details(account_id, market_id, preview_or_asset_delta),
+    )
 
 
 class BayesMarketApiUnitTests(unittest.TestCase):
@@ -256,6 +481,294 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.MARKET_WRITE_LOCKS, {})
         self.assertIsNot(server.get_market_write_lock("m1"), original)
 
+    def test_reset_state_clears_account_exposure_projection(self):
+        server.ACCOUNT_EXPOSURE["acct_test"] = {
+            "accountId": "acct_test",
+            "positions": {
+                "m1|yes": {
+                    "marketId": "m1",
+                    "outcomeId": "yes",
+                    "netSize": 12.5,
+                }
+            },
+        }
+
+        self.assertEqual(server.max_position_size, 100.0)
+        self.assertIn("acct_test", server.ACCOUNT_EXPOSURE)
+
+        server.reset_state()
+
+        self.assertEqual(server.ACCOUNT_EXPOSURE, {})
+
+    def test_aggregate_platform_stats_returns_initial_totals_without_orders(self):
+        markets = list(server.INITIAL_MARKETS.values())
+
+        self.assertEqual(
+            server.aggregate_platform_stats(),
+            {
+                "total_markets": len(markets),
+                "active_markets": sum(1 for market in markets if market["status"] == "active"),
+                "resolved_markets": sum(1 for market in markets if market["status"] == "resolved"),
+                "total_volume": server.round_risk_value(sum(float(market["volume"]) for market in markets)),
+                "total_trades": 0,
+                "total_accounts": 0,
+            },
+        )
+
+    def test_aggregate_platform_stats_filters_trade_orders_and_rounds_total_volume_once(self):
+        custom_markets = deepcopy(server.INITIAL_MARKETS)
+        custom_markets["m1"]["volume"] = 0.1234564
+        custom_markets["m2"]["status"] = "draft"
+        custom_markets["m2"]["volume"] = 0.0000004
+        custom_markets["m3"]["volume"] = 2.0
+
+        server.MARKETS.clear()
+        server.MARKETS.update(custom_markets)
+        server.ORDERS.clear()
+        server.ORDERS.update(
+            {
+                "o1": {
+                    "id": "o1",
+                    "type": "ProbabilityEdit",
+                    "status": "filled",
+                    "accountId": "acct_a",
+                },
+                "o2": {
+                    "id": "o2",
+                    "type": "EventTrade",
+                    "status": "filled",
+                    "accountId": "acct_b",
+                },
+                "o3": {
+                    "id": "o3",
+                    "type": "ProbabilityEdit",
+                    "status": "rejected",
+                    "accountId": "acct_c",
+                },
+                "o4": {
+                    "id": "o4",
+                    "type": "EventTrade",
+                    "status": "filled",
+                    "accountId": "acct_b",
+                },
+                "o5": {
+                    "id": "o5",
+                    "type": "AdminOp",
+                    "status": "filled",
+                    "accountId": "acct_d",
+                },
+            }
+        )
+
+        self.assertEqual(
+            server.aggregate_platform_stats(),
+            {
+                "total_markets": 3,
+                "active_markets": 1,
+                "resolved_markets": 1,
+                "total_volume": 2.123457,
+                "total_trades": 3,
+                "total_accounts": 2,
+            },
+        )
+
+    def test_aggregate_component_status_returns_ok_when_all_components_are_ok(self):
+        components = {
+            "db": {"status": "ok"},
+            "inference": {"status": "ok"},
+            "auth": {"status": "ok"},
+        }
+
+        self.assertEqual(server.aggregate_component_status(components), "ok")
+
+    def test_aggregate_component_status_returns_degraded_when_any_component_is_degraded(self):
+        components = {
+            "db": {"status": "ok"},
+            "inference": {"status": "degraded"},
+            "auth": {"status": "ok"},
+        }
+
+        self.assertEqual(server.aggregate_component_status(components), "degraded")
+
+    def test_aggregate_component_status_returns_unhealthy_when_any_component_is_unhealthy(self):
+        components = {
+            "db": {"status": "degraded"},
+            "inference": {"status": "ok"},
+            "auth": {"status": "unhealthy"},
+        }
+
+        self.assertEqual(server.aggregate_component_status(components), "unhealthy")
+
+    def test_aggregate_component_status_rejects_empty_components(self):
+        with self.assertRaisesRegex(ValueError, "components must not be empty"):
+            server.aggregate_component_status({})
+
+    def test_aggregate_component_status_rejects_missing_component_status(self):
+        with self.assertRaisesRegex(ValueError, "component 'db' is missing status"):
+            server.aggregate_component_status({"db": {}})
+
+    def test_aggregate_component_status_rejects_unexpected_component_status(self):
+        with self.assertRaisesRegex(ValueError, "component 'db' has unexpected status: 'healthy'"):
+            server.aggregate_component_status({"db": {"status": "healthy"}})
+
+    def test_v1_health_components_are_assembled_from_shared_builders(self):
+        with (
+            patch.object(server, "db_health_component", return_value={"status": "ok", "kind": "in_memory"}) as db_health_component,
+            patch.object(
+                server,
+                "inference_health_component",
+                return_value={"status": "degraded", "backend": "approximate", "version": "1.2.3"},
+            ) as inference_health_component,
+            patch.object(server, "auth_health_component", return_value={"status": "ok", "requires_agent_id": False}) as auth_health_component,
+        ):
+            components = server.v1_health_components()
+
+        db_health_component.assert_called_once_with()
+        inference_health_component.assert_called_once_with()
+        auth_health_component.assert_called_once_with()
+        self.assertEqual(
+            components,
+            {
+                "db": {"status": "ok", "kind": "in_memory"},
+                "inference": {
+                    "status": "degraded",
+                    "backend": "approximate",
+                    "version": "1.2.3",
+                },
+                "auth": {
+                    "status": "ok",
+                    "requires_agent_id": False,
+                },
+            },
+        )
+
+    def test_v1_health_payload_extends_a_copy_of_legacy_health_payload(self):
+        original_engine_config = server.ENGINE_CONFIG
+        original_auth_require_agent_id = server.AUTH_REQUIRE_AGENT_ID
+        self.addCleanup(setattr, server, "ENGINE_CONFIG", original_engine_config)
+        self.addCleanup(setattr, server, "AUTH_REQUIRE_AGENT_ID", original_auth_require_agent_id)
+
+        server.ENGINE_CONFIG = server.EngineConfig(
+            mode="EXACT",
+            backend="variable_elimination",
+            version="9.9.9",
+            precision="float64",
+            compile_type="junction_tree",
+            inference_sample_limit=100,
+        )
+        server.AUTH_REQUIRE_AGENT_ID = True
+
+        legacy_payload = {
+            "service": "legacy-bayes-market",
+            "status": "legacy-status",
+            "timestamp": "2026-04-10T00:00:00Z",
+        }
+
+        with (
+            patch.object(server, "health_payload", return_value=legacy_payload) as health_payload,
+            patch.object(
+                server,
+                "db_health_component",
+                return_value={"status": "degraded", "kind": "in_memory"},
+            ) as db_health_component,
+            patch.object(server, "inference_health_component", wraps=server.inference_health_component) as inference_health_component,
+            patch.object(server, "auth_health_component", wraps=server.auth_health_component) as auth_health_component,
+            patch.object(server, "uptime_seconds", return_value=12.345) as uptime_seconds,
+        ):
+            payload = server.v1_health_payload()
+
+        health_payload.assert_called_once_with()
+        db_health_component.assert_called_once_with()
+        inference_health_component.assert_called_once_with()
+        auth_health_component.assert_called_once_with()
+        uptime_seconds.assert_called_once_with()
+        self.assertEqual(
+            legacy_payload,
+            {
+                "service": "legacy-bayes-market",
+                "status": "legacy-status",
+                "timestamp": "2026-04-10T00:00:00Z",
+            },
+        )
+        self.assertEqual(
+            payload,
+            {
+                "service": "legacy-bayes-market",
+                "status": "degraded",
+                "timestamp": "2026-04-10T00:00:00Z",
+                "version": "9.9.9",
+                "uptime_seconds": 12.345,
+                "components": {
+                    "db": {"status": "degraded", "kind": "in_memory"},
+                    "inference": {
+                        "status": "ok",
+                        "backend": "variable_elimination",
+                        "version": "9.9.9",
+                    },
+                    "auth": {
+                        "status": "ok",
+                        "requires_agent_id": True,
+                    },
+                },
+            },
+        )
+
+    def test_get_market_events_serializes_cross_market_appends_while_snapshotting_events(self):
+        server.emit_terminal_event({"commandId": "cmd_m1_1", "marketId": "m1"}, "CommandAccepted", {"effects": {}})
+        server.emit_terminal_event({"commandId": "cmd_m1_2", "marketId": "m1"}, "CommandAccepted", {"effects": {}})
+
+        writer_errors: list[Exception] = []
+
+        def append_other_market_event() -> None:
+            try:
+                server.emit_terminal_event(
+                    {"commandId": "cmd_m2_1", "marketId": "m2"},
+                    "CommandAccepted",
+                    {"effects": {}},
+                )
+            except Exception as exc:
+                writer_errors.append(exc)
+
+        writer_thread = threading.Thread(target=append_other_market_event, daemon=True)
+
+        class CoordinatedEventValues:
+            def __init__(self, mapping: dict[str, dict[str, object]]) -> None:
+                self._mapping = mapping
+                self._started_writer = False
+
+            def __iter__(self):
+                iterator = iter(dict.values(self._mapping))
+                for event in iterator:
+                    if not self._started_writer:
+                        self._started_writer = True
+                        writer_thread.start()
+                        time.sleep(0.05)
+                    yield event
+
+        class CoordinatedEventsDict(dict[str, dict[str, object]]):
+            def values(self):
+                return CoordinatedEventValues(self)
+
+        original_events = server.EVENTS
+        coordinated_events = CoordinatedEventsDict(server.EVENTS)
+        server.EVENTS = coordinated_events
+
+        try:
+            payload, status = server.get_market_events("m1", {})
+            writer_thread.join(timeout=1)
+        finally:
+            original_events.clear()
+            original_events.update(coordinated_events)
+            server.EVENTS = original_events
+
+        self.assertEqual(status, 200)
+        self.assertEqual([event["seq"] for event in payload["events"]], [1, 2])
+        self.assertEqual(payload["chain"]["headSeq"], 2)
+        self.assertEqual(payload["chain"]["headHash"], payload["events"][-1]["eventHash"])
+        self.assertFalse(writer_errors)
+        self.assertFalse(writer_thread.is_alive(), "cross-market append should complete after the read snapshot releases")
+        self.assertEqual(len(server.EVENTS), 3)
+
     def test_root_route_returns_service_index(self):
         payload, status = server.route_request("GET", "/")
 
@@ -263,17 +776,692 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["service"], "bayes-market")
         self.assertEqual(payload["status"], "ok")
         self.assertIn("routes", payload)
-        self.assertEqual(payload["routes"]["accounts"], ["/v1/accounts/{id}/risk"])
+        self.assertEqual(
+            payload["routes"]["accounts"],
+            ["/v1/accounts/{id}/risk", "/v1/accounts/{id}/pnl", "/v1/accounts/{id}/exposure"],
+        )
+        self.assertEqual(payload["routes"]["health"], ["/health", "/healthz", "/v1/health", "/v1/version"])
+        self.assertEqual(payload["routes"]["stats"], ["/v1/stats"])
+        self.assertIn("GET /v1/markets/{id}/analytics", payload["routes"]["markets"])
+        self.assertIn("/v1/markets/{id}/meta", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/events", payload["routes"]["markets"])
+        self.assertIn("/v1/markets/{id}/trades", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/engine-stats", payload["routes"]["markets"])
+        self.assertIn("POST /v1/markets/{id}/close", payload["routes"]["markets"])
+        self.assertIn("POST /v1/markets/{id}/reopen", payload["routes"]["markets"])
+        self.assertIn("POST /v1/markets/{id}/resolve", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/orders/event-trade", payload["routes"]["orders"])
+
+    def test_root_route_service_index_exposes_stats_route(self):
+        payload, status = server.route_request("GET", "/")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["routes"]["stats"], ["/v1/stats"])
+
+    def test_v1_stats_route_returns_aggregated_totals_plus_meta(self):
+        aggregate_stats = {
+            "total_markets": 7,
+            "active_markets": 4,
+            "resolved_markets": 2,
+            "total_volume": 123.456789,
+            "total_trades": 11,
+            "total_accounts": 5,
+        }
+        meta = {"timestamp": "2026-04-10T00:00:00Z", "requestId": "req_stats"}
+
+        with (
+            patch.object(server, "aggregate_platform_stats", return_value=aggregate_stats) as aggregate_platform_stats,
+            patch.object(server, "make_meta", return_value=meta) as make_meta,
+        ):
+            payload, status = server.route_request("GET", "/v1/stats")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, {**aggregate_stats, "meta": meta})
+        aggregate_platform_stats.assert_called_once_with()
+        make_meta.assert_called_once_with()
+
+    def test_v1_stats_route_returns_seeded_snapshot_without_mocks(self):
+        payload, status = server.route_request("GET", "/v1/stats")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            {key: value for key, value in payload.items() if key != "meta"},
+            {
+                "total_markets": 3,
+                "active_markets": 2,
+                "resolved_markets": 1,
+                "total_volume": 188000.0,
+                "total_trades": 0,
+                "total_accounts": 0,
+            },
+        )
+        self.assertEqual(set(payload["meta"]), {"timestamp"})
+        self.assertRegex(
+            payload["meta"]["timestamp"],
+            r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$",
+        )
+
+    def test_v1_stats_route_normalizes_trailing_slash_for_get(self):
+        aggregate_stats = {
+            "total_markets": 7,
+            "active_markets": 4,
+            "resolved_markets": 2,
+            "total_volume": 123.456789,
+            "total_trades": 11,
+            "total_accounts": 5,
+        }
+        meta = {"timestamp": "2026-04-10T00:00:00Z", "requestId": "req_stats"}
+
+        with (
+            patch.object(server, "aggregate_platform_stats", return_value=aggregate_stats) as aggregate_platform_stats,
+            patch.object(server, "make_meta", return_value=meta) as make_meta,
+        ):
+            payload, status = server.route_request("GET", "/v1/stats/")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, {**aggregate_stats, "meta": meta})
+        aggregate_platform_stats.assert_called_once_with()
+        make_meta.assert_called_once_with()
+
+    def test_v1_stats_route_is_method_not_allowed_for_non_get(self):
+        for method in ("POST", "PUT", "DELETE"):
+            with self.subTest(method=method):
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(method, "/v1/stats/", {})
+
+                error = ctx.exception
+                self.assertEqual(error.status, 405)
+                self.assertEqual(error.code, "method_not_allowed")
+                self.assertEqual(error.details["method"], method)
+                self.assertEqual(error.details["path"], "/v1/stats")
+
+    def test_legacy_health_routes_return_legacy_health_payload(self):
+        legacy_payload = {
+            "service": "bayes-market",
+            "status": "ok",
+            "timestamp": "2026-04-10T00:00:00Z",
+        }
+
+        with (
+            patch.object(server, "health_payload", return_value=legacy_payload) as health_payload,
+            patch.object(server, "v1_health_payload", return_value={"status": "wrong"}) as v1_health_payload,
+        ):
+            for path in ("/health", "/healthz"):
+                with self.subTest(path=path):
+                    payload, status = server.route_request("GET", path)
+
+                    self.assertEqual(status, 200)
+                    self.assertEqual(payload, legacy_payload)
+
+        self.assertEqual(health_payload.call_count, 2)
+        v1_health_payload.assert_not_called()
+
+    def test_v1_health_route_returns_versioned_health_payload(self):
+        versioned_payload = {
+            "service": "bayes-market",
+            "status": "ok",
+            "timestamp": "2026-04-10T00:00:00Z",
+            "version": "9.9.9",
+            "uptime_seconds": 12.345,
+            "components": {
+                "db": {"status": "ok"},
+                "inference": {"status": "ok"},
+                "auth": {"status": "ok"},
+            },
+        }
+
+        with (
+            patch.object(server, "v1_health_payload", return_value=versioned_payload) as v1_health_payload,
+            patch.object(server, "health_payload", return_value={"status": "legacy"}) as health_payload,
+        ):
+            payload, status = server.route_request("GET", "/v1/health")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, versioned_payload)
+        v1_health_payload.assert_called_once_with()
+        health_payload.assert_not_called()
+
+    def test_v1_health_route_is_method_not_allowed_for_non_get(self):
+        for method in ("POST", "PUT", "DELETE"):
+            with self.subTest(method=method):
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(method, "/v1/health", {})
+
+                error = ctx.exception
+                self.assertEqual(error.status, 405)
+                self.assertEqual(error.code, "method_not_allowed")
+                self.assertEqual(error.details["method"], method)
+                self.assertEqual(error.details["path"], "/v1/health")
+
+    def test_v1_version_route_returns_startup_scoped_build_payload(self):
+        original_engine_config = server.ENGINE_CONFIG
+        original_build_git_sha = server.BUILD_GIT_SHA
+        original_build_timestamp = server.BUILD_TIMESTAMP
+        self.addCleanup(setattr, server, "ENGINE_CONFIG", original_engine_config)
+        self.addCleanup(setattr, server, "BUILD_GIT_SHA", original_build_git_sha)
+        self.addCleanup(setattr, server, "BUILD_TIMESTAMP", original_build_timestamp)
+
+        server.ENGINE_CONFIG = server.EngineConfig(
+            mode="EXACT",
+            backend="variable_elimination",
+            version="9.9.9",
+            precision="float64",
+            compile_type="junction_tree",
+            inference_sample_limit=100,
+        )
+        server.BUILD_GIT_SHA = "0123456789abcdef0123456789abcdef01234567"
+        server.BUILD_TIMESTAMP = "2026-04-10T00:00:00Z"
+
+        payload, status = server.route_request("GET", "/v1/version")
+        server.reset_state()
+        repeated_payload, repeated_status = server.route_request("GET", "/v1/version/")
+
+        expected_payload = {
+            "service": "bayes-market",
+            "version": "9.9.9",
+            "git_sha": "0123456789abcdef0123456789abcdef01234567",
+            "build_timestamp": "2026-04-10T00:00:00Z",
+        }
+        self.assertEqual(status, 200)
+        self.assertEqual(repeated_status, 200)
+        self.assertEqual(payload, expected_payload)
+        self.assertEqual(repeated_payload, expected_payload)
+        self.assertEqual(payload["version"], server.ENGINE_CONFIG.version)
+
+    def test_v1_version_route_is_method_not_allowed_for_non_get(self):
+        for method in ("POST", "PUT", "DELETE"):
+            with self.subTest(method=method):
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(method, "/v1/version/", {})
+
+                error = ctx.exception
+                self.assertEqual(error.status, 405)
+                self.assertEqual(error.code, "method_not_allowed")
+                self.assertEqual(error.details["method"], method)
+                self.assertEqual(error.details["path"], "/v1/version")
+
+    def test_do_get_routes_public_health_paths_before_static_fallback(self):
+        handler = object.__new__(server.BayesHandler)
+        handler.headers = Message()
+        handler.handle_api = Mock()
+        handler._serve_static = Mock(return_value=False)
+
+        with patch.object(server, "PUBLIC_HEALTH_ROUTES", ("/health", "/healthz", "/ready")):
+            handler.path = "/ready"
+            server.BayesHandler.do_GET(handler)
+
+        handler.handle_api.assert_called_once_with("GET")
+        handler._serve_static.assert_not_called()
+
+    def test_market_analytics_returns_multi_outcome_price_series_and_excludes_contextual_edits(self):
+        unconditional_body = build_unconditional_probability_edit_body("acct_chart", "m2", "yes", 0.4)
+        contextual_body = build_unconditional_probability_edit_body("acct_context", "m2", "delayed", 0.2)
+        contextual_body["context"] = [{"variableId": server.MARKETS["m1"]["variableId"], "outcomeId": "yes"}]
+
+        unconditional_payload, unconditional_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/probability-edit",
+            unconditional_body,
+        )
+        contextual_payload, contextual_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/probability-edit",
+            contextual_body,
+        )
+        trade_payload, trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body("acct_trade", "m2", "yes", size=7.0),
+        )
+        analytics_payload, analytics_status = server.route_request("GET", "/v1/markets/m2/analytics")
+
+        self.assertEqual(unconditional_status, 201)
+        self.assertEqual(contextual_status, 201)
+        self.assertEqual(trade_status, 201)
+        self.assertEqual(analytics_status, 200)
+        self.assertEqual(analytics_payload["marketId"], "m2")
+        self.assertEqual(analytics_payload["summary"]["totalTrades"], 3)
+        self.assertEqual(analytics_payload["summary"]["uniqueTraders"], 3)
+        self.assertEqual(analytics_payload["summary"]["bucketInterval"], "day")
+        self.assertEqual(
+            analytics_payload["summary"]["totalVolume"],
+            server.round_risk_value(
+                float(unconditional_payload["order"]["impactScore"])
+                + float(contextual_payload["order"]["impactScore"])
+                + float(trade_payload["order"]["notional"])
+            ),
+        )
+        self.assertEqual(len(analytics_payload["volumeBuckets"]), 1)
+        self.assertEqual(analytics_payload["volumeBuckets"][0]["tradeCount"], 3)
+        self.assertEqual(
+            analytics_payload["volumeBuckets"][0]["volume"],
+            analytics_payload["summary"]["totalVolume"],
+        )
+
+        series_by_outcome = {
+            series["outcomeId"]: series
+            for series in analytics_payload["priceSeries"]
+        }
+        self.assertEqual(set(series_by_outcome), {"yes", "no", "delayed"})
+        self.assertEqual(
+            [point["probability"] for point in series_by_outcome["yes"]["points"]],
+            [0.25, unconditional_payload["order"]["newMarginals"]["yes"]],
+        )
+        self.assertEqual(
+            [point["probability"] for point in series_by_outcome["no"]["points"]],
+            [0.6, unconditional_payload["order"]["newMarginals"]["no"]],
+        )
+        self.assertEqual(
+            [point["probability"] for point in series_by_outcome["delayed"]["points"]],
+            [0.15, unconditional_payload["order"]["newMarginals"]["delayed"]],
+        )
+        emitted_at_points = {
+            point["emittedAt"]
+            for series in analytics_payload["priceSeries"]
+            for point in series["points"]
+        }
+        self.assertNotIn(contextual_payload["result"]["emittedAt"], emitted_at_points)
+        self.assertNotIn(trade_payload["result"]["emittedAt"], emitted_at_points)
+
+    def test_market_analytics_buckets_mixed_activity_by_hour_and_day(self):
+        probability_payload, probability_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_prob", "m1", "yes", 0.8),
+        )
+        first_trade_payload, first_trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_buy", "m1", "yes", size=5.0, side="buy"),
+        )
+        second_trade_payload, second_trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_sell", "m1", "yes", size=2.0, side="sell"),
+        )
+
+        server.EVENTS[probability_payload["result"]["eventId"]]["emittedAt"] = "2026-04-08T10:15:00Z"
+        server.EVENTS[first_trade_payload["result"]["eventId"]]["emittedAt"] = "2026-04-08T10:45:00Z"
+        server.EVENTS[second_trade_payload["result"]["eventId"]]["emittedAt"] = "2026-04-09T01:10:00Z"
+
+        hourly_payload, hourly_status = server.route_request("GET", "/v1/markets/m1/analytics?interval=hour")
+        daily_payload, daily_status = server.route_request("GET", "/v1/markets/m1/analytics?interval=day")
+
+        self.assertEqual(probability_status, 201)
+        self.assertEqual(first_trade_status, 201)
+        self.assertEqual(second_trade_status, 201)
+        self.assertEqual(hourly_status, 200)
+        self.assertEqual(daily_status, 200)
+        self.assertEqual(hourly_payload["summary"]["bucketInterval"], "hour")
+        self.assertEqual(daily_payload["summary"]["bucketInterval"], "day")
+        self.assertEqual(hourly_payload["summary"]["lastUpdated"], "2026-04-09T01:10:00Z")
+        self.assertEqual(daily_payload["summary"]["lastUpdated"], "2026-04-09T01:10:00Z")
+
+        expected_first_bucket_volume = server.round_risk_value(
+            float(probability_payload["order"]["impactScore"]) + float(first_trade_payload["order"]["notional"])
+        )
+        expected_second_bucket_volume = server.round_risk_value(float(second_trade_payload["order"]["notional"]))
+        self.assertEqual(
+            hourly_payload["volumeBuckets"],
+            [
+                {
+                    "bucketStart": "2026-04-08T10:00:00Z",
+                    "bucketEnd": "2026-04-08T11:00:00Z",
+                    "tradeCount": 2,
+                    "volume": expected_first_bucket_volume,
+                },
+                {
+                    "bucketStart": "2026-04-09T01:00:00Z",
+                    "bucketEnd": "2026-04-09T02:00:00Z",
+                    "tradeCount": 1,
+                    "volume": expected_second_bucket_volume,
+                },
+            ],
+        )
+        self.assertEqual(
+            daily_payload["volumeBuckets"],
+            [
+                {
+                    "bucketStart": "2026-04-08T00:00:00Z",
+                    "bucketEnd": "2026-04-09T00:00:00Z",
+                    "tradeCount": 2,
+                    "volume": expected_first_bucket_volume,
+                },
+                {
+                    "bucketStart": "2026-04-09T00:00:00Z",
+                    "bucketEnd": "2026-04-10T00:00:00Z",
+                    "tradeCount": 1,
+                    "volume": expected_second_bucket_volume,
+                },
+            ],
+        )
+
+    def test_market_analytics_ranks_traders_deterministically_on_ties(self):
+        alpha_payload, alpha_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body("acct_alpha", "m2", "yes", size=4.0),
+        )
+        zeta_payload, zeta_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body("acct_zeta", "m2", "yes", size=4.0),
+        )
+        beta_payload, beta_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body("acct_beta", "m2", "yes", size=4.0),
+        )
+
+        shared_timestamp = "2026-04-08T09:00:00Z"
+        server.EVENTS[alpha_payload["result"]["eventId"]]["emittedAt"] = shared_timestamp
+        server.EVENTS[zeta_payload["result"]["eventId"]]["emittedAt"] = shared_timestamp
+        server.EVENTS[beta_payload["result"]["eventId"]]["emittedAt"] = "2026-04-08T10:00:00Z"
+
+        analytics_payload, analytics_status = server.route_request("GET", "/v1/markets/m2/analytics")
+
+        self.assertEqual(alpha_status, 201)
+        self.assertEqual(zeta_status, 201)
+        self.assertEqual(beta_status, 201)
+        self.assertEqual(analytics_status, 200)
+        self.assertEqual(
+            [row["accountId"] for row in analytics_payload["topTraders"]],
+            ["acct_beta", "acct_alpha", "acct_zeta"],
+        )
+        self.assertEqual(
+            {row["volume"] for row in analytics_payload["topTraders"]},
+            {alpha_payload["order"]["notional"]},
+        )
+
+    def test_market_analytics_rejects_invalid_interval_query(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/markets/m1/analytics?interval=week")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_query")
+        self.assertEqual(error.details["parameter"], "interval")
+        self.assertEqual(error.details["received"], "week")
+        self.assertEqual(error.details["allowed"], ["day", "hour"])
+
+    def test_market_analytics_requires_known_market(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/markets/missing/analytics")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 404)
+        self.assertEqual(error.code, "market_not_found")
+        self.assertEqual(error.details["market_id"], "missing")
+
+    def test_market_analytics_route_is_method_not_allowed_for_post(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", "/v1/markets/m1/analytics", {})
+
+        error = ctx.exception
+        self.assertEqual(error.status, 405)
+        self.assertEqual(error.code, "method_not_allowed")
+        self.assertEqual(error.details["method"], "POST")
+        self.assertEqual(error.details["path"], "/v1/markets/m1/analytics")
+
+    def test_account_pnl_replays_resolved_probability_edit_exposure_after_risk_settlement(self):
+        account_id = "acct_resolved_pnl"
+        edit_payload, edit_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
+        )
+        resolve_payload, resolve_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_pnl", "yes"),
+        )
+        pnl_payload, pnl_status = server.route_request("GET", f"/v1/accounts/{account_id}/pnl")
+
+        order = edit_payload["order"]
+        score_by_outcome = server._round_score_by_outcome(
+            server.lmsr.lmsr_score_delta(
+                order["previousMarginals"],
+                order["newMarginals"],
+                float(server.MARKETS["m1"]["liquidity"]),
+            )
+        )
+        expected_marked_value = server.round_risk_value(float(score_by_outcome["yes"]))
+        expected_realized_pnl = server.round_risk_value(expected_marked_value - float(order["impactScore"]))
+
+        self.assertEqual(edit_status, 201)
+        self.assertEqual(resolve_status, 201)
+        self.assertEqual(pnl_status, 200)
+        self.assertEqual(server.ACCOUNT_RISK[account_id]["markets"], {})
+        self.assertEqual(server.ACCOUNT_RISK[account_id]["lmsrState"]["slices"], {})
+        self.assertEqual(
+            pnl_payload["account"]["pnl"]["positions"],
+            [
+                {
+                    "marketId": "m1",
+                    "marketTitle": server.MARKETS["m1"]["title"],
+                    "marketStatus": "resolved",
+                    "realizedPnl": expected_realized_pnl,
+                    "unrealizedPnl": 0.0,
+                    "costBasis": order["impactScore"],
+                    "markedValue": expected_marked_value,
+                }
+            ],
+        )
+        self.assertEqual(
+            pnl_payload["account"]["pnl"]["totals"],
+            {
+                "costBasis": order["impactScore"],
+                "markedValue": expected_marked_value,
+                "realizedPnl": expected_realized_pnl,
+                "unrealizedPnl": 0.0,
+                "netPnl": expected_realized_pnl,
+            },
+        )
+        self.assertEqual(pnl_payload["account"]["pnl"]["updatedAt"], resolve_payload["result"]["emittedAt"])
+
+    def test_account_pnl_marks_contextual_probability_edits_against_current_conditional_marginals(self):
+        account_id = "acct_context_pnl"
+        context = [{"variableId": server.MARKETS["m2"]["variableId"], "outcomeId": "yes"}]
+        body = build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8)
+        body["context"] = deepcopy(context)
+
+        edit_payload, edit_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            body,
+        )
+        pnl_payload, pnl_status = server.route_request("GET", f"/v1/accounts/{account_id}/pnl")
+
+        order = edit_payload["order"]
+        context_key = server.context_state_key(context)
+        valuation_distribution = server.CONDITIONAL_MARGINALS["m1"][context_key]
+        score_by_outcome = server._round_score_by_outcome(
+            server.lmsr.lmsr_score_delta(
+                order["previousMarginals"],
+                order["newMarginals"],
+                float(server.MARKETS["m1"]["liquidity"]),
+            )
+        )
+        expected_marked_value = server.round_risk_value(
+            sum(float(valuation_distribution[outcome_id]) * float(score) for outcome_id, score in score_by_outcome.items())
+        )
+        expected_unrealized_pnl = server.round_risk_value(expected_marked_value - float(order["impactScore"]))
+
+        self.assertEqual(edit_status, 201)
+        self.assertEqual(pnl_status, 200)
+        self.assertEqual(
+            pnl_payload["account"]["pnl"]["positions"],
+            [
+                {
+                    "marketId": "m1",
+                    "marketTitle": server.MARKETS["m1"]["title"],
+                    "marketStatus": "active",
+                    "realizedPnl": 0.0,
+                    "unrealizedPnl": expected_unrealized_pnl,
+                    "costBasis": order["impactScore"],
+                    "markedValue": expected_marked_value,
+                }
+            ],
+        )
+
+    def test_account_pnl_falls_back_to_unconditional_marginals_when_context_slice_missing(self):
+        account_id = "acct_context_fallback"
+        context = [{"variableId": server.MARKETS["m2"]["variableId"], "outcomeId": "yes"}]
+        body = build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8)
+        body["context"] = deepcopy(context)
+
+        edit_payload, edit_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            body,
+        )
+        context_key = server.context_state_key(context)
+        del server.CONDITIONAL_MARGINALS["m1"][context_key]
+
+        pnl_payload, pnl_status = server.route_request("GET", f"/v1/accounts/{account_id}/pnl")
+
+        order = edit_payload["order"]
+        valuation_distribution = deepcopy(server.MARKETS["m1"]["marginals"])
+        score_by_outcome = server._round_score_by_outcome(
+            server.lmsr.lmsr_score_delta(
+                order["previousMarginals"],
+                order["newMarginals"],
+                float(server.MARKETS["m1"]["liquidity"]),
+            )
+        )
+        expected_marked_value = server.round_risk_value(
+            sum(float(valuation_distribution[outcome_id]) * float(score) for outcome_id, score in score_by_outcome.items())
+        )
+        expected_unrealized_pnl = server.round_risk_value(expected_marked_value - float(order["impactScore"]))
+
+        self.assertEqual(edit_status, 201)
+        self.assertEqual(pnl_status, 200)
+        self.assertEqual(pnl_payload["account"]["pnl"]["positions"][0]["markedValue"], expected_marked_value)
+        self.assertEqual(pnl_payload["account"]["pnl"]["positions"][0]["unrealizedPnl"], expected_unrealized_pnl)
+
+    def test_account_pnl_marks_event_trade_sells_with_signed_cost_basis_and_payout(self):
+        account_id = "acct_short_pnl"
+        trade_payload, trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=3.0, side="sell"),
+        )
+        resolve_payload, resolve_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_short", "no"),
+        )
+        pnl_payload, pnl_status = server.route_request("GET", f"/v1/accounts/{account_id}/pnl")
+
+        order = trade_payload["order"]
+        expected_cost_basis = server.round_risk_value(-float(order["size"]) * float(order["price"]))
+        expected_marked_value = 0.0
+        expected_realized_pnl = server.round_risk_value(expected_marked_value - expected_cost_basis)
+
+        self.assertEqual(trade_status, 201)
+        self.assertEqual(resolve_status, 201)
+        self.assertEqual(pnl_status, 200)
+        self.assertEqual(
+            pnl_payload["account"]["pnl"]["positions"],
+            [
+                {
+                    "marketId": "m1",
+                    "marketTitle": server.MARKETS["m1"]["title"],
+                    "marketStatus": "resolved",
+                    "realizedPnl": expected_realized_pnl,
+                    "unrealizedPnl": 0.0,
+                    "costBasis": expected_cost_basis,
+                    "markedValue": expected_marked_value,
+                }
+            ],
+        )
+        self.assertEqual(pnl_payload["account"]["pnl"]["updatedAt"], resolve_payload["result"]["emittedAt"])
+
+    def test_account_pnl_updated_at_tracks_market_valuation_changes_from_other_accounts(self):
+        account_id = "acct_mark_to_market"
+        own_trade_payload, own_trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=5.0, side="buy"),
+        )
+        before_payload, before_status = server.route_request("GET", f"/v1/accounts/{account_id}/pnl")
+        other_edit_payload, other_edit_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_other", "m1", "yes", 0.8),
+        )
+        after_payload, after_status = server.route_request("GET", f"/v1/accounts/{account_id}/pnl")
+
+        self.assertEqual(own_trade_status, 201)
+        self.assertEqual(before_status, 200)
+        self.assertEqual(other_edit_status, 201)
+        self.assertEqual(after_status, 200)
+        self.assertEqual(before_payload["account"]["pnl"]["updatedAt"], own_trade_payload["result"]["emittedAt"])
+        self.assertEqual(after_payload["account"]["pnl"]["updatedAt"], other_edit_payload["result"]["emittedAt"])
+        self.assertGreater(
+            after_payload["account"]["pnl"]["positions"][0]["markedValue"],
+            before_payload["account"]["pnl"]["positions"][0]["markedValue"],
+        )
+        self.assertGreater(
+            after_payload["account"]["pnl"]["positions"][0]["unrealizedPnl"],
+            before_payload["account"]["pnl"]["positions"][0]["unrealizedPnl"],
+        )
+
+    def test_account_pnl_requires_known_account(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/accounts/acct_missing/pnl")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 404)
+        self.assertEqual(error.code, "account_not_found")
+        self.assertEqual(error.details["accountId"], "acct_missing")
+
+    def test_account_pnl_route_is_method_not_allowed_for_post(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", "/v1/accounts/acct_test/pnl", {})
+
+        error = ctx.exception
+        self.assertEqual(error.status, 405)
+        self.assertEqual(error.code, "method_not_allowed")
+        self.assertEqual(error.details["method"], "POST")
+        self.assertEqual(error.details["path"], "/v1/accounts/acct_test/pnl")
+
+    def test_market_close_route_dispatches_to_close_handler(self):
+        body = build_market_close_body("ops_admin", idempotency_key="idem-close-router")
+        expected_payload = {
+            "market": {"id": "m1", "status": "closed"},
+            "result": {"status": "accepted"},
+        }
+
+        with patch.object(server, "handle_market_close", return_value=(expected_payload, 202)) as close_mock:
+            payload, status = server.route_request("POST", "/v1/markets/m1/close", body)
+
+        close_mock.assert_called_once_with("m1", body)
+        self.assertIs(payload, expected_payload)
+        self.assertEqual(status, 202)
+
+    def test_market_close_route_is_method_not_allowed_for_non_post_methods(self):
+        for method in ("GET", "PUT", "DELETE"):
+            with self.subTest(method=method):
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(method, "/v1/markets/m1/close")
+
+                error = ctx.exception
+                self.assertEqual(error.status, 405)
+                self.assertEqual(error.code, "method_not_allowed")
+                self.assertEqual(error.details["method"], method)
+                self.assertEqual(error.details["path"], "/v1/markets/m1/close")
 
     def test_list_markets_returns_summary_shape(self):
         payload, status = server.route_request("GET", "/v1/markets")
 
         self.assertEqual(status, 200)
-        self.assertEqual(payload["count"], 3)
-        self.assertEqual(payload["meta"]["filters"], {"status": None})
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2"])
+        self.assertEqual(
+            payload["meta"]["filters"],
+            {"status": None, "sort": None, "q": None, "include_resolved": False},
+        )
         self.assertTrue(payload["meta"]["timestamp"].endswith("Z"))
         self.assertEqual(
             set(payload["markets"][0].keys()),
@@ -281,13 +1469,162 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         )
         self.assertNotIn("description", payload["markets"][0])
 
+    def test_list_markets_accepts_status_all_alias(self):
+        payload, status = server.route_request("GET", "/v1/markets?status=all")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["count"], 3)
+        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2", "m3"])
+        self.assertEqual(
+            payload["meta"]["filters"],
+            {"status": None, "sort": None, "q": None, "include_resolved": True},
+        )
+
     def test_list_markets_filters_by_status(self):
         payload, status = server.route_request("GET", "/v1/markets?status=resolved")
 
         self.assertEqual(status, 200)
         self.assertEqual(payload["count"], 1)
         self.assertEqual([market["id"] for market in payload["markets"]], ["m3"])
-        self.assertEqual(payload["meta"]["filters"], {"status": "resolved"})
+        self.assertEqual(
+            payload["meta"]["filters"],
+            {"status": "resolved", "sort": None, "q": None, "include_resolved": True},
+        )
+
+    def test_list_markets_keeps_closed_and_draft_status_filters_valid(self):
+        for market_status in ("closed", "draft"):
+            with self.subTest(status=market_status):
+                payload, status = server.route_request("GET", f"/v1/markets?status={market_status}")
+
+                self.assertEqual(status, 200)
+                self.assertEqual(payload["count"], 0)
+                self.assertEqual(payload["markets"], [])
+                self.assertEqual(
+                    payload["meta"]["filters"],
+                    {"status": market_status, "sort": None, "q": None, "include_resolved": False},
+                )
+
+    def test_list_markets_filters_by_trimmed_case_insensitive_title_search(self):
+        payload, status = server.route_request("GET", "/v1/markets?q=%20ETH%20")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual([market["id"] for market in payload["markets"]], ["m1"])
+        self.assertEqual(
+            payload["meta"]["filters"],
+            {"status": None, "sort": None, "q": "ETH", "include_resolved": False},
+        )
+
+    def test_list_markets_treats_blank_search_like_no_filter(self):
+        payload, status = server.route_request("GET", "/v1/markets?q=%20%20")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2"])
+        self.assertEqual(
+            payload["meta"]["filters"],
+            {"status": None, "sort": None, "q": None, "include_resolved": False},
+        )
+
+    def test_list_markets_applies_supported_sorts_descending(self):
+        expectations = {
+            "volume": ["m1", "m2"],
+            "liquidity": ["m1", "m2"],
+            "created": ["m2", "m1"],
+        }
+
+        for sort, expected_ids in expectations.items():
+            with self.subTest(sort=sort):
+                payload, status = server.route_request("GET", f"/v1/markets?sort={sort}")
+
+                self.assertEqual(status, 200)
+                self.assertEqual([market["id"] for market in payload["markets"]], expected_ids)
+                self.assertEqual(
+                    payload["meta"]["filters"],
+                    {"status": None, "sort": sort, "q": None, "include_resolved": False},
+                )
+
+    def test_list_markets_combines_status_search_and_sort_filters(self):
+        payload, status = server.route_request("GET", "/v1/markets?status=active&q=t&sort=liquidity")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2"])
+        self.assertEqual(
+            payload["meta"]["filters"],
+            {"status": "active", "sort": "liquidity", "q": "t", "include_resolved": False},
+        )
+
+    def test_list_markets_excludes_resolved_by_default(self):
+        payload, status = server.route_request("GET", "/v1/markets")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2"])
+        self.assertEqual(
+            payload["meta"]["filters"],
+            {"status": None, "sort": None, "q": None, "include_resolved": False},
+        )
+
+    def test_list_markets_include_resolved_true_returns_all_markets(self):
+        payload, status = server.route_request("GET", "/v1/markets?include_resolved=true")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["count"], 3)
+        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2", "m3"])
+        self.assertEqual(
+            payload["meta"]["filters"],
+            {"status": None, "sort": None, "q": None, "include_resolved": True},
+        )
+
+    def test_list_markets_status_resolved_overrides_include_resolved_false(self):
+        payload, status = server.route_request(
+            "GET", "/v1/markets?status=resolved&include_resolved=false",
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual([market["id"] for market in payload["markets"]], ["m3"])
+        self.assertEqual(
+            payload["meta"]["filters"],
+            {"status": "resolved", "sort": None, "q": None, "include_resolved": True},
+        )
+
+    def test_blank_include_resolved_filter_returns_contract_error(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/markets?include_resolved=")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_query")
+        self.assertEqual(error.details["parameter"], "include_resolved")
+        self.assertEqual(error.details["received"], "")
+        self.assertEqual(error.details["allowed"], ["false", "true"])
+
+    def test_unsupported_include_resolved_filter_returns_contract_error(self):
+        for raw_value in ("TRUE", "1"):
+            with self.subTest(raw_value=raw_value):
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("GET", f"/v1/markets?include_resolved={raw_value}")
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_query")
+                self.assertEqual(error.details["parameter"], "include_resolved")
+                self.assertEqual(error.details["received"], raw_value)
+                self.assertEqual(error.details["allowed"], ["false", "true"])
+
+    def test_duplicate_include_resolved_filter_returns_contract_error(self):
+        query = urlencode([("include_resolved", "true"), ("include_resolved", "false")])
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", f"/v1/markets?{query}")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_query")
+        self.assertEqual(error.details["parameter"], "include_resolved")
+        self.assertEqual(error.details["received"], ["true", "false"])
 
     def test_invalid_status_filter_returns_contract_error(self):
         with self.assertRaises(server.ApiError) as ctx:
@@ -298,6 +1635,32 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.code, "invalid_query")
         self.assertEqual(error.details["parameter"], "status")
 
+    def test_invalid_market_list_sort_returns_contract_error(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/markets?sort=oldest")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_query")
+        self.assertEqual(error.details["parameter"], "sort")
+
+    def test_duplicate_market_list_query_params_return_contract_error(self):
+        paths = {
+            "status": "/v1/markets?status=active&status=resolved",
+            "sort": "/v1/markets?sort=volume&sort=created",
+            "q": "/v1/markets?q=eth&q=btc",
+        }
+
+        for parameter, path in paths.items():
+            with self.subTest(parameter=parameter):
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("GET", path)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_query")
+                self.assertEqual(error.details["parameter"], parameter)
+
     def test_market_detail_returns_variable_and_marginals(self):
         payload, status = server.route_request("GET", "/v1/markets/m1")
 
@@ -305,6 +1668,29 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["market"]["id"], "m1")
         self.assertEqual(payload["market"]["variableId"], "eth_price_gt_3000_mar15")
         self.assertEqual(payload["market"]["marginals"], {"yes": 0.65, "no": 0.35})
+
+    def test_market_meta_returns_normalized_preview(self):
+        payload, status = server.route_request("GET", "/v1/markets/m1/meta")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            payload["preview"],
+            {
+                "marketId": "m1",
+                "title": "ETH Price > $3000 on March 15",
+                "description": "Will ETH trade above $3000 at any point on March 15, 2026?",
+                "url": f"{server.DEFAULT_PUBLIC_ORIGIN}/markets/m1",
+                "siteName": server.SITE_NAME,
+                "type": server.OPEN_GRAPH_TYPE,
+            },
+        )
+
+    def test_market_meta_prefers_configured_public_origin(self):
+        with patch.dict(server.os.environ, {server.PUBLIC_ORIGIN_ENV: "https://bayes.futarchy.ai/app/"}, clear=False):
+            payload, status = server.route_request("GET", "/v1/markets/m1/meta")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["preview"]["url"], "https://bayes.futarchy.ai/markets/m1")
 
     def test_market_events_returns_genesis_chain_for_existing_market_without_events(self):
         payload, status = server.route_request("GET", "/v1/markets/m1/events")
@@ -444,6 +1830,330 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.details["method"], "POST")
         self.assertEqual(error.details["path"], "/v1/markets/m1/events")
 
+    def test_get_market_trades_returns_only_filled_event_trades_for_requested_market(self):
+        first_trade, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m1", "yes", size=12.5, side="buy"),
+        )
+        edit_payload, edit_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_trade_history", "m1", "yes", 0.8),
+        )
+        other_market_trade, other_market_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m2", "delayed", size=4.0, side="buy"),
+        )
+        rejected_trade_payload, rejected_trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m3/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m3", "yes", size=6.0, side="buy"),
+        )
+        second_trade, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m1", "no", size=7.5, side="sell"),
+        )
+
+        payload, status = server.get_market_trades("m1", {})
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(edit_status, 201)
+        self.assertEqual(other_market_status, 201)
+        self.assertEqual(rejected_trade_status, 409)
+        self.assertEqual(second_status, 201)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["marketId"], "m1")
+        trade_ids = [trade["id"] for trade in payload["trades"]]
+        self.assertEqual(trade_ids, [second_trade["order"]["id"], first_trade["order"]["id"]])
+        self.assertNotIn(edit_payload["order"]["id"], trade_ids)
+        self.assertNotIn(other_market_trade["order"]["id"], trade_ids)
+        self.assertEqual(
+            payload["trades"][0],
+            {
+                "id": second_trade["order"]["id"],
+                "accountId": "acct_trade_history",
+                "targetOutcomeId": "no",
+                "side": "sell",
+                "size": 7.5,
+                "price": second_trade["order"]["price"],
+                "notional": second_trade["order"]["notional"],
+                "filledAt": second_trade["order"]["filledAt"],
+            },
+        )
+        self.assertEqual(
+            payload["trades"][1],
+            {
+                "id": first_trade["order"]["id"],
+                "accountId": "acct_trade_history",
+                "targetOutcomeId": "yes",
+                "side": "buy",
+                "size": 12.5,
+                "price": first_trade["order"]["price"],
+                "notional": first_trade["order"]["notional"],
+                "filledAt": first_trade["order"]["filledAt"],
+            },
+        )
+        self.assertEqual(
+            payload["pagination"],
+            {
+                "beforeId": None,
+                "limit": 100,
+                "returned": 2,
+                "nextBeforeId": None,
+            },
+        )
+        self.assertNotIn("chain", payload)
+        self.assertEqual(edit_payload["order"]["type"], "ProbabilityEdit")
+        self.assertEqual(other_market_trade["order"]["marketId"], "m2")
+        self.assertEqual(rejected_trade_payload["result"]["status"], "rejected")
+        self.assertEqual(rejected_trade_payload["result"]["reasonCode"], "market_not_active")
+        self.assertEqual(rejected_trade_payload["error"]["details"]["marketId"], "m3")
+
+    def test_get_market_trades_supports_exclusive_before_id_pagination(self):
+        first_trade, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m1", "yes", size=3.0, side="buy"),
+        )
+        second_trade, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m1", "no", size=4.0, side="buy"),
+        )
+        third_trade, third_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m1", "yes", size=5.0, side="sell"),
+        )
+
+        first_page, first_page_status = server.get_market_trades("m1", {"limit": ["2"]})
+        second_page, second_page_status = server.get_market_trades(
+            "m1",
+            {"before_id": [first_page["pagination"]["nextBeforeId"]], "limit": ["2"]},
+        )
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        self.assertEqual(third_status, 201)
+        self.assertEqual(first_page_status, 200)
+        self.assertEqual(second_page_status, 200)
+        first_page_trade_ids = [trade["id"] for trade in first_page["trades"]]
+        second_page_trade_ids = [trade["id"] for trade in second_page["trades"]]
+        self.assertEqual(first_page_trade_ids, [third_trade["order"]["id"], second_trade["order"]["id"]])
+        self.assertEqual(
+            first_page["pagination"],
+            {
+                "beforeId": None,
+                "limit": 2,
+                "returned": 2,
+                "nextBeforeId": second_trade["order"]["id"],
+            },
+        )
+        self.assertEqual(second_page_trade_ids, [first_trade["order"]["id"]])
+        self.assertNotIn(second_trade["order"]["id"], second_page_trade_ids)
+        self.assertEqual(
+            second_page["pagination"],
+            {
+                "beforeId": second_trade["order"]["id"],
+                "limit": 2,
+                "returned": 1,
+                "nextBeforeId": None,
+            },
+        )
+
+    def test_get_market_trades_rejects_before_id_that_is_not_in_market_feed(self):
+        market_one_trade, market_one_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m1", "yes"),
+        )
+        other_market_trade, other_market_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body("acct_trade_history", "m2", "yes"),
+        )
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.get_market_trades("m1", {"before_id": [other_market_trade["order"]["id"]]})
+
+        self.assertEqual(market_one_status, 201)
+        self.assertEqual(other_market_status, 201)
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_query")
+        self.assertEqual(error.details["parameter"], "before_id")
+        self.assertEqual(error.details["received"], other_market_trade["order"]["id"])
+        self.assertEqual(error.details["marketId"], "m1")
+        self.assertEqual(market_one_trade["order"]["marketId"], "m1")
+
+    def test_market_trades_route_returns_trade_history_for_market(self):
+        trade_payload, trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_route", "m1", "yes", size=3.0, side="buy"),
+        )
+
+        payload, status = server.route_request("GET", "/v1/markets/m1/trades")
+
+        self.assertEqual(trade_status, 201)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["marketId"], "m1")
+        self.assertEqual(
+            payload["trades"],
+            [
+                {
+                    "id": trade_payload["order"]["id"],
+                    "accountId": "acct_trade_route",
+                    "targetOutcomeId": "yes",
+                    "side": "buy",
+                    "size": 3.0,
+                    "price": trade_payload["order"]["price"],
+                    "notional": trade_payload["order"]["notional"],
+                    "filledAt": trade_payload["order"]["filledAt"],
+                }
+            ],
+        )
+        self.assertEqual(
+            payload["pagination"],
+            {
+                "beforeId": None,
+                "limit": 100,
+                "returned": 1,
+                "nextBeforeId": None,
+            },
+        )
+        self.assertTrue(payload["meta"]["timestamp"].endswith("Z"))
+
+    def test_market_trades_route_supports_exclusive_before_id_pagination_via_raw_query(self):
+        first_trade, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_route_query", "m1", "yes", size=3.0, side="buy"),
+        )
+        second_trade, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_route_query", "m1", "no", size=4.0, side="buy"),
+        )
+        third_trade, third_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_route_query", "m1", "yes", size=5.0, side="sell"),
+        )
+        fourth_trade, fourth_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_route_query", "m1", "no", size=6.0, side="sell"),
+        )
+
+        payload, status = server.route_request(
+            "GET",
+            f"/v1/markets/m1/trades?before_id={fourth_trade['order']['id']}&limit=2",
+        )
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        self.assertEqual(third_status, 201)
+        self.assertEqual(fourth_status, 201)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["marketId"], "m1")
+        self.assertEqual(
+            [trade["id"] for trade in payload["trades"]],
+            [third_trade["order"]["id"], second_trade["order"]["id"]],
+        )
+        self.assertNotIn(fourth_trade["order"]["id"], [trade["id"] for trade in payload["trades"]])
+        self.assertEqual(
+            payload["pagination"],
+            {
+                "beforeId": fourth_trade["order"]["id"],
+                "limit": 2,
+                "returned": 2,
+                "nextBeforeId": second_trade["order"]["id"],
+            },
+        )
+        self.assertEqual(first_trade["order"]["marketId"], "m1")
+
+    def test_market_trades_route_requires_known_market(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/markets/missing/trades")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 404)
+        self.assertEqual(error.code, "market_not_found")
+        self.assertEqual(error.details["market_id"], "missing")
+
+    def test_market_trades_route_rejects_invalid_query(self):
+        market_trade, market_trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_trade_invalid_query", "m1", "yes"),
+        )
+        other_market_trade, other_market_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body("acct_trade_invalid_query", "m2", "yes"),
+        )
+
+        invalid_queries = (
+            (
+                "unknown before_id",
+                f"/v1/markets/m1/trades?before_id={other_market_trade['order']['id']}",
+                {"parameter": "before_id", "received": other_market_trade["order"]["id"], "marketId": "m1"},
+            ),
+            (
+                "blank before_id",
+                "/v1/markets/m1/trades?before_id=",
+                {"parameter": "before_id", "received": ""},
+            ),
+            (
+                "repeated before_id",
+                "/v1/markets/m1/trades?before_id=ord_1&before_id=ord_2",
+                {"parameter": "before_id", "received": ["ord_1", "ord_2"]},
+            ),
+            (
+                "malformed limit",
+                "/v1/markets/m1/trades?limit=abc",
+                {"parameter": "limit", "received": "abc"},
+            ),
+            (
+                "minimum limit",
+                "/v1/markets/m1/trades?limit=0",
+                {"parameter": "limit", "received": "0", "minimum": 1},
+            ),
+            (
+                "maximum limit",
+                "/v1/markets/m1/trades?limit=101",
+                {"parameter": "limit", "received": "101", "maximum": 100},
+            ),
+        )
+
+        self.assertEqual(market_trade_status, 201)
+        self.assertEqual(other_market_status, 201)
+        self.assertEqual(market_trade["order"]["marketId"], "m1")
+
+        for label, path, expected_details in invalid_queries:
+            with self.subTest(label=label, path=path):
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("GET", path)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_query")
+                self.assertEqual(error.details, expected_details)
+
+    def test_market_trades_route_is_method_not_allowed_for_post(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", "/v1/markets/m1/trades", {})
+
+        error = ctx.exception
+        self.assertEqual(error.status, 405)
+        self.assertEqual(error.code, "method_not_allowed")
+        self.assertEqual(error.details["method"], "POST")
+        self.assertEqual(error.details["path"], "/v1/markets/m1/trades")
+
     def test_market_engine_stats_returns_zeroed_empty_state_for_existing_market(self):
         payload, status = server.route_request("GET", "/v1/markets/m1/engine-stats")
 
@@ -537,13 +2247,37 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["diagnostics"]["request_count"], 1)
         self.assertEqual(payload["diagnostics"]["error_count"], 0)
         self.assertEqual(payload["diagnostics"]["inference"]["count"], 1)
-        self.assertEqual(payload["diagnostics"]["cache"], {"hits": 0, "misses": 0, "hit_rate": 0.0})
+        self.assertEqual(payload["diagnostics"]["cache"], {"hits": 0, "misses": 1, "hit_rate": 0.0})
         self.assertIn("compile_time_ms", payload["diagnostics"])
         self.assertIn("memory_bytes", payload["diagnostics"])
         self.assertIn("last_updated", payload["diagnostics"])
         self.assertGreaterEqual(payload["diagnostics"]["compile_time_ms"], 0.0)
         self.assertGreater(payload["diagnostics"]["memory_bytes"], 0)
         self.assertTrue(payload["diagnostics"]["last_updated"].endswith("Z"))
+
+    def test_market_engine_stats_materializes_compile_snapshot_after_resolution(self):
+        context = [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}]
+        server.CONDITIONAL_MARGINALS["m1"] = {
+            server.context_state_key(context): {"yes": 0.7, "no": 0.3},
+        }
+
+        write_payload, write_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_engine_stats", "yes"),
+        )
+        payload, status = server.route_request("GET", "/v1/markets/m1/engine-stats")
+
+        self.assertEqual(write_status, 201)
+        self.assertEqual(write_payload["result"]["status"], "accepted")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["marketId"], "m1")
+        self.assertEqual(payload["engine"]["source_state_hash"], server.market_replay_state_hash("m1"))
+        self.assertEqual(
+            payload["engine"]["compile_id"],
+            f"comp-{payload['engine']['source_state_hash'].split(':', 1)[-1][:12]}",
+        )
+        self.assertNotIn("m1", server.CONDITIONAL_MARGINALS)
 
     def test_refresh_market_compile_snapshot_uses_current_model_compiler_adapter(self):
         class StubClique:
@@ -570,6 +2304,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 *,
                 market_snapshot: dict[str, object],
                 conditional_marginals: dict[str, dict[str, float]] | None = None,
+                market_outcomes_by_variable: dict[str, int] | None = None,
                 compile_time_ms: float = 0.0,
                 last_updated: str,
             ) -> server.CompileResult:
@@ -577,6 +2312,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     {
                         "market_snapshot": market_snapshot,
                         "conditional_marginals": conditional_marginals or {},
+                        "market_outcomes_by_variable": market_outcomes_by_variable,
                         "compile_time_ms": compile_time_ms,
                         "last_updated": last_updated,
                     }
@@ -672,6 +2408,85 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.details["method"], "POST")
         self.assertEqual(error.details["path"], "/v1/markets/m1/engine-stats")
 
+    def test_cache_invalidation_probability_edit_increments_cache_misses(self):
+        _, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_cache_a", "m1", "yes", 0.8),
+        )
+        self.assertEqual(status, 201)
+
+        stats, stats_status = server.route_request("GET", "/v1/markets/m1/engine-stats")
+        self.assertEqual(stats_status, 200)
+        self.assertIsNotNone(stats["engine"]["compile_id"])
+        self.assertIsNotNone(stats["engine"]["source_state_hash"])
+        self.assertEqual(stats["engine"]["source_state_hash"], server.market_replay_state_hash("m1"))
+        self.assertGreaterEqual(stats["diagnostics"]["cache"]["misses"], 1)
+
+    def test_cache_invalidation_duplicate_edit_increments_cache_hits(self):
+        # First edit — cache miss (new state).
+        server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_cache_b", "m1", "yes", 0.8),
+        )
+        first_stats, _ = server.route_request("GET", "/v1/markets/m1/engine-stats")
+        first_compile_id = first_stats["engine"]["compile_id"]
+        first_misses = first_stats["diagnostics"]["cache"]["misses"]
+
+        # Duplicate edit (same probability) — cache hit, compile_id unchanged.
+        server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_cache_b", "m1", "yes", 0.8),
+        )
+        second_stats, _ = server.route_request("GET", "/v1/markets/m1/engine-stats")
+        self.assertEqual(second_stats["engine"]["compile_id"], first_compile_id)
+        self.assertEqual(second_stats["diagnostics"]["cache"]["misses"], first_misses)
+        self.assertGreater(second_stats["diagnostics"]["cache"]["hits"], first_stats["diagnostics"]["cache"]["hits"])
+
+    def test_cache_invalidation_unconditional_edit_clears_conditional_marginals(self):
+        # Seed a conditional marginal.
+        context = [{"variableId": server.MARKETS["m2"]["variableId"], "outcomeId": "yes"}]
+        server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                **build_unconditional_probability_edit_body("acct_cache_c", "m1", "yes", 0.7),
+                "context": context,
+            },
+        )
+        self.assertIn("m1", server.CONDITIONAL_MARGINALS)
+
+        # Unconditional edit should clear conditional marginals.
+        server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_cache_c", "m1", "yes", 0.65),
+        )
+        self.assertNotIn("m1", server.CONDITIONAL_MARGINALS)
+
+    def test_cache_invalidation_event_trade_does_not_trigger_invalidation(self):
+        # First do a probability edit to establish compile state.
+        server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_cache_d", "m1", "yes", 0.8),
+        )
+        stats_before, _ = server.route_request("GET", "/v1/markets/m1/engine-stats")
+        misses_before = stats_before["diagnostics"]["cache"]["misses"]
+        hits_before = stats_before["diagnostics"]["cache"]["hits"]
+
+        # Event trade — should NOT change cache counters.
+        server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_cache_d", "m1", "yes", size=5.0),
+        )
+        stats_after, _ = server.route_request("GET", "/v1/markets/m1/engine-stats")
+        self.assertEqual(stats_after["diagnostics"]["cache"]["misses"], misses_before)
+        self.assertEqual(stats_after["diagnostics"]["cache"]["hits"], hits_before)
+
     def test_account_risk_requires_known_account(self):
         with self.assertRaises(server.ApiError) as ctx:
             server.route_request("GET", "/v1/accounts/acct_missing/risk")
@@ -690,6 +2505,49 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.code, "method_not_allowed")
         self.assertEqual(error.details["method"], "POST")
         self.assertEqual(error.details["path"], "/v1/accounts/acct_test/risk")
+
+    def test_account_exposure_requires_known_account(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/accounts/acct_missing/exposure")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 404)
+        self.assertEqual(error.code, "account_not_found")
+        self.assertEqual(error.details["accountId"], "acct_missing")
+
+    def test_account_exposure_route_returns_404_for_risk_only_account(self):
+        account_id = "acct_risk_only"
+        write_payload, write_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
+        )
+        risk_payload, risk_status = server.route_request("GET", f"/v1/accounts/{account_id}/risk")
+
+        self.assertEqual(write_status, 201)
+        self.assertEqual(write_payload["result"]["status"], "accepted")
+        self.assertEqual(risk_status, 200)
+        self.assertEqual(risk_payload["account"]["id"], account_id)
+        self.assertIn(account_id, server.ACCOUNT_RISK)
+        self.assertNotIn(account_id, server.ACCOUNT_EXPOSURE)
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", f"/v1/accounts/{account_id}/exposure")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 404)
+        self.assertEqual(error.code, "account_not_found")
+        self.assertEqual(error.details["accountId"], account_id)
+
+    def test_account_exposure_route_is_method_not_allowed_for_post(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", "/v1/accounts/acct_test/exposure", {})
+
+        error = ctx.exception
+        self.assertEqual(error.status, 405)
+        self.assertEqual(error.code, "method_not_allowed")
+        self.assertEqual(error.details["method"], "POST")
+        self.assertEqual(error.details["path"], "/v1/accounts/acct_test/exposure")
 
     def test_probability_edit_success_updates_market(self):
         payload, status = server.route_request(
@@ -1739,6 +3597,81 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             ],
         )
 
+    def test_create_probability_edit_order_ignores_unconditional_preview_on_contextual_path(self):
+        class StubQueryBackend:
+            def __init__(self) -> None:
+                self.contexts: list[dict[str, str] | None] = []
+
+            def query_marginals(
+                self,
+                compile_result: object,
+                *,
+                context: dict[str, str] | None = None,
+            ) -> object:
+                self.contexts.append(deepcopy(context))
+                if context is None:
+                    return type("MarginalResult", (), {"marginals": {"yes": 0.65, "no": 0.35}})()
+                return type("MarginalResult", (), {"marginals": {"yes": 0.2, "no": 0.8}})()
+
+        original_backend = server.CURRENT_MODEL_QUERY_BACKEND
+        stub_backend = StubQueryBackend()
+        server.CURRENT_MODEL_QUERY_BACKEND = stub_backend
+
+        try:
+            unconditional_body = {
+                "accountId": "acct_contextual_preview_guard",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": [],
+            }
+            unconditional_payload = server.normalize_probability_edit_payload("m1", unconditional_body)
+            unconditional_preview = server.preview_unconditional_probability_edit(
+                "m1",
+                unconditional_payload,
+                "acct_contextual_preview_guard",
+            )
+
+            contextual_payload = server.normalize_probability_edit_payload(
+                "m1",
+                {
+                    "accountId": "acct_contextual_preview_guard",
+                    "variableId": "eth_price_gt_3000_mar15",
+                    "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.5},
+                    "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+                },
+            )
+            command = server.materialize_probability_edit_command(
+                market_id="m1",
+                normalized_payload=contextual_payload,
+                account_id="acct_contextual_preview_guard",
+                command_id="cmd_contextual_preview_guard",
+                submitted_at="2026-04-08T00:00:00Z",
+            )
+            order = server.create_probability_edit_order(command, preview=unconditional_preview)
+        finally:
+            server.CURRENT_MODEL_QUERY_BACKEND = original_backend
+
+        expected_previous = {"yes": 0.2, "no": 0.8}
+        expected_new = {"yes": 0.5, "no": 0.5}
+        expected_impact = server.kl_divergence(expected_previous, expected_new)
+
+        self.assertNotEqual(unconditional_preview["impactScore"], expected_impact)
+        self.assertEqual(order["payload"]["context"], [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}])
+        self.assertEqual(order["previousMarginals"], expected_previous)
+        self.assertEqual(order["newMarginals"], expected_new)
+        self.assertEqual(order["impactScore"], expected_impact)
+        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
+        self.assertEqual(server.CONDITIONAL_MARGINALS["m1"]["btc_etf_approval_week=yes"], expected_new)
+        self.assertEqual(
+            stub_backend.contexts,
+            [
+                None,
+                None,
+                {"btc_etf_approval_week": "yes"},
+                {"btc_etf_approval_week": "yes"},
+            ],
+        )
+
     def test_probability_edit_with_context_updates_account_risk(self):
         payload, status = server.route_request(
             "POST",
@@ -1951,6 +3884,35 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(len(server.EVENTS), 1)
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.8, "no": 0.2})
 
+    def test_probability_edit_idempotent_replay_skips_unconditional_preview(self):
+        body = {
+            "accountId": "acct_test",
+            "idempotencyKey": "idem-preview-gate",
+            "variableId": "eth_price_gt_3000_mar15",
+            "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+            "context": [],
+        }
+
+        first_payload, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            body,
+        )
+
+        with patch.object(server, "preview_unconditional_probability_edit", autospec=True) as preview_mock:
+            second_payload, second_status = server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/probability-edit",
+                body,
+            )
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
+        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
+        preview_mock.assert_not_called()
+
     def test_account_risk_replay_does_not_double_count_capacity(self):
         body = {
             "accountId": "acct_test",
@@ -1984,36 +3946,26 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_probability_edit_rejects_unconditional_min_asset_violation_without_side_effects(self):
         preview_delta, low_min_asset = seed_low_headroom_account("acct_low")
-        payload, status = server.route_request(
-            "POST",
-            "/v1/markets/m1/orders/probability-edit",
-            {
-                "accountId": "acct_low",
-                "variableId": "eth_price_gt_3000_mar15",
-                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
-                "context": [],
-            },
-        )
+        with patch.object(server, "create_probability_edit_order", autospec=True) as create_order_mock:
+            with patch.object(server, "sync_account_risk_state", autospec=True) as sync_risk_mock:
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(
+                        "POST",
+                        "/v1/markets/m1/orders/probability-edit",
+                        {
+                            "accountId": "acct_low",
+                            "variableId": "eth_price_gt_3000_mar15",
+                            "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                            "context": [],
+                        },
+                    )
 
-        self.assertEqual(status, 409)
-        self.assertEqual(payload["error"]["code"], "min_asset_violation")
-        self.assertEqual(payload["error"]["message"], "Edit would produce negative state-contingent assets")
-        self.assertEqual(payload["result"]["status"], "rejected")
-        self.assertEqual(payload["result"]["eventType"], "CommandRejected")
-        self.assertEqual(payload["result"]["reasonCode"], "min_asset_violation")
-        self.assertEqual(payload["result"]["reason"], "Edit would produce negative state-contingent assets")
-        self.assertEqual(payload["result"]["retryHint"], "reduce probability target")
-        self.assertEqual(
-            payload["error"]["details"],
-            {
-                "accountId": "acct_low",
-                "marketId": "m1",
-                "commandId": payload["result"]["commandId"],
-                "riskLimit": 100.0,
-                "beforeMinAsset": low_min_asset,
-                "impactScore": preview_delta["impactScore"],
-                "afterMinAsset": round(low_min_asset - preview_delta["impactScore"], 6),
-            },
+        assert_min_asset_violation_api_error(
+            self,
+            ctx.exception,
+            account_id="acct_low",
+            market_id="m1",
+            preview_or_asset_delta=preview_delta,
         )
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(server.ORDERS, {})
@@ -2021,8 +3973,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             server.ACCOUNT_RISK["acct_low"],
             expected_seeded_account_state("acct_low", low_min_asset),
         )
-        self.assertEqual(len(server.COMMANDS), 1)
-        self.assertEqual(len(server.EVENTS), 1)
+        create_order_mock.assert_not_called()
+        sync_risk_mock.assert_not_called()
+        self.assertEqual(server.COMMANDS, {})
+        self.assertEqual(server.EVENTS, {})
+        self.assertEqual(server.TERMINAL_OUTCOMES, {})
 
     def test_probability_edit_accepts_unconditional_edit_at_zero_min_asset_boundary(self):
         preview_delta, exact_headroom = seed_exact_headroom_account("acct_edge")
@@ -2053,7 +4008,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.8, "no": 0.2})
         self.assertEqual(len(server.ORDERS), 1)
 
-    def test_probability_edit_replays_unconditional_min_asset_rejection(self):
+    def test_probability_edit_rejects_repeated_unconditional_min_asset_violation_without_replay(self):
         preview_delta, low_min_asset = seed_low_headroom_account("acct_low")
         body = {
             "accountId": "acct_low",
@@ -2063,29 +4018,91 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "context": [],
         }
 
-        first_payload, first_status = server.route_request(
-            "POST",
-            "/v1/markets/m1/orders/probability-edit",
-            body,
-        )
-        second_payload, second_status = server.route_request(
-            "POST",
-            "/v1/markets/m1/orders/probability-edit",
-            body,
-        )
+        with self.assertRaises(server.ApiError) as first_ctx:
+            server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/probability-edit",
+                body,
+            )
+        with self.assertRaises(server.ApiError) as second_ctx:
+            server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/probability-edit",
+                body,
+            )
 
-        self.assertEqual(first_status, 409)
-        self.assertEqual(second_status, 409)
-        self.assertEqual(first_payload["error"]["code"], "min_asset_violation")
-        self.assertEqual(second_payload["error"]["details"]["impactScore"], preview_delta["impactScore"])
-        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
-        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
-        self.assertTrue(second_payload["meta"]["replayed"])
+        assert_min_asset_violation_api_error(
+            self,
+            first_ctx.exception,
+            account_id="acct_low",
+            market_id="m1",
+            preview_or_asset_delta=preview_delta,
+        )
+        assert_min_asset_violation_api_error(
+            self,
+            second_ctx.exception,
+            account_id="acct_low",
+            market_id="m1",
+            preview_or_asset_delta=preview_delta,
+        )
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(server.ACCOUNT_RISK["acct_low"]["minAsset"], low_min_asset)
-        self.assertEqual(len(server.COMMANDS), 1)
-        self.assertEqual(len(server.EVENTS), 1)
+        self.assertEqual(server.COMMANDS, {})
+        self.assertEqual(server.EVENTS, {})
+        self.assertEqual(server.TERMINAL_OUTCOMES, {})
+        self.assertNotIn(
+            server.idempotency_scope_key("m1", "acct_low", "idem-low-headroom"),
+            server.IDEMPOTENCY_KEYS,
+        )
+
+    def test_probability_edit_repeated_min_asset_violation_recomputes_preview(self):
+        preview_delta, _ = seed_low_headroom_account("acct_low_replay_contract")
+        body = {
+            "accountId": "acct_low_replay_contract",
+            "idempotencyKey": "idem-low-replay-contract",
+            "variableId": "eth_price_gt_3000_mar15",
+            "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+            "context": [],
+        }
+
+        with self.assertRaises(server.ApiError) as first_ctx:
+            server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/probability-edit",
+                body,
+            )
+        with patch.object(
+            server,
+            "preview_unconditional_probability_edit",
+            autospec=True,
+            side_effect=server.preview_unconditional_probability_edit,
+        ) as preview_mock:
+            with self.assertRaises(server.ApiError) as second_ctx:
+                server.route_request(
+                    "POST",
+                    "/v1/markets/m1/orders/probability-edit",
+                    body,
+                )
+
+        self.assertGreater(preview_mock.call_count, 0)
+        assert_min_asset_violation_api_error(
+            self,
+            first_ctx.exception,
+            account_id="acct_low_replay_contract",
+            market_id="m1",
+            preview_or_asset_delta=preview_delta,
+        )
+        assert_min_asset_violation_api_error(
+            self,
+            second_ctx.exception,
+            account_id="acct_low_replay_contract",
+            market_id="m1",
+            preview_or_asset_delta=preview_delta,
+        )
+        self.assertEqual(server.COMMANDS, {})
+        self.assertEqual(server.EVENTS, {})
+        self.assertEqual(server.TERMINAL_OUTCOMES, {})
 
     def test_probability_edit_replays_rejected_idempotent_submission(self):
         body = {
@@ -2194,16 +4211,1659 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(command["marketId"], "m3")
         event = server.EVENTS[payload["result"]["eventId"]]
         self.assertEqual(event["payload"]["reasonCode"], "market_not_active")
-        self.assertEqual(server.MARKETS["m3"]["marginals"], {"yes": 0.12, "no": 0.88})
+        self.assertEqual(server.MARKETS["m3"]["marginals"], {"yes": 0.0, "no": 1.0})
         self.assertEqual(len(server.ORDERS), 0)
 
-    def test_post_to_markets_collection_is_method_not_allowed(self):
+    def test_probability_edit_non_active_market_skips_unconditional_preview(self):
+        with patch.object(server, "preview_unconditional_probability_edit", autospec=True) as preview_mock:
+            payload, status = server.route_request(
+                "POST",
+                "/v1/markets/m3/orders/probability-edit",
+                {
+                    "accountId": "acct_test",
+                    "idempotencyKey": "idem-resolved-preview-gate",
+                    "variableId": "fed_rate_cut_mar_2026",
+                    "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.2},
+                    "context": [],
+                },
+            )
+
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"]["code"], "market_not_active")
+        self.assertEqual(payload["result"]["reasonCode"], "market_not_active")
+        preview_mock.assert_not_called()
+
+    def test_market_resolution_accepts_admin_op_and_settles_account_exposure(self):
+        account_id = "acct_resolve_settlement"
+        first_order, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
+        )
+        conditional_order, conditional_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                **build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.7),
+                "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+            },
+        )
+        retained_order, retained_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/probability-edit",
+            build_unconditional_probability_edit_body(account_id, "m2", "yes", 0.4),
+        )
+        resolved_trade, resolved_trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=8.0),
+        )
+        retained_trade, retained_trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body(account_id, "m2", "yes", size=5.0),
+        )
+        pre_resolution_risk, pre_resolution_risk_status = server.route_request("GET", f"/v1/accounts/{account_id}/risk")
+        pre_resolution_exposure, pre_resolution_exposure_status = server.route_request(
+            "GET",
+            f"/v1/accounts/{account_id}/exposure",
+        )
+        pre_resolution_account_state = deepcopy(server.ACCOUNT_RISK[account_id])
+
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_admin", "yes", idempotency_key="idem-resolve-m1"),
+        )
+        post_resolution_risk, post_resolution_risk_status = server.route_request("GET", f"/v1/accounts/{account_id}/risk")
+        post_resolution_exposure, post_resolution_exposure_status = server.route_request(
+            "GET",
+            f"/v1/accounts/{account_id}/exposure",
+        )
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(conditional_status, 201)
+        self.assertEqual(retained_status, 201)
+        self.assertEqual(resolved_trade_status, 201)
+        self.assertEqual(retained_trade_status, 201)
+        self.assertEqual(pre_resolution_risk_status, 200)
+        self.assertEqual(pre_resolution_exposure_status, 200)
+        self.assertEqual(status, 201)
+        self.assertEqual(post_resolution_risk_status, 200)
+        self.assertEqual(post_resolution_exposure_status, 200)
+        self.assertEqual(payload["market"]["id"], "m1")
+        self.assertEqual(payload["market"]["status"], "resolved")
+        self.assertEqual(payload["market"]["resolution"], "yes")
+        self.assertEqual(payload["market"]["resolutionProbabilities"], {"yes": 1.0, "no": 0.0})
+        self.assertEqual(payload["market"]["marginals"], {"yes": 1.0, "no": 0.0})
+        self.assertEqual(payload["result"]["status"], "accepted")
+        self.assertEqual(payload["meta"]["idempotencyKeyEcho"], "idem-resolve-m1")
+
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        retained_market = post_resolution_risk["account"]["risk"]["minAssets"]["markets"][0]
+        retained_impact_score = retained_order["order"]["impactScore"]
+        expected_remaining_min_asset = round(100.0 - retained_impact_score, 6)
+        self.assertEqual(command["commandType"], "AdminOp")
+        self.assertEqual(command["payload"], expected_market_resolution_payload("m1", "yes"))
+        self.assertNotIn("m1", server.CONDITIONAL_MARGINALS)
+        self.assertEqual(post_resolution_risk["account"]["id"], account_id)
+        self.assertEqual(
+            [position["marketId"] for position in pre_resolution_exposure["account"]["exposure"]["positions"]],
+            ["m1", "m2"],
+        )
+        self.assertEqual(post_resolution_exposure["account"]["id"], account_id)
+        self.assertEqual(
+            post_resolution_exposure["account"]["exposure"]["positions"],
+            [
+                {
+                    "marketId": "m2",
+                    "outcomeId": "yes",
+                    "netSize": 5.0,
+                    "absSize": 5.0,
+                    "lastTradePrice": retained_trade["order"]["price"],
+                    "updatedAt": retained_trade["order"]["filledAt"],
+                    "lastOrderId": retained_trade["order"]["id"],
+                    "lastCommandId": retained_trade["order"]["commandId"],
+                }
+            ],
+        )
+        self.assertEqual(post_resolution_risk["account"]["risk"]["minAssets"]["overall"], expected_remaining_min_asset)
+        self.assertEqual(
+            post_resolution_risk["account"]["risk"]["capacityIndicators"],
+            {
+                "limit": 100.0,
+                "available": expected_remaining_min_asset,
+                "consumed": retained_impact_score,
+                "utilization": round(retained_impact_score / 100.0, 6),
+                "status": "healthy",
+            },
+        )
+        self.assertEqual(
+            post_resolution_risk["account"]["risk"]["minAssets"]["markets"],
+            [
+                {
+                    "marketId": "m2",
+                    "minAsset": expected_remaining_min_asset,
+                    "capacityConsumed": retained_impact_score,
+                    "utilization": round(retained_impact_score / 100.0, 6),
+                    "commandCount": 1,
+                    "lastOrderId": retained_order["order"]["id"],
+                    "lastCommandId": retained_order["order"]["commandId"],
+                    "updatedAt": retained_order["order"]["filledAt"],
+                }
+            ],
+        )
+        self.assertEqual(post_resolution_risk["account"]["risk"]["updatedAt"], server.ACCOUNT_RISK[account_id]["updatedAt"])
+        self.assertNotEqual(post_resolution_risk["account"]["risk"]["updatedAt"], pre_resolution_risk["account"]["risk"]["updatedAt"])
+        self.assertEqual(set(server.ACCOUNT_RISK[account_id]["markets"]), {"m2"})
+        self.assertEqual(server.ACCOUNT_RISK[account_id]["markets"]["m2"]["minAsset"], retained_market["minAsset"])
+        self.assertNotEqual(server.ACCOUNT_RISK[account_id], pre_resolution_account_state)
+        self.assertEqual(
+            set(server.ACCOUNT_RISK[account_id]["lmsrState"]["slices"]),
+            {
+                server.account_lmsr_slice_key("m2", []),
+            },
+        )
+        self.assertEqual(set(server.ACCOUNT_EXPOSURE[account_id]["positions"]), {"m2|yes"})
+
+        event = server.EVENTS[payload["result"]["eventId"]]
+        self.assertEqual(event["eventType"], "CommandAccepted")
+        self.assertEqual(event["payload"]["resolution"]["outcomeId"], "yes")
+        self.assertEqual(event["payload"]["resolution"]["finalProbabilities"], {"yes": 1.0, "no": 0.0})
+        self.assertTrue(event["payload"]["resolution"]["resolvedAt"].endswith("Z"))
+        self.assertEqual(
+            post_resolution_exposure["account"]["exposure"]["updatedAt"],
+            event["payload"]["resolution"]["resolvedAt"],
+        )
+        self.assertEqual(
+            event["payload"]["effects"]["marginalDelta"],
+            [
+                {
+                    "variableId": "eth_price_gt_3000_mar15",
+                    "outcomeId": "yes",
+                    "before": 0.8,
+                    "after": 1.0,
+                },
+                {
+                    "variableId": "eth_price_gt_3000_mar15",
+                    "outcomeId": "no",
+                    "before": 0.2,
+                    "after": 0.0,
+                },
+            ],
+        )
+        self.assertEqual(
+            event["payload"]["effects"]["assetDelta"],
+            [
+                {
+                    "accountId": account_id,
+                    "marketId": "m1",
+                    "beforeMinAsset": pre_resolution_risk["account"]["risk"]["minAssets"]["overall"],
+                    "afterMinAsset": expected_remaining_min_asset,
+                }
+            ],
+        )
+        self.assertEqual(event["payload"]["pricing"], {"cost": 0.0, "fee": 0.0})
+        self.assertEqual(event["payload"]["replayStateHash"], server.market_replay_state_hash("m1"))
+
+    def test_market_resolution_prunes_last_live_exposure_and_exposure_route_returns_404(self):
+        account_id = "acct_resolve_pruned_exposure"
+        trade_payload, trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=8.0),
+        )
+        pre_resolution_exposure, pre_resolution_exposure_status = server.route_request(
+            "GET",
+            f"/v1/accounts/{account_id}/exposure",
+        )
+
+        resolve_payload, resolve_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_admin", "yes", idempotency_key="idem-resolve-pruned-exposure"),
+        )
+
         with self.assertRaises(server.ApiError) as ctx:
-            server.route_request("POST", "/v1/markets", {})
+            server.route_request("GET", f"/v1/accounts/{account_id}/exposure")
 
         error = ctx.exception
-        self.assertEqual(error.status, 405)
-        self.assertEqual(error.code, "method_not_allowed")
+        self.assertEqual(trade_status, 201)
+        self.assertEqual(pre_resolution_exposure_status, 200)
+        self.assertEqual(resolve_status, 201)
+        self.assertEqual(
+            pre_resolution_exposure["account"]["exposure"]["positions"],
+            [
+                {
+                    "marketId": "m1",
+                    "outcomeId": "yes",
+                    "netSize": 8.0,
+                    "absSize": 8.0,
+                    "lastTradePrice": trade_payload["order"]["price"],
+                    "updatedAt": trade_payload["order"]["filledAt"],
+                    "lastOrderId": trade_payload["order"]["id"],
+                    "lastCommandId": trade_payload["order"]["commandId"],
+                }
+            ],
+        )
+        self.assertEqual(resolve_payload["market"]["status"], "resolved")
+        self.assertEqual(resolve_payload["result"]["status"], "accepted")
+        self.assertEqual(error.status, 404)
+        self.assertEqual(error.code, "account_not_found")
+        self.assertEqual(error.details, {"accountId": account_id})
+        self.assertNotIn(account_id, server.ACCOUNT_EXPOSURE)
+
+    def test_market_resolution_accepts_closed_market(self):
+        close_payload, close_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/close",
+            build_market_close_body("ops_admin", idempotency_key="idem-close-before-resolve"),
+        )
+
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_admin", "yes", idempotency_key="idem-closed-resolve"),
+        )
+
+        self.assertEqual(close_status, 201)
+        self.assertEqual(close_payload["market"]["status"], "closed")
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["id"], "m1")
+        self.assertEqual(payload["market"]["status"], "resolved")
+        self.assertEqual(payload["market"]["resolution"], "yes")
+        self.assertEqual(payload["market"]["resolutionProbabilities"], {"yes": 1.0, "no": 0.0})
+        self.assertEqual(payload["market"]["marginals"], {"yes": 1.0, "no": 0.0})
+        self.assertEqual(payload["result"]["status"], "accepted")
+        self.assertEqual(server.MARKETS["m1"]["status"], "resolved")
+        self.assertEqual(server.MARKETS["m1"]["resolution"], "yes")
+        self.assertEqual(server.MARKETS["m1"]["resolutionProbabilities"], {"yes": 1.0, "no": 0.0})
+
+    def test_normalize_market_close_payload_returns_canonical_payload_and_strips_extra_keys(self):
+        normalized_payload = server.normalize_market_close_payload(
+            "m1",
+            {
+                "accountId": "ops_admin",
+                "idempotencyKey": "idem-close",
+                "kind": "ClientSuppliedCloseKind",
+                "unexpected": {"noise": True},
+            },
+        )
+
+        self.assertEqual(normalized_payload, {"kind": "CloseMarket"})
+
+    def test_normalize_market_close_payload_requires_existing_market(self):
+        before_state = snapshot_domain_state()
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.normalize_market_close_payload("missing-market", {})
+
+        error = ctx.exception
+        self.assertEqual(error.status, 404)
+        self.assertEqual(error.code, "market_not_found")
+        self.assertEqual(error.message, "Market not found")
+        self.assertEqual(error.details, {"market_id": "missing-market"})
+        assert_domain_state_unchanged(self, before_state)
+
+    def test_normalize_market_close_payload_requires_object_body(self):
+        before_state = snapshot_domain_state()
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.normalize_market_close_payload("m1", [])
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_body")
+        self.assertEqual(error.message, "payload must be an object")
+        self.assertEqual(error.details, {})
+        assert_domain_state_unchanged(self, before_state)
+
+    def test_transition_market_to_closed_returns_closed_snapshot_without_mutating_state(self):
+        server.MARKETS["m1"].update(
+            {
+                "closedAt": "2026-03-01T00:00:00Z",
+                "resolution": "yes",
+                "resolutionProbabilities": {"yes": 1.0, "no": 0.0},
+            }
+        )
+        before_state = snapshot_domain_state()
+        baseline_market = deepcopy(server.MARKETS["m1"])
+        closure = server.transition_market_to_closed("m1", closed_at="2026-04-10T00:00:00Z")
+
+        self.assertEqual(closure["closedAt"], "2026-04-10T00:00:00Z")
+        self.assertEqual(closure["market"]["status"], "closed")
+        self.assertNotIn("closedAt", closure["market"])
+        self.assertNotIn("resolution", closure["market"])
+        self.assertNotIn("resolutionProbabilities", closure["market"])
+        self.assertEqual(closure["market"]["marginals"], baseline_market["marginals"])
+        self.assertEqual(closure["market"]["outcomes"], baseline_market["outcomes"])
+        self.assertEqual(server.MARKETS["m1"], baseline_market)
+        assert_domain_state_unchanged(self, before_state)
+
+    def test_close_market_command_revalidates_market_status_before_mutating_market(self):
+        command = {
+            "schemaVersion": "bayes-command/v1",
+            "commandId": "cmd_close_revalidate",
+            "marketId": "m1",
+            "accountId": "ops_admin",
+            "commandType": "AdminOp",
+            "submittedAt": server.utc_timestamp(),
+            "payload": expected_market_close_payload(),
+            "meta": {
+                "source": "test",
+            },
+        }
+        cases = (
+            (
+                "closed",
+                {
+                    "status": "closed",
+                },
+                "market_already_closed",
+                {
+                    "marketId": "m1",
+                    "status": "closed",
+                },
+            ),
+            (
+                "draft",
+                {
+                    "status": "draft",
+                },
+                "market_not_closable",
+                {
+                    "marketId": "m1",
+                    "status": "draft",
+                    "allowedStatuses": ["active"],
+                },
+            ),
+            (
+                "resolved",
+                {
+                    "status": "resolved",
+                    "resolution": "yes",
+                    "resolutionProbabilities": {"yes": 1.0, "no": 0.0},
+                },
+                "market_not_closable",
+                {
+                    "marketId": "m1",
+                    "status": "resolved",
+                    "allowedStatuses": ["active"],
+                },
+            ),
+        )
+
+        for label, updates, expected_code, expected_details in cases:
+            with self.subTest(status=label):
+                server.reset_state()
+                server.MARKETS["m1"].update(deepcopy(updates))
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.close_market_command(command)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 409)
+                self.assertEqual(error.code, expected_code)
+                self.assertEqual(error.details, expected_details)
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_close_accepts_active_market_and_emits_terminal_acceptance(self):
+        account_id = "acct_close_preserved"
+        probability_edit_payload, probability_edit_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
+        )
+        trade_payload, trade_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=8.0),
+        )
+        server.CONDITIONAL_MARGINALS["m1"] = {
+            server.context_state_key([{"variableId": server.MARKETS["m2"]["variableId"], "outcomeId": "yes"}]): {
+                "yes": 0.9,
+                "no": 0.1,
+            }
+        }
+        server.MARKETS["m1"].update(
+            {
+                "closedAt": "2026-03-01T00:00:00Z",
+                "resolution": "yes",
+                "resolutionProbabilities": {"yes": 1.0, "no": 0.0},
+            }
+        )
+        expected_market = server.build_closed_market_snapshot(server.MARKETS["m1"])
+        baseline_marginals = deepcopy(server.MARKETS["m1"]["marginals"])
+        baseline_risk = deepcopy(server.ACCOUNT_RISK)
+        baseline_exposure = deepcopy(server.ACCOUNT_EXPOSURE)
+        baseline_conditionals = deepcopy(server.CONDITIONAL_MARGINALS)
+
+        with patch.object(server, "resolve_market_command", autospec=True) as resolve_mock, patch.object(
+            server,
+            "settle_market_account_risk",
+            autospec=True,
+        ) as settle_risk_mock, patch.object(
+            server,
+            "settle_market_account_exposure",
+            autospec=True,
+        ) as settle_exposure_mock:
+            payload, status = server.route_request(
+                "POST",
+                "/v1/markets/m1/close",
+                build_market_close_body("ops_admin", idempotency_key="idem-close") | {"unexpected": "noise"},
+            )
+
+        self.assertEqual(probability_edit_status, 201)
+        self.assertEqual(trade_status, 201)
+        self.assertEqual(status, 201)
+        self.assertEqual(probability_edit_payload["order"]["newMarginals"], baseline_marginals)
+        self.assertNotEqual(baseline_marginals, server.INITIAL_MARKETS["m1"]["marginals"])
+        self.assertIn(account_id, baseline_risk)
+        self.assertIn(account_id, baseline_exposure)
+        self.assertTrue(baseline_exposure[account_id]["positions"])
+        self.assertEqual(payload["market"], expected_market)
+        self.assertNotIn("closedAt", payload["market"])
+        self.assertNotIn("resolution", payload["market"])
+        self.assertNotIn("resolutionProbabilities", payload["market"])
+        self.assertTrue(payload["result"]["commandId"].startswith("cmd_"))
+        self.assertTrue(payload["result"]["eventId"].startswith("evt_"))
+        self.assertTrue(payload["result"]["emittedAt"].endswith("Z"))
+        self.assertEqual(
+            payload["result"],
+            {
+                "terminal": True,
+                "status": "accepted",
+                "eventType": "CommandAccepted",
+                "eventId": payload["result"]["eventId"],
+                "commandId": payload["result"]["commandId"],
+                "emittedAt": payload["result"]["emittedAt"],
+            },
+        )
+        self.assertEqual(payload["result"]["status"], "accepted")
+        self.assertEqual(server.MARKETS["m1"]["status"], "closed")
+        self.assertEqual(server.MARKETS["m1"], expected_market)
+        self.assertEqual(server.MARKETS["m1"]["marginals"], baseline_marginals)
+        self.assertEqual(server.CONDITIONAL_MARGINALS, baseline_conditionals)
+        self.assertEqual(server.ACCOUNT_RISK, baseline_risk)
+        self.assertEqual(server.ACCOUNT_EXPOSURE, baseline_exposure)
+        resolve_mock.assert_not_called()
+        settle_risk_mock.assert_not_called()
+        settle_exposure_mock.assert_not_called()
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        self.assertEqual(command["commandType"], "AdminOp")
+        self.assertEqual(command["payload"], expected_market_close_payload())
+        self.assertEqual(command["accountId"], "ops_admin")
+        self.assertEqual(command["commandId"], payload["result"]["commandId"])
+        terminal_outcome = server.TERMINAL_OUTCOMES[payload["result"]["commandId"]]
+        self.assertEqual(terminal_outcome["eventId"], payload["result"]["eventId"])
+        self.assertEqual(terminal_outcome["eventType"], "CommandAccepted")
+        self.assertEqual(terminal_outcome["status"], 201)
+        self.assertEqual(terminal_outcome["response"], payload)
+        event = server.EVENTS[payload["result"]["eventId"]]
+        self.assertEqual(event["commandId"], payload["result"]["commandId"])
+        self.assertEqual(event["eventId"], payload["result"]["eventId"])
+        self.assertEqual(event["emittedAt"], payload["result"]["emittedAt"])
+        self.assertEqual(event["eventType"], "CommandAccepted")
+        self.assertEqual(
+            event["payload"],
+            {
+                "closure": {"closedAt": event["payload"]["closure"]["closedAt"]},
+                "effects": {"marginalDelta": [], "assetDelta": []},
+                "pricing": {"cost": 0.0, "fee": 0.0},
+                "replayStateHash": server.market_replay_state_hash("m1"),
+            },
+        )
+        self.assertEqual(terminal_outcome["eventPayload"], event["payload"])
+        self.assertTrue(event["payload"]["closure"]["closedAt"].endswith("Z"))
+        self.assertEqual(trade_payload["order"]["marketId"], "m1")
+
+    def test_market_close_route_rejects_invalid_account_id_with_close_specific_error(self):
+        cases = (
+            ("missing", {}, "accountId is required", {"field": "accountId"}),
+            ("non_string", {"accountId": 123}, "accountId is required", {"field": "accountId"}),
+            ("blank", {"accountId": "   "}, "accountId is required", {"field": "accountId"}),
+        )
+
+        for label, body, expected_message, expected_details in cases:
+            with self.subTest(label=label):
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/close", body)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_close")
+                self.assertEqual(error.message, expected_message)
+                self.assertEqual(error.details, expected_details)
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_close_route_rejects_invalid_idempotency_key_with_close_specific_error(self):
+        cases = (
+            (
+                "non_string",
+                build_market_close_body("ops_admin") | {"idempotencyKey": 123},
+                "idempotencyKey must be a non-empty string when provided",
+                {"field": "idempotencyKey"},
+            ),
+            (
+                "blank",
+                build_market_close_body("ops_admin", idempotency_key="   "),
+                "idempotencyKey must be a non-empty string when provided",
+                {"field": "idempotencyKey"},
+            ),
+        )
+
+        for label, body, expected_message, expected_details in cases:
+            with self.subTest(label=label):
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/close", body)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_close")
+                self.assertEqual(error.message, expected_message)
+                self.assertEqual(error.details, expected_details)
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_close_route_trims_envelope_values_before_scope_derivation(self):
+        with patch.object(
+            server,
+            "idempotency_scope_key",
+            autospec=True,
+            return_value=("m1", "ops_admin", "idem-close"),
+        ) as scope_mock:
+            payload, status = server.route_request(
+                "POST",
+                "/v1/markets/m1/close",
+                build_market_close_body("  ops_admin  ", idempotency_key="  idem-close  "),
+            )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["status"], "closed")
+        scope_mock.assert_called_once_with("m1", "ops_admin", "idem-close")
+
+    def test_market_close_route_records_engine_timing_and_refreshes_compile_snapshot_on_success(self):
+        server.refresh_market_compile_snapshot("m1", compile_time_ms=12.345)
+        previous_compile_state = deepcopy(server.MARKET_ENGINE_STATS["m1"])
+
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/close",
+            build_market_close_body("ops_admin", idempotency_key="idem-close-engine-stats"),
+        )
+        stats_payload, stats_status = server.route_request("GET", "/v1/markets/m1/engine-stats")
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["status"], "closed")
+        self.assertEqual(payload["meta"]["idempotencyKeyEcho"], "idem-close-engine-stats")
+        self.assertNotIn("replayed", payload["meta"])
+        self.assertEqual(stats_status, 200)
+        self.assertEqual(stats_payload["marketId"], "m1")
+        self.assertEqual(stats_payload["engine"]["mode"], "EXACT")
+        self.assertEqual(stats_payload["engine"]["backend"], "junction_tree")
+        self.assertEqual(stats_payload["engine"]["version"], "0.1.0")
+        self.assertEqual(stats_payload["engine"]["precision"], "float64")
+        self.assertEqual(stats_payload["engine"]["compile_type"], "junction_tree")
+        self.assertEqual(stats_payload["engine"]["source_state_hash"], server.market_replay_state_hash("m1"))
+        self.assertNotEqual(stats_payload["engine"]["source_state_hash"], previous_compile_state["source_state_hash"])
+        self.assertEqual(
+            stats_payload["engine"]["compile_id"],
+            f"comp-{stats_payload['engine']['source_state_hash'].split(':', 1)[-1][:12]}",
+        )
+        self.assertEqual(stats_payload["diagnostics"]["request_count"], 1)
+        self.assertEqual(stats_payload["diagnostics"]["error_count"], 0)
+        self.assertEqual(stats_payload["diagnostics"]["inference"]["count"], 1)
+        self.assertGreaterEqual(stats_payload["diagnostics"]["cache"]["misses"], 1)
+        self.assertIn("compile_time_ms", stats_payload["diagnostics"])
+        self.assertIn("memory_bytes", stats_payload["diagnostics"])
+        self.assertIn("last_updated", stats_payload["diagnostics"])
+        self.assertGreaterEqual(stats_payload["diagnostics"]["compile_time_ms"], 0.0)
+        self.assertGreater(stats_payload["diagnostics"]["memory_bytes"], 0)
+        self.assertTrue(stats_payload["diagnostics"]["last_updated"].endswith("Z"))
+
+    def test_market_close_idempotency_replays_terminal_acceptance(self):
+        first_payload, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/close",
+            build_market_close_body("ops_admin", idempotency_key="idem-close-replay"),
+        )
+        first_events_payload, first_events_status = server.route_request("GET", "/v1/markets/m1/events")
+        scope_key = ("m1", "ops_admin", "idem-close-replay")
+        command = deepcopy(server.COMMANDS[first_payload["result"]["commandId"]])
+        event = deepcopy(server.EVENTS[first_payload["result"]["eventId"]])
+        terminal_outcome = deepcopy(server.TERMINAL_OUTCOMES[first_payload["result"]["commandId"]])
+        replay_snapshot = snapshot_domain_state()
+        second_payload, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/close",
+            build_market_close_body("ops_admin", idempotency_key="idem-close-replay"),
+        )
+        second_events_payload, second_events_status = server.route_request("GET", "/v1/markets/m1/events")
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(first_events_status, 200)
+        self.assertEqual(second_status, 201)
+        self.assertEqual(second_events_status, 200)
+        self.assertEqual(first_payload["meta"]["idempotencyKeyEcho"], "idem-close-replay")
+        self.assertNotIn("replayed", first_payload["meta"])
+        self.assertEqual(command["payload"], expected_market_close_payload())
+        self.assertEqual(server.IDEMPOTENCY_KEYS[scope_key], first_payload["result"]["commandId"])
+        self.assertEqual(first_payload["result"]["status"], "accepted")
+        self.assertEqual(
+            terminal_outcome,
+            {
+                "eventId": first_payload["result"]["eventId"],
+                "eventType": "CommandAccepted",
+                "eventPayload": event["payload"],
+                "status": 201,
+                "response": first_payload,
+            },
+        )
+        self.assertEqual(event["eventType"], "CommandAccepted")
+        self.assertEqual(event["seq"], 1)
+        self.assertEqual(event["prevEventHash"], server.GENESIS_EVENT_HASH)
+        self.assertEqual(first_events_payload["events"], [event])
+        self.assertEqual(
+            first_events_payload["chain"],
+            {
+                "genesisHash": server.GENESIS_EVENT_HASH,
+                "headSeq": event["seq"],
+                "headHash": event["eventHash"],
+            },
+        )
+        self.assertEqual(second_payload["result"], first_payload["result"])
+        self.assertEqual(second_payload["market"], first_payload["market"])
+        self.assertEqual(
+            {key: value for key, value in second_payload["meta"].items() if key != "replayed"},
+            first_payload["meta"],
+        )
+        self.assertEqual(second_payload["meta"]["idempotencyKeyEcho"], "idem-close-replay")
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(second_events_payload["events"], first_events_payload["events"])
+        self.assertEqual(second_events_payload["chain"], first_events_payload["chain"])
+        self.assertEqual(second_events_payload["pagination"], first_events_payload["pagination"])
+        self.assertEqual(len(server.COMMANDS), 1)
+        self.assertEqual(len(server.EVENTS), 1)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
+        assert_domain_state_unchanged(self, replay_snapshot)
+
+    def test_market_close_rejects_already_closed_market_with_terminal_response(self):
+        server.MARKETS["m1"]["status"] = "closed"
+        before_state = snapshot_market_close_rejection_state("m1")
+        baseline_command_count = len(server.COMMANDS)
+        baseline_event_count = len(server.EVENTS)
+        baseline_terminal_outcome_count = len(server.TERMINAL_OUTCOMES)
+        baseline_head_seq = server.MARKET_EVENT_SEQUENCES.get("m1", 0)
+        baseline_head_hash = server.LAST_EVENT_HASHES.get("m1", server.GENESIS_EVENT_HASH)
+
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/close",
+            build_market_close_body("ops_admin", idempotency_key="idem-close-closed"),
+        )
+        events_payload, events_status = server.route_request("GET", "/v1/markets/m1/events")
+
+        self.assertEqual(status, 409)
+        self.assertEqual(events_status, 200)
+        self.assertTrue(payload["result"]["commandId"].startswith("cmd_"))
+        self.assertTrue(payload["result"]["eventId"].startswith("evt_"))
+        self.assertTrue(payload["result"]["emittedAt"].endswith("Z"))
+        self.assertEqual(
+            payload["error"],
+            {
+                "code": "market_already_closed",
+                "message": "Market is already closed",
+                "details": {
+                    "marketId": "m1",
+                    "status": "closed",
+                    "commandId": payload["result"]["commandId"],
+                },
+            },
+        )
+        self.assertEqual(
+            payload["result"],
+            {
+                "terminal": True,
+                "status": "rejected",
+                "eventType": "CommandRejected",
+                "eventId": payload["result"]["eventId"],
+                "commandId": payload["result"]["commandId"],
+                "emittedAt": payload["result"]["emittedAt"],
+                "reasonCode": "market_already_closed",
+                "reason": "Market is already closed",
+                "retryHint": "reuse the original idempotency key to replay the prior outcome",
+            },
+        )
+        assert_market_close_rejection_state_unchanged(self, "m1", before_state)
+        self.assertEqual(len(server.COMMANDS), baseline_command_count + 1)
+        self.assertEqual(len(server.EVENTS), baseline_event_count + 1)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), baseline_terminal_outcome_count + 1)
+        self.assertEqual(
+            server.IDEMPOTENCY_KEYS[("m1", "ops_admin", "idem-close-closed")],
+            payload["result"]["commandId"],
+        )
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        self.assertEqual(command["commandId"], payload["result"]["commandId"])
+        self.assertEqual(command["payload"], expected_market_close_payload())
+        event = server.EVENTS[payload["result"]["eventId"]]
+        self.assertEqual(event["commandId"], payload["result"]["commandId"])
+        self.assertEqual(event["eventId"], payload["result"]["eventId"])
+        self.assertEqual(event["emittedAt"], payload["result"]["emittedAt"])
+        self.assertEqual(event["eventType"], "CommandRejected")
+        self.assertEqual(event["seq"], baseline_head_seq + 1)
+        self.assertEqual(event["prevEventHash"], baseline_head_hash)
+        self.assertEqual(
+            event["payload"],
+            {
+                "reasonCode": "market_already_closed",
+                "reason": "Market is already closed",
+                "retryHint": "reuse the original idempotency key to replay the prior outcome",
+            },
+        )
+        terminal_outcome = server.TERMINAL_OUTCOMES[payload["result"]["commandId"]]
+        self.assertEqual(terminal_outcome["eventId"], payload["result"]["eventId"])
+        self.assertEqual(terminal_outcome["eventType"], "CommandRejected")
+        self.assertEqual(terminal_outcome["eventPayload"], event["payload"])
+        self.assertEqual(terminal_outcome["status"], 409)
+        self.assertEqual(terminal_outcome["response"], payload)
+        self.assertEqual(server.MARKET_EVENT_SEQUENCES["m1"], event["seq"])
+        self.assertEqual(server.LAST_EVENT_HASHES["m1"], event["eventHash"])
+        self.assertEqual(events_payload["events"], [event])
+        self.assertEqual(
+            events_payload["chain"],
+            {
+                "genesisHash": server.GENESIS_EVENT_HASH,
+                "headSeq": event["seq"],
+                "headHash": event["eventHash"],
+            },
+        )
+
+    def test_market_close_rejects_non_active_market_with_terminal_response(self):
+        cases = (
+            (
+                "draft",
+                "idem-close-draft",
+                {
+                    "status": "draft",
+                },
+                {
+                    "marketId": "m1",
+                    "status": "draft",
+                    "allowedStatuses": ["active"],
+                },
+            ),
+            (
+                "resolved",
+                "idem-close-resolved",
+                {
+                    "status": "resolved",
+                    "resolution": "yes",
+                    "resolutionProbabilities": {"yes": 1.0, "no": 0.0},
+                },
+                {
+                    "marketId": "m1",
+                    "status": "resolved",
+                    "allowedStatuses": ["active"],
+                },
+            ),
+        )
+
+        for status_label, idempotency_key, market_updates, expected_details in cases:
+            with self.subTest(status=status_label):
+                server.reset_state()
+                account_id = "acct_close_reject_invariants"
+                server.route_request(
+                    "POST",
+                    "/v1/markets/m1/orders/probability-edit",
+                    build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
+                )
+                server.route_request(
+                    "POST",
+                    "/v1/markets/m1/orders/event-trade",
+                    build_event_trade_body(account_id, "m1", "yes", size=8.0),
+                )
+                server.CONDITIONAL_MARGINALS["m1"] = {
+                    server.context_state_key(
+                        [{"variableId": server.MARKETS["m2"]["variableId"], "outcomeId": "yes"}]
+                    ): {
+                        "yes": 0.9,
+                        "no": 0.1,
+                    }
+                }
+                server.MARKETS["m1"].update(deepcopy(market_updates))
+                before_state = snapshot_market_close_rejection_state("m1")
+                baseline_command_count = len(server.COMMANDS)
+                baseline_event_count = len(server.EVENTS)
+                baseline_terminal_outcome_count = len(server.TERMINAL_OUTCOMES)
+                baseline_head_seq = server.MARKET_EVENT_SEQUENCES["m1"]
+                baseline_head_hash = server.LAST_EVENT_HASHES["m1"]
+
+                payload, status = server.route_request(
+                    "POST",
+                    "/v1/markets/m1/close",
+                    build_market_close_body("ops_admin", idempotency_key=idempotency_key),
+                )
+                events_payload, events_status = server.route_request("GET", "/v1/markets/m1/events")
+
+                self.assertEqual(status, 409)
+                self.assertEqual(events_status, 200)
+                self.assertTrue(payload["result"]["commandId"].startswith("cmd_"))
+                self.assertTrue(payload["result"]["eventId"].startswith("evt_"))
+                self.assertTrue(payload["result"]["emittedAt"].endswith("Z"))
+                self.assertEqual(
+                    payload["error"],
+                    {
+                        "code": "market_not_closable",
+                        "message": "Market can only be closed from active status",
+                        "details": expected_details | {"commandId": payload["result"]["commandId"]},
+                    },
+                )
+                self.assertEqual(
+                    payload["result"],
+                    {
+                        "terminal": True,
+                        "status": "rejected",
+                        "eventType": "CommandRejected",
+                        "eventId": payload["result"]["eventId"],
+                        "commandId": payload["result"]["commandId"],
+                        "emittedAt": payload["result"]["emittedAt"],
+                        "reasonCode": "market_not_closable",
+                        "reason": "Market can only be closed from active status",
+                        "retryHint": "close an active market",
+                    },
+                )
+                assert_market_close_rejection_state_unchanged(self, "m1", before_state)
+                self.assertEqual(len(server.COMMANDS), baseline_command_count + 1)
+                self.assertEqual(len(server.EVENTS), baseline_event_count + 1)
+                self.assertEqual(len(server.TERMINAL_OUTCOMES), baseline_terminal_outcome_count + 1)
+                self.assertEqual(
+                    server.IDEMPOTENCY_KEYS[("m1", "ops_admin", idempotency_key)],
+                    payload["result"]["commandId"],
+                )
+                command = server.COMMANDS[payload["result"]["commandId"]]
+                self.assertEqual(command["commandId"], payload["result"]["commandId"])
+                self.assertEqual(command["payload"], expected_market_close_payload())
+                event = server.EVENTS[payload["result"]["eventId"]]
+                self.assertEqual(event["commandId"], payload["result"]["commandId"])
+                self.assertEqual(event["eventId"], payload["result"]["eventId"])
+                self.assertEqual(event["emittedAt"], payload["result"]["emittedAt"])
+                self.assertEqual(event["eventType"], "CommandRejected")
+                self.assertEqual(event["seq"], baseline_head_seq + 1)
+                self.assertEqual(event["prevEventHash"], baseline_head_hash)
+                self.assertEqual(
+                    event["payload"],
+                    {
+                        "reasonCode": "market_not_closable",
+                        "reason": "Market can only be closed from active status",
+                        "retryHint": "close an active market",
+                    },
+                )
+                terminal_outcome = server.TERMINAL_OUTCOMES[payload["result"]["commandId"]]
+                self.assertEqual(terminal_outcome["eventId"], payload["result"]["eventId"])
+                self.assertEqual(terminal_outcome["eventType"], "CommandRejected")
+                self.assertEqual(terminal_outcome["eventPayload"], event["payload"])
+                self.assertEqual(terminal_outcome["status"], 409)
+                self.assertEqual(terminal_outcome["response"], payload)
+                self.assertEqual(server.MARKET_EVENT_SEQUENCES["m1"], event["seq"])
+                self.assertEqual(server.LAST_EVENT_HASHES["m1"], event["eventHash"])
+                self.assertEqual(len(events_payload["events"]), baseline_event_count + 1)
+                self.assertEqual(events_payload["events"][-1], event)
+                self.assertEqual(events_payload["chain"]["headSeq"], event["seq"])
+                self.assertEqual(events_payload["chain"]["headHash"], event["eventHash"])
+
+    def test_market_close_rejected_terminal_outcomes_replay_for_status_conflicts(self):
+        cases = (
+            (
+                "already_closed",
+                "idem-close-replay-closed",
+                {
+                    "status": "closed",
+                },
+                "market_already_closed",
+                "Market is already closed",
+                {
+                    "marketId": "m1",
+                    "status": "closed",
+                },
+                "reuse the original idempotency key to replay the prior outcome",
+            ),
+            (
+                "draft_not_closable",
+                "idem-close-replay-draft",
+                {
+                    "status": "draft",
+                },
+                "market_not_closable",
+                "Market can only be closed from active status",
+                {
+                    "marketId": "m1",
+                    "status": "draft",
+                    "allowedStatuses": ["active"],
+                },
+                "close an active market",
+            ),
+            (
+                "resolved_not_closable",
+                "idem-close-replay-resolved",
+                {
+                    "status": "resolved",
+                    "resolution": "yes",
+                    "resolutionProbabilities": {"yes": 1.0, "no": 0.0},
+                },
+                "market_not_closable",
+                "Market can only be closed from active status",
+                {
+                    "marketId": "m1",
+                    "status": "resolved",
+                    "allowedStatuses": ["active"],
+                },
+                "close an active market",
+            ),
+        )
+
+        for label, idempotency_key, market_updates, expected_code, expected_message, expected_details, retry_hint in cases:
+            with self.subTest(case=label):
+                server.reset_state()
+                server.MARKETS["m1"].update(deepcopy(market_updates))
+                before_rejection_state = snapshot_market_close_rejection_state("m1")
+                baseline_command_count = len(server.COMMANDS)
+                baseline_event_count = len(server.EVENTS)
+                baseline_terminal_outcome_count = len(server.TERMINAL_OUTCOMES)
+                baseline_head_seq = server.MARKET_EVENT_SEQUENCES.get("m1", 0)
+                baseline_head_hash = server.LAST_EVENT_HASHES.get("m1", server.GENESIS_EVENT_HASH)
+                scope_key = ("m1", "ops_admin", idempotency_key)
+
+                first_payload, first_status = server.route_request(
+                    "POST",
+                    "/v1/markets/m1/close",
+                    build_market_close_body("ops_admin", idempotency_key=idempotency_key),
+                )
+                first_events_payload, first_events_status = server.route_request("GET", "/v1/markets/m1/events")
+                replay_snapshot = snapshot_domain_state()
+                second_payload, second_status = server.route_request(
+                    "POST",
+                    "/v1/markets/m1/close",
+                    build_market_close_body("ops_admin", idempotency_key=idempotency_key),
+                )
+                second_events_payload, second_events_status = server.route_request("GET", "/v1/markets/m1/events")
+
+                self.assertEqual(first_status, 409)
+                self.assertEqual(first_events_status, 200)
+                self.assertEqual(second_status, 409)
+                self.assertEqual(second_events_status, 200)
+                self.assertEqual(first_payload["meta"]["idempotencyKeyEcho"], idempotency_key)
+                self.assertNotIn("replayed", first_payload["meta"])
+                self.assertTrue(first_payload["result"]["commandId"].startswith("cmd_"))
+                self.assertTrue(first_payload["result"]["eventId"].startswith("evt_"))
+                self.assertTrue(first_payload["result"]["emittedAt"].endswith("Z"))
+                self.assertEqual(
+                    first_payload["error"],
+                    {
+                        "code": expected_code,
+                        "message": expected_message,
+                        "details": expected_details | {"commandId": first_payload["result"]["commandId"]},
+                    },
+                )
+                self.assertEqual(second_payload["error"], first_payload["error"])
+                self.assertEqual(
+                    first_payload["result"],
+                    {
+                        "terminal": True,
+                        "status": "rejected",
+                        "eventType": "CommandRejected",
+                        "eventId": first_payload["result"]["eventId"],
+                        "commandId": first_payload["result"]["commandId"],
+                        "emittedAt": first_payload["result"]["emittedAt"],
+                        "reasonCode": expected_code,
+                        "reason": expected_message,
+                        "retryHint": retry_hint,
+                    },
+                )
+                assert_market_close_rejection_state_unchanged(self, "m1", before_rejection_state)
+                self.assertEqual(len(server.COMMANDS), baseline_command_count + 1)
+                self.assertEqual(len(server.EVENTS), baseline_event_count + 1)
+                self.assertEqual(len(server.TERMINAL_OUTCOMES), baseline_terminal_outcome_count + 1)
+                self.assertEqual(server.IDEMPOTENCY_KEYS[scope_key], first_payload["result"]["commandId"])
+                command = server.COMMANDS[first_payload["result"]["commandId"]]
+                self.assertEqual(command["payload"], expected_market_close_payload())
+                event = server.EVENTS[first_payload["result"]["eventId"]]
+                self.assertEqual(event["eventType"], "CommandRejected")
+                self.assertEqual(event["seq"], baseline_head_seq + 1)
+                self.assertEqual(event["prevEventHash"], baseline_head_hash)
+                self.assertEqual(
+                    event["payload"],
+                    {
+                        "reasonCode": expected_code,
+                        "reason": expected_message,
+                        "retryHint": retry_hint,
+                    },
+                )
+                terminal_outcome = server.TERMINAL_OUTCOMES[first_payload["result"]["commandId"]]
+                self.assertEqual(terminal_outcome["eventId"], first_payload["result"]["eventId"])
+                self.assertEqual(terminal_outcome["eventType"], "CommandRejected")
+                self.assertEqual(terminal_outcome["eventPayload"], event["payload"])
+                self.assertEqual(terminal_outcome["status"], 409)
+                self.assertEqual(terminal_outcome["response"], first_payload)
+                self.assertEqual(server.MARKET_EVENT_SEQUENCES["m1"], event["seq"])
+                self.assertEqual(server.LAST_EVENT_HASHES["m1"], event["eventHash"])
+                self.assertEqual(first_events_payload["events"], [event])
+                self.assertEqual(
+                    first_events_payload["chain"],
+                    {
+                        "genesisHash": server.GENESIS_EVENT_HASH,
+                        "headSeq": event["seq"],
+                        "headHash": event["eventHash"],
+                    },
+                )
+                self.assertEqual(second_payload["result"], first_payload["result"])
+                self.assertEqual(second_payload["error"], first_payload["error"])
+                self.assertEqual(
+                    {key: value for key, value in second_payload["meta"].items() if key != "replayed"},
+                    first_payload["meta"],
+                )
+                self.assertEqual(second_payload["meta"]["idempotencyKeyEcho"], idempotency_key)
+                self.assertTrue(second_payload["meta"]["replayed"])
+                self.assertEqual(second_events_payload["events"], first_events_payload["events"])
+                self.assertEqual(second_events_payload["chain"], first_events_payload["chain"])
+                self.assertEqual(second_events_payload["pagination"], first_events_payload["pagination"])
+                self.assertEqual(len(server.COMMANDS), 1)
+                self.assertEqual(len(server.EVENTS), 1)
+                self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
+                assert_market_close_rejection_state_unchanged(self, "m1", before_rejection_state)
+                assert_domain_state_unchanged(self, replay_snapshot)
+
+    def test_market_reopen_requires_account_id(self):
+        cases = (
+            ("missing", None),
+            ("blank", "   "),
+        )
+
+        for label, account_id in cases:
+            with self.subTest(label=label):
+                body = build_market_reopen_body("ops_admin")
+                if account_id is None:
+                    del body["accountId"]
+                else:
+                    body["accountId"] = account_id
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/reopen", body)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_reopen")
+                self.assertEqual(error.message, "accountId is required")
+                self.assertEqual(error.details["field"], "accountId")
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_reopen_rejects_malformed_idempotency_key(self):
+        invalid_values = ("", "   ", 123)
+
+        for value in invalid_values:
+            with self.subTest(value=value):
+                body = build_market_reopen_body("ops_admin")
+                body["idempotencyKey"] = value
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/reopen", body)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_reopen")
+                self.assertEqual(error.message, "idempotencyKey must be a non-empty string when provided")
+                self.assertEqual(error.details["field"], "idempotencyKey")
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_reopen_rejects_non_object_payload(self):
+        invalid_payloads = (
+            ["ops_admin"],
+            "ops_admin",
+            123,
+        )
+
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/reopen", payload)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_body")
+                self.assertEqual(error.message, "payload must be an object")
+                self.assertEqual(error.details, {})
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_reopen_accepts_closed_market(self):
+        account_id = "acct_reopen_stateful"
+        idempotency_key = "idem-reopen-m1"
+        fixture = seed_closed_market_reopen_fixture(account_id)
+
+        self.assertEqual(fixture["setup_statuses"], (201, 201, 201))
+        self.assertEqual(fixture["closed_market"]["status"], "closed")
+        self.assertEqual(fixture["closed_market"]["resolution"], "yes")
+        self.assertEqual(fixture["closed_market"]["resolutionProbabilities"], {"yes": 1.0, "no": 0.0})
+        self.assertTrue(fixture["expected_conditional_marginals"])
+
+        before_command_count = len(server.COMMANDS)
+        before_event_count = len(server.EVENTS)
+        before_order_count = len(server.ORDERS)
+        before_terminal_outcome_count = len(server.TERMINAL_OUTCOMES)
+        before_market_event_sequence = server.MARKET_EVENT_SEQUENCES.get("m1", 0)
+        before_market_event_hash = server.LAST_EVENT_HASHES.get("m1", server.GENESIS_EVENT_HASH)
+
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/reopen",
+            build_market_reopen_body("ops_admin", idempotency_key=idempotency_key),
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"], fixture["expected_reopened_market"])
+        self.assertEqual(server.MARKETS["m1"], fixture["expected_reopened_market"])
+        self.assertEqual(server.MARKETS["m1"]["status"], "active")
+        self.assertNotIn("resolution", payload["market"])
+        self.assertNotIn("resolutionProbabilities", payload["market"])
+        self.assertNotIn("resolution", server.MARKETS["m1"])
+        self.assertNotIn("resolutionProbabilities", server.MARKETS["m1"])
+        self.assertEqual(server.MARKETS["m1"]["marginals"], fixture["expected_reopened_market"]["marginals"])
+        self.assertEqual(server.CONDITIONAL_MARGINALS.get("m1", {}), fixture["expected_conditional_marginals"])
+        self.assertEqual(server.ACCOUNT_RISK[account_id], fixture["expected_account_risk"])
+        self.assertEqual(server.ACCOUNT_EXPOSURE[account_id], fixture["expected_account_exposure"])
+        self.assertEqual(len(server.ORDERS), before_order_count)
+        self.assertEqual(len(server.COMMANDS), before_command_count + 1)
+        self.assertEqual(len(server.EVENTS), before_event_count + 1)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), before_terminal_outcome_count + 1)
+        self.assertEqual(payload["result"]["status"], "accepted")
+        self.assertEqual(payload["result"]["eventType"], "CommandAccepted")
+        self.assertEqual(payload["meta"]["idempotencyKeyEcho"], idempotency_key)
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        self.assertEqual(
+            command,
+            {
+                "schemaVersion": "bayes-command/v1",
+                "commandId": command["commandId"],
+                "marketId": "m1",
+                "accountId": "ops_admin",
+                "commandType": "AdminOp",
+                "submittedAt": command["submittedAt"],
+                "payload": expected_market_reopen_payload(),
+                "meta": {"source": "api"},
+                "idempotencyKey": idempotency_key,
+            },
+        )
+        self.assertTrue(command["submittedAt"].endswith("Z"))
+        self.assertEqual(command["commandType"], "AdminOp")
+        self.assertEqual(command["payload"], expected_market_reopen_payload())
+        event = server.EVENTS[payload["result"]["eventId"]]
+        reopened_at = event["payload"]["reopen"]["reopenedAt"]
+        self.assertEqual(event["schemaVersion"], "bayes-event/v1")
+        self.assertEqual(event["marketId"], "m1")
+        self.assertEqual(event["seq"], before_market_event_sequence + 1)
+        self.assertEqual(event["commandId"], command["commandId"])
+        self.assertEqual(event["eventType"], "CommandAccepted")
+        self.assertEqual(event["prevEventHash"], before_market_event_hash)
+        self.assertFalse(event["approxFlag"])
+        self.assertTrue(event["emittedAt"].endswith("Z"))
+        self.assertTrue(reopened_at.endswith("Z"))
+        self.assertEqual(
+            event["payload"],
+            {
+                "reopen": {
+                    "reopenedAt": reopened_at,
+                },
+                "effects": {
+                    "marginalDelta": [],
+                    "assetDelta": [],
+                },
+                "pricing": {
+                    "cost": 0.0,
+                    "fee": 0.0,
+                },
+                "replayStateHash": server.market_replay_state_hash("m1"),
+            },
+        )
+        self.assertEqual(server.MARKET_EVENT_SEQUENCES["m1"], before_market_event_sequence + 1)
+        self.assertEqual(server.LAST_EVENT_HASHES["m1"], event["eventHash"])
+        expected_response = {
+            "market": deepcopy(fixture["expected_reopened_market"]),
+            "result": {
+                "terminal": True,
+                "status": "accepted",
+                "eventType": "CommandAccepted",
+                "eventId": event["eventId"],
+                "commandId": command["commandId"],
+                "emittedAt": event["emittedAt"],
+            },
+            "meta": {
+                "timestamp": payload["meta"]["timestamp"],
+                "idempotencyKeyEcho": idempotency_key,
+            },
+        }
+        self.assertEqual(payload, expected_response)
+        self.assertEqual(
+            server.TERMINAL_OUTCOMES[command["commandId"]],
+            {
+                "eventId": event["eventId"],
+                "eventType": "CommandAccepted",
+                "eventPayload": event["payload"],
+                "status": 201,
+                "response": expected_response,
+            },
+        )
+
+        accepted_state = snapshot_domain_state()
+        replayed_payload, replayed_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/reopen",
+            build_market_reopen_body("ops_admin", idempotency_key=idempotency_key),
+        )
+
+        expected_replayed_response = deepcopy(expected_response)
+        expected_replayed_response["meta"]["replayed"] = True
+        self.assertEqual(replayed_status, 201)
+        self.assertEqual(replayed_payload, expected_replayed_response)
+        assert_domain_state_unchanged(self, accepted_state)
+
+    def test_market_reopen_rejects_non_closed_market_with_persisted_terminal_replay(self):
+        cases = (
+            ("active", "m1", None),
+            ("draft", "m1", "draft"),
+            ("resolved", "m3", None),
+        )
+
+        for status_label, market_id, overridden_status in cases:
+            with self.subTest(status=status_label):
+                server.reset_state()
+                if overridden_status is not None:
+                    server.MARKETS[market_id]["status"] = overridden_status
+
+                self.assertEqual(server.MARKETS[market_id]["status"], status_label)
+                idempotency_key = f"idem-{status_label}-reopen"
+                body = build_market_reopen_body("ops_admin", idempotency_key=idempotency_key)
+                baseline_state = {
+                    "markets": deepcopy(server.MARKETS),
+                    "conditional_marginals": deepcopy(server.CONDITIONAL_MARGINALS),
+                    "orders": deepcopy(server.ORDERS),
+                    "account_risk": deepcopy(server.ACCOUNT_RISK),
+                    "account_exposure": deepcopy(server.ACCOUNT_EXPOSURE),
+                }
+                before_command_count = len(server.COMMANDS)
+                before_event_count = len(server.EVENTS)
+                before_terminal_outcome_count = len(server.TERMINAL_OUTCOMES)
+                before_market_event_sequence = server.MARKET_EVENT_SEQUENCES.get(market_id, 0)
+                before_market_event_hash = server.LAST_EVENT_HASHES.get(market_id, server.GENESIS_EVENT_HASH)
+
+                first_payload, first_status = server.route_request("POST", f"/v1/markets/{market_id}/reopen", body)
+
+                command_id = first_payload["result"]["commandId"]
+                event_id = first_payload["result"]["eventId"]
+                command = server.COMMANDS[command_id]
+                event = server.EVENTS[event_id]
+                expected_response = {
+                    "error": {
+                        "code": "market_not_reopenable",
+                        "message": "Market can only be reopened from closed status",
+                        "details": {
+                            "marketId": market_id,
+                            "status": status_label,
+                            "allowedStatuses": ["closed"],
+                            "commandId": command_id,
+                        },
+                    },
+                    "result": {
+                        "terminal": True,
+                        "status": "rejected",
+                        "eventType": "CommandRejected",
+                        "eventId": event_id,
+                        "commandId": command_id,
+                        "emittedAt": event["emittedAt"],
+                        "reasonCode": "market_not_reopenable",
+                        "reason": "Market can only be reopened from closed status",
+                        "retryHint": "reopen a closed market",
+                    },
+                    "meta": {
+                        "timestamp": first_payload["meta"]["timestamp"],
+                        "idempotencyKeyEcho": idempotency_key,
+                    },
+                }
+
+                self.assertEqual(first_status, 409)
+                self.assertEqual(first_payload, expected_response)
+                self.assertEqual(len(server.COMMANDS), before_command_count + 1)
+                self.assertEqual(len(server.EVENTS), before_event_count + 1)
+                self.assertEqual(len(server.TERMINAL_OUTCOMES), before_terminal_outcome_count + 1)
+                self.assertEqual(server.MARKETS, baseline_state["markets"])
+                self.assertEqual(server.CONDITIONAL_MARGINALS, baseline_state["conditional_marginals"])
+                self.assertEqual(server.ORDERS, baseline_state["orders"])
+                self.assertEqual(server.ACCOUNT_RISK, baseline_state["account_risk"])
+                self.assertEqual(server.ACCOUNT_EXPOSURE, baseline_state["account_exposure"])
+                self.assertEqual(
+                    command,
+                    {
+                        "schemaVersion": "bayes-command/v1",
+                        "commandId": command_id,
+                        "marketId": market_id,
+                        "accountId": "ops_admin",
+                        "commandType": "AdminOp",
+                        "submittedAt": command["submittedAt"],
+                        "payload": expected_market_reopen_payload(),
+                        "meta": {"source": "api"},
+                        "idempotencyKey": idempotency_key,
+                    },
+                )
+                self.assertTrue(command["submittedAt"].endswith("Z"))
+                self.assertEqual(event["schemaVersion"], "bayes-event/v1")
+                self.assertEqual(event["marketId"], market_id)
+                self.assertEqual(event["seq"], before_market_event_sequence + 1)
+                self.assertEqual(event["commandId"], command_id)
+                self.assertEqual(event["eventType"], "CommandRejected")
+                self.assertEqual(event["prevEventHash"], before_market_event_hash)
+                self.assertFalse(event["approxFlag"])
+                self.assertTrue(event["emittedAt"].endswith("Z"))
+                self.assertEqual(
+                    event["payload"],
+                    {
+                        "reasonCode": "market_not_reopenable",
+                        "reason": "Market can only be reopened from closed status",
+                        "retryHint": "reopen a closed market",
+                    },
+                )
+                self.assertEqual(server.MARKET_EVENT_SEQUENCES[market_id], before_market_event_sequence + 1)
+                self.assertEqual(server.LAST_EVENT_HASHES[market_id], event["eventHash"])
+                self.assertEqual(
+                    server.TERMINAL_OUTCOMES[command_id],
+                    {
+                        "eventId": event_id,
+                        "eventType": "CommandRejected",
+                        "eventPayload": event["payload"],
+                        "status": 409,
+                        "response": expected_response,
+                    },
+                )
+                self.assertEqual(
+                    server.IDEMPOTENCY_KEYS[server.idempotency_scope_key(market_id, "ops_admin", idempotency_key)],
+                    command_id,
+                )
+
+                second_payload, second_status = server.route_request("POST", f"/v1/markets/{market_id}/reopen", body)
+                expected_replayed_response = deepcopy(expected_response)
+                expected_replayed_response["meta"]["replayed"] = True
+
+                self.assertEqual(second_status, 409)
+                self.assertEqual(second_payload, expected_replayed_response)
+                self.assertEqual(len(server.COMMANDS), before_command_count + 1)
+                self.assertEqual(len(server.EVENTS), before_event_count + 1)
+                self.assertEqual(len(server.TERMINAL_OUTCOMES), before_terminal_outcome_count + 1)
+                self.assertEqual(server.MARKETS, baseline_state["markets"])
+                self.assertEqual(server.CONDITIONAL_MARGINALS, baseline_state["conditional_marginals"])
+                self.assertEqual(server.ORDERS, baseline_state["orders"])
+                self.assertEqual(server.ACCOUNT_RISK, baseline_state["account_risk"])
+                self.assertEqual(server.ACCOUNT_EXPOSURE, baseline_state["account_exposure"])
+
+    def test_market_reopen_reuses_admin_op_idempotency_namespace(self):
+        server.MARKETS["m1"]["status"] = "closed"
+        idempotency_key = "idem-admin-op-shared"
+
+        _, resolve_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_admin", "yes", idempotency_key=idempotency_key),
+        )
+        reopen_payload, reopen_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/reopen",
+            build_market_reopen_body("ops_admin", idempotency_key=idempotency_key),
+        )
+
+        self.assertEqual(resolve_status, 201)
+        self.assertEqual(reopen_status, 409)
+        self.assertEqual(reopen_payload["error"]["code"], "idempotency_conflict")
+        self.assertEqual(reopen_payload["error"]["details"]["idempotencyKey"], idempotency_key)
+        self.assertEqual(reopen_payload["error"]["details"]["marketId"], "m1")
+        self.assertEqual(reopen_payload["error"]["details"]["accountId"], "ops_admin")
+
+    def test_market_resolution_accepts_final_probabilities_body_and_canonicalizes_command_payload(self):
+        final_probabilities = {"yes": 0.0, "no": 0.0, "delayed": 1.0}
+
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m2/resolve",
+            build_market_resolution_body("ops_admin", final_probabilities=final_probabilities),
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["id"], "m2")
+        self.assertEqual(payload["market"]["status"], "resolved")
+        self.assertEqual(payload["market"]["resolution"], "delayed")
+        self.assertEqual(payload["market"]["resolutionProbabilities"], final_probabilities)
+        self.assertEqual(payload["market"]["marginals"], final_probabilities)
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        self.assertEqual(command["payload"], expected_market_resolution_payload("m2", "delayed"))
+        event = server.EVENTS[payload["result"]["eventId"]]
+        self.assertEqual(event["payload"]["resolution"]["outcomeId"], "delayed")
+        self.assertEqual(event["payload"]["resolution"]["finalProbabilities"], final_probabilities)
+
+    def test_market_resolution_idempotency_replays_across_legacy_and_final_probability_shapes(self):
+        legacy_body = build_market_resolution_body("ops_admin", "yes", idempotency_key="idem-resolve-shape")
+        final_probabilities_body = build_market_resolution_body(
+            "ops_admin",
+            final_probabilities={"yes": 1.0, "no": 0.0},
+            idempotency_key="idem-resolve-shape",
+        )
+
+        first_payload, first_status = server.route_request("POST", "/v1/markets/m1/resolve", legacy_body)
+        second_payload, second_status = server.route_request("POST", "/v1/markets/m1/resolve", final_probabilities_body)
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
+        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(len(server.COMMANDS), 1)
+        self.assertEqual(len(server.EVENTS), 1)
+
+    def test_market_resolution_rejects_non_point_mass_final_probabilities(self):
+        before_state = snapshot_domain_state()
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request(
+                "POST",
+                "/v1/markets/m1/resolve",
+                build_market_resolution_body("ops_admin", final_probabilities={"yes": 0.6, "no": 0.4}),
+            )
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_market_resolution")
+        self.assertEqual(error.message, "finalProbabilities must encode a point-mass distribution")
+        self.assertEqual(
+            error.details,
+            {
+                "field": "finalProbabilities",
+                "marketId": "m1",
+            },
+        )
+        assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolution_rejects_final_probabilities_that_do_not_sum_to_one(self):
+        before_state = snapshot_domain_state()
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request(
+                "POST",
+                "/v1/markets/m1/resolve",
+                build_market_resolution_body("ops_admin", final_probabilities={"yes": 0.7, "no": 0.31}),
+            )
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_market_resolution")
+        self.assertEqual(error.message, "finalProbabilities must sum to 1.0")
+        self.assertEqual(error.details["field"], "finalProbabilities")
+        self.assertEqual(error.details["marketId"], "m1")
+        self.assertAlmostEqual(error.details["sum"], 1.01)
+        assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolution_rejects_mismatched_outcome_id_and_final_probabilities(self):
+        before_state = snapshot_domain_state()
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request(
+                "POST",
+                "/v1/markets/m1/resolve",
+                build_market_resolution_body(
+                    "ops_admin",
+                    "yes",
+                    final_probabilities={"yes": 0.0, "no": 1.0},
+                ),
+            )
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_market_resolution")
+        self.assertEqual(error.message, "outcomeId must match finalProbabilities when both are provided")
+        self.assertEqual(
+            error.details,
+            {
+                "field": "outcomeId",
+                "marketId": "m1",
+                "received": "yes",
+                "expected": "no",
+            },
+        )
+        assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolution_rejects_draft_market_with_terminal_result(self):
+        server.MARKETS["m1"]["status"] = "draft"
+        baseline_market = deepcopy(server.MARKETS["m1"])
+
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_admin", "yes", idempotency_key="idem-draft-resolve"),
+        )
+
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"]["code"], "market_not_resolvable")
+        self.assertEqual(payload["result"]["status"], "rejected")
+        self.assertEqual(payload["result"]["eventType"], "CommandRejected")
+        self.assertEqual(payload["meta"]["idempotencyKeyEcho"], "idem-draft-resolve")
+        self.assertEqual(
+            payload["error"]["details"],
+            {
+                "marketId": "m1",
+                "status": "draft",
+                "allowedStatuses": ["active", "closed"],
+                "commandId": payload["result"]["commandId"],
+            },
+        )
+        self.assertEqual(server.MARKETS["m1"], baseline_market)
+        self.assertEqual(server.ORDERS, {})
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        self.assertEqual(command["commandType"], "AdminOp")
+        self.assertEqual(command["payload"], expected_market_resolution_payload("m1", "yes"))
+
+    def test_market_resolution_requires_account_id(self):
+        cases = (
+            ("missing", None),
+            ("blank", "   "),
+        )
+
+        for label, account_id in cases:
+            with self.subTest(label=label):
+                body = build_market_resolution_body("ops_admin", "yes")
+                if account_id is None:
+                    del body["accountId"]
+                else:
+                    body["accountId"] = account_id
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/resolve", body)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_resolution")
+                self.assertEqual(error.message, "accountId is required")
+                self.assertEqual(error.details["field"], "accountId")
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolution_requires_outcome_id(self):
+        cases = (
+            ("missing", None),
+            ("blank", "   "),
+        )
+
+        for label, outcome_id in cases:
+            with self.subTest(label=label):
+                body = build_market_resolution_body("ops_admin", "yes")
+                if outcome_id is None:
+                    del body["outcomeId"]
+                else:
+                    body["outcomeId"] = outcome_id
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/resolve", body)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_resolution")
+                self.assertEqual(error.message, "outcomeId is required")
+                self.assertEqual(error.details["field"], "outcomeId")
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolution_rejects_malformed_idempotency_key(self):
+        invalid_values = ("", "   ", 123)
+
+        for value in invalid_values:
+            with self.subTest(value=value):
+                body = build_market_resolution_body("ops_admin", "yes")
+                body["idempotencyKey"] = value
+                before_state = snapshot_domain_state()
+
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets/m1/resolve", body)
+
+                error = ctx.exception
+                self.assertEqual(error.status, 400)
+                self.assertEqual(error.code, "invalid_market_resolution")
+                self.assertEqual(error.message, "idempotencyKey must be a non-empty string when provided")
+                self.assertEqual(error.details["field"], "idempotencyKey")
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_create_market_returns_201_with_valid_payload(self):
+        payload, status = server.route_request("POST", "/v1/markets", {
+            "title": "Test Market",
+            "description": "A test market",
+            "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+            "expires_at": "2026-12-31T23:59:59Z",
+        })
+        self.assertEqual(status, 201)
+        self.assertIn("market", payload)
+        m = payload["market"]
+        self.assertEqual(m["title"], "Test Market")
+        self.assertEqual(m["status"], "active")
+        self.assertEqual(len(m["outcomes"]), 2)
+        self.assertAlmostEqual(m["marginals"]["yes"], 0.5, places=4)
+        self.assertAlmostEqual(m["marginals"]["no"], 0.5, places=4)
+        server.MARKETS.pop(m["id"], None)
+
+    def test_create_market_rejects_missing_title(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", "/v1/markets", {
+                "outcomes": [{"id": "a", "name": "A"}, {"id": "b", "name": "B"}],
+                "expires_at": "2026-12-31T23:59:59Z",
+            })
+        self.assertEqual(ctx.exception.status, 400)
 
     def test_event_formula_normalizes_literals_and_preserves_clause_order(self):
         normalized = server.normalize_event_formula(
@@ -2332,6 +5992,28 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 self.assertEqual(error.details["field"], field)
                 for detail_key, detail_value in expected_details.items():
                     self.assertEqual(error.details[detail_key], detail_value)
+
+    def test_event_formula_rejects_literals_with_unexpected_fields(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.normalize_event_formula(
+                [
+                    [
+                        {
+                            "variableId": "eth_price_gt_3000_mar15",
+                            "outcomeId": "yes",
+                            "negated": False,
+                            "kind": "legacy",
+                        }
+                    ]
+                ]
+            )
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_event_formula")
+        self.assertEqual(error.details["field"], "formula[0][0]")
+        self.assertEqual(error.details["unexpected"], ["kind"])
+        self.assertEqual(error.details["allowed"], sorted(server.formula_schema.EVENT_FORMULA_LITERAL_FIELDS))
 
     def test_event_formula_rejects_empty_inputs_and_clause_literal_cap(self):
         with self.subTest("empty formula"):
@@ -2466,6 +6148,52 @@ class BayesMarketEventTradeTests(unittest.TestCase):
         self.assertIsNone(stats_payload["engine"]["compile_type"])
         self.assertIsNone(stats_payload["engine"]["source_state_hash"])
         self.assertNotIn("compile_time_ms", stats_payload["diagnostics"])
+
+    def test_event_trade_acceptance_appends_after_existing_probability_edit_event(self):
+        first_payload, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_event_chain_setup", "m1", "yes", 0.8),
+        )
+        second_payload, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body("acct_event_chain_trade", "m1", "yes"),
+        )
+        events_payload, events_status = server.route_request("GET", "/v1/markets/m1/events")
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        self.assertEqual(events_status, 200)
+        self.assertEqual(
+            [event["eventId"] for event in events_payload["events"]],
+            [first_payload["result"]["eventId"], second_payload["result"]["eventId"]],
+        )
+        self.assertEqual([event["seq"] for event in events_payload["events"]], [1, 2])
+        self.assertEqual(events_payload["events"][0]["prevEventHash"], server.GENESIS_EVENT_HASH)
+        self.assertEqual(
+            events_payload["events"][1]["prevEventHash"],
+            events_payload["events"][0]["eventHash"],
+        )
+        self.assertEqual(
+            events_payload["events"][1]["payload"]["trade"],
+            {
+                "marketId": "m1",
+                "outcomeId": "yes",
+                "side": "buy",
+                "size": second_payload["order"]["size"],
+                "price": second_payload["order"]["price"],
+                "notional": second_payload["order"]["notional"],
+            },
+        )
+        self.assertEqual(
+            events_payload["chain"],
+            {
+                "genesisHash": server.GENESIS_EVENT_HASH,
+                "headSeq": 2,
+                "headHash": events_payload["events"][1]["eventHash"],
+            },
+        )
 
     def test_event_trade_prices_via_query_backend_adapter_with_internal_variable_id(self):
         class StubQueryBackend:
@@ -2661,6 +6389,240 @@ class BayesMarketEventTradeTests(unittest.TestCase):
             self.assertEqual(error.code, "invalid_event_trade")
             self.assertEqual(error.details["field"], "size")
 
+    def test_event_trade_accepts_exact_max_position_boundary_without_widening_contract(self):
+        for case in (
+            {
+                "label": "positive-cap-buy",
+                "account_id": "acct_event_trade_exact_positive",
+                "starting_net_size": 99.5,
+                "side": "buy",
+                "size": 0.5,
+                "expected_net_size": 100.0,
+            },
+            {
+                "label": "negative-cap-sell",
+                "account_id": "acct_event_trade_exact_negative",
+                "starting_net_size": -99.5,
+                "side": "sell",
+                "size": 0.5,
+                "expected_net_size": -100.0,
+            },
+        ):
+            with self.subTest(case=case["label"]):
+                server.reset_state()
+                account_id = case["account_id"]
+                server.ACCOUNT_EXPOSURE[account_id] = {
+                    "accountId": account_id,
+                    "updatedAt": "2026-04-09T12:00:00Z",
+                    "positions": {
+                        "m1|yes": {
+                            "marketId": "m1",
+                            "outcomeId": "yes",
+                            "netSize": case["starting_net_size"],
+                            "lastTradePrice": 0.65,
+                            "updatedAt": "2026-04-09T11:55:00Z",
+                            "lastOrderId": "ord_seed",
+                            "lastCommandId": "cmd_seed",
+                        }
+                    },
+                }
+
+                payload, status = server.route_request(
+                    "POST",
+                    "/v1/markets/m1/orders/event-trade",
+                    build_event_trade_body(
+                        account_id,
+                        "m1",
+                        "yes",
+                        size=case["size"],
+                        side=case["side"],
+                    ),
+                )
+
+                self.assertEqual(status, 201)
+                self.assertEqual(payload["result"]["status"], "accepted")
+                self.assertEqual(payload["order"]["type"], "EventTrade")
+                self.assertEqual(payload["order"]["size"], case["size"])
+                self.assertNotIn("currentNetSize", payload["order"])
+                self.assertNotIn("resultingNetSize", payload["order"])
+                self.assertEqual(
+                    server.ACCOUNT_EXPOSURE[account_id]["positions"]["m1|yes"]["netSize"],
+                    case["expected_net_size"],
+                )
+                self.assertEqual(server.ACCOUNT_RISK, {})
+                self.assertEqual(
+                    server.EVENTS[payload["result"]["eventId"]]["payload"]["effects"],
+                    {"marginalDelta": [], "assetDelta": []},
+                )
+
+    def test_event_trade_exposure_route_reflects_accepted_buy_then_sell_netting(self):
+        account_id = "acct_event_trade_exposure_route"
+
+        buy_payload, buy_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=12.5, side="buy"),
+        )
+        buy_exposure_payload, buy_exposure_status = server.route_request(
+            "GET",
+            f"/v1/accounts/{account_id}/exposure",
+        )
+        sell_payload, sell_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=4.0, side="sell"),
+        )
+        sell_exposure_payload, sell_exposure_status = server.route_request(
+            "GET",
+            f"/v1/accounts/{account_id}/exposure",
+        )
+
+        self.assertEqual(buy_status, 201)
+        self.assertEqual(buy_exposure_status, 200)
+        self.assertEqual(sell_status, 201)
+        self.assertEqual(sell_exposure_status, 200)
+        self.assertEqual(
+            buy_exposure_payload,
+            {
+                "account": {
+                    "id": account_id,
+                    "exposure": {
+                        "maxPositionSize": 100.0,
+                        "updatedAt": buy_payload["order"]["filledAt"],
+                        "positions": [
+                            {
+                                "marketId": "m1",
+                                "outcomeId": "yes",
+                                "netSize": 12.5,
+                                "absSize": 12.5,
+                                "lastTradePrice": 0.65,
+                                "updatedAt": buy_payload["order"]["filledAt"],
+                                "lastOrderId": buy_payload["order"]["id"],
+                                "lastCommandId": buy_payload["order"]["commandId"],
+                            }
+                        ],
+                    },
+                },
+                "meta": buy_exposure_payload["meta"],
+            },
+        )
+        self.assertEqual(
+            sell_exposure_payload,
+            {
+                "account": {
+                    "id": account_id,
+                    "exposure": {
+                        "maxPositionSize": 100.0,
+                        "updatedAt": sell_payload["order"]["filledAt"],
+                        "positions": [
+                            {
+                                "marketId": "m1",
+                                "outcomeId": "yes",
+                                "netSize": 8.5,
+                                "absSize": 8.5,
+                                "lastTradePrice": 0.65,
+                                "updatedAt": sell_payload["order"]["filledAt"],
+                                "lastOrderId": sell_payload["order"]["id"],
+                                "lastCommandId": sell_payload["order"]["commandId"],
+                            }
+                        ],
+                    },
+                },
+                "meta": sell_exposure_payload["meta"],
+            },
+        )
+        self.assertEqual(server.ACCOUNT_RISK, {})
+
+    def test_event_trade_position_limit_exceeded_is_side_effect_free_and_idempotency_key_remains_reusable(self):
+        account_id = "acct_event_trade_limit"
+        idempotency_key = "idem-event-trade-limit"
+        scope_key = server.idempotency_scope_key("m1", account_id, idempotency_key)
+
+        setup_payload, setup_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=99.0, side="buy"),
+        )
+        baseline_exposure_payload, baseline_exposure_status = server.route_request(
+            "GET",
+            f"/v1/accounts/{account_id}/exposure",
+        )
+        baseline_snapshot = snapshot_domain_state()
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/event-trade",
+                build_event_trade_body(
+                    account_id,
+                    "m1",
+                    "yes",
+                    size=2.0,
+                    side="buy",
+                    idempotency_key=idempotency_key,
+                ),
+            )
+
+        error = ctx.exception
+        self.assertEqual(setup_status, 201)
+        self.assertEqual(setup_payload["result"]["status"], "accepted")
+        self.assertEqual(baseline_exposure_status, 200)
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "position_limit_exceeded")
+        self.assertEqual(error.message, "Trade would exceed max position size")
+        self.assertEqual(
+            error.details,
+            {
+                "accountId": account_id,
+                "marketId": "m1",
+                "outcomeId": "yes",
+                "side": "buy",
+                "requestedSize": 2.0,
+                "currentNetSize": 99.0,
+                "resultingNetSize": 101.0,
+                "maxPositionSize": 100.0,
+            },
+        )
+        post_rejection_exposure_payload, post_rejection_exposure_status = server.route_request(
+            "GET",
+            f"/v1/accounts/{account_id}/exposure",
+        )
+        self.assertEqual(post_rejection_exposure_status, 200)
+        self.assertEqual(post_rejection_exposure_payload["account"], baseline_exposure_payload["account"])
+        self.assertNotIn(scope_key, server.IDEMPOTENCY_KEYS)
+        self.assertEqual(server.COMMANDS, baseline_snapshot["commands"])
+        self.assertEqual(server.EVENTS, baseline_snapshot["events"])
+        self.assertEqual(server.ACCOUNT_EXPOSURE, baseline_snapshot["account_exposure"])
+        self.assertEqual(server.IDEMPOTENCY_KEYS, baseline_snapshot["idempotency_keys"])
+        assert_domain_state_unchanged(self, baseline_snapshot)
+
+        reduction_payload, reduction_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=10.0, side="sell"),
+        )
+        retry_payload, retry_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(
+                account_id,
+                "m1",
+                "yes",
+                size=2.0,
+                side="buy",
+                idempotency_key=idempotency_key,
+            ),
+        )
+
+        self.assertEqual(reduction_status, 201)
+        self.assertEqual(reduction_payload["result"]["status"], "accepted")
+        self.assertEqual(retry_status, 201)
+        self.assertEqual(retry_payload["result"]["status"], "accepted")
+        self.assertEqual(retry_payload["order"]["idempotencyKey"], idempotency_key)
+        self.assertNotIn("replayed", retry_payload["meta"])
+        self.assertEqual(server.ACCOUNT_EXPOSURE[account_id]["positions"]["m1|yes"]["netSize"], 91.0)
+        self.assertEqual(server.IDEMPOTENCY_KEYS[scope_key], retry_payload["result"]["commandId"])
+
     def test_event_trade_replays_idempotent_submission(self):
         body = build_event_trade_body(
             "acct_event_trade",
@@ -2674,23 +6636,526 @@ class BayesMarketEventTradeTests(unittest.TestCase):
             "/v1/markets/m1/orders/event-trade",
             body,
         )
-        second_payload, second_status = server.route_request(
-            "POST",
-            "/v1/markets/m1/orders/event-trade",
-            body,
+        first_exposure_payload, first_exposure_status = server.route_request(
+            "GET",
+            "/v1/accounts/acct_event_trade/exposure",
+        )
+        with patch.object(server, "preview_event_trade_position_net_change", autospec=True) as preview_mock:
+            second_payload, second_status = server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/event-trade",
+                body,
+            )
+        second_exposure_payload, second_exposure_status = server.route_request(
+            "GET",
+            "/v1/accounts/acct_event_trade/exposure",
         )
 
         self.assertEqual(first_status, 201)
+        self.assertEqual(first_exposure_status, 200)
         self.assertEqual(second_status, 201)
+        self.assertEqual(second_exposure_status, 200)
         self.assertEqual(second_payload["order"]["id"], first_payload["order"]["id"])
         self.assertEqual(second_payload["order"]["commandId"], first_payload["order"]["commandId"])
         self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
         self.assertTrue(second_payload["meta"]["replayed"])
+        preview_mock.assert_not_called()
+        self.assertEqual(
+            first_exposure_payload,
+            {
+                "account": {
+                    "id": "acct_event_trade",
+                    "exposure": {
+                        "maxPositionSize": 100.0,
+                        "updatedAt": first_payload["order"]["filledAt"],
+                        "positions": [
+                            {
+                                "marketId": "m1",
+                                "outcomeId": "yes",
+                                "netSize": 12.5,
+                                "absSize": 12.5,
+                                "lastTradePrice": 0.65,
+                                "updatedAt": first_payload["order"]["filledAt"],
+                                "lastOrderId": first_payload["order"]["id"],
+                                "lastCommandId": first_payload["order"]["commandId"],
+                            }
+                        ],
+                    },
+                },
+                "meta": first_exposure_payload["meta"],
+            },
+        )
+        self.assertEqual(second_exposure_payload["account"], first_exposure_payload["account"])
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(server.ACCOUNT_RISK, {})
         self.assertEqual(len(server.ORDERS), 1)
         self.assertEqual(len(server.COMMANDS), 1)
         self.assertEqual(len(server.EVENTS), 1)
+
+    def test_event_trade_rejection_appends_once_and_replays_without_double_append(self):
+        body = build_event_trade_body(
+            "acct_event_trade_reject",
+            "m3",
+            "yes",
+            idempotency_key="idem-event-trade-reject",
+        )
+
+        first_payload, first_status = server.route_request(
+            "POST",
+            "/v1/markets/m3/orders/event-trade",
+            body,
+        )
+        second_payload, second_status = server.route_request(
+            "POST",
+            "/v1/markets/m3/orders/event-trade",
+            body,
+        )
+        events_payload, events_status = server.route_request("GET", "/v1/markets/m3/events")
+
+        self.assertEqual(first_status, 409)
+        self.assertEqual(second_status, 409)
+        self.assertEqual(events_status, 200)
+        self.assertEqual(first_payload["error"]["code"], "market_not_active")
+        self.assertEqual(first_payload["error"]["details"]["marketId"], "m3")
+        self.assertEqual(first_payload["result"]["status"], "rejected")
+        self.assertEqual(first_payload["result"]["eventType"], "CommandRejected")
+        self.assertEqual(first_payload["result"]["reasonCode"], "market_not_active")
+        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
+        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(len(server.COMMANDS), 1)
+        self.assertEqual(len(server.EVENTS), 1)
+
+        rejection_event = server.EVENTS[first_payload["result"]["eventId"]]
+        self.assertEqual(rejection_event["seq"], 1)
+        self.assertEqual(rejection_event["prevEventHash"], server.GENESIS_EVENT_HASH)
+        self.assertEqual(
+            rejection_event["payload"],
+            {
+                "reasonCode": "market_not_active",
+                "reason": "EventTrade is only allowed for active markets",
+                "retryHint": "submit against an active market",
+            },
+        )
+        self.assertEqual(events_payload["events"], [rejection_event])
+        self.assertEqual(
+            events_payload["chain"],
+            {
+                "genesisHash": server.GENESIS_EVENT_HASH,
+                "headSeq": 1,
+                "headHash": rejection_event["eventHash"],
+            },
+        )
+
+
+class BayesMarketExposureProjectionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        server.reset_state()
+
+    def test_account_exposure_helpers_materialize_canonical_shape_and_composite_keys(self):
+        timestamp = "2026-04-09T12:00:00Z"
+        built_position = server.build_account_exposure_position(
+            "m2",
+            "no",
+            timestamp,
+            net_size=12.3456789,
+            last_trade_price=0.6000004,
+            last_order_id="ord_built",
+            last_command_id="cmd_built",
+        )
+        built_account = server.build_account_exposure_state(
+            "acct_exposure_build",
+            timestamp,
+            positions={server.account_exposure_position_key("m2", "no"): built_position},
+        )
+
+        self.assertEqual(
+            built_position,
+            {
+                "marketId": "m2",
+                "outcomeId": "no",
+                "netSize": 12.345679,
+                "lastTradePrice": 0.6,
+                "updatedAt": timestamp,
+                "lastOrderId": "ord_built",
+                "lastCommandId": "cmd_built",
+            },
+        )
+        self.assertEqual(
+            built_account,
+            {
+                "accountId": "acct_exposure_build",
+                "updatedAt": timestamp,
+                "positions": {
+                    "m2|no": {
+                        "marketId": "m2",
+                        "outcomeId": "no",
+                        "netSize": 12.345679,
+                        "lastTradePrice": 0.6,
+                        "updatedAt": timestamp,
+                        "lastOrderId": "ord_built",
+                        "lastCommandId": "cmd_built",
+                    }
+                },
+            },
+        )
+
+        server.ACCOUNT_EXPOSURE["acct_exposure_build"] = {
+            "updatedAt": timestamp,
+            "positions": [],
+        }
+        account = server.ensure_account_exposure_state("acct_exposure_build", timestamp)
+        position = server.ensure_account_exposure_position(account, "m1", "yes", timestamp)
+
+        self.assertEqual(account["accountId"], "acct_exposure_build")
+        self.assertEqual(account["positions"], {"m1|yes": position})
+        self.assertEqual(
+            position,
+            {
+                "marketId": "m1",
+                "outcomeId": "yes",
+                "netSize": 0.0,
+                "lastTradePrice": 0.0,
+                "updatedAt": timestamp,
+                "lastOrderId": None,
+                "lastCommandId": None,
+            },
+        )
+
+    def test_build_event_trade_position_net_change_rounds_signed_size_and_zero_boundary(self):
+        net_change = server.build_event_trade_position_net_change(
+            {"netSize": 1.2345678},
+            {"side": "sell", "size": 1.2345678},
+        )
+
+        self.assertEqual(
+            net_change,
+            {
+                "currentNetSize": 1.234568,
+                "signedDelta": -1.234568,
+                "resultingNetSize": 0.0,
+            },
+        )
+
+    def test_preview_event_trade_position_net_change_reads_matching_composite_slice(self):
+        normalized_payload = server.normalize_event_trade_payload(
+            "m1",
+            build_event_trade_body("acct_exposure_preview", "m1", "yes", size=12.5, side="buy"),
+        )
+        server.ACCOUNT_EXPOSURE["acct_exposure_preview"] = {
+            "accountId": "acct_exposure_preview",
+            "updatedAt": "2026-04-09T12:00:00Z",
+            "positions": {
+                "m1|yes": {
+                    "marketId": "m1",
+                    "outcomeId": "yes",
+                    "netSize": 3.3333334,
+                    "lastTradePrice": 0.65,
+                    "updatedAt": "2026-04-09T11:30:00Z",
+                    "lastOrderId": "ord_existing",
+                    "lastCommandId": "cmd_existing",
+                },
+                "m1|no": {
+                    "marketId": "m1",
+                    "outcomeId": "no",
+                    "netSize": 99.0,
+                    "lastTradePrice": 0.35,
+                    "updatedAt": "2026-04-09T11:45:00Z",
+                    "lastOrderId": "ord_other",
+                    "lastCommandId": "cmd_other",
+                },
+            },
+        }
+
+        preview = server.preview_event_trade_position_net_change(
+            "acct_exposure_preview",
+            "m1",
+            normalized_payload,
+        )
+
+        self.assertEqual(
+            preview,
+            {
+                "currentNetSize": 3.333333,
+                "signedDelta": 12.5,
+                "resultingNetSize": 15.833333,
+            },
+        )
+
+    def test_preview_event_trade_position_net_change_defaults_malformed_state_to_zero_without_mutation(self):
+        normalized_payload = server.normalize_event_trade_payload(
+            "m1",
+            build_event_trade_body("acct_exposure_preview_zero", "m1", "yes", size=1.2345678, side="sell"),
+        )
+        server.ACCOUNT_EXPOSURE["acct_exposure_preview_zero"] = {
+            "accountId": "acct_exposure_preview_zero",
+            "updatedAt": "2026-04-09T12:00:00Z",
+            "positions": [],
+        }
+        before_preview = deepcopy(server.ACCOUNT_EXPOSURE)
+
+        preview = server.preview_event_trade_position_net_change(
+            "acct_exposure_preview_zero",
+            "m1",
+            normalized_payload,
+        )
+
+        self.assertEqual(
+            preview,
+            {
+                "currentNetSize": 0.0,
+                "signedDelta": -1.234568,
+                "resultingNetSize": -1.234568,
+            },
+        )
+        self.assertEqual(server.ACCOUNT_EXPOSURE, before_preview)
+
+    def test_event_trade_acceptance_syncs_account_exposure_and_prunes_after_offsetting_sell(self):
+        account_id = "acct_exposure_sync"
+        buy_payload, buy_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=12.5, side="buy"),
+        )
+
+        self.assertEqual(buy_status, 201)
+        self.assertEqual(
+            server.ACCOUNT_EXPOSURE,
+            {
+                account_id: {
+                    "accountId": account_id,
+                    "updatedAt": buy_payload["order"]["filledAt"],
+                    "positions": {
+                        "m1|yes": {
+                            "marketId": "m1",
+                            "outcomeId": "yes",
+                            "netSize": 12.5,
+                            "lastTradePrice": 0.65,
+                            "updatedAt": buy_payload["order"]["filledAt"],
+                            "lastOrderId": buy_payload["order"]["id"],
+                            "lastCommandId": buy_payload["order"]["commandId"],
+                        }
+                    },
+                }
+            },
+        )
+
+        sell_payload, sell_status = server.route_request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=12.5, side="sell"),
+        )
+
+        self.assertEqual(sell_status, 201)
+        self.assertEqual(sell_payload["order"]["price"], 0.65)
+        self.assertEqual(server.ACCOUNT_EXPOSURE, {})
+
+    def test_get_account_exposure_serializes_lexically_sorted_positions_and_account_timestamp(self):
+        account_id = "acct_exposure_view"
+        account_timestamp = "2026-04-09T12:30:00Z"
+        server.ACCOUNT_EXPOSURE[account_id] = {
+            "accountId": account_id,
+            "updatedAt": account_timestamp,
+            "positions": {
+                "m2|yes": {
+                    "marketId": "m2",
+                    "outcomeId": "yes",
+                    "netSize": -3.4567894,
+                    "lastTradePrice": 0.2500004,
+                    "updatedAt": "2026-04-09T09:00:00Z",
+                    "lastOrderId": "ord_2",
+                    "lastCommandId": "cmd_2",
+                },
+                "m1|yes": {
+                    "marketId": "m1",
+                    "outcomeId": "yes",
+                    "netSize": 0.0000004,
+                    "lastTradePrice": 0.65,
+                    "updatedAt": "2026-04-09T08:00:00Z",
+                    "lastOrderId": "ord_zero",
+                    "lastCommandId": "cmd_zero",
+                },
+                "m1|no": {
+                    "marketId": "m1",
+                    "outcomeId": "no",
+                    "netSize": 1.2345678,
+                    "lastTradePrice": 0.3499996,
+                    "updatedAt": "2026-04-09T11:00:00Z",
+                    "lastOrderId": "ord_1",
+                    "lastCommandId": "cmd_1",
+                },
+            },
+        }
+
+        payload, status = server.get_account_exposure(account_id)
+        route_payload, route_status = server.route_request("GET", f"/v1/accounts/{account_id}/exposure")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(route_status, 200)
+        self.assertEqual(route_payload["account"], payload["account"])
+        self.assertEqual(payload["account"]["id"], account_id)
+        self.assertEqual(
+            payload["account"]["exposure"],
+            {
+                "maxPositionSize": 100.0,
+                "updatedAt": account_timestamp,
+                "positions": [
+                    {
+                        "marketId": "m1",
+                        "outcomeId": "no",
+                        "netSize": 1.234568,
+                        "absSize": 1.234568,
+                        "lastTradePrice": 0.35,
+                        "updatedAt": "2026-04-09T11:00:00Z",
+                        "lastOrderId": "ord_1",
+                        "lastCommandId": "cmd_1",
+                    },
+                    {
+                        "marketId": "m2",
+                        "outcomeId": "yes",
+                        "netSize": -3.456789,
+                        "absSize": 3.456789,
+                        "lastTradePrice": 0.25,
+                        "updatedAt": "2026-04-09T09:00:00Z",
+                        "lastOrderId": "ord_2",
+                        "lastCommandId": "cmd_2",
+                    },
+                ],
+            },
+        )
+        self.assertIn("timestamp", payload["meta"])
+
+    def test_get_account_exposure_raises_404_for_missing_or_fully_pruned_projection(self):
+        with self.subTest("missing account"):
+            with self.assertRaises(server.ApiError) as ctx:
+                server.get_account_exposure("acct_missing_exposure")
+
+            error = ctx.exception
+            self.assertEqual(error.status, 404)
+            self.assertEqual(error.code, "account_not_found")
+            self.assertEqual(error.details, {"accountId": "acct_missing_exposure"})
+
+        with self.subTest("only zero rows"):
+            server.ACCOUNT_EXPOSURE["acct_zero_only"] = {
+                "accountId": "acct_zero_only",
+                "updatedAt": "2026-04-09T12:30:00Z",
+                "positions": {
+                    "m1|yes": {
+                        "marketId": "m1",
+                        "outcomeId": "yes",
+                        "netSize": 0.0000004,
+                        "lastTradePrice": 0.65,
+                        "updatedAt": "2026-04-09T08:00:00Z",
+                        "lastOrderId": "ord_zero",
+                        "lastCommandId": "cmd_zero",
+                    }
+                },
+            }
+
+            with self.assertRaises(server.ApiError) as ctx:
+                server.get_account_exposure("acct_zero_only")
+
+            error = ctx.exception
+            self.assertEqual(error.status, 404)
+            self.assertEqual(error.code, "account_not_found")
+            self.assertEqual(error.details, {"accountId": "acct_zero_only"})
+
+    def test_settle_market_account_exposure_prunes_resolved_market_rows_and_updates_survivors(self):
+        timestamp = "2026-04-10T00:00:00Z"
+        server.ACCOUNT_EXPOSURE.update(
+            {
+                "acct_keep": {
+                    "accountId": "acct_keep",
+                    "updatedAt": "2026-04-09T12:00:00Z",
+                    "positions": {
+                        "m1|yes": {
+                            "marketId": "m1",
+                            "outcomeId": "yes",
+                            "netSize": 4.0,
+                            "lastTradePrice": 0.65,
+                            "updatedAt": "2026-04-09T11:00:00Z",
+                            "lastOrderId": "ord_drop",
+                            "lastCommandId": "cmd_drop",
+                        },
+                        "m2|no": {
+                            "marketId": "m2",
+                            "outcomeId": "no",
+                            "netSize": -2.5,
+                            "lastTradePrice": 0.6,
+                            "updatedAt": "2026-04-09T11:30:00Z",
+                            "lastOrderId": "ord_keep",
+                            "lastCommandId": "cmd_keep",
+                        },
+                    },
+                },
+                "acct_prune": {
+                    "accountId": "acct_prune",
+                    "updatedAt": "2026-04-09T12:05:00Z",
+                    "positions": {
+                        "m1|no": {
+                            "marketId": "m1",
+                            "outcomeId": "no",
+                            "netSize": 1.5,
+                            "lastTradePrice": 0.35,
+                            "updatedAt": "2026-04-09T11:10:00Z",
+                            "lastOrderId": "ord_prune",
+                            "lastCommandId": "cmd_prune",
+                        },
+                        "m2|yes": {
+                            "marketId": "m2",
+                            "outcomeId": "yes",
+                            "netSize": 0.0000004,
+                            "lastTradePrice": 0.25,
+                            "updatedAt": "2026-04-09T11:15:00Z",
+                            "lastOrderId": "ord_zero",
+                            "lastCommandId": "cmd_zero",
+                        },
+                    },
+                },
+            }
+        )
+
+        cleanup = server.settle_market_account_exposure("m1", timestamp)
+
+        self.assertEqual(
+            cleanup,
+            [
+                {
+                    "accountId": "acct_keep",
+                    "marketId": "m1",
+                    "removedPositionCount": 1,
+                    "remainingPositionCount": 1,
+                    "pruned": False,
+                },
+                {
+                    "accountId": "acct_prune",
+                    "marketId": "m1",
+                    "removedPositionCount": 1,
+                    "remainingPositionCount": 0,
+                    "pruned": True,
+                },
+            ],
+        )
+        self.assertEqual(
+            server.ACCOUNT_EXPOSURE,
+            {
+                "acct_keep": {
+                    "accountId": "acct_keep",
+                    "updatedAt": timestamp,
+                    "positions": {
+                        "m2|no": {
+                            "marketId": "m2",
+                            "outcomeId": "no",
+                            "netSize": -2.5,
+                            "lastTradePrice": 0.6,
+                            "updatedAt": "2026-04-09T11:30:00Z",
+                            "lastOrderId": "ord_keep",
+                            "lastCommandId": "cmd_keep",
+                        }
+                    },
+                }
+            },
+        )
 
 
 class BayesMarketApiPropertyTests(unittest.TestCase):
@@ -2823,12 +7288,12 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
             baseline_market = deepcopy(server.MARKETS[market_id]["marginals"])
             baseline_account = seed_account_min_asset(account_id, starting_min_asset)
             seeded_preview = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
-
-            payload, status = server.route_request(
-                "POST",
-                f"/v1/markets/{market_id}/orders/probability-edit",
-                body,
-            )
+            with self.assertRaises(server.ApiError) as ctx:
+                server.route_request(
+                    "POST",
+                    f"/v1/markets/{market_id}/orders/probability-edit",
+                    body,
+                )
 
             with self.subTest(
                 case_index=case_index,
@@ -2837,27 +7302,20 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
                 probability=probability,
                 impact_score=impact_score,
             ):
-                self.assertEqual(status, 409)
-                self.assertEqual(payload["error"]["code"], "min_asset_violation")
-                self.assertEqual(payload["result"]["status"], "rejected")
-                self.assertEqual(
-                    payload["error"]["details"]["beforeMinAsset"],
-                    seeded_preview["assetDelta"]["beforeMinAsset"],
+                assert_min_asset_violation_api_error(
+                    self,
+                    ctx.exception,
+                    account_id=account_id,
+                    market_id=market_id,
+                    preview_or_asset_delta=seeded_preview,
                 )
-                self.assertEqual(
-                    payload["error"]["details"]["impactScore"],
-                    seeded_preview["assetDelta"]["impactScore"],
-                )
-                self.assertEqual(
-                    payload["error"]["details"]["afterMinAsset"],
-                    seeded_preview["assetDelta"]["afterMinAsset"],
-                )
-                self.assertLess(payload["error"]["details"]["afterMinAsset"], 0.0)
+                self.assertLess(ctx.exception.details["afterMinAsset"], 0.0)
                 self.assertEqual(server.MARKETS[market_id]["marginals"], baseline_market)
                 self.assertEqual(server.ACCOUNT_RISK[account_id], baseline_account)
                 self.assertEqual(server.ORDERS, {})
-                self.assertEqual(len(server.COMMANDS), 1)
-                self.assertEqual(len(server.EVENTS), 1)
+                self.assertEqual(server.COMMANDS, {})
+                self.assertEqual(server.EVENTS, {})
+                self.assertEqual(server.TERMINAL_OUTCOMES, {})
 
     def test_conditional_probability_edit_property_bypasses_unconditional_guard_after_exact_zero_acceptance(self):
         rng = random.Random(587)
@@ -2974,6 +7432,9 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
             first_risk_payload, first_risk_status = server.route_request("GET", f"/v1/accounts/{account_id}/risk")
             post_first_market = deepcopy(server.MARKETS[market_id]["marginals"])
             post_first_account = deepcopy(server.ACCOUNT_RISK[account_id])
+            post_first_command_count = len(server.COMMANDS)
+            post_first_event_count = len(server.EVENTS)
+            post_first_terminal_count = len(server.TERMINAL_OUTCOMES)
 
             follow_up_outcome_id = rng.choice([outcome["id"] for outcome in server.MARKETS[market_id]["outcomes"]])
             follow_up_probability = pick_probability_distinct_from_current(market_id, follow_up_outcome_id, rng)
@@ -2986,11 +7447,12 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
             follow_up_normalized = server.normalize_probability_edit_payload(market_id, follow_up_body)
             follow_up_preview = server.preview_unconditional_probability_edit(market_id, follow_up_normalized, account_id)
 
-            follow_up_payload, follow_up_status = server.route_request(
-                "POST",
-                f"/v1/markets/{market_id}/orders/probability-edit",
-                follow_up_body,
-            )
+            with self.assertRaises(server.ApiError) as follow_up_ctx:
+                server.route_request(
+                    "POST",
+                    f"/v1/markets/{market_id}/orders/probability-edit",
+                    follow_up_body,
+                )
 
             with self.subTest(
                 case_index=case_index,
@@ -3010,22 +7472,19 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
                 self.assertGreater(follow_up_preview["assetDelta"]["impactScore"], 0.0)
                 self.assertEqual(follow_up_preview["assetDelta"]["beforeMinAsset"], 0.0)
                 self.assertLess(follow_up_preview["assetDelta"]["afterMinAsset"], 0.0)
-                self.assertEqual(follow_up_status, 409)
-                self.assertEqual(follow_up_payload["error"]["code"], "min_asset_violation")
-                self.assertEqual(follow_up_payload["result"]["status"], "rejected")
-                self.assertEqual(follow_up_payload["result"]["reasonCode"], "min_asset_violation")
-                self.assertEqual(follow_up_payload["error"]["details"]["beforeMinAsset"], 0.0)
-                self.assertEqual(
-                    follow_up_payload["error"]["details"]["impactScore"],
-                    follow_up_preview["assetDelta"]["impactScore"],
-                )
-                self.assertEqual(
-                    follow_up_payload["error"]["details"]["afterMinAsset"],
-                    follow_up_preview["assetDelta"]["afterMinAsset"],
+                assert_min_asset_violation_api_error(
+                    self,
+                    follow_up_ctx.exception,
+                    account_id=account_id,
+                    market_id=market_id,
+                    preview_or_asset_delta=follow_up_preview,
                 )
                 self.assertEqual(server.MARKETS[market_id]["marginals"], post_first_market)
                 self.assertEqual(server.ACCOUNT_RISK[account_id], post_first_account)
                 self.assertEqual(len(server.ORDERS), 1)
+                self.assertEqual(len(server.COMMANDS), post_first_command_count)
+                self.assertEqual(len(server.EVENTS), post_first_event_count)
+                self.assertEqual(len(server.TERMINAL_OUTCOMES), post_first_terminal_count)
 
     def test_unconditional_probability_edit_property_preserves_valid_marginal_distribution(self):
         rng = random.Random(584001)
@@ -3042,17 +7501,32 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
             body = build_unconditional_probability_edit_body(account_id, market_id, outcome_id, probability)
             baseline_marginals = deepcopy(server.MARKETS[market_id]["marginals"])
             should_reject = case_index % 2 == 1
+            baseline_command_count = len(server.COMMANDS)
+            baseline_event_count = len(server.EVENTS)
+            baseline_terminal_count = len(server.TERMINAL_OUTCOMES)
+            payload = None
+            status = None
+            preview = None
+            rejection_error = None
 
             if should_reject:
                 normalized_payload = server.normalize_probability_edit_payload(market_id, body)
                 preview = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
                 seed_account_min_asset(account_id, server.round_risk_value(preview["impactScore"] * 0.5))
-
-            payload, status = server.route_request(
-                "POST",
-                f"/v1/markets/{market_id}/orders/probability-edit",
-                body,
-            )
+                preview = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(
+                        "POST",
+                        f"/v1/markets/{market_id}/orders/probability-edit",
+                        body,
+                    )
+                rejection_error = ctx.exception
+            else:
+                payload, status = server.route_request(
+                    "POST",
+                    f"/v1/markets/{market_id}/orders/probability-edit",
+                    body,
+                )
             current_marginals = deepcopy(server.MARKETS[market_id]["marginals"])
 
             with self.subTest(
@@ -3064,10 +7538,17 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
             ):
                 if should_reject:
                     rejected_count += 1
-                    self.assertEqual(status, 409)
-                    self.assertEqual(payload["result"]["status"], "rejected")
-                    self.assertEqual(payload["error"]["code"], "min_asset_violation")
+                    assert_min_asset_violation_api_error(
+                        self,
+                        rejection_error,
+                        account_id=account_id,
+                        market_id=market_id,
+                        preview_or_asset_delta=preview,
+                    )
                     self.assertEqual(current_marginals, baseline_marginals)
+                    self.assertEqual(len(server.COMMANDS), baseline_command_count)
+                    self.assertEqual(len(server.EVENTS), baseline_event_count)
+                    self.assertEqual(len(server.TERMINAL_OUTCOMES), baseline_terminal_count)
                 else:
                     accepted_count += 1
                     self.assertEqual(status, 201)
@@ -3346,7 +7827,7 @@ class BayesMarketApiMarketInvariantTests(unittest.TestCase):
                 self.assertEqual(server.MARKET_EVENT_SEQUENCES[market_id], len(event_ids))
                 self.assertEqual(server.LAST_EVENT_HASHES[market_id], final_event["eventHash"])
 
-    def test_invariant_first_rejection_preserves_market_and_account_state_while_journaling_terminal_event(self):
+    def test_invariant_min_asset_api_error_preserves_market_and_account_state_without_journal_append(self):
         rng = random.Random(584004)
         market_id = "m1"
         market_path = f"/v1/markets/{market_id}/orders/probability-edit"
@@ -3389,51 +7870,31 @@ class BayesMarketApiMarketInvariantTests(unittest.TestCase):
         baseline_head_seq = server.MARKET_EVENT_SEQUENCES[market_id]
         baseline_head_hash = server.LAST_EVENT_HASHES[market_id]
 
-        payload, status = server.route_request("POST", market_path, rejecting_body)
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", market_path, rejecting_body)
         events_payload, events_status = server.route_request("GET", f"/v1/markets/{market_id}/events")
 
-        self.assertEqual(status, 409)
         self.assertEqual(events_status, 200)
-        self.assertEqual(payload["error"]["code"], "min_asset_violation")
-        self.assertEqual(payload["result"]["status"], "rejected")
-        self.assertEqual(payload["result"]["eventType"], "CommandRejected")
-        self.assertEqual(payload["result"]["reasonCode"], "min_asset_violation")
-        self.assertEqual(
-            payload["error"]["details"],
-            {
-                "accountId": rejecting_account_id,
-                "marketId": market_id,
-                "commandId": payload["result"]["commandId"],
-                "riskLimit": rejecting_preview["assetDelta"]["riskLimit"],
-                "beforeMinAsset": rejecting_preview["assetDelta"]["beforeMinAsset"],
-                "impactScore": rejecting_preview["assetDelta"]["impactScore"],
-                "afterMinAsset": rejecting_preview["assetDelta"]["afterMinAsset"],
-            },
+        assert_min_asset_violation_api_error(
+            self,
+            ctx.exception,
+            account_id=rejecting_account_id,
+            market_id=market_id,
+            preview_or_asset_delta=rejecting_preview,
         )
         self.assertEqual(server.MARKETS[market_id], baseline_market)
         self.assertEqual(server.ACCOUNT_RISK[rejecting_account_id], baseline_account)
-        self.assertEqual(len(server.EVENTS), baseline_event_count + 1)
+        self.assertEqual(len(server.EVENTS), baseline_event_count)
+        self.assertEqual(server.MARKET_EVENT_SEQUENCES[market_id], baseline_head_seq)
+        self.assertEqual(server.LAST_EVENT_HASHES[market_id], baseline_head_hash)
+        self.assertEqual(len(events_payload["events"]), baseline_event_count)
+        self.assertEqual(events_payload["events"][-1], server.EVENTS[setup_payload["result"]["eventId"]])
+        self.assertEqual(events_payload["chain"]["headSeq"], baseline_head_seq)
+        self.assertEqual(events_payload["chain"]["headHash"], baseline_head_hash)
+        self.assertEqual(len(server.COMMANDS), 1)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
 
-        rejection_event = server.EVENTS[payload["result"]["eventId"]]
-        self.assertEqual(rejection_event["eventType"], "CommandRejected")
-        self.assertEqual(rejection_event["seq"], baseline_head_seq + 1)
-        self.assertEqual(rejection_event["prevEventHash"], baseline_head_hash)
-        self.assertEqual(
-            rejection_event["payload"],
-            {
-                "reasonCode": "min_asset_violation",
-                "reason": "Edit would produce negative state-contingent assets",
-                "retryHint": "reduce probability target",
-            },
-        )
-        self.assertEqual(server.MARKET_EVENT_SEQUENCES[market_id], rejection_event["seq"])
-        self.assertEqual(server.LAST_EVENT_HASHES[market_id], rejection_event["eventHash"])
-        self.assertEqual(len(events_payload["events"]), baseline_event_count + 1)
-        self.assertEqual(events_payload["events"][-1], rejection_event)
-        self.assertEqual(events_payload["chain"]["headSeq"], rejection_event["seq"])
-        self.assertEqual(events_payload["chain"]["headHash"], rejection_event["eventHash"])
-
-    def test_invariant_first_market_event_can_be_rejection_without_state_mutation(self):
+    def test_invariant_first_market_min_asset_api_error_leaves_journal_empty(self):
         market_id = "m2"
         market_path = f"/v1/markets/{market_id}/orders/probability-edit"
         account_id = "acct_market_empty_journal_reject"
@@ -3454,45 +7915,35 @@ class BayesMarketApiMarketInvariantTests(unittest.TestCase):
         )
         baseline_market = deepcopy(server.MARKETS[market_id])
 
-        payload, status = server.route_request("POST", market_path, rejecting_body)
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", market_path, rejecting_body)
         events_payload, events_status = server.route_request("GET", f"/v1/markets/{market_id}/events")
 
-        self.assertEqual(status, 409)
         self.assertEqual(events_status, 200)
-        self.assertEqual(payload["error"]["code"], "min_asset_violation")
-        self.assertEqual(payload["result"]["status"], "rejected")
+        assert_min_asset_violation_api_error(
+            self,
+            ctx.exception,
+            account_id=account_id,
+            market_id=market_id,
+            preview_or_asset_delta=rejecting_preview,
+        )
         self.assertEqual(server.MARKETS[market_id], baseline_market)
         self.assertEqual(server.ACCOUNT_RISK[account_id], baseline_account)
         self.assertEqual(server.ORDERS, {})
-        self.assertEqual(len(server.EVENTS), 1)
-
-        rejection_event = server.EVENTS[payload["result"]["eventId"]]
-        self.assertEqual(rejection_event["eventType"], "CommandRejected")
-        self.assertEqual(rejection_event["seq"], 1)
-        self.assertEqual(rejection_event["prevEventHash"], server.GENESIS_EVENT_HASH)
-        self.assertEqual(
-            payload["error"]["details"],
-            {
-                "accountId": account_id,
-                "marketId": market_id,
-                "commandId": payload["result"]["commandId"],
-                "riskLimit": rejecting_preview["assetDelta"]["riskLimit"],
-                "beforeMinAsset": rejecting_preview["assetDelta"]["beforeMinAsset"],
-                "impactScore": rejecting_preview["assetDelta"]["impactScore"],
-                "afterMinAsset": rejecting_preview["assetDelta"]["afterMinAsset"],
-            },
-        )
-        self.assertEqual(events_payload["events"], [rejection_event])
+        self.assertEqual(server.EVENTS, {})
+        self.assertEqual(server.COMMANDS, {})
+        self.assertEqual(server.TERMINAL_OUTCOMES, {})
+        self.assertEqual(events_payload["events"], [])
         self.assertEqual(
             events_payload["chain"],
             {
                 "genesisHash": server.GENESIS_EVENT_HASH,
-                "headSeq": 1,
-                "headHash": rejection_event["eventHash"],
+                "headSeq": 0,
+                "headHash": server.GENESIS_EVENT_HASH,
             },
         )
-        self.assertEqual(server.MARKET_EVENT_SEQUENCES[market_id], 1)
-        self.assertEqual(server.LAST_EVENT_HASHES[market_id], rejection_event["eventHash"])
+        self.assertEqual(server.MARKET_EVENT_SEQUENCES.get(market_id, 0), 0)
+        self.assertEqual(server.LAST_EVENT_HASHES.get(market_id, server.GENESIS_EVENT_HASH), server.GENESIS_EVENT_HASH)
 
 
     def test_invariant_canonical_json_hash_is_deterministic_and_order_independent(self):
@@ -3653,14 +8104,62 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
             timeout=timeout,
         )
 
+    def event_trade(self, market_id: str, body: dict, *, timeout: float = 5):
+        return self.request(
+            "POST",
+            f"/v1/markets/{market_id}/orders/event-trade",
+            body,
+            timeout=timeout,
+        )
+
+    def market_close(self, market_id: str, body: dict, *, timeout: float = 5):
+        return self.request(
+            "POST",
+            f"/v1/markets/{market_id}/close",
+            body,
+            timeout=timeout,
+        )
+
     def market_events(self, market_id: str, *, timeout: float = 5):
         return self.request("GET", f"/v1/markets/{market_id}/events", timeout=timeout)
 
     def account_risk(self, account_id: str, *, timeout: float = 5):
         return self.request("GET", f"/v1/accounts/{account_id}/risk", timeout=timeout)
 
+    def account_exposure(self, account_id: str, *, timeout: float = 5):
+        return self.request("GET", f"/v1/accounts/{account_id}/exposure", timeout=timeout)
+
     def run_concurrent_probability_edits(
         self,
+        operations: list[tuple[str, dict[str, object]]],
+        *,
+        hash_delay: float = 0.0,
+        timeout: float = 5,
+    ) -> list[tuple[int, dict[str, object]]]:
+        return self.run_concurrent_requests(
+            self.probability_edit,
+            operations,
+            hash_delay=hash_delay,
+            timeout=timeout,
+        )
+
+    def run_concurrent_event_trades(
+        self,
+        operations: list[tuple[str, dict[str, object]]],
+        *,
+        hash_delay: float = 0.0,
+        timeout: float = 5,
+    ) -> list[tuple[int, dict[str, object]]]:
+        return self.run_concurrent_requests(
+            self.event_trade,
+            operations,
+            hash_delay=hash_delay,
+            timeout=timeout,
+        )
+
+    def run_concurrent_requests(
+        self,
+        request_fn,
         operations: list[tuple[str, dict[str, object]]],
         *,
         hash_delay: float = 0.0,
@@ -3681,7 +8180,7 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
         def worker(index: int, market_id: str, body: dict[str, object]) -> None:
             try:
                 barrier.wait(timeout=timeout)
-                results[index] = self.probability_edit(market_id, body, timeout=timeout)
+                results[index] = request_fn(market_id, body, timeout=timeout)
             except Exception as exc:
                 errors.append(f"{index}: {exc!r}")
 
@@ -3706,6 +8205,311 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
             self.fail("concurrent requests completed without producing full results")
 
         return [result for result in results if result is not None]
+
+    def test_account_exposure_threaded_http_happy_path_matches_direct_route_after_event_trade(self):
+        account_id = "acct_concurrency_http_exposure"
+        path = f"/v1/accounts/{account_id}/exposure"
+        trade_status, trade_payload = self.event_trade(
+            "m1",
+            build_event_trade_body(account_id, "m1", "yes", size=12.5, side="buy"),
+            timeout=10,
+        )
+        http_status, http_payload = self.account_exposure(account_id, timeout=10)
+        direct_payload, direct_status = server.route_request("GET", path)
+
+        self.assertEqual(trade_status, 201)
+        self.assertEqual(trade_payload["result"]["status"], "accepted")
+        self.assertEqual(http_status, 200)
+        self.assertEqual(direct_status, 200)
+        self.assertEqual(http_status, direct_status)
+        self.assertEqual(http_payload["account"], direct_payload["account"])
+
+    def test_account_exposure_threaded_http_unknown_account_returns_structured_error(self):
+        status, payload = self.account_exposure("acct_missing_threaded", timeout=10)
+
+        self.assertEqual(status, 404)
+        self.assertEqual(
+            payload["error"],
+            {
+                "code": "account_not_found",
+                "message": "Account not found",
+                "details": {"accountId": "acct_missing_threaded"},
+            },
+        )
+
+    def test_account_exposure_threaded_http_rejects_non_get_methods(self):
+        status, payload = self.request("POST", "/v1/accounts/acct_threaded/exposure", {}, timeout=10)
+
+        self.assertEqual(status, 405)
+        self.assertEqual(
+            payload["error"],
+            {
+                "code": "method_not_allowed",
+                "message": "POST is not allowed for this resource",
+                "details": {
+                    "method": "POST",
+                    "path": "/v1/accounts/acct_threaded/exposure",
+                },
+            },
+        )
+
+    def assert_market_close_http_rejection_contract(
+        self,
+        payload: dict[str, object],
+        *,
+        idempotency_key: str,
+        code: str,
+        message: str,
+        details: dict[str, object],
+        retry_hint: str,
+    ) -> None:
+        self.assertTrue(payload["result"]["commandId"].startswith("cmd_"))
+        self.assertTrue(payload["result"]["eventId"].startswith("evt_"))
+        self.assertTrue(payload["result"]["emittedAt"].endswith("Z"))
+        self.assertEqual(
+            payload["error"],
+            {
+                "code": code,
+                "message": message,
+                "details": details | {"commandId": payload["result"]["commandId"]},
+            },
+        )
+        self.assertEqual(
+            payload["result"],
+            {
+                "terminal": True,
+                "status": "rejected",
+                "eventType": "CommandRejected",
+                "eventId": payload["result"]["eventId"],
+                "commandId": payload["result"]["commandId"],
+                "emittedAt": payload["result"]["emittedAt"],
+                "reasonCode": code,
+                "reason": message,
+                "retryHint": retry_hint,
+            },
+        )
+        self.assertEqual(payload["meta"]["idempotencyKeyEcho"], idempotency_key)
+
+    def test_market_close_http_replays_same_idempotency_key(self):
+        body = build_market_close_body("ops_http", idempotency_key="idem-threaded-close")
+        expected_market = server.build_closed_market_snapshot(server.MARKETS["m1"])
+
+        first_status, first_payload = self.market_close("m1", body, timeout=10)
+        first_events_status, first_events_payload = self.market_events("m1", timeout=10)
+        second_status, second_payload = self.market_close("m1", body, timeout=10)
+        second_events_status, second_events_payload = self.market_events("m1", timeout=10)
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(first_events_status, 200)
+        self.assertEqual(first_payload["market"], expected_market)
+        self.assertEqual(
+            first_payload["result"],
+            {
+                "terminal": True,
+                "status": "accepted",
+                "eventType": "CommandAccepted",
+                "eventId": first_payload["result"]["eventId"],
+                "commandId": first_payload["result"]["commandId"],
+                "emittedAt": first_payload["result"]["emittedAt"],
+            },
+        )
+        self.assertEqual(first_payload["meta"]["idempotencyKeyEcho"], "idem-threaded-close")
+        self.assertEqual(second_status, 201)
+        self.assertEqual(second_events_status, 200)
+        self.assertEqual(second_payload["market"], first_payload["market"])
+        self.assertEqual(second_payload["result"], first_payload["result"])
+        self.assertEqual(
+            {key: value for key, value in second_payload["meta"].items() if key != "replayed"},
+            first_payload["meta"],
+        )
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(second_events_payload["events"], first_events_payload["events"])
+        self.assertEqual(second_events_payload["chain"], first_events_payload["chain"])
+        self.assertEqual(second_events_payload["pagination"], first_events_payload["pagination"])
+
+    def test_market_close_http_replays_rejected_terminal_outcomes_for_status_conflicts(self):
+        cases = (
+            (
+                "closed",
+                "idem-threaded-close-closed",
+                {"status": "closed"},
+                "market_already_closed",
+                "Market is already closed",
+                {
+                    "marketId": "m1",
+                    "status": "closed",
+                },
+                "reuse the original idempotency key to replay the prior outcome",
+            ),
+            (
+                "draft",
+                "idem-threaded-close-draft",
+                {"status": "draft"},
+                "market_not_closable",
+                "Market can only be closed from active status",
+                {
+                    "marketId": "m1",
+                    "status": "draft",
+                    "allowedStatuses": ["active"],
+                },
+                "close an active market",
+            ),
+            (
+                "resolved",
+                "idem-threaded-close-resolved",
+                {
+                    "status": "resolved",
+                    "resolution": "yes",
+                    "resolutionProbabilities": {"yes": 1.0, "no": 0.0},
+                },
+                "market_not_closable",
+                "Market can only be closed from active status",
+                {
+                    "marketId": "m1",
+                    "status": "resolved",
+                    "allowedStatuses": ["active"],
+                },
+                "close an active market",
+            ),
+        )
+
+        for status_label, idempotency_key, market_updates, expected_code, expected_message, expected_details, retry_hint in cases:
+            with self.subTest(status=status_label):
+                server.reset_state()
+                server.MARKETS["m1"].update(deepcopy(market_updates))
+                body = build_market_close_body("ops_http", idempotency_key=idempotency_key)
+
+                first_status, first_payload = self.market_close("m1", body, timeout=10)
+                first_events_status, first_events_payload = self.market_events("m1", timeout=10)
+                second_status, second_payload = self.market_close("m1", body, timeout=10)
+                second_events_status, second_events_payload = self.market_events("m1", timeout=10)
+
+                self.assertEqual(first_status, 409)
+                self.assertEqual(first_events_status, 200)
+                self.assertEqual(second_status, 409)
+                self.assertEqual(second_events_status, 200)
+                self.assert_market_close_http_rejection_contract(
+                    first_payload,
+                    idempotency_key=idempotency_key,
+                    code=expected_code,
+                    message=expected_message,
+                    details=expected_details,
+                    retry_hint=retry_hint,
+                )
+                self.assertEqual(second_payload["error"], first_payload["error"])
+                self.assertEqual(second_payload["result"], first_payload["result"])
+                self.assertEqual(
+                    {key: value for key, value in second_payload["meta"].items() if key != "replayed"},
+                    first_payload["meta"],
+                )
+                self.assertTrue(second_payload["meta"]["replayed"])
+
+                self.assertEqual(first_events_payload["pagination"]["returned"], 1)
+                self.assertEqual(len(first_events_payload["events"]), 1)
+                first_event = first_events_payload["events"][0]
+                self.assertEqual(first_event["commandId"], first_payload["result"]["commandId"])
+                self.assertEqual(first_event["eventId"], first_payload["result"]["eventId"])
+                self.assertEqual(first_event["eventType"], "CommandRejected")
+                self.assertEqual(
+                    first_event["payload"],
+                    {
+                        "reasonCode": expected_code,
+                        "reason": expected_message,
+                        "retryHint": retry_hint,
+                    },
+                )
+                self.assertEqual(first_event["seq"], 1)
+                self.assertEqual(first_event["prevEventHash"], first_events_payload["chain"]["genesisHash"])
+                self.assertEqual(first_events_payload["chain"]["headSeq"], 1)
+                self.assertEqual(first_events_payload["chain"]["headHash"], first_event["eventHash"])
+                self.assertEqual(second_events_payload["events"], first_events_payload["events"])
+                self.assertEqual(second_events_payload["chain"], first_events_payload["chain"])
+                self.assertEqual(second_events_payload["pagination"], first_events_payload["pagination"])
+
+    def test_concurrent_duplicate_probability_edit_idempotency_key_replays_without_double_append(self):
+        operations = [
+            (
+                "m1",
+                build_unconditional_probability_edit_body(
+                    "acct_concurrency_idem_probability",
+                    "m1",
+                    "yes",
+                    0.8,
+                    idempotency_key="idem-concurrency-probability",
+                ),
+            )
+            for _ in range(2)
+        ]
+
+        responses = self.run_concurrent_probability_edits(operations, hash_delay=0.01, timeout=10)
+        replayed_count = sum(1 for _, payload in responses if payload["meta"].get("replayed"))
+
+        for status, payload in responses:
+            self.assertEqual(status, 201)
+            self.assertEqual(payload["result"]["status"], "accepted")
+
+        self.assertEqual(replayed_count, 1)
+        self.assertEqual({payload["order"]["id"] for _, payload in responses}, {next(iter(server.ORDERS))})
+        self.assertEqual({payload["result"]["commandId"] for _, payload in responses}, set(server.COMMANDS))
+        self.assertEqual({payload["result"]["eventId"] for _, payload in responses}, set(server.EVENTS))
+        self.assertEqual(len(server.ORDERS), 1)
+        self.assertEqual(len(server.COMMANDS), 1)
+        self.assertEqual(len(server.EVENTS), 1)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
+        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.8, "no": 0.2})
+
+        risk_status, risk_payload = self.account_risk("acct_concurrency_idem_probability", timeout=10)
+        events_status, events_payload = self.market_events("m1", timeout=10)
+
+        self.assertEqual(risk_status, 200)
+        self.assertEqual(events_status, 200)
+        self.assertEqual(risk_payload["account"]["risk"]["minAssets"]["markets"][0]["commandCount"], 1)
+        self.assertEqual(events_payload["pagination"]["returned"], 1)
+        self.assertEqual(events_payload["chain"]["headSeq"], 1)
+        self.assertEqual(events_payload["events"][0]["seq"], 1)
+        self.assertEqual(events_payload["events"][0]["prevEventHash"], server.GENESIS_EVENT_HASH)
+        self.assertEqual(events_payload["chain"]["headHash"], events_payload["events"][0]["eventHash"])
+
+    def test_concurrent_duplicate_event_trade_idempotency_key_replays_without_double_append(self):
+        operations = [
+            (
+                "m1",
+                build_event_trade_body(
+                    "acct_concurrency_idem_event_trade",
+                    "m1",
+                    "yes",
+                    idempotency_key="idem-concurrency-event-trade",
+                ),
+            )
+            for _ in range(2)
+        ]
+
+        responses = self.run_concurrent_event_trades(operations, hash_delay=0.01, timeout=10)
+        replayed_count = sum(1 for _, payload in responses if payload["meta"].get("replayed"))
+
+        for status, payload in responses:
+            self.assertEqual(status, 201)
+            self.assertEqual(payload["result"]["status"], "accepted")
+
+        self.assertEqual(replayed_count, 1)
+        self.assertEqual({payload["order"]["id"] for _, payload in responses}, {next(iter(server.ORDERS))})
+        self.assertEqual({payload["result"]["commandId"] for _, payload in responses}, set(server.COMMANDS))
+        self.assertEqual({payload["result"]["eventId"] for _, payload in responses}, set(server.EVENTS))
+        self.assertEqual(len(server.ORDERS), 1)
+        self.assertEqual(len(server.COMMANDS), 1)
+        self.assertEqual(len(server.EVENTS), 1)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
+        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
+        self.assertEqual(server.ACCOUNT_RISK, {})
+
+        events_status, events_payload = self.market_events("m1", timeout=10)
+
+        self.assertEqual(events_status, 200)
+        self.assertEqual(events_payload["pagination"]["returned"], 1)
+        self.assertEqual(events_payload["chain"]["headSeq"], 1)
+        self.assertEqual(events_payload["events"][0]["seq"], 1)
+        self.assertEqual(events_payload["events"][0]["prevEventHash"], server.GENESIS_EVENT_HASH)
+        self.assertEqual(events_payload["chain"]["headHash"], events_payload["events"][0]["eventHash"])
 
     def test_concurrent_same_market_probability_edits_keep_contiguous_seq_and_chain_links(self):
         operations = [
@@ -3827,6 +8631,7 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         server.reset_state()
         self._original_auth_require_agent_id = server.AUTH_REQUIRE_AGENT_ID
         self._original_rate_limit_per_min = server.RATE_LIMIT_PER_MIN
+        self._create_market_title_index = 0
 
     def tearDown(self) -> None:
         server.AUTH_REQUIRE_AGENT_ID = self._original_auth_require_agent_id
@@ -3891,6 +8696,56 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         status, payload, _ = self.request_with_headers(method, path, body, timeout=timeout, headers=headers)
         return status, payload
 
+    def _headers_with_agent_id(self, agent_id: str | None = None) -> dict[str, str]:
+        return {} if agent_id is None else {server.AGENT_ID_HEADER: agent_id}
+
+    def _next_create_market_title(self) -> str:
+        self._create_market_title_index += 1
+        return f"HTTP Auth Create Market {self._create_market_title_index}"
+
+    def create_market(
+        self,
+        *,
+        title: str | None = None,
+        description: str = "A test market",
+        outcomes: list[dict[str, str]] | None = None,
+        expires_at: str = "2026-12-31T23:59:59Z",
+        liquidity: float = 10000.0,
+        agent_id: str | None = None,
+    ):
+        status, payload, _ = self.create_market_with_headers(
+            title=title,
+            description=description,
+            outcomes=outcomes,
+            expires_at=expires_at,
+            liquidity=liquidity,
+            agent_id=agent_id,
+        )
+        return status, payload
+
+    def create_market_with_headers(
+        self,
+        *,
+        title: str | None = None,
+        description: str = "A test market",
+        outcomes: list[dict[str, str]] | None = None,
+        expires_at: str = "2026-12-31T23:59:59Z",
+        liquidity: float = 10000.0,
+        agent_id: str | None = None,
+    ):
+        return self.request_with_headers(
+            "POST",
+            "/v1/markets",
+            build_create_market_body(
+                title=self._next_create_market_title() if title is None else title,
+                description=description,
+                outcomes=outcomes,
+                expires_at=expires_at,
+                liquidity=liquidity,
+            ),
+            headers=self._headers_with_agent_id(agent_id),
+        )
+
     def probability_edit(
         self,
         probability: float,
@@ -3912,11 +8767,120 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         account_id: str = "acct_http_auth",
         agent_id: str | None = None,
     ):
-        headers = {} if agent_id is None else {server.AGENT_ID_HEADER: agent_id}
         return self.request_with_headers(
             "POST",
             "/v1/markets/m1/orders/probability-edit",
             build_unconditional_probability_edit_body(account_id, "m1", "yes", probability),
+            headers=self._headers_with_agent_id(agent_id),
+        )
+
+    def comment_post(
+        self,
+        *,
+        market_id: str = "m1",
+        account_id: str = "acct_http_auth_comment",
+        comment_body: str = "HTTP auth comment",
+        agent_id: str | None = None,
+    ):
+        status, payload, _ = self.comment_post_with_headers(
+            market_id=market_id,
+            account_id=account_id,
+            comment_body=comment_body,
+            agent_id=agent_id,
+        )
+        return status, payload
+
+    def comment_post_with_headers(
+        self,
+        *,
+        market_id: str = "m1",
+        account_id: str = "acct_http_auth_comment",
+        comment_body: str = "HTTP auth comment",
+        agent_id: str | None = None,
+    ):
+        return self.request_with_headers(
+            "POST",
+            f"/v1/markets/{market_id}/comments",
+            {"accountId": account_id, "body": comment_body},
+            headers=self._headers_with_agent_id(agent_id),
+        )
+
+    def event_trade(
+        self,
+        *,
+        market_id: str = "m1",
+        outcome_id: str = "yes",
+        account_id: str = "acct_http_auth_trade",
+        size: float = 12.5,
+        side: str = "buy",
+        agent_id: str | None = None,
+        idempotency_key: str | None = None,
+    ):
+        status, payload, _ = self.event_trade_with_headers(
+            market_id=market_id,
+            outcome_id=outcome_id,
+            account_id=account_id,
+            size=size,
+            side=side,
+            agent_id=agent_id,
+            idempotency_key=idempotency_key,
+        )
+        return status, payload
+
+    def event_trade_with_headers(
+        self,
+        *,
+        market_id: str = "m1",
+        outcome_id: str = "yes",
+        account_id: str = "acct_http_auth_trade",
+        size: float = 12.5,
+        side: str = "buy",
+        agent_id: str | None = None,
+        idempotency_key: str | None = None,
+    ):
+        return self.request_with_headers(
+            "POST",
+            f"/v1/markets/{market_id}/orders/event-trade",
+            build_event_trade_body(
+                account_id,
+                market_id,
+                outcome_id,
+                size=size,
+                side=side,
+                idempotency_key=idempotency_key,
+            ),
+            headers=self._headers_with_agent_id(agent_id),
+        )
+
+    def market_resolution_with_headers(
+        self,
+        *,
+        market_id: str = "m2",
+        account_id: str = "ops_http_auth",
+        outcome_id: str = "delayed",
+        final_probabilities: dict[str, float] | None = None,
+        agent_id: str | None = None,
+    ):
+        return self.request_with_headers(
+            "POST",
+            f"/v1/markets/{market_id}/resolve",
+            build_market_resolution_body(account_id, outcome_id, final_probabilities=final_probabilities),
+            headers=self._headers_with_agent_id(agent_id),
+        )
+
+    def market_close_with_headers(
+        self,
+        *,
+        market_id: str = "m1",
+        account_id: str = "ops_http_auth",
+        idempotency_key: str | None = None,
+        agent_id: str | None = None,
+    ):
+        headers = {} if agent_id is None else {server.AGENT_ID_HEADER: agent_id}
+        return self.request_with_headers(
+            "POST",
+            f"/v1/markets/{market_id}/close",
+            build_market_close_body(account_id, idempotency_key=idempotency_key),
             headers=headers,
         )
 
@@ -3935,6 +8899,24 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         self.assertNotIn("X-RateLimit-Reset", headers)
         self.assertNotIn("X-RateLimit-Policy", headers)
         self.assertNotIn("Retry-After", headers)
+
+    def assert_agent_id_error(
+        self,
+        status: int,
+        payload: dict[str, object],
+        *,
+        code: str,
+        category: str,
+        reason: str | None = None,
+    ) -> None:
+        self.assertEqual(status, 401)
+        self.assertEqual(payload["error"]["code"], code)
+        self.assertEqual(payload["error"]["details"]["header"], server.AGENT_ID_HEADER)
+        self.assertEqual(payload["error"]["details"]["category"], category)
+        if reason is None:
+            self.assertNotIn("reason", payload["error"]["details"])
+        else:
+            self.assertEqual(payload["error"]["details"]["reason"], reason)
 
     def test_probability_edit_http_allows_missing_agent_id_by_default(self):
         server.RATE_LIMIT_PER_MIN = 1
@@ -3961,6 +8943,88 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(payload["result"]["status"], "accepted")
         self.assert_rate_limit_headers(response_headers, limit=2, remaining=1)
+
+    def test_comment_post_http_returns_accepted_comment_contract_with_rate_limit_headers(self):
+        server.RATE_LIMIT_PER_MIN = 2
+
+        status, payload, response_headers = self.comment_post_with_headers(
+            market_id="m1",
+            account_id="acct_http_headers_comment_contract",
+            comment_body="HTTP auth comment contract",
+            agent_id="agent-header-comment-contract",
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(set(payload), {"comment", "meta"})
+        self.assertEqual(
+            set(payload["comment"]),
+            {"commentId", "marketId", "seq", "accountId", "body", "createdAt"},
+        )
+        self.assertEqual(payload["comment"]["marketId"], "m1")
+        self.assertEqual(payload["comment"]["seq"], 1)
+        self.assertEqual(payload["comment"]["accountId"], "acct_http_headers_comment_contract")
+        self.assertEqual(payload["comment"]["body"], "HTTP auth comment contract")
+        self.assertTrue(payload["comment"]["commentId"])
+        self.assertTrue(payload["comment"]["createdAt"].endswith("Z"))
+        self.assertEqual(payload["meta"].keys(), {"timestamp"})
+        self.assertTrue(payload["meta"]["timestamp"].endswith("Z"))
+        self.assert_rate_limit_headers(response_headers, limit=2, remaining=1)
+
+        self.assertEqual(server.MARKET_COMMENT_SEQUENCES["m1"], 1)
+        self.assertEqual(len(server.COMMENTS), 1)
+        self.assertEqual(server.COMMENTS[payload["comment"]["commentId"]], payload["comment"])
+
+    def test_protected_post_routes_emit_rate_limit_headers_on_first_success(self):
+        server.RATE_LIMIT_PER_MIN = 2
+
+        route_requests = (
+            (
+                "create-market",
+                lambda agent_id: self.create_market_with_headers(agent_id=agent_id),
+            ),
+            (
+                "probability-edit",
+                lambda agent_id: self.probability_edit_with_headers(
+                    0.8,
+                    account_id="acct_http_headers_breadth_probability",
+                    agent_id=agent_id,
+                ),
+            ),
+            (
+                "market-resolve",
+                lambda agent_id: self.market_resolution_with_headers(
+                    market_id="m2",
+                    account_id="ops_http_headers_breadth_resolve",
+                    outcome_id="delayed",
+                    agent_id=agent_id,
+                ),
+            ),
+            (
+                "comment-post",
+                lambda agent_id: self.comment_post_with_headers(
+                    market_id="m1",
+                    account_id="acct_http_headers_breadth_comment",
+                    comment_body="HTTP auth breadth comment",
+                    agent_id=agent_id,
+                ),
+            ),
+            (
+                "event-trade",
+                lambda agent_id: self.event_trade_with_headers(
+                    market_id="m1",
+                    outcome_id="yes",
+                    account_id="acct_http_headers_breadth_trade",
+                    agent_id=agent_id,
+                ),
+            ),
+        )
+
+        for label, request in route_requests:
+            with self.subTest(label=label):
+                status, _, response_headers = request(f"agent-header-breadth-{label}")
+
+                self.assertEqual(status, 201)
+                self.assert_rate_limit_headers(response_headers, limit=2, remaining=1)
 
     def test_probability_edit_http_decrements_remaining_quota_headers_per_agent_id(self):
         server.RATE_LIMIT_PER_MIN = 3
@@ -4042,6 +9106,40 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         self.assertEqual(payload["error"]["details"]["header"], server.AGENT_ID_HEADER)
         self.assert_rate_limit_headers_absent(response_headers)
 
+    def test_probability_edit_http_rejects_blank_agent_id_when_required(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+        before_state = snapshot_domain_state()
+
+        status, payload, response_headers = self.probability_edit_with_headers(
+            0.8,
+            account_id="acct_http_auth_blank",
+            agent_id="   ",
+        )
+
+        self.assert_agent_id_error(status, payload, code="blank_agent_id", category=server.TRADE_WRITE_CATEGORY)
+        self.assert_rate_limit_headers_absent(response_headers)
+        assert_domain_state_unchanged(self, before_state)
+
+    def test_probability_edit_http_rejects_malformed_agent_id_when_required(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+        before_state = snapshot_domain_state()
+
+        status, payload, response_headers = self.probability_edit_with_headers(
+            0.8,
+            account_id="acct_http_auth_invalid",
+            agent_id="agent invalid",
+        )
+
+        self.assert_agent_id_error(
+            status,
+            payload,
+            code="invalid_agent_id",
+            category=server.TRADE_WRITE_CATEGORY,
+            reason="invalid_format",
+        )
+        self.assert_rate_limit_headers_absent(response_headers)
+        assert_domain_state_unchanged(self, before_state)
+
     def test_probability_edit_http_accepts_agent_id_when_enabled(self):
         server.AUTH_REQUIRE_AGENT_ID = True
         bad_json_status, bad_json_payload, _ = self.request_raw(
@@ -4060,6 +9158,113 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(payload["result"]["status"], "accepted")
         self.assertEqual(len(server.ORDERS), 1)
+
+    def test_market_resolve_http_requires_valid_agent_id_when_enabled(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+        server.RATE_LIMIT_PER_MIN = 1
+
+        missing_status, missing_payload, missing_headers = self.market_resolution_with_headers(
+            account_id="ops_http_auth_missing",
+        )
+        blank_status, blank_payload, blank_headers = self.market_resolution_with_headers(
+            account_id="ops_http_auth_blank",
+            agent_id="   ",
+        )
+        invalid_status, invalid_payload, invalid_headers = self.market_resolution_with_headers(
+            account_id="ops_http_auth_invalid",
+            agent_id="ops admin",
+        )
+
+        self.assert_agent_id_error(
+            missing_status,
+            missing_payload,
+            code="missing_agent_id",
+            category=server.MARKET_ADMIN_WRITE_CATEGORY,
+        )
+        self.assert_rate_limit_headers_absent(missing_headers)
+        self.assert_agent_id_error(
+            blank_status,
+            blank_payload,
+            code="blank_agent_id",
+            category=server.MARKET_ADMIN_WRITE_CATEGORY,
+        )
+        self.assert_rate_limit_headers_absent(blank_headers)
+        self.assert_agent_id_error(
+            invalid_status,
+            invalid_payload,
+            code="invalid_agent_id",
+            category=server.MARKET_ADMIN_WRITE_CATEGORY,
+            reason="invalid_format",
+        )
+        self.assert_rate_limit_headers_absent(invalid_headers)
+        self.assertEqual(server.MARKETS["m2"]["status"], "active")
+
+    def test_market_resolve_http_omits_rate_limit_headers_when_limiter_disabled(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+
+        status, payload, response_headers = self.market_resolution_with_headers(
+            market_id="m2",
+            account_id="ops_http_auth_valid",
+            outcome_id="delayed",
+            agent_id="agent-admin-valid",
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["id"], "m2")
+        self.assertEqual(payload["market"]["status"], "resolved")
+        self.assertEqual(payload["market"]["resolution"], "delayed")
+        self.assertEqual(payload["result"]["status"], "accepted")
+        self.assert_rate_limit_headers_absent(response_headers)
+        self.assertEqual(server.MARKETS["m2"]["status"], "resolved")
+
+    def test_market_close_http_requires_valid_agent_id_when_enabled(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+
+        missing_status, missing_payload, missing_headers = self.market_close_with_headers(
+            account_id="ops_http_auth_missing",
+        )
+        blank_status, blank_payload, blank_headers = self.market_close_with_headers(
+            account_id="ops_http_auth_blank",
+            agent_id="   ",
+        )
+        invalid_status, invalid_payload, invalid_headers = self.market_close_with_headers(
+            account_id="ops_http_auth_invalid",
+            agent_id="ops admin",
+        )
+        valid_status, valid_payload, valid_headers = self.market_close_with_headers(
+            account_id="ops_http_auth_valid",
+            agent_id="agent-admin-valid",
+        )
+
+        self.assert_agent_id_error(
+            missing_status,
+            missing_payload,
+            code="missing_agent_id",
+            category=server.MARKET_ADMIN_WRITE_CATEGORY,
+        )
+        self.assert_rate_limit_headers_absent(missing_headers)
+        self.assert_agent_id_error(
+            blank_status,
+            blank_payload,
+            code="blank_agent_id",
+            category=server.MARKET_ADMIN_WRITE_CATEGORY,
+        )
+        self.assert_rate_limit_headers_absent(blank_headers)
+        self.assert_agent_id_error(
+            invalid_status,
+            invalid_payload,
+            code="invalid_agent_id",
+            category=server.MARKET_ADMIN_WRITE_CATEGORY,
+            reason="invalid_format",
+        )
+        self.assert_rate_limit_headers_absent(invalid_headers)
+        self.assertEqual(valid_status, 201)
+        self.assertEqual(valid_payload["market"]["id"], "m1")
+        self.assertEqual(valid_payload["market"]["status"], "closed")
+        self.assertEqual(valid_payload["market"], server.MARKETS["m1"])
+        self.assertEqual(valid_payload["result"]["status"], "accepted")
+        self.assertTrue(valid_payload["result"]["terminal"])
+        self.assert_rate_limit_headers_absent(valid_headers)
 
     def test_probability_edit_http_emits_retry_after_and_quota_headers_on_429(self):
         server.AUTH_REQUIRE_AGENT_ID = True
@@ -4131,6 +9336,72 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         self.assertEqual(len(server.ORDERS), 4)
         self.assertEqual(len(server.EVENTS), 4)
 
+    def test_create_market_http_requires_agent_id_when_enabled(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+        market_title = "HTTP Auth Create Market"
+
+        unauthorized_status, unauthorized_payload = self.create_market(title=market_title)
+        authorized_status, authorized_payload = self.create_market(
+            title=market_title,
+            agent_id="agent-create-auth",
+        )
+
+        self.assertEqual(unauthorized_status, 401)
+        self.assertEqual(unauthorized_payload["error"]["code"], "missing_agent_id")
+        self.assertEqual(unauthorized_payload["error"]["details"]["header"], server.AGENT_ID_HEADER)
+        self.assertEqual(authorized_status, 201)
+        self.assertEqual(authorized_payload["market"]["title"], market_title)
+        self.assertEqual(len(server.MARKETS), len(server.INITIAL_MARKETS) + 1)
+
+    def test_market_resolve_http_requires_agent_id_when_enabled(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+        body = build_market_resolution_body("ops_http_auth", "yes")
+
+        unauthorized_status, unauthorized_payload = self.request("POST", "/v1/markets/m1/resolve", body)
+        authorized_status, authorized_payload = self.request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            body,
+            headers={server.AGENT_ID_HEADER: "agent-resolve-auth"},
+        )
+
+        self.assertEqual(unauthorized_status, 401)
+        self.assertEqual(unauthorized_payload["error"]["code"], "missing_agent_id")
+        self.assertEqual(unauthorized_payload["error"]["details"]["header"], server.AGENT_ID_HEADER)
+        self.assertEqual(authorized_status, 201)
+        self.assertEqual(authorized_payload["market"]["status"], "resolved")
+        self.assertEqual(authorized_payload["market"]["resolution"], "yes")
+
+    def test_resolve_write_request_agent_rejects_duplicate_header_lines_when_required(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+        headers = Message()
+        headers.add_header(server.AGENT_ID_HEADER, "agent-dup-a")
+        headers.add_header(server.AGENT_ID_HEADER, "agent-dup-b")
+
+        with self.assertRaises(server.ApiError) as raised:
+            server.resolve_write_request_agent("POST", "/v1/markets/m1/orders/probability-edit", headers)
+
+        error = raised.exception
+        self.assertEqual(error.status, 401)
+        self.assertEqual(error.code, "invalid_agent_id")
+        self.assertEqual(error.details["header"], server.AGENT_ID_HEADER)
+        self.assertEqual(error.details["category"], server.TRADE_WRITE_CATEGORY)
+        self.assertEqual(error.details["reason"], "multiple_values")
+
+    def test_unsupported_post_route_stays_router_not_found_when_auth_enabled(self):
+        server.AUTH_REQUIRE_AGENT_ID = True
+
+        status, payload, response_headers = self.request_with_headers(
+            "POST",
+            "/v1/orders/probability-edit",
+            build_unconditional_probability_edit_body("acct_http_legacy", "m1", "yes", 0.8),
+        )
+
+        self.assertEqual(status, 404)
+        self.assertEqual(payload["error"]["code"], "not_found")
+        self.assertEqual(payload["error"]["details"]["path"], "/v1/orders/probability-edit")
+        self.assert_rate_limit_headers_absent(response_headers)
+
 
 class BayesMarketApiIntegrationTests(unittest.TestCase):
     @classmethod
@@ -4173,6 +9444,28 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             conn.close()
         return response.status, json.loads(response_body), response_headers
 
+    def request_raw(
+        self,
+        method: str,
+        path: str,
+        body: str | bytes | None = None,
+        *,
+        headers: dict[str, str] | None = None,
+    ):
+        conn = HTTPConnection("127.0.0.1", self.port, timeout=5)
+        request_headers = dict(headers or {})
+        request_body = body.encode("utf-8") if isinstance(body, str) else body
+        if request_body is not None:
+            request_headers.setdefault("Content-Type", "application/json")
+        try:
+            conn.request(method, path, body=request_body, headers=request_headers)
+            response = conn.getresponse()
+            response_body = response.read()
+            response_headers = {key: value for key, value in response.getheaders()}
+        finally:
+            conn.close()
+        return response.status, response_body, response_headers
+
     def request(
         self,
         method: str,
@@ -4184,13 +9477,288 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         status, payload, _ = self.request_with_headers(method, path, body, headers=headers)
         return status, payload
 
-    def test_healthz_returns_service_payload(self):
-        status, payload = self.request("GET", "/healthz")
+    def test_legacy_health_http_routes_return_service_payload(self):
+        timestamp_pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$"
+
+        for path in ("/health", "/healthz"):
+            with self.subTest(path=path):
+                status, payload = self.request("GET", path)
+
+                self.assertEqual(status, 200)
+                self.assertEqual(set(payload), {"service", "status", "timestamp"})
+                self.assertEqual(payload["service"], "bayes-market")
+                self.assertEqual(payload["status"], "ok")
+                self.assertIsInstance(payload["timestamp"], str)
+                self.assertRegex(payload["timestamp"], timestamp_pattern)
+
+    def test_v1_health_http_returns_versioned_service_payload(self):
+        status, payload = self.request("GET", "/v1/health")
 
         self.assertEqual(status, 200)
+        self.assertEqual(
+            set(payload),
+            {"service", "status", "timestamp", "version", "uptime_seconds", "components"},
+        )
         self.assertEqual(payload["service"], "bayes-market")
         self.assertEqual(payload["status"], "ok")
-        self.assertTrue(payload["timestamp"].endswith("Z"))
+        self.assertIsInstance(payload["timestamp"], str)
+        self.assertRegex(payload["timestamp"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$")
+        self.assertEqual(payload["version"], server.ENGINE_CONFIG.version)
+        self.assertIsInstance(payload["uptime_seconds"], float)
+        self.assertIsInstance(payload["components"], dict)
+        self.assertEqual(set(payload["components"]), {"db", "inference", "auth"})
+
+    def test_v1_version_http_returns_build_payload(self):
+        status, payload = self.request("GET", "/v1/version")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(set(payload), {"service", "version", "git_sha", "build_timestamp"})
+        self.assertEqual(payload["service"], "bayes-market")
+        self.assertEqual(payload["version"], server.ENGINE_CONFIG.version)
+        self.assertEqual(payload["git_sha"], server.BUILD_GIT_SHA)
+        self.assertEqual(payload["build_timestamp"], server.BUILD_TIMESTAMP)
+        self.assertRegex(payload["build_timestamp"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$")
+        if payload["git_sha"] != "unknown":
+            self.assertRegex(payload["git_sha"], r"^[0-9a-f]{40}$")
+
+    def test_create_market_http_returns_created_market_and_collection_entry(self):
+        body = build_create_market_body(
+            title="Solana ETF Approval in April",
+            description="Will a new Solana ETF be approved in April 2026?",
+            liquidity=42000.0,
+        )
+
+        status, payload = self.request("POST", "/v1/markets", body)
+        detail_status, detail_payload = self.request("GET", f"/v1/markets/{payload['market']['id']}")
+        list_status, list_payload = self.request("GET", "/v1/markets?include_resolved=true")
+
+        self.assertEqual(status, 201)
+        self.assertEqual(detail_status, 200)
+        self.assertEqual(list_status, 200)
+        self.assertEqual(payload["market"]["id"], "m4")
+        self.assertEqual(payload["market"]["title"], body["title"])
+        self.assertEqual(payload["market"]["description"], body["description"])
+        self.assertEqual(payload["market"]["variableId"], "solana_etf_approval_in_april")
+        self.assertEqual(payload["market"]["status"], "active")
+        self.assertEqual(payload["market"]["marginals"], {"yes": 0.5, "no": 0.5})
+        self.assertEqual(payload["market"]["liquidity"], 42000.0)
+        self.assertEqual(payload["market"]["volume"], 0.0)
+        self.assertEqual(detail_payload["market"], payload["market"])
+        self.assertEqual(list_payload["count"], len(server.INITIAL_MARKETS) + 1)
+        self.assertIn("m4", {market["id"] for market in list_payload["markets"]})
+
+    def test_create_market_http_rejects_invalid_payloads_without_side_effects(self):
+        cases = (
+            (
+                "missing_title",
+                {
+                    "description": "A test market",
+                    "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+                    "expires_at": "2026-12-31T23:59:59Z",
+                },
+                "title is required and must be a string",
+            ),
+            (
+                "duplicate_outcome_ids",
+                build_create_market_body(
+                    outcomes=[{"id": "yes", "name": "Yes"}, {"id": "yes", "name": "Still Yes"}],
+                ),
+                "outcome IDs must be unique",
+            ),
+            (
+                "missing_expires_at",
+                {
+                    "title": "No Expiry Market",
+                    "description": "A test market",
+                    "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+                },
+                "expires_at is required (ISO 8601 string)",
+            ),
+        )
+
+        for label, body, expected_message in cases:
+            with self.subTest(label=label):
+                before_state = snapshot_domain_state()
+
+                status, payload = self.request("POST", "/v1/markets", body)
+
+                self.assertEqual(status, 400)
+                self.assertEqual(payload["error"]["code"], "invalid_payload")
+                self.assertEqual(payload["error"]["message"], expected_message)
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_create_market_http_rejects_duplicate_market_variable_id(self):
+        body = build_create_market_body(title="Duplicate Collision Market")
+
+        first_status, first_payload = self.request("POST", "/v1/markets", body)
+        second_status, second_payload = self.request("POST", "/v1/markets", deepcopy(body))
+        list_status, list_payload = self.request("GET", "/v1/markets?include_resolved=true")
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 409)
+        self.assertEqual(list_status, 200)
+        self.assertEqual(second_payload["error"]["code"], "market_already_exists")
+        self.assertEqual(second_payload["error"]["message"], "A market with this title already exists")
+        self.assertEqual(
+            second_payload["error"]["details"],
+            {
+                "title": body["title"],
+                "variableId": first_payload["market"]["variableId"],
+                "existingMarketId": first_payload["market"]["id"],
+            },
+        )
+        self.assertEqual(list_payload["count"], len(server.INITIAL_MARKETS) + 1)
+
+    def test_frontend_spa_routes_serve_index_html(self):
+        status, body, headers = self.request_raw("GET", "/markets/m1")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "text/html")
+        self.assertEqual(headers["Cache-Control"], "no-store")
+        self.assertIn(b'<div id="root"></div>', body)
+        self.assertIn(b'/assets/index-', body)
+
+    def test_frontend_market_routes_emit_market_preview_meta_tags(self):
+        status, body, headers = self.request_raw(
+            "GET",
+            "/markets/m1",
+            headers={"Host": "share.example", "X-Forwarded-Proto": "https"},
+        )
+        html = body.decode("utf-8")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "text/html")
+        self.assertIn("<title>ETH Price &gt; $3000 on March 15</title>", html)
+        self.assertIn(
+            '<meta name="description" content="Will ETH trade above $3000 at any point on March 15, 2026?" />',
+            html,
+        )
+        self.assertIn(
+            '<meta property="og:title" content="ETH Price &gt; $3000 on March 15" />',
+            html,
+        )
+        self.assertIn(
+            '<meta property="og:url" content="https://share.example/markets/m1" />',
+            html,
+        )
+
+    def test_missing_market_frontend_route_keeps_generic_meta_tags(self):
+        status, body, _ = self.request_raw(
+            "GET",
+            "/markets/missing-market",
+            headers={"Host": "share.example", "X-Forwarded-Proto": "https"},
+        )
+        html = body.decode("utf-8")
+
+        self.assertEqual(status, 200)
+        self.assertIn(f"<title>{server.SITE_NAME}</title>", html)
+        self.assertIn(
+            '<meta property="og:url" content="https://share.example/markets/missing-market" />',
+            html,
+        )
+        self.assertIn(
+            f'<meta name="description" content="{server.SITE_DESCRIPTION}" />',
+            html,
+        )
+
+    def test_market_meta_http_route_uses_request_origin_when_unconfigured(self):
+        status, payload = self.request(
+            "GET",
+            "/v1/markets/m1/meta",
+            headers={"Host": "share.example:4444", "X-Forwarded-Proto": "https"},
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["preview"]["marketId"], "m1")
+        self.assertEqual(payload["preview"]["url"], "https://share.example:4444/markets/m1")
+
+    def test_frontend_asset_requests_serve_bundles_with_immutable_cache_headers(self):
+        asset_path = next((server.FRONTEND_DIST / "assets").glob("*.js"))
+
+        status, body, headers = self.request_raw("GET", f"/assets/{asset_path.name}")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "application/javascript")
+        self.assertEqual(headers["Cache-Control"], "public, max-age=31536000, immutable")
+        self.assertEqual(body, asset_path.read_bytes())
+
+    def test_missing_frontend_asset_does_not_fall_back_to_index_html(self):
+        status, body, headers = self.request_raw("GET", "/assets/does-not-exist.js")
+        payload = json.loads(body.decode("utf-8"))
+
+        self.assertEqual(status, 404)
+        self.assertEqual(headers["Content-Type"], "application/json")
+        self.assertEqual(payload["error"]["code"], "not_found")
+
+    def test_frontend_static_handler_blocks_path_traversal_outside_dist(self):
+        probe_path = server.FRONTEND_DIST.parent / f"{server.FRONTEND_DIST.name}-escape-probe.txt"
+        probe_path.write_text("static-traversal-probe", encoding="utf-8")
+        self.addCleanup(lambda: probe_path.unlink(missing_ok=True))
+
+        status, body, headers = self.request_raw("GET", f"/../{probe_path.name}")
+        payload = json.loads(body.decode("utf-8"))
+
+        self.assertEqual(status, 404)
+        self.assertEqual(headers["Content-Type"], "application/json")
+        self.assertEqual(payload["error"]["code"], "not_found")
+        self.assertNotIn(b"static-traversal-probe", body)
+
+    def test_market_detail_http_returns_conditional_marginals_for_context_query(self):
+        context = [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}]
+        post_status, post_payload = self.request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            {
+                "accountId": "acct_http_conditional_market_read",
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": deepcopy(context),
+            },
+        )
+        unconditional_status, unconditional_payload = self.request("GET", "/v1/markets/m1")
+        contextual_status, contextual_payload = self.request(
+            "GET",
+            f"/v1/markets/m1?{build_market_context_query_string(context)}",
+        )
+
+        self.assertEqual(post_status, 201)
+        self.assertEqual(unconditional_status, 200)
+        self.assertEqual(contextual_status, 200)
+        self.assertEqual(unconditional_payload["market"]["marginals"], {"yes": 0.65, "no": 0.35})
+        self.assertEqual(contextual_payload["market"]["marginals"], post_payload["order"]["newMarginals"])
+        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
+        self.assertEqual(
+            server.CONDITIONAL_MARGINALS["m1"][server.context_state_key(context)],
+            post_payload["order"]["newMarginals"],
+        )
+
+    def test_market_detail_http_canonicalizes_context_query_order(self):
+        canonical_context = [
+            {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
+            {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no"},
+        ]
+        server.CONDITIONAL_MARGINALS["m1"] = {
+            server.context_state_key(canonical_context): {"yes": 0.91, "no": 0.09}
+        }
+
+        status, payload = self.request(
+            "GET",
+            "/v1/markets/m1?"
+            + build_market_context_query_string(list(reversed(canonical_context))),
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["market"]["marginals"], {"yes": 0.91, "no": 0.09})
+        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
+
+    def test_market_detail_http_rejects_malformed_context_query(self):
+        status, payload = self.request("GET", "/v1/markets/m1?context=btc_etf_approval_week")
+
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"]["code"], "invalid_query")
+        self.assertEqual(payload["error"]["details"]["parameter"], "context")
+        self.assertEqual(payload["error"]["details"]["index"], 0)
+        self.assertEqual(payload["error"]["details"]["received"], "btc_etf_approval_week")
 
     def test_probability_edit_route_uses_market_scoped_path(self):
         status, payload = self.request(
@@ -4210,6 +9778,336 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["order"]["accountId"], "acct_http")
         self.assertTrue(payload["order"]["commandId"].startswith("cmd_"))
         self.assertTrue(payload["order"]["submittedAt"].endswith("Z"))
+
+    def test_market_resolve_route_uses_market_scoped_path(self):
+        status, payload = self.request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_http", "yes"),
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["id"], "m1")
+        self.assertEqual(payload["market"]["status"], "resolved")
+        self.assertEqual(payload["market"]["resolution"], "yes")
+        self.assertEqual(payload["market"]["resolutionProbabilities"], {"yes": 1.0, "no": 0.0})
+        self.assertEqual(payload["market"]["marginals"], {"yes": 1.0, "no": 0.0})
+        self.assertEqual(payload["result"]["status"], "accepted")
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        self.assertEqual(command["commandType"], "AdminOp")
+        self.assertEqual(command["payload"], expected_market_resolution_payload("m1", "yes"))
+
+    def test_market_reopen_route_uses_market_scoped_path(self):
+        server.MARKETS["m1"]["status"] = "closed"
+
+        status, payload = self.request(
+            "POST",
+            "/v1/markets/m1/reopen",
+            build_market_reopen_body("ops_http"),
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["id"], "m1")
+        self.assertEqual(payload["market"]["status"], "active")
+        self.assertEqual(payload["result"]["status"], "accepted")
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        self.assertEqual(command["commandType"], "AdminOp")
+        self.assertEqual(command["payload"], expected_market_reopen_payload())
+
+    def test_market_reopen_http_replays_rejected_terminal_outcome(self):
+        body = build_market_reopen_body("ops_http", idempotency_key="idem-http-reopen-active")
+
+        first_status, first_payload = self.request("POST", "/v1/markets/m1/reopen", body)
+        second_status, second_payload = self.request("POST", "/v1/markets/m1/reopen", body)
+        events_status, events_payload = self.request("GET", "/v1/markets/m1/events")
+
+        self.assertEqual(first_status, 409)
+        self.assertEqual(second_status, 409)
+        self.assertEqual(events_status, 200)
+        self.assertEqual(first_payload["error"]["code"], "market_not_reopenable")
+        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
+        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(events_payload["events"], [server.EVENTS[first_payload["result"]["eventId"]]])
+        self.assertEqual(events_payload["chain"]["headSeq"], 1)
+
+    def test_market_reopen_http_conflicts_with_prior_admin_op_payload(self):
+        server.MARKETS["m1"]["status"] = "closed"
+        idempotency_key = "idem-http-admin-op-shared"
+
+        resolve_status, resolve_payload = self.request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_http", "yes", idempotency_key=idempotency_key),
+        )
+        reopen_status, reopen_payload = self.request(
+            "POST",
+            "/v1/markets/m1/reopen",
+            build_market_reopen_body("ops_http", idempotency_key=idempotency_key),
+        )
+
+        self.assertEqual(resolve_status, 201)
+        self.assertEqual(reopen_status, 409)
+        self.assertEqual(reopen_payload["error"]["code"], "idempotency_conflict")
+        self.assertEqual(
+            reopen_payload["error"]["details"]["existingCommandId"],
+            resolve_payload["result"]["commandId"],
+        )
+        self.assertEqual(reopen_payload["meta"]["idempotencyKeyEcho"], idempotency_key)
+
+    def test_market_resolve_route_accepts_final_probabilities_body(self):
+        status, payload = self.request(
+            "POST",
+            "/v1/markets/m2/resolve",
+            build_market_resolution_body(
+                "ops_http",
+                final_probabilities={"yes": 0.0, "no": 0.0, "delayed": 1.0},
+            ),
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["market"]["id"], "m2")
+        self.assertEqual(payload["market"]["status"], "resolved")
+        self.assertEqual(payload["market"]["resolution"], "delayed")
+        self.assertEqual(payload["market"]["resolutionProbabilities"], {"yes": 0.0, "no": 0.0, "delayed": 1.0})
+        self.assertEqual(payload["market"]["marginals"], {"yes": 0.0, "no": 0.0, "delayed": 1.0})
+        command = server.COMMANDS[payload["result"]["commandId"]]
+        self.assertEqual(command["payload"], expected_market_resolution_payload("m2", "delayed"))
+
+    def test_market_resolve_route_is_method_not_allowed_for_get(self):
+        status, payload = self.request("GET", "/v1/markets/m1/resolve")
+
+        self.assertEqual(status, 405)
+        self.assertEqual(payload["error"]["code"], "method_not_allowed")
+        self.assertEqual(payload["error"]["details"]["method"], "GET")
+        self.assertEqual(payload["error"]["details"]["path"], "/v1/markets/m1/resolve")
+
+    def test_market_resolve_http_requires_account_id(self):
+        cases = (
+            ("missing", None),
+            ("blank", "   "),
+        )
+
+        for label, account_id in cases:
+            with self.subTest(label=label):
+                body = build_market_resolution_body("ops_http", "yes")
+                if account_id is None:
+                    del body["accountId"]
+                else:
+                    body["accountId"] = account_id
+                before_state = snapshot_domain_state()
+
+                status, payload = self.request("POST", "/v1/markets/m1/resolve", body)
+
+                self.assertEqual(status, 400)
+                self.assertEqual(payload["error"]["code"], "invalid_market_resolution")
+                self.assertEqual(payload["error"]["message"], "accountId is required")
+                self.assertEqual(payload["error"]["details"]["field"], "accountId")
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolve_http_requires_outcome_id(self):
+        cases = (
+            ("missing", None),
+            ("blank", "   "),
+        )
+
+        for label, outcome_id in cases:
+            with self.subTest(label=label):
+                body = build_market_resolution_body("ops_http", "yes")
+                if outcome_id is None:
+                    del body["outcomeId"]
+                else:
+                    body["outcomeId"] = outcome_id
+                before_state = snapshot_domain_state()
+
+                status, payload = self.request("POST", "/v1/markets/m1/resolve", body)
+
+                self.assertEqual(status, 400)
+                self.assertEqual(payload["error"]["code"], "invalid_market_resolution")
+                self.assertEqual(payload["error"]["message"], "outcomeId is required")
+                self.assertEqual(payload["error"]["details"]["field"], "outcomeId")
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolve_http_rejects_malformed_idempotency_key(self):
+        invalid_values = ("", "   ", 123)
+
+        for value in invalid_values:
+            with self.subTest(value=value):
+                body = build_market_resolution_body("ops_http", "yes")
+                body["idempotencyKey"] = value
+                before_state = snapshot_domain_state()
+
+                status, payload = self.request("POST", "/v1/markets/m1/resolve", body)
+
+                self.assertEqual(status, 400)
+                self.assertEqual(payload["error"]["code"], "invalid_market_resolution")
+                self.assertEqual(
+                    payload["error"]["message"],
+                    "idempotencyKey must be a non-empty string when provided",
+                )
+                self.assertEqual(payload["error"]["details"]["field"], "idempotencyKey")
+                assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolve_http_replays_same_idempotency_key(self):
+        body = build_market_resolution_body("ops_http", "yes", idempotency_key="idem-http-resolve")
+
+        first_status, first_payload = self.request("POST", "/v1/markets/m1/resolve", body)
+        second_status, second_payload = self.request("POST", "/v1/markets/m1/resolve", body)
+        events_status, events_payload = self.request("GET", "/v1/markets/m1/events")
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        self.assertEqual(events_status, 200)
+        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
+        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(events_payload["events"], [server.EVENTS[first_payload["result"]["eventId"]]])
+        self.assertEqual(events_payload["chain"]["headSeq"], 1)
+
+    def test_market_resolve_http_rejects_already_resolved_market(self):
+        body = build_market_resolution_body("ops_http", "no", idempotency_key="idem-http-resolved")
+
+        first_status, first_payload = self.request("POST", "/v1/markets/m3/resolve", body)
+        second_status, second_payload = self.request("POST", "/v1/markets/m3/resolve", body)
+
+        self.assertEqual(first_status, 409)
+        self.assertEqual(second_status, 409)
+        self.assertEqual(first_payload["error"]["code"], "market_already_resolved")
+        self.assertEqual(first_payload["error"]["details"]["currentResolution"], "no")
+        self.assertEqual(first_payload["result"]["eventType"], "CommandRejected")
+        self.assertEqual(first_payload["meta"]["idempotencyKeyEcho"], "idem-http-resolved")
+        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
+        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
+        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(server.MARKETS["m3"]["marginals"], {"yes": 0.0, "no": 1.0})
+
+    def test_market_resolve_http_rejects_unknown_outcome_id(self):
+        before_state = snapshot_domain_state()
+
+        status, payload = self.request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_http", "maybe"),
+        )
+
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"]["code"], "invalid_market_resolution")
+        self.assertEqual(payload["error"]["message"], "outcomeId must match a known market outcome")
+        self.assertEqual(
+            payload["error"]["details"],
+            {
+                "field": "outcomeId",
+                "marketId": "m1",
+                "received": "maybe",
+                "allowed": ["no", "yes"],
+            },
+        )
+        assert_domain_state_unchanged(self, before_state)
+
+    def test_market_resolve_http_settles_account_exposure(self):
+        account_id = "acct_http_resolve_risk"
+        post_status, post_payload = self.request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8),
+        )
+        resolved_trade_status, resolved_trade_payload = self.request(
+            "POST",
+            "/v1/markets/m1/orders/event-trade",
+            build_event_trade_body(account_id, "m1", "yes", size=7.0),
+        )
+        retained_trade_status, retained_trade_payload = self.request(
+            "POST",
+            "/v1/markets/m2/orders/event-trade",
+            build_event_trade_body(account_id, "m2", "yes", size=4.0),
+        )
+        pre_resolution_risk_status, pre_resolution_risk_payload = self.request("GET", f"/v1/accounts/{account_id}/risk")
+        pre_resolution_exposure_status, pre_resolution_exposure_payload = self.request(
+            "GET",
+            f"/v1/accounts/{account_id}/exposure",
+        )
+        pre_resolution_account_state = deepcopy(server.ACCOUNT_RISK[account_id])
+        resolve_status, resolve_payload = self.request(
+            "POST",
+            "/v1/markets/m1/resolve",
+            build_market_resolution_body("ops_http", "yes"),
+        )
+        risk_status, risk_payload = self.request("GET", f"/v1/accounts/{account_id}/risk")
+        exposure_status, exposure_payload = self.request("GET", f"/v1/accounts/{account_id}/exposure")
+
+        self.assertEqual(post_status, 201)
+        self.assertEqual(resolved_trade_status, 201)
+        self.assertEqual(retained_trade_status, 201)
+        self.assertEqual(resolve_status, 201)
+        self.assertEqual(pre_resolution_risk_status, 200)
+        self.assertEqual(pre_resolution_exposure_status, 200)
+        self.assertEqual(risk_status, 200)
+        self.assertEqual(exposure_status, 200)
+        self.assertEqual(resolve_payload["market"]["status"], "resolved")
+        self.assertEqual(risk_payload["account"]["id"], account_id)
+        self.assertEqual(
+            [position["marketId"] for position in pre_resolution_exposure_payload["account"]["exposure"]["positions"]],
+            ["m1", "m2"],
+        )
+        self.assertEqual(exposure_payload["account"]["id"], account_id)
+        self.assertEqual(
+            exposure_payload["account"]["exposure"]["positions"],
+            [
+                {
+                    "marketId": "m2",
+                    "outcomeId": "yes",
+                    "netSize": 4.0,
+                    "absSize": 4.0,
+                    "lastTradePrice": retained_trade_payload["order"]["price"],
+                    "updatedAt": retained_trade_payload["order"]["filledAt"],
+                    "lastOrderId": retained_trade_payload["order"]["id"],
+                    "lastCommandId": retained_trade_payload["order"]["commandId"],
+                }
+            ],
+        )
+        self.assertEqual(
+            risk_payload["account"]["risk"]["minAssets"],
+            {
+                "overall": 100.0,
+                "markets": [],
+            },
+        )
+        self.assertEqual(
+            risk_payload["account"]["risk"]["capacityIndicators"],
+            {
+                "limit": 100.0,
+                "available": 100.0,
+                "consumed": 0.0,
+                "utilization": 0.0,
+                "status": "healthy",
+            },
+        )
+        self.assertEqual(risk_payload["account"]["risk"]["updatedAt"], server.ACCOUNT_RISK[account_id]["updatedAt"])
+        self.assertNotEqual(risk_payload["account"]["risk"]["updatedAt"], pre_resolution_risk_payload["account"]["risk"]["updatedAt"])
+        self.assertEqual(server.ACCOUNT_RISK[account_id]["markets"], {})
+        self.assertEqual(
+            server.ACCOUNT_RISK[account_id]["lmsrState"],
+            {
+                "version": server.ACCOUNT_LMSR_LEDGER_VERSION,
+                "riskReadModel": server.ACCOUNT_LMSR_RISK_READ_MODEL,
+                "slices": {},
+            },
+        )
+        self.assertNotEqual(server.ACCOUNT_RISK[account_id], pre_resolution_account_state)
+        self.assertEqual(set(server.ACCOUNT_EXPOSURE[account_id]["positions"]), {"m2|yes"})
+        event = server.EVENTS[resolve_payload["result"]["eventId"]]
+        self.assertEqual(exposure_payload["account"]["exposure"]["updatedAt"], event["payload"]["resolution"]["resolvedAt"])
+        self.assertEqual(
+            event["payload"]["effects"]["assetDelta"],
+            [
+                {
+                    "accountId": account_id,
+                    "marketId": "m1",
+                    "beforeMinAsset": pre_resolution_risk_payload["account"]["risk"]["minAssets"]["overall"],
+                    "afterMinAsset": 100.0,
+                }
+            ],
+        )
 
     def test_probability_edit_legacy_route_is_not_found(self):
         status, payload = self.request(
@@ -4418,7 +10316,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["result"]["eventType"], "CommandRejected")
         self.assertEqual(payload["meta"]["idempotencyKeyEcho"], "idem-resolved")
 
-    def test_probability_edit_http_rejects_unconditional_min_asset_violation(self):
+    def test_probability_edit_http_returns_plain_422_for_unconditional_min_asset_violation(self):
         preview_delta, low_min_asset = seed_low_headroom_account("acct_http_low")
         body = {
             "accountId": "acct_http_low",
@@ -4439,23 +10337,67 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             body,
         )
 
-        self.assertEqual(first_status, 409)
-        self.assertEqual(second_status, 409)
+        self.assertEqual(first_status, 422)
+        self.assertEqual(second_status, 422)
         self.assertEqual(first_payload["error"]["code"], "min_asset_violation")
-        self.assertEqual(first_payload["error"]["details"]["beforeMinAsset"], low_min_asset)
-        self.assertEqual(first_payload["error"]["details"]["impactScore"], preview_delta["impactScore"])
-        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
-        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
-        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(
+            first_payload["error"]["details"],
+            expected_min_asset_violation_details("acct_http_low", "m1", preview_delta),
+        )
+        self.assertEqual(first_payload["error"], second_payload["error"])
+        self.assertNotIn("result", first_payload)
+        self.assertNotIn("result", second_payload)
+        self.assertEqual(set(first_payload["meta"]), {"timestamp"})
+        self.assertEqual(set(second_payload["meta"]), {"timestamp"})
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(
             server.ACCOUNT_RISK["acct_http_low"],
             expected_seeded_account_state("acct_http_low", low_min_asset),
         )
-        self.assertEqual(len(server.COMMANDS), 1)
-        self.assertEqual(len(server.EVENTS), 1)
-        self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
+        self.assertEqual(server.COMMANDS, {})
+        self.assertEqual(server.EVENTS, {})
+        self.assertEqual(server.TERMINAL_OUTCOMES, {})
+        self.assertNotIn(
+            server.idempotency_scope_key("m1", "acct_http_low", "idem-http-low-headroom"),
+            server.IDEMPOTENCY_KEYS,
+        )
+
+    def test_probability_edit_http_repeated_min_asset_violation_omits_terminal_replay_metadata(self):
+        preview_delta, _ = seed_low_headroom_account("acct_http_low_replay_contract")
+        body = {
+            "accountId": "acct_http_low_replay_contract",
+            "idempotencyKey": "idem-http-low-replay-contract",
+            "variableId": "eth_price_gt_3000_mar15",
+            "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+            "context": [],
+        }
+
+        first_status, first_payload = self.request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            body,
+        )
+        second_status, second_payload = self.request(
+            "POST",
+            "/v1/markets/m1/orders/probability-edit",
+            body,
+        )
+
+        self.assertEqual(first_status, 422)
+        self.assertEqual(second_status, 422)
+        self.assertEqual(
+            first_payload["error"]["details"],
+            expected_min_asset_violation_details("acct_http_low_replay_contract", "m1", preview_delta),
+        )
+        self.assertEqual(second_payload["error"], first_payload["error"])
+        self.assertNotIn("result", first_payload)
+        self.assertNotIn("result", second_payload)
+        self.assertEqual(set(first_payload["meta"]), {"timestamp"})
+        self.assertEqual(set(second_payload["meta"]), {"timestamp"})
+        self.assertEqual(server.COMMANDS, {})
+        self.assertEqual(server.EVENTS, {})
+        self.assertEqual(server.TERMINAL_OUTCOMES, {})
 
     def test_probability_edit_http_replays_rejected_idempotency_key(self):
         body = {
@@ -4483,7 +10425,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
         self.assertTrue(second_payload["meta"]["replayed"])
 
-    def test_probability_edit_http_fresh_account_rejection_preserves_state_and_replay_is_stable(self):
+    def test_probability_edit_http_fresh_account_min_asset_violation_preserves_state_without_replay(self):
         account_id = "acct_http_reject_full_chain"
         market_path = "/v1/markets/m1/orders/probability-edit"
         market_status, market_payload = self.request("GET", "/v1/markets/m1")
@@ -4549,17 +10491,16 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         replay_market_status, replay_market_payload = self.request("GET", "/v1/markets/m1")
         replay_events_status, replay_events_payload = self.request("GET", "/v1/markets/m1/events")
 
-        self.assertEqual(first_rejection_status, 409)
+        self.assertEqual(first_rejection_status, 422)
         self.assertEqual(post_rejection_risk_status, 200)
         self.assertEqual(post_rejection_market_status, 200)
         self.assertEqual(post_rejection_events_status, 200)
-        self.assertEqual(replay_status, 409)
+        self.assertEqual(replay_status, 422)
         self.assertEqual(replay_risk_status, 200)
         self.assertEqual(replay_market_status, 200)
         self.assertEqual(replay_events_status, 200)
         self.assertEqual(first_rejection_payload["error"]["code"], "min_asset_violation")
-        self.assertEqual(first_rejection_payload["result"]["status"], "rejected")
-        self.assertEqual(first_rejection_payload["result"]["eventType"], "CommandRejected")
+        self.assertNotIn("result", first_rejection_payload)
         self.assertGreater(first_rejection_payload["error"]["details"]["impactScore"], 0.0)
         self.assertEqual(
             first_rejection_payload["error"]["details"]["beforeMinAsset"],
@@ -4571,28 +10512,12 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             post_rejection_market_payload["market"]["marginals"],
             last_successful_market_payload["market"]["marginals"],
         )
-        self.assertEqual(post_rejection_events_payload["events"][:-1], last_successful_events_payload["events"])
-        self.assertEqual(len(post_rejection_events_payload["events"]), len(last_successful_events_payload["events"]) + 1)
-        self.assertEqual(
-            post_rejection_events_payload["events"][-1]["eventId"],
-            first_rejection_payload["result"]["eventId"],
-        )
-        self.assertEqual(post_rejection_events_payload["events"][-1]["eventType"], "CommandRejected")
-        self.assertEqual(
-            post_rejection_events_payload["events"][-1]["prevEventHash"],
-            last_successful_events_payload["chain"]["headHash"],
-        )
-        self.assertEqual(
-            post_rejection_events_payload["chain"]["headSeq"],
-            last_successful_events_payload["chain"]["headSeq"] + 1,
-        )
-        self.assertEqual(
-            post_rejection_events_payload["chain"]["headHash"],
-            post_rejection_events_payload["events"][-1]["eventHash"],
-        )
-        self.assertEqual(replay_payload["result"]["eventId"], first_rejection_payload["result"]["eventId"])
-        self.assertEqual(replay_payload["result"]["commandId"], first_rejection_payload["result"]["commandId"])
-        self.assertTrue(replay_payload["meta"]["replayed"])
+        self.assertEqual(post_rejection_events_payload["events"], last_successful_events_payload["events"])
+        self.assertEqual(post_rejection_events_payload["chain"], last_successful_events_payload["chain"])
+        self.assertEqual(replay_payload["error"], first_rejection_payload["error"])
+        self.assertNotIn("result", replay_payload)
+        self.assertEqual(set(first_rejection_payload["meta"]), {"timestamp"})
+        self.assertEqual(set(replay_payload["meta"]), {"timestamp"})
         self.assertEqual(replay_risk_payload["account"]["risk"], post_rejection_risk_payload["account"]["risk"])
         self.assertEqual(
             replay_market_payload["market"]["marginals"],
@@ -4999,6 +10924,35 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "method_not_allowed")
         self.assertEqual(payload["error"]["details"]["method"], "POST")
         self.assertEqual(payload["error"]["details"]["path"], "/v1/accounts/acct_http/risk")
+
+    def test_account_exposure_http_unknown_account_returns_structured_error(self):
+        status, payload = self.request("GET", "/v1/accounts/acct_missing/exposure")
+
+        self.assertEqual(status, 404)
+        self.assertEqual(
+            payload["error"],
+            {
+                "code": "account_not_found",
+                "message": "Account not found",
+                "details": {"accountId": "acct_missing"},
+            },
+        )
+
+    def test_account_exposure_http_rejects_non_get_methods(self):
+        status, payload = self.request("POST", "/v1/accounts/acct_http/exposure", {})
+
+        self.assertEqual(status, 405)
+        self.assertEqual(
+            payload["error"],
+            {
+                "code": "method_not_allowed",
+                "message": "POST is not allowed for this resource",
+                "details": {
+                    "method": "POST",
+                    "path": "/v1/accounts/acct_http/exposure",
+                },
+            },
+        )
 
 
 if __name__ == "__main__":

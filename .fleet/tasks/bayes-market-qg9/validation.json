@@ -1,0 +1,16 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.5,
+  "plan_adherence_notes": "Relative to frontend-scaffold, the execution changed only backend/server.py, tests/test_bayes_market_api.py, and frontend/src/lib/api/types.ts. That means plan steps 1 and 2 were completed: the branch adds normalized status/sort/q parsing, status=all aliasing, trimmed case-insensitive title search, descending sort modes, expanded meta.filters, and backend coverage for aliases, duplicates, search, combined filters, and sort order. Plan step 3 was only partial because the frontend types were widened, but frontend/src/lib/api/client.ts still only sends status and frontend/src/lib/query/hooks.ts still keys/fetches only by status. Plan step 4 was not executed because frontend/src/routes/MarketList.tsx remains unchanged and still exposes only the status dropdown with no sort or search controls. Plan step 5 was partial: python3 -m unittest discover -s tests -p 'test_bayes_market_api.py' passed (213 tests), but frontend verification could not run in this checkout because frontend/node_modules is missing and pnpm --dir frontend test -- api-client.test.ts MarketList.test.tsx failed with 'vitest: Permission denied'.",
+  "research_quality": 0.9,
+  "question_completeness": 0.8,
+  "missed_questions": [
+    "If frontend delivery is in scope, what exact MarketList UI contract should ship for sort and q, including whether the current empty-string 'All statuses' option should become an explicit status=all request?",
+    "What frontend acceptance tests are required to prove the client, hooks, and MarketList route actually send the new status/sort/q params end to end?",
+    "How should ties within volume, liquidity, and created sorts be broken so ordering stays deterministic when values are equal?"
+  ],
+  "verdict": "changes_requested",
+  "reason": "The research and plan are coherent, and the backend implementation itself looks correct and is covered by passing backend tests. The branch still falls short of the approved plan because the frontend request path and MarketList UI were not updated, so users cannot exercise the new sort and search parameters from the app and the end-to-end scope described by the plan is incomplete.",
+  "spawn_children": false,
+  "children": []
+}

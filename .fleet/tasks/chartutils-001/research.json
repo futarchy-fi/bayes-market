@@ -1,0 +1,90 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes, tests should pin TZ=UTC to avoid locale-dependent failures. The CI config (.github/workflows/ci.yml) does NOT set any TZ or locale env vars. formatTimestampLabel and formatBucketRangeLabel use toLocaleDateString/toLocaleTimeString with [] as the locale argument (runtime default), so output will differ between CI (ubuntu-latest, likely UTC) and developer machines (various timezones). The simplest fix is to set TZ=UTC either in the test file via beforeAll or as a vitest env variable. An alternative is structural assertions (regex matching for month/day patterns), but pinning TZ=UTC is more robust and lets us assert exact strings, which matches the existing test style in format.test.ts (exact .toBe() assertions, not regex).",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/analytics/chartUtils.ts:41-44",
+        "frontend/src/features/analytics/chartUtils.ts:47",
+        "frontend/src/features/analytics/chartUtils.ts:61-63",
+        ".github/workflows/ci.yml:41-43",
+        "frontend/src/__tests__/format.test.ts:5-7"
+      ],
+      "uncertainty": "Whether setting process.env.TZ in a vitest beforeAll reliably affects toLocaleTimeString in the jsdom environment. Node.js respects TZ for Intl, but jsdom may have edge cases. If it doesn't work, falling back to structural assertions is the backup."
+    },
+    {
+      "question_id": "q2",
+      "answer": "A vitest.config.ts ALREADY EXISTS at frontend/vitest.config.ts with the @ alias configured (resolve.alias: { '@': path.resolve(__dirname, './src') }). The question's premise is partially outdated — there IS a vitest config, separate from vite.config.ts. The test file should use @/ imports, exactly as format.test.ts and other existing tests do. No configuration changes are needed.",
+      "confidence": 1.0,
+      "evidence": [
+        "frontend/vitest.config.ts:7-10",
+        "frontend/src/__tests__/format.test.ts:2"
+      ],
+      "uncertainty": "None — vitest.config.ts exists and is confirmed working with existing @/ imports in test files."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Test the composed behavior directly, without mocking formatCurrency. This matches the existing repo convention: format.test.ts tests formatCurrency with exact value assertions (toBe) and no mocks. formatSignedCurrency is a thin wrapper that adds a '+' prefix for positive values and delegates to formatCurrency. Testing the composed output (e.g., expect(formatSignedCurrency(1500)).toBe('+1.5K')) is clearer, simpler, and consistent with the codebase style. The only mock usage in the repo is for external dependencies (fetch, API client modules), never for pure utility functions.",
+      "confidence": 0.98,
+      "evidence": [
+        "frontend/src/__tests__/format.test.ts:10-14",
+        "frontend/src/features/analytics/chartUtils.ts:67-70",
+        "frontend/src/__tests__/api-client.test.ts:1-2"
+      ],
+      "uncertainty": "None — the convention is clear and unambiguous."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes, tests should verify the fallback path. With noUncheckedIndexedAccess: true in tsconfig.json, the ?? '#818cf8' fallback is there for a reason. The fallback triggers when OUTCOME_COLORS[index % OUTCOME_COLORS.length] returns undefined, which happens in two practical cases: (1) NaN input — NaN % 6 = NaN, and OUTCOME_COLORS[NaN] = undefined. (2) Negative indices — (-1) % 6 = -1 in JavaScript, and OUTCOME_COLORS[-1] = undefined. Both are realistic edge cases (e.g., index from an empty array's length-1, or a calculation that produces NaN). Testing these validates the defensive coding and documents the expected behavior for consumers.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/analytics/chartUtils.ts:13-15",
+        "frontend/src/features/analytics/chartUtils.ts:4-11",
+        "frontend/tsconfig.json:18"
+      ],
+      "uncertainty": "Whether negative index inputs are realistic in the actual call sites. But testing them is cheap and documents behavior regardless."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "No action needed. vitest.config.ts exists at frontend/vitest.config.ts with resolve.alias configured for @/. All existing tests use @/ imports successfully."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "Test file should use: import { describe, it, expect } from 'vitest'; use @/ path aliases; concise one-liner assertions with .toBe(); describe blocks per function. Matches format.test.ts exactly."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.7,
+      "impact": "Structural assertions are a valid fallback, but pinning TZ=UTC is preferred because it matches the repo's style of exact .toBe() assertions. Need to verify that process.env.TZ works in jsdom/vitest. If not, fall back to structural assertions (regex, .toContain())."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "No mocking needed. All functions are pure (formatSignedCurrency composes formatCurrency which is also pure). The repo convention is to not mock pure utility functions."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "Test file goes at frontend/src/__tests__/chartUtils.test.ts. The __tests__/ directory has a flat structure with all test files at the same level."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "OUTCOME_COLORS has exactly 6 entries (lines 4-11). Index 6 should wrap to index 0's color (#818cf8). Test indices 0-5 for distinct colors and index 6 for wrap-around."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

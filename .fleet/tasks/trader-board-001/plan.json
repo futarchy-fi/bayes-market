@@ -1,0 +1,72 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use bare render() from @testing-library/react without any providers, following the AnalyticsSummaryCards.test.tsx pattern.",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Wrapping with renderWithProviders — unnecessary since TraderLeaderboard is purely presentational with no hooks, context, or routing."],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Verify rank numbers (index+1) display correctly in the DOM as part of 'proper ordering' tests.",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Treating rank display as trivial — the task explicitly asks for 'proper ordering' verification."],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Test volume formatting end-to-end by using formatCurrency() to compute expected values and asserting they appear in the DOM, not by mocking formatCurrency.",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Mocking formatCurrency with vi.mock — over-isolation for a pure utility that already has its own test suite in format.test.ts."],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Create a makeRow() factory function for test data, mirroring the makeSummary() pattern from AnalyticsSummaryCards.test.tsx.",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Inline object literals in each test — more repetitive and harder to maintain."],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create frontend/src/__tests__/TraderLeaderboard.test.tsx with imports (vitest, @testing-library/react, TraderLeaderboard, formatCurrency, MarketAnalyticsTraderRow type) and a makeRow() factory function that returns a default MarketAnalyticsTraderRow with overrides support.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add test: 'renders empty state when rows is empty' — render with rows=[], assert 'No accepted activity yet.' is in the document and the table is NOT in the document.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add test: 'renders table headers' — render with one row, assert column headers '#', 'Trader', 'Trades', 'Volume' are present.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Add test: 'renders rows with correct rank numbers' — render with 3 rows, query all rows via data-testid='trader-leaderboard', verify rank cells show 1, 2, 3 in order.",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Add test: 'renders trader accountId, tradeCount, and formatted volume' — render with a row having known values (e.g., volume=56789), assert accountId text, tradeCount text, and formatCurrency(56789) text all appear in the DOM.",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Add test: 'renders formatted volume for large values' — render with a row having volume=2500000, assert formatCurrency(2500000) appears in the DOM (covers M suffix).",
+      "depends_on": [1]
+    },
+    {
+      "step": 7,
+      "task": "Run `npx vitest run --reporter=verbose frontend/src/__tests__/TraderLeaderboard.test.tsx` and verify all tests pass. Fix any failures.",
+      "depends_on": [2, 3, 4, 5, 6]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,39 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should test_alpha.py be a test file (using pytest/unittest) or just a plain module with a function?",
+      "category": "requirements",
+      "why_it_matters": "The 'test_' prefix conventionally indicates a test module, but the description says to create a function greet_alpha() that returns a string, which is not a test pattern. Clarifying intent avoids placing non-test code in a test-named file or vice versa."
+    },
+    {
+      "id": "q2",
+      "question": "Are there any existing coding conventions in the backend package (e.g., docstrings, type hints) that test_alpha.py should follow?",
+      "category": "codebase",
+      "why_it_matters": "Consistency with the existing backend modules (server.py, lmsr.py, etc.) ensures the new file fits the project style."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "test_alpha.py is a plain Python module placed directly in backend/, not in tests/",
+      "confidence": 0.9,
+      "if_wrong": "Would need to place it in tests/ and possibly structure it as a pytest test case instead."
+    },
+    {
+      "id": "a2",
+      "assumption": "greet_alpha() is a simple standalone function with no dependencies on other backend modules",
+      "confidence": 0.95,
+      "if_wrong": "Would need to import and wire up dependencies from the backend package."
+    },
+    {
+      "id": "a3",
+      "assumption": "The return value is the exact string 'Hello Alpha' with no formatting or parameterization",
+      "confidence": 0.95,
+      "if_wrong": "Would need to accept parameters or use a different return format."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

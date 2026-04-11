@@ -1,0 +1,70 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Treat verification as a worktree-local run of `pnpm --dir frontend install` followed by the full `pnpm --dir frontend test` script, with `pnpm --dir frontend build` kept outside the blocking acceptance path for this task.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Run only targeted Vitest files",
+        "Require `pnpm --dir frontend build` to pass before calling the task complete"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use the CI-aligned runtime baseline of Node 22 plus globally installed pnpm and record the runtime versions used in the worktree before running install and test commands.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Treat the host default Node version as authoritative without checking it",
+        "Introduce a new repo-local Node or pnpm pin as part of this verification task"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Run the frontend suite self-contained in the worktree without starting backend services, because the checked-in Vitest setup is jsdom-based and mocks API boundaries.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Start the backend before every frontend test run",
+        "Block verification on adding extra local service bootstrap steps"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Treat install-time lockfile drift or post-install test failures as validation findings to document explicitly, and report results as executed commands, per-test-file outcomes, and the overall Vitest summary instead of widening the task into unrelated frontend remediation.",
+      "based_on": ["q5", "q6", "q7"],
+      "alternatives_rejected": [
+        "Silently commit dependency drift created by `pnpm install`",
+        "Expand the task into open-ended debugging if the suite still fails after a clean install",
+        "Report only a single pass/fail line without suite-level detail"
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Capture the worktree baseline for frontend verification: confirm the current git state, inspect the checked-in frontend test suite surface, and record the Node and pnpm versions that will be used.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Run `pnpm --dir frontend install` in this worktree, then inspect whether tracked frontend artifacts such as `frontend/pnpm-lock.yaml` changed so dependency drift is reported instead of silently absorbed.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Run the full `pnpm --dir frontend test` suite without starting backend services and capture the command output needed for per-test-file and overall Vitest reporting.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Write the validation artifact with the exact commands, runtime context, suite results, and any reproducible drift or failure details, then stage and commit the task outputs.",
+      "depends_on": [2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

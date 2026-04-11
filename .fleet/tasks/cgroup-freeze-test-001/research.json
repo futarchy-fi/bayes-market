@@ -1,0 +1,61 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes, there are clear conventions. Backend modules use: (1) a module-level docstring, (2) `from __future__ import annotations` as the first import, (3) `__all__` exports in subpackage modules (inference/*.py, formula_schema.py). However, the top-level backend/__init__.py is minimal (just a docstring, no re-exports of top-level modules). The existing test_alpha.py already follows these conventions: it has a docstring, uses `from __future__ import annotations`, and defines a simple function. test_beta.py should follow the same pattern. Since these are simple standalone modules (not part of a subpackage), `__all__` is optional but consistent with codebase style.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/__init__.py:1",
+        "backend/test_alpha.py:1-8",
+        "backend/inference/__init__.py:1-57",
+        "backend/formula_schema.py:1-5",
+        "backend/lmsr.py:1-5"
+      ],
+      "uncertainty": "Whether __all__ should be added to these simple single-function modules; existing test_alpha.py does not have __all__ so likely not needed."
+    },
+    {
+      "question_id": "q2",
+      "answer": "They are pure standalone functions with no dependencies. The existing test_alpha.py confirms this: greet_alpha() is a pure function that simply returns a string literal 'Hello Alpha' with no imports beyond `__future__` annotations, no integration with server.py, and no registration with any module system. greet_beta() should follow the identical pattern.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/test_alpha.py:1-8",
+        "backend/server.py:1-50"
+      ],
+      "uncertainty": "None significant. The existing implementation of test_alpha.py is definitive evidence."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Confirmed by existing test_alpha.py: greet_alpha() is a simple standalone function returning a string literal with no external dependencies."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Confirmed: backend/test_alpha.py already exists directly in backend/. test_beta.py should go in the same location."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Confirmed: test_alpha.py returns exactly 'Hello Alpha'. test_beta.py should return exactly 'Hello Beta'."
+    }
+  ],
+  "spawn_children": true,
+  "children": [
+    {
+      "id": "child-alpha",
+      "title": "Create backend/test_alpha.py",
+      "description": "Create backend/test_alpha.py with a function greet_alpha() that returns 'Hello Alpha'"
+    },
+    {
+      "id": "child-beta",
+      "title": "Create backend/test_beta.py",
+      "description": "Create backend/test_beta.py with a function greet_beta() that returns 'Hello Beta'"
+    }
+  ]
+}

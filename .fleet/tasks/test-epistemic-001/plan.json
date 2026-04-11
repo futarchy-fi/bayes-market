@@ -1,0 +1,59 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep `POST /v1/markets/{id}/resolve` backward compatible by accepting both the legacy `{accountId,outcomeId,idempotencyKey?}` body and a new `{accountId,finalProbabilities,idempotencyKey?}` body, then canonicalize both shapes to one stored `AdminOp` payload.",
+      "based_on": ["q1", "q5", "q6"],
+      "alternatives_rejected": [
+        "Replace the body shape in place and break the existing backend/frontend/tests.",
+        "Add a versioned route for this task even though the repo has no versioning path for resolve."
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Validate `finalProbabilities` as a full explicit outcome map: every declared outcome must be present exactly once, values must be finite non-negative numbers, `0` and `1` are allowed, and the sum must equal `1.0` within `abs_tol=1e-9`.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Infer omitted outcomes as `0`.",
+        "Require strict string-exact equality instead of the repo's established tolerance."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Preserve current settlement semantics by only accepting point-mass final distributions for now; add explicit resolved-distribution metadata on market/event surfaces while keeping `market.resolution` for point-mass compatibility.",
+      "based_on": ["q3", "q4", "q5", "q6"],
+      "alternatives_rejected": [
+        "Introduce fractional settlement and account/P&L semantics in this task.",
+        "Drop or retag the existing `resolution` string in place."
+      ],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Update backend resolve normalization to accept both request shapes, canonicalize the stored command payload, validate full distributions, and reject non-point-mass distributions with a structured terminal response while preserving idempotency and route behavior.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Extend resolved market and accepted event payloads with explicit final-probability metadata, then update frontend API types/client code to match the additive read contract.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add and adjust backend and frontend tests for the new payload shape, validation matrix, idempotency canonicalization, and read/event metadata.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Run targeted test suites, inspect diffs, and commit all changes with the required message.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

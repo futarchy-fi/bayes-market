@@ -1,0 +1,132 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Convert entire test file from client-level mocking (vi.mock('@/lib/api/client')) to hook-level mocking (vi.mock('@/lib/query/hooks') + vi.mock('@/features/session/context')). Since vi.mock is hoisted to file scope, mixing approaches in one file is not feasible without jest.isolateModules. All existing tests will be refactored to use hook-level mocks.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Keep client-level mocking for existing tests and add hook-level only for new tests (impossible since vi.mock is hoisted)",
+        "Use jest.isolateModules to mix mocking strategies (adds unnecessary complexity)",
+        "Create a separate test file for new tests (fragmenting coverage for the same component)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Mock useMarket to return { isLoading: true } for loading state test and { error: new Error(...) } for error state test. This gives deterministic control over component branch conditions at lines 25-27 of MarketDetail.tsx.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Mock api.getMarket with never-resolving promise (fragile, timing-dependent)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Test PositionCard and EventRow through the parent MarketDetail component (integration style). They are private/non-exported functions and testing through the parent exercises real prop-passing and integration.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Export PositionCard/EventRow for direct unit testing (changes module public API unnecessarily)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Use userEvent.click() on <tr> elements for EventRow expand/collapse tests. React synthetic events handle click propagation on any element. Ensure test events have non-empty payload objects so the hasPayload guard allows expansion.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Add wrapper clickable elements (unnecessary change to production code)",
+        "Use fireEvent.click instead (userEvent is preferred, fireEvent is fallback)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "'Resolvable market' means status is 'active' or 'closed' AND session.accountId is non-empty. Test with status 'active' and a configured session to verify ResolveMarketPanel shows the 'Resolve Market' heading.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Test only with 'active' status (misses that 'closed' is also resolvable)",
+        "Test ResolveMarketPanel in isolation (already covered by ResolveMarketPanel.test.tsx; this test verifies integration)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Use vi.useFakeTimers() with vi.setSystemTime() for all time-dependent assertions (Volume/Liquidity/Expires display, event timestamps). Set time to a fixed date (e.g., 2025-06-01T12:00:00Z) and use timestamps relative to that. This matches the pattern in DiscussionThread.test.tsx.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Use far-future dates without fake timers (will eventually become stale and cause flaky tests)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d7",
+      "decision": "Mock useSession by spreading vi.importActual to preserve SessionProvider (used by test helpers wrapper) while replacing useSession with vi.fn(). This follows the exact pattern from ResolveMarketPanel.test.tsx lines 13-21.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Mock entire session/context module without importActual (breaks SessionProvider in test wrapper)",
+        "Remove SessionProvider from test wrapper (would require modifying shared helpers.tsx)"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Refactor file-level mocks: replace vi.mock('@/lib/api/client') with hook-level mocks for useMarket, useMarketEvents, useAccountRisk (from '@/lib/query/hooks') and useSession (from '@/features/session/context' with importActual to preserve SessionProvider). Add vi.useFakeTimers()/vi.setSystemTime() in beforeEach and vi.useRealTimers() in afterEach.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Refactor existing 7 tests to work with hook-level mocks. Update beforeEach to set mockUseMarket.mockReturnValue({ data: mockMarket, isLoading: false, error: undefined, ... }), mockUseMarketEvents.mockReturnValue({ data: mockEvents, isLoading: false, ... }), mockUseAccountRisk.mockReturnValue({ data: undefined, isLoading: false, ... }), mockUseSession.mockReturnValue(unconfiguredSession). Verify all 7 existing tests still pass.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add loading state test: mock useMarket to return { isLoading: true, data: undefined, error: undefined }. Assert that LoadingPage spinner is rendered (look for role='status' or the loading indicator).",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Add error state test: mock useMarket to return { isLoading: false, data: undefined, error: new Error('Market not found') }. Assert that ErrorMessage is rendered with 'Market not found' text.",
+      "depends_on": [2]
+    },
+    {
+      "step": 5,
+      "task": "Add Volume/Liquidity/Expires display test: with fake timers set to a known date, assert that 'Volume: $45,000', 'Liquidity: $150,000', and the correct expires timeUntil string are rendered.",
+      "depends_on": [2]
+    },
+    {
+      "step": 6,
+      "task": "Add PositionCard visible test: mock useSession to return configuredSession (isConfigured: true, accountId: 'acc-123'), mock useAccountRisk to return risk data with a MarketRisk entry matching market id 'm1' (including minAsset, utilization, commandCount). Assert 'Your Position' heading, minAsset value, utilization percentage, and trade count are rendered.",
+      "depends_on": [2]
+    },
+    {
+      "step": 7,
+      "task": "Add PositionCard hidden test: mock useSession to return unconfiguredSession (isConfigured: false). Assert 'Your Position' is NOT in the document.",
+      "depends_on": [2]
+    },
+    {
+      "step": 8,
+      "task": "Add EventRow rendering test: mock useMarketEvents to return 2-3 events with seq, type, eventHash, timestamp, and payload. Assert the event table headers (Seq, Type, Hash, Time) and event row data are rendered.",
+      "depends_on": [2]
+    },
+    {
+      "step": 9,
+      "task": "Add EventRow expand/collapse test: with events that have non-empty payloads, use userEvent.click() on a table row to expand it. Assert the payload JSON is visible after click. Click again to collapse and assert payload is hidden.",
+      "depends_on": [8]
+    },
+    {
+      "step": 10,
+      "task": "Add ResolveMarketPanel integration test: mock useSession with configuredSession (accountId set). Assert 'Resolve Market' heading is visible, confirming the panel renders within MarketDetail for a resolvable market.",
+      "depends_on": [2]
+    },
+    {
+      "step": 11,
+      "task": "Run the full test suite (npx vitest run frontend/src/__tests__/MarketDetail.test.tsx) to verify all existing + new tests pass. Fix any failures.",
+      "depends_on": [3, 4, 5, 6, 7, 8, 9, 10]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

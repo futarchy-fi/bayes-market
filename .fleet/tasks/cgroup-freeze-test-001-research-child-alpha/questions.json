@@ -1,0 +1,39 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should test_alpha.py follow any existing testing conventions or patterns from the tests/ directory?",
+      "category": "codebase",
+      "why_it_matters": "The repo has a dedicated tests/ directory; placing a test file in backend/ instead may conflict with project conventions."
+    },
+    {
+      "id": "q2",
+      "question": "Should greet_alpha() be a pure function with no parameters, or should it accept any arguments?",
+      "category": "requirements",
+      "why_it_matters": "The description says 'returns Hello Alpha' but doesn't specify the signature beyond the name."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The file should be created at backend/test_alpha.py exactly as specified, not in the tests/ directory",
+      "confidence": 0.95,
+      "if_wrong": "File would need to be moved to tests/ or another location"
+    },
+    {
+      "id": "a2",
+      "assumption": "greet_alpha() is a simple no-argument function returning the string 'Hello Alpha'",
+      "confidence": 0.95,
+      "if_wrong": "Function signature or return value would need adjustment"
+    },
+    {
+      "id": "a3",
+      "assumption": "No additional imports, classes, or boilerplate are needed beyond the function definition",
+      "confidence": 0.9,
+      "if_wrong": "May need to add imports or register the function somewhere"
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

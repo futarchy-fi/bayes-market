@@ -1,0 +1,33 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should test_beta.py follow the exact same structure as test_alpha.py (docstrings, future annotations import)?",
+      "category": "requirements",
+      "why_it_matters": "Consistency with existing test_alpha.py ensures uniform code style across the backend."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "test_beta.py should mirror the structure of test_alpha.py exactly, substituting 'Alpha' for 'Beta'.",
+      "confidence": 0.95,
+      "if_wrong": "Minor style differences; easy to adjust."
+    },
+    {
+      "id": "a2",
+      "assumption": "The file should be placed at backend/test_beta.py (same directory level as test_alpha.py).",
+      "confidence": 0.99,
+      "if_wrong": "Wrong file location; trivial to move."
+    },
+    {
+      "id": "a3",
+      "assumption": "The function greet_beta() returns the exact string 'Hello Beta' with no formatting or arguments.",
+      "confidence": 0.99,
+      "if_wrong": "Return value mismatch; trivial to fix."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Does step 5 assume the upstream frontend/backend refresh has already landed `include_resolved` across `backend/server.py`, `tests/test_bayes_market_api.py`, `frontend/src/lib/api/types.ts`, `frontend/src/lib/marketListFilters.ts`, `frontend/src/lib/api/client.ts`, and the affected route tests, or must this branch backfill those seams first because the current checkout still only supports `{ status, sort, q }`?",
+      "category": "codebase",
+      "why_it_matters": "The requested verification slices are defined around default resolved exclusion and invalid `include_resolved` handling, but none of that contract exists in the checked-out server, shared frontend filters, or current test names."
+    },
+    {
+      "id": "q2",
+      "question": "What exact unittest selectors are the later execution step supposed to run inside `tests.test_bayes_market_api.BayesMarketApiUnitTests`, given that the current file does not yet contain named methods for default exclusion, explicit inclusion, resolved-status normalization, or invalid `include_resolved` inputs?",
+      "category": "requirements",
+      "why_it_matters": "An execution step cannot reliably run the backend slice until the canonical method names are known; the repo currently only has the older `/v1/markets` tests without any `include_resolved` coverage."
+    },
+    {
+      "id": "q3",
+      "question": "If the listed frontend command still fails after the referenced refresh because supporting seams such as query-key normalization or API-client serialization were not updated, is step 5 allowed to patch those tests/helpers, or should it stop and report unmet prerequisites instead of broadening scope?",
+      "category": "requirements",
+      "why_it_matters": "The task title frames this as focused verification after a refresh, but the current checkout suggests the refresh has not fully landed, so the allowed recovery path determines whether this remains execution-only."
+    },
+    {
+      "id": "q4",
+      "question": "For the `frontend/src/__tests__/MarketDetail.test.tsx` slice, should the nested `useMarkets()` consumers in `frontend/src/features/assumptions/AssumptionPanel.tsx` and `frontend/src/features/graph/BayesNetGraph.tsx` stay on the new default hidden-resolved behavior, or should one of them opt into resolved markets so a resolved market detail page still shows the broader network context?",
+      "category": "design",
+      "why_it_matters": "`MarketDetail.tsx` itself does not list markets, but those two child components do; their resolved-visibility decision is what makes `MarketDetail.test.tsx` relevant to this verification step."
+    },
+    {
+      "id": "q5",
+      "question": "Should the verification boundary remain exactly the named backend methods plus `pnpm test -- src/__tests__/api-client.test.ts src/__tests__/MarketList.test.tsx src/__tests__/System.test.tsx src/__tests__/MarketDetail.test.tsx`, or are shared regressions such as `frontend/src/__tests__/query-hooks.test.ts` expected once `includeResolved` changes filter normalization and query keys?",
+      "category": "requirements",
+      "why_it_matters": "The listed frontend files cover route behavior, but the shared market-list contract also flows through query-key normalization and search-param helpers, so the execution gate is ambiguous unless the verification surface is fixed explicitly."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This phase only needs to create and commit `.fleet/tasks/bayes-market-0zg-execute-step-5-execute-step-5/questions.json` rather than run the verification commands yet.",
+      "confidence": 0.99,
+      "if_wrong": "The task would require an execution artifact or immediate test runs in addition to the question-generation output."
+    },
+    {
+      "id": "a2",
+      "assumption": "Step 5 is intended to sit on top of earlier production and test refresh work that already introduced `include_resolved` to the backend parser and the shared frontend market-list utilities.",
+      "confidence": 0.97,
+      "if_wrong": "The later execution step cannot succeed as written, and this branch would need to implement missing backend/frontend seams before any named verification command exists."
+    },
+    {
+      "id": "a3",
+      "assumption": "If the later execution step is truly verification-only, a failure caused by the missing `include_resolved` contract should be reported as an unmet prerequisite rather than treated as permission to broaden into unrelated refactors.",
+      "confidence": 0.82,
+      "if_wrong": "Step 5 would implicitly allow reopening production code and additional tests beyond the stated focused command set."
+    },
+    {
+      "id": "a4",
+      "assumption": "`MarketDetail.test.tsx` is included because `AssumptionPanel` and `BayesNetGraph` indirectly depend on `useMarkets()`, not because `MarketDetail.tsx` itself calls `listMarkets` directly.",
+      "confidence": 0.88,
+      "if_wrong": "The test list is either broader than necessary or there is another indirect dependency in the detail route that still needs to be identified."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

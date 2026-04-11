@@ -1,0 +1,15 @@
+[Task bayes-t548-v2-execute-t548-v2-r2-server-migration] PHASE 3b: IMPLEMENT
+Title: Migrate server synthetic helpers to inference module
+
+Read your plan at .fleet/tasks/bayes-t548-v2-execute-t548-v2-r2-server-migration/plan.json.
+
+NOW IMPLEMENT the plan. Modify production source files. Run tests.
+Do NOT just write JSON artifacts. Modify .py/.ts/.js source files.
+Follow the steps in plan.json and write real, working code.
+
+DEPENDENCIES: If tests require packages (node_modules, venv), install them first:
+  - Node: if package.json exists, run 'pnpm install' or 'npm install'
+  - Python: if requirements.txt exists, run 'pip install -r requirements.txt'
+Worktrees are fresh checkouts without dependencies pre-installed.
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "execute: bayes-t548-v2-execute-t548-v2-r2-server-migration"

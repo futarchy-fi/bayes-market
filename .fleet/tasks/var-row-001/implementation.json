@@ -1,0 +1,48 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Create test file with module-level mocks, fixtures, defaultMutationState helper, and renderVariableRow helper with AssumptionProvider/Seeder pattern",
+      "files_created": ["frontend/src/__tests__/VariableRow.test.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Write rendering tests: returns null when no data; renders title and outcomes with probabilities; renders (current) for target; no (current) for non-target",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/VariableRow.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Write assumption toggle tests: Assume button renders for each outcome; clicking adds assumption with badge and button text change; clicking again removes; no Assume button for target market",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/VariableRow.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Write edit flow tests: Edit button when configured; hidden when not; clicking shows slider/Set/Cancel; slider updates probability; Set calls mutate with correct payload; conditional variableId for isTargetMarket; Cancel hides slider",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/VariableRow.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Write mutation feedback tests: pending shows … and disabled; success shows orderId; error shows error.message for Error; error shows 'Edit failed' for non-Error",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/VariableRow.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Run vitest — all 19 tests pass",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}

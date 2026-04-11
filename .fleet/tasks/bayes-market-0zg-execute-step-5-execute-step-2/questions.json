@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Does this step assume the hidden-resolved production contract has already landed in the shared market-list path (`useMarkets`, `listMarkets`, and `GET /v1/markets`), or must that behavior be backfilled before `frontend/src/__tests__/MarketList.test.tsx` can be rewritten against it?",
+      "category": "codebase",
+      "why_it_matters": "In the current checkout, `useMarkets` and `listMarkets` still default to `{}`, and the backend list contract still includes resolved rows on the default `/v1/markets` response, so a test that expects `listMarkets(undefined)` and no resolved cards cannot pass without upstream implementation changes."
+    },
+    {
+      "id": "q2",
+      "question": "Should the default-request assertion be literally `listMarkets(undefined)`, or is the real requirement only that no explicit status filter is applied on the initial load?",
+      "category": "requirements",
+      "why_it_matters": "Vitest distinguishes a zero-argument call, an explicit `undefined` argument, and `{}`; that choice changes both the matcher in the test and the production call signature the route and hook must use."
+    },
+    {
+      "id": "q3",
+      "question": "What exact per-request fixture contract should the new request-aware `listMarkets` mock mirror: only different `markets` arrays, or full `MarketListResponse` envelopes with matching `count` and `meta.filters` for the default, `status=active`, and `status=resolved` requests?",
+      "category": "design",
+      "why_it_matters": "The current suite reuses one mixed fixture for every request, but the task explicitly asks for contract-consistent fixtures, which likely requires the mock responses to stay internally consistent with the backend response shape."
+    },
+    {
+      "id": "q4",
+      "question": "Is `frontend/src/__tests__/MarketList.test.tsx` intentionally being narrowed to the new resolved-visibility behavior, or should it keep the existing URL hydration, sort, and debounced search assertions alongside the new default and explicit-status proofs?",
+      "category": "requirements",
+      "why_it_matters": "The file currently covers status, sort, and search behaviors together; switching to request-aware mocks is easier if the intended coverage boundary is explicit, and dropping or relocating those assertions changes the overall frontend test matrix."
+    },
+    {
+      "id": "q5",
+      "question": "Should this suite stay focused on the `active` and `resolved` selections named in the task, or also keep proving that the still-exposed `closed` and `draft` dropdown options continue to issue `{ status: ... }` requests correctly?",
+      "category": "requirements",
+      "why_it_matters": "The route and shared types still expose four status values, but the task wording only names two of them, so it is unclear whether narrowing the suite would be intentional focus or lost compatibility coverage."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This test refresh is meant to sit on top of an earlier behavior change where the default market list hides resolved rows while explicit `status` selections still drive resolved discoverability.",
+      "confidence": 0.73,
+      "if_wrong": "Rewriting the test now will either fail against the current implementation or freeze behavior that the product has not actually adopted."
+    },
+    {
+      "id": "a2",
+      "assumption": "The rewritten mock should branch on the exact `listMarkets` input and return backend-shaped `MarketListResponse` envelopes whose `markets`, `count`, and `meta` stay aligned with that request.",
+      "confidence": 0.93,
+      "if_wrong": "A looser mock strategy would be acceptable, but the suite would no longer prove the task's stated contract consistency."
+    },
+    {
+      "id": "a3",
+      "assumption": "Resolved-market discoverability in `MarketList` still comes from the existing status dropdown, not from a new dedicated toggle or extra query parameter in this step.",
+      "confidence": 0.84,
+      "if_wrong": "The route and tests need broader UI and URL-state changes than the task title implies."
+    },
+    {
+      "id": "a4",
+      "assumption": "The public status model remains `active`, `resolved`, `closed`, and `draft`; this step is only re-centering the test around the new default hidden-resolved behavior rather than redefining the status contract.",
+      "confidence": 0.79,
+      "if_wrong": "The route's dropdown options or expected request shapes changed too, and the suite needs a broader rewrite than just fixture and mock behavior."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

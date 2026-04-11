@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact preserved test selector is the decision gate for this step: the full `BayesMarketApiAuthRateLimitTests` class, only the existing ProbabilityEdit limiter/absence-path tests plus `test_unsupported_post_route_stays_router_not_found_when_auth_enabled`, or some broader selector inherited from the earlier steps?",
+      "category": "requirements",
+      "why_it_matters": "The brief says to patch `backend/server.py` only if preserved tests reveal a real regression, and the current local auth/rate-limit class is green, so the accepted gate determines whether any backend work is warranted at all."
+    },
+    {
+      "id": "q2",
+      "question": "If the preserved gate remains green on this branch, is the intended outcome for this step an explicit no-op with no `backend/server.py` changes, or is there still an expectation to proactively harden the shared protected-write seam despite no reproduced failure?",
+      "category": "requirements",
+      "why_it_matters": "A proactive refactor would broaden the scope from regression repair to speculative hardening, which conflicts with the task's conditional wording."
+    },
+    {
+      "id": "q3",
+      "question": "If a regression is reproduced later, is the frozen contract still that quota headers appear only on successful protected POSTs and on `429 rate_limit_exceeded`, while missing/blank/invalid agent-id failures, disabled-limiter mode, and unsupported POST routes remain header-free?",
+      "category": "requirements",
+      "why_it_matters": "Any backend patch in `handle_api()` or `rate_limit_headers(...)` is only safe if the header-presence boundary is fixed up front; otherwise the fix could accidentally widen quota headers onto negative paths."
+    },
+    {
+      "id": "q4",
+      "question": "Does 'without introducing route-local special cases' mean this phase is strictly limited to the shared seam inside `resolve_write_request_agent(...)`, `_enforce_write_controls()`, `rate_limit_headers(...)`, or `BayesHandler.handle_api()`, with route handlers and `route_request(...)` explicitly out of scope?",
+      "category": "codebase",
+      "why_it_matters": "The current backend already centralizes protected-write auth and limiter behavior before dispatch, so clarifying the allowed edit surface prevents a route-specific workaround from sneaking in if a failure is found."
+    },
+    {
+      "id": "q5",
+      "question": "Should the existing ProbabilityEdit tests remain the sole shared limiter regression seam for remaining-quota decrement, `429` responses, `Retry-After`, and per-agent isolation, with other routes serving only as auth/unsupported-route sentinels rather than gaining duplicate limiter assertions in this step?",
+      "category": "design",
+      "why_it_matters": "The task description points at the current ProbabilityEdit tests as the shared seam, and duplicating that matrix elsewhere would change this phase from backend-regression triage into broader coverage expansion."
+    },
+    {
+      "id": "q6",
+      "question": "If a future failure appears only on a non-ProbabilityEdit protected route while the ProbabilityEdit limiter tests stay green, should that still be treated as a shared-seam backend regression to fix centrally, or as evidence that an adjacent route test drifted away from the canonical contract?",
+      "category": "design",
+      "why_it_matters": "The current runtime path is shared across protected POST routes, so distinguishing between a real shared-seam failure and route-local test drift matters before changing `backend/server.py`."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "There is no currently reproduced protected-write backend regression on this branch: the focused preserved selector passed (`9 passed`) and the full `BayesMarketApiAuthRateLimitTests` class also passed (`18 passed`).",
+      "confidence": 0.99,
+      "if_wrong": "Treating the next phase as a no-op would be unsafe; the failing selector would need to be reproduced and used to drive a backend fix."
+    },
+    {
+      "id": "a2",
+      "assumption": "The protected-write contract is still that missing/blank/invalid agent ids and unsupported POST routes stay header-free, successful protected writes emit quota headers only when the limiter is enabled and an agent id is present, and `429 rate_limit_exceeded` adds both `Retry-After` and quota headers.",
+      "confidence": 0.98,
+      "if_wrong": "A backend patch could preserve the wrong response-shape boundary and either suppress required headers on success/429 paths or leak them onto ordinary failures."
+    },
+    {
+      "id": "a3",
+      "assumption": "Any legitimate repair for this step belongs in the shared `backend/server.py` control flow rather than in route handlers, because `_enforce_write_controls()` runs before `route_request(...)` and `BayesHandler.handle_api()` owns quota-header emission.",
+      "confidence": 0.98,
+      "if_wrong": "The codebase contains a route-specific bypass that the current audit missed, and a central patch alone would not restore the preserved contract."
+    },
+    {
+      "id": "a4",
+      "assumption": "The existing ProbabilityEdit tests are intentionally the canonical limiter regression seam for remaining-quota decrement, `429`, `Retry-After`, and per-agent isolation, so this phase should not broaden that matrix onto other routes unless the task owner explicitly widens scope.",
+      "confidence": 0.96,
+      "if_wrong": "The later implementation would need additional multi-route limiter assertions, and relying on the current ProbabilityEdit slice would leave required coverage missing."
+    },
+    {
+      "id": "a5",
+      "assumption": "If the preserved gate remains green, the acceptable execute-phase outcome is likely a verified no-op rather than a speculative refactor.",
+      "confidence": 0.9,
+      "if_wrong": "The next phase would need to make proactive backend changes even without a reproduced regression, which materially changes the step's purpose and review standard."
+    },
+    {
+      "id": "a6",
+      "assumption": "The canonical unsupported-route sentinel is still `POST /v1/orders/probability-edit`, which remains outside `resolve_write_route_category(...)` and therefore should keep router-level `404 not_found` behavior with no quota headers even when auth is enabled.",
+      "confidence": 0.95,
+      "if_wrong": "The step would need a broader unsupported-route definition, and preserving only the legacy probability-edit path would under-specify the absence-path contract."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

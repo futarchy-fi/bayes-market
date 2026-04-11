@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "For testing inline styles (orange beacon background, green glow boxShadow, red beacon), should I use element.style assertions via testing-library's container queries, or is there a preferred style-testing utility in this project?",
+      "category": "codebase",
+      "why_it_matters": "The health beacon uses inline styles for color (background) and glow (boxShadow). Testing inline styles requires accessing the DOM element directly. Need to confirm the right assertion approach to avoid brittle tests."
+    },
+    {
+      "id": "q2",
+      "question": "For loading state tests, should I use a never-resolving promise (new Promise(() => {})) to keep the component in loading state, or is there a different pattern used in this test suite?",
+      "category": "codebase",
+      "why_it_matters": "Testing 'Checking...' text and orange beacon requires the health query to stay in loading state. The approach for simulating pending async state affects test reliability and must match the project's existing patterns."
+    },
+    {
+      "id": "q3",
+      "question": "For the error state test, should the mock reject with a standard Error('message') or with the project's custom BayesApiError class?",
+      "category": "codebase",
+      "why_it_matters": "System.tsx checks `health.error instanceof Error` (line 56) to decide between showing error.message or 'Connection failed'. The mock rejection type determines which branch is tested."
+    },
+    {
+      "id": "q4",
+      "question": "Should the formatCurrency test verify the actual formatted string output (e.g. '2.0K' for volume 2000) or just verify that the value appears in the document?",
+      "category": "requirements",
+      "why_it_matters": "formatCurrency is already unit-tested separately. The System test could either verify the formatted output matches expectations (integration-style) or just check that formatted values render. This affects test scope and coupling."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Continue mocking at the @/lib/api/client level (getHealth, getServiceIndex, listMarkets) rather than mocking the hooks directly, matching the existing test pattern.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to restructure all mock setup to use vi.mock on @/lib/query/hooks instead."
+    },
+    {
+      "id": "a2",
+      "assumption": "Inline styles can be asserted via element.style properties using testing-library's container/querySelector since the component uses React inline styles (which map to DOM element.style).",
+      "confidence": 0.9,
+      "if_wrong": "May need to use getComputedStyle or a different assertion approach, or skip style-level assertions in favor of text/content assertions."
+    },
+    {
+      "id": "a3",
+      "assumption": "For loading state, using mockImplementation(() => new Promise(() => {})) on the API client mock will keep react-query in isLoading state, allowing assertion of 'Checking...' text.",
+      "confidence": 0.85,
+      "if_wrong": "May need to manipulate react-query's loading state differently, or use msw/fake timers."
+    },
+    {
+      "id": "a4",
+      "assumption": "For error state, using mockRejectedValue(new Error('Network error')) will trigger react-query's isError state after retries are exhausted (retries are disabled in test QueryClient config).",
+      "confidence": 0.9,
+      "if_wrong": "May need to configure retry behavior or wait longer for error state to propagate."
+    },
+    {
+      "id": "a5",
+      "assumption": "The formatCurrency integration test should verify the actual rendered formatted string (e.g., providing volume=2000 should render '2.0K'), testing the integration between System and formatCurrency.",
+      "confidence": 0.8,
+      "if_wrong": "If formatCurrency has its own thorough tests, a simpler presence check may suffice."
+    },
+    {
+      "id": "a6",
+      "assumption": "All 10 requested test cases can be added to the existing System.test.tsx file without needing additional test infrastructure or new helper utilities.",
+      "confidence": 0.95,
+      "if_wrong": "Might need to add custom matchers or test utilities for style assertions."
+    },
+    {
+      "id": "a7",
+      "assumption": "CountCard color testing can be done by finding the value element and checking its style.color property, since CountCard applies color as an inline style.",
+      "confidence": 0.85,
+      "if_wrong": "May need to use a different selector strategy or test-id approach to locate CountCard elements reliably."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

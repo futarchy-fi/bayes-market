@@ -1,0 +1,125 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Mock `@/lib/query/hooks` (useCreateMarket) at the hook level, following the TradingPanel pattern. TradingPanel mocks `@/lib/query/hooks` with `vi.mock('@/lib/query/hooks', () => ({ useProbabilityEdit: vi.fn() }))` and returns a controlled mutation state object via a `defaultMutationState()` factory. This gives direct control over isPending/isError/isSuccess states and the mutate function. The current test mocks `@/lib/api/client` which only prevents actual HTTP calls but doesn't help test mutation state rendering. Since CreateMarketForm uses `useCreateMarket()` from hooks (line 14), mocking the hook is the correct layer.",
+      "confidence": 0.98,
+      "evidence": [
+        "frontend/src/__tests__/TradingPanel.test.tsx:23-25",
+        "frontend/src/__tests__/TradingPanel.test.tsx:68-87",
+        "frontend/src/features/market/CreateMarketForm.tsx:14",
+        "frontend/src/lib/query/hooks.ts:134-143",
+        "frontend/src/__tests__/CreateMarketForm.test.tsx:6"
+      ],
+      "uncertainty": "None — the TradingPanel pattern is well-established and directly applicable."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Mock `useNavigate` from react-router-dom. The component calls `navigate('/markets/${data.market.id}')` in the onSuccess callback passed to mutation.mutate() (line 56). TradingPanel doesn't test navigation because it doesn't navigate. The cleanest approach is to mock useNavigate to return a vi.fn() and assert it was called with the expected path. MemoryRouter location tracking is more complex and less direct. The mock approach: `vi.mock('react-router-dom', async () => { const actual = await vi.importActual('react-router-dom'); return { ...actual, useNavigate: vi.fn() }; })` then import and assert on the mock.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/market/CreateMarketForm.tsx:12",
+        "frontend/src/features/market/CreateMarketForm.tsx:54-58",
+        "frontend/src/__tests__/TradingPanel.test.tsx:13-21"
+      ],
+      "uncertainty": "Need to confirm the vi.importActual pattern works with react-router-dom in this test setup. The TradingPanel successfully uses this pattern with session/context, so it should work."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes, capture and invoke the onSuccess callback manually. The onSuccess callback is passed as the second argument to `mutation.mutate()` (lines 54-58), not in the useMutation config. When we mock useCreateMarket to return a controlled mutate (vi.fn()), we need to: (1) trigger form submission, (2) capture the onSuccess callback from `mockMutate.mock.calls[0][1].onSuccess`, (3) invoke it with fake response data `{ market: { id: 'test-mkt-123' } }`, (4) assert navigate was called with `/markets/test-mkt-123`. This is the standard pattern for testing inline mutation callbacks.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/market/CreateMarketForm.tsx:43-59",
+        "frontend/src/__tests__/TradingPanel.test.tsx:139-165"
+      ],
+      "uncertainty": "Need to verify that calling the captured onSuccess within act() properly triggers the navigate call and React re-renders."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Testing the submit button disabled state is sufficient. The form validation is gated entirely through the `isValid` variable (line 62), which controls `disabled={!isValid || mutation.isPending}` on the submit button (line 164). There is no other validation path — the form uses `onSubmit={handleSubmit}` (line 70) and HTML `required` attributes on title and expiry inputs (lines 79, 137), but these are redundant with the isValid check since the button is disabled. Tests should verify: (1) button is disabled with empty title, (2) button is disabled with empty expiresAt, (3) button is disabled with invalid outcomes (empty id or name), (4) button is enabled when all fields are valid. Testing that form submission is prevented is redundant since the disabled button blocks clicks.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/market/CreateMarketForm.tsx:62",
+        "frontend/src/features/market/CreateMarketForm.tsx:164",
+        "frontend/src/features/market/CreateMarketForm.tsx:70",
+        "frontend/src/features/market/CreateMarketForm.tsx:79",
+        "frontend/src/features/market/CreateMarketForm.tsx:137"
+      ],
+      "uncertainty": "The HTML `required` attribute on inputs provides browser-level validation on form submit, but since the button is disabled when !isValid, this path shouldn't be reachable in tests."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Replace the `@/lib/api/client` mock with `@/lib/query/hooks` mock. The existing `vi.mock('@/lib/api/client')` (line 6) was only there to prevent real HTTP calls during render tests. Since we'll now mock `useCreateMarket` from `@/lib/query/hooks`, the hook mock intercepts at a higher level and the API client is never called. The client mock becomes redundant. However, the existing 6 tests will need the hook mock to return a valid default mutation state (like TradingPanel's beforeEach), otherwise useCreateMarket() returns undefined and the component crashes. So the replacement is required, not optional — we must add the hook mock with a default return value for existing tests to continue working.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/CreateMarketForm.test.tsx:6",
+        "frontend/src/__tests__/TradingPanel.test.tsx:23-25",
+        "frontend/src/__tests__/TradingPanel.test.tsx:93-97",
+        "frontend/src/features/market/CreateMarketForm.tsx:14"
+      ],
+      "uncertainty": "Need to verify that removing the client mock doesn't cause issues if any provider (e.g., QueryClient) tries to make a real request during render. Since useCreateMarket is mocked, no real request should occur."
+    },
+    {
+      "question_id": "q6",
+      "answer": "Mock `useSession` like TradingPanel does. The SessionProvider in renderWithProviders provides a default session with `{ accountId: '', agentId: '' }` loaded from localStorage (which is empty in tests). The component uses `session.accountId` in two places: (1) line 52: `session: session.accountId ? session : undefined` — with empty accountId, session is passed as undefined to mutate; (2) there's no conditional rendering based on session. So mocking useSession is needed to test the session-passing logic — specifically to verify that when accountId is set, the session object is included in the mutation payload, and when it's empty, undefined is passed. Follow the TradingPanel pattern: `vi.mock('@/features/session/context', async () => { const actual = await vi.importActual(...); return { ...actual, useSession: vi.fn() }; })`.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/session/context.tsx:6-18",
+        "frontend/src/features/session/context.tsx:33-57",
+        "frontend/src/features/market/CreateMarketForm.tsx:13",
+        "frontend/src/features/market/CreateMarketForm.tsx:52",
+        "frontend/src/__tests__/TradingPanel.test.tsx:13-21",
+        "frontend/src/__tests__/TradingPanel.test.tsx:54-66",
+        "frontend/src/__tests__/helpers.tsx:27-33"
+      ],
+      "uncertainty": "The existing render tests work without mocking useSession because SessionProvider provides valid (empty) defaults. Mocking is only needed for testing the session-conditional logic in handleSubmit."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Core test strategy confirmed. TradingPanel.test.tsx lines 23-25 and 68-87 provide the exact pattern to follow."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Navigation testing approach confirmed. useNavigate mock + captured onSuccess callback invocation is the right approach. TradingPanel doesn't test this but the vi.importActual pattern from TradingPanel applies."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "useSession must be mocked to test session-conditional logic at line 52. SessionProvider defaults give empty accountId which means session is always undefined without the mock. For existing render tests, the empty default works fine, but for mutation payload tests we need controlled session values."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.70,
+      "impact": "Existing tests will BREAK if we add the useCreateMarket mock without providing a default return value. The 6 render tests currently work because vi.mock('@/lib/api/client') prevents HTTP calls, but useCreateMarket still returns a real useMutation result (from QueryClient). If we mock useCreateMarket without a default return, it returns undefined and the component crashes on `mutation.mutate`. We need to add a beforeEach with defaultMutationState() for all tests to work. This is a change to existing test infrastructure, not the tests themselves."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.92,
+      "impact": "TradingPanel.test.tsx uses fireEvent exclusively (line 2, lines 134, 144, 148, 152). The project has an established pattern of using fireEvent from @testing-library/react. For our tests, fireEvent.change works for inputs and fireEvent.click for buttons. No need for userEvent."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Confirmed at line 31: `if (outcomes.length <= 2) return;` and line 119: `disabled={outcomes.length <= 2}`. The remove button is disabled when <= 2 outcomes, and the removeOutcome function has the same guard. Tests should verify both the disabled state with 2 outcomes and successful removal with 3+."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Confirmed at line 105: `e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '')`. Sanitization happens in the onChange handler, converting to lowercase and stripping non-alphanumeric/underscore characters. Tests should verify that typing 'Hello World!' results in 'helloworld' in the input value."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

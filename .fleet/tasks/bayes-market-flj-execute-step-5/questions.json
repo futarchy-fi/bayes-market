@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Does step 5 assume the earlier close-endpoint work has already landed in this branch, or must this task also backfill the missing production seams because the current checkout still has no `/v1/markets/{id}/close` route, no close service-index entry, no close auth categorization in `resolve_write_route_category(...)`, and no close request/test helpers?",
+      "category": "codebase",
+      "why_it_matters": "The requested threaded parity coverage cannot be implemented against the checkout as-is because `backend/server.py` only advertises and routes `/resolve`, and `tests/test_bayes_market_api.py` has no close helper analogous to `build_market_resolution_body(...)` or `market_resolution_with_headers(...)`."
+    },
+    {
+      "id": "q2",
+      "question": "Which threaded HTTP fixture is supposed to own the new close parity assertions: extend `BayesMarketApiAuthRateLimitTests`, introduce a new `ThreadingHTTPServer` suite near it, or migrate/duplicate the existing resolve success/replay/rejection checks because those currently live under `BayesMarketApiIntegrationTests` with a plain `HTTPServer`?",
+      "category": "design",
+      "why_it_matters": "The task says to prove parity over `BayesHandler` beside the existing resolve and auth coverage, but the current test file splits auth and resolve coverage across different fixtures, helpers, and server implementations."
+    },
+    {
+      "id": "q3",
+      "question": "What exact request and accepted-response contract should the new HTTP tests freeze for `POST /v1/markets/{id}/close`: body shape (`accountId`, `idempotencyKey?`), success status, mutated market fields, and the persisted `AdminOp`/event payload shape that the handler is expected to expose?",
+      "category": "requirements",
+      "why_it_matters": "There is no existing `build_market_close_body(...)` helper or close acceptance assertion in the suite, so the HTTP tests need the canonical close contract instead of guessing from the resolve path."
+    },
+    {
+      "id": "q4",
+      "question": "Which close replay and rejection cases must be proven over `BayesHandler`: only successful replay with the same idempotency key, or also replayable terminal rejections such as `market_already_closed` and `market_not_closable` with their exact HTTP status, message, `retryHint`, `error.details`, and no-extra-append journal contract?",
+      "category": "requirements",
+      "why_it_matters": "The existing resolve HTTP tests lock in both accepted replay and terminal rejection behavior, and step 5 explicitly asks for the same success, replay, and rejection contracts for close."
+    },
+    {
+      "id": "q5",
+      "question": "When `AUTH_REQUIRE_AGENT_ID` is enabled, should close match resolve's market-admin auth surface exactly: `missing_agent_id`, `blank_agent_id`, and `invalid_agent_id` error shapes with `category = \"market_admin\"`, plus the same absence of rate-limit headers on 401 responses?",
+      "category": "requirements",
+      "why_it_matters": "The current threaded auth coverage proves that contract for `/resolve`, but `resolve_write_route_category(...)` does not yet classify `/close`, so the intended BayesHandler error shape for close is still only implied by symmetry."
+    },
+    {
+      "id": "q6",
+      "question": "If the threaded HTTP response for close differs slightly from the direct route assertions, which layer is the source of truth for this step: should the new tests mirror the direct close assertions exactly, or only assert the stable payload subset that `BayesHandler` actually returns after transport handling?",
+      "category": "design",
+      "why_it_matters": "The task explicitly mentions tightening payload-field expectations when the handler exposes a transport detail that differs from direct assertions, so the parity tests need to know whether body equality or handler-observed stability is the contract to freeze."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Step 5 is intended to add threaded HTTP parity coverage on top of a previously implemented `/v1/markets/{id}/close` surface, even though that production route is not present in the current checkout.",
+      "confidence": 0.98,
+      "if_wrong": "This task expands from focused parity tests into implementing the close route, service-index entry, write-policy classification, and close helpers before any threaded assertions can be added."
+    },
+    {
+      "id": "a2",
+      "assumption": "Close should share the same market-admin auth contract as resolve, including `X-Bayes-Agent-Id` enforcement when enabled and `category = \"market_admin\"` in agent-id validation failures.",
+      "confidence": 0.95,
+      "if_wrong": "The auth coverage would need a different category mapping or error shape than the existing admin-write surface, which would change both server design and test expectations."
+    },
+    {
+      "id": "a3",
+      "assumption": "The HTTP replay contract for close should mirror resolve: reusing the same idempotency key replays the original terminal outcome, whether that outcome was accepted or rejected, without appending another command/event.",
+      "confidence": 0.92,
+      "if_wrong": "The close endpoint would need a distinct idempotency model, so copying the resolve parity pattern into BayesHandler tests would freeze the wrong behavior."
+    },
+    {
+      "id": "a4",
+      "assumption": "The task's \"threaded HTTP\" wording refers to exercising `BayesHandler` through the existing threaded HTTP test fixture, not to adding new concurrent close race tests with barriers or delayed hashing.",
+      "confidence": 0.79,
+      "if_wrong": "The step would need additional concurrency coverage similar to `BayesMarketApiConcurrencyTests`, which is a materially larger verification scope than simple request/response parity."
+    },
+    {
+      "id": "a5",
+      "assumption": "The direct close assertions added in earlier steps are supposed to remain the semantic source of truth, and step 5 should only relax field-by-field HTTP expectations when `BayesHandler` adds a transport-specific detail instead of changing the close contract itself.",
+      "confidence": 0.86,
+      "if_wrong": "The threaded tests would need to define an independent HTTP contract for close rather than reusing the direct assertions as the baseline."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

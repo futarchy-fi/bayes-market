@@ -1,0 +1,104 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Create test file skeleton with imports, vi.mock, vi.mocked wrappers, and beforeEach",
+      "files_created": ["frontend/src/__tests__/BayesNetGraph.test.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Define test fixture data: mockMarkets (3 MarketSummary), mockMarketDetail, mockEngineStatsData, defaultEdges",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/BayesNetGraph.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Test case 1: loading state shows 'Loading network...'",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/BayesNetGraph.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Test case 2: empty state shows 'No markets to visualize.'",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/BayesNetGraph.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Test case 3: renders market nodes with title truncation for >28 chars",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/BayesNetGraph.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Test case 4: stats bar shows '3 variables'",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/BayesNetGraph.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Test case 5: stats bar shows '2 edges' when conditionalEdges provided",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/BayesNetGraph.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 8,
+      "task": "Test case 6: clique count in stats bar + CliqueOverlay single-node edge case returns null",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/BayesNetGraph.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 9,
+      "task": "Test case 7: JT width displayed from engine stats",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/BayesNetGraph.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 10,
+      "task": "Test case 8: focused market node has strokeWidth 2.5",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/BayesNetGraph.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 11,
+      "task": "Test case 9: status dots with correct fill colors for active/resolved",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/BayesNetGraph.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 12,
+      "task": "Test case 10: legend shows Active/Resolved always, Conditional dependency and Junction tree clique conditionally",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/BayesNetGraph.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 13,
+      "task": "Test case 11: probability bars with per-ID mockImplementation and formatted percentages",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/BayesNetGraph.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 14,
+      "task": "Run vitest — all 13 tests pass, full suite 331/331 pass",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}

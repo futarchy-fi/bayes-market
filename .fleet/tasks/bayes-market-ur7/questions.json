@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should this task verify the entire frontend Vitest suite exposed by `frontend/package.json` (`pnpm test` -> `vitest run`), or is a targeted subset acceptable if only certain frontend areas matter?",
+      "category": "requirements",
+      "why_it_matters": "The repo currently has multiple frontend `.test.ts` and `.test.tsx` files under `frontend/src/__tests__`, and prior task artifacts sometimes ran targeted Vitest files. The acceptance boundary changes what 'the frontend test suite runs in the worktree' actually means."
+    },
+    {
+      "id": "q2",
+      "question": "Which local runtime should be treated as canonical for this worktree verification: the CI baseline of Node 22 plus globally installed pnpm, or some other Node/pnpm version?",
+      "category": "codebase",
+      "why_it_matters": "`.github/workflows/ci.yml` pins Node 22 and installs pnpm explicitly, but the repo does not declare `packageManager`, `engines`, `.nvmrc`, or Volta config. Version drift can turn a setup check into a false failure."
+    },
+    {
+      "id": "q3",
+      "question": "Is success for this task defined strictly as `pnpm install` in `frontend/` followed by a passing `pnpm test`, or should we also require `pnpm build` to match the CI frontend health check?",
+      "category": "requirements",
+      "why_it_matters": "CI runs install, test, and build. The task title only says to validate the frontend test suite, so the stopping point for later execution is ambiguous."
+    },
+    {
+      "id": "q4",
+      "question": "Should the frontend tests be expected to run fully self-contained in the worktree, or must a local backend/service/environment be started first?",
+      "category": "codebase",
+      "why_it_matters": "`frontend/vitest.config.ts` uses `jsdom`, and most tests mock `@/lib/api/client`, which suggests offline execution, but `frontend/vite.config.ts` still proxies `/v1` and `/healthz` to the backend during development. If a service is actually required, a failing run would be a setup problem, not a frontend regression."
+    },
+    {
+      "id": "q5",
+      "question": "If `pnpm install` rewrites tracked frontend files such as `frontend/pnpm-lock.yaml` or other generated artifacts, should that drift be kept as part of this validation task or treated as an environment mismatch to report only?",
+      "category": "requirements",
+      "why_it_matters": "The frontend is a standalone pnpm importer with a checked-in lockfile. Install behavior can differ across pnpm versions, and this task is meant to validate setup rather than silently broaden dependency changes."
+    },
+    {
+      "id": "q6",
+      "question": "How should a passing run be documented: a single Vitest summary, a per-test-file result list, or individual test-case names and counts?",
+      "category": "design",
+      "why_it_matters": "The brief requires documenting which tests were run and their results. The repo currently has several frontend test files, so the reporting granularity needs a consistent rule before execution."
+    },
+    {
+      "id": "q7",
+      "question": "If `pnpm test` still fails after a clean install, is the expected outcome a documented reproduction of the worktree/setup failure, or should the follow-up execution phase also debug and fix inherited frontend breakages?",
+      "category": "requirements",
+      "why_it_matters": "A prior task artifact recorded frontend verification failing because `frontend/node_modules` was missing and Vitest was not runnable. This task could either stop at validating setup or expand into open-ended remediation."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The commands should run from the current temporary worktree, with dependency install scoped to `frontend/`, because the task explicitly says to verify the test suite in the worktree and the repo contains a standalone `frontend/package.json` plus `frontend/pnpm-lock.yaml`.",
+      "confidence": 0.96,
+      "if_wrong": "Running install/tests in `/home/kelvin/bayes-market` instead of this worktree could hide worktree-specific setup problems or produce different dependency state."
+    },
+    {
+      "id": "a2",
+      "assumption": "The canonical verification command is the full `pnpm test` script, not a targeted Vitest invocation, because `frontend/package.json` maps `test` to `vitest run` and the task names `pnpm test` explicitly.",
+      "confidence": 0.94,
+      "if_wrong": "A full-suite run could surface unrelated failures outside the intended verification boundary, or a targeted run could under-report setup problems."
+    },
+    {
+      "id": "a3",
+      "assumption": "The frontend suite should run without a live backend because `frontend/vitest.config.ts` uses `jsdom`, the test helpers use `MemoryRouter` and React Query only, and the route/component tests mock API client calls.",
+      "confidence": 0.91,
+      "if_wrong": "The execution phase would need additional local services or seeded environment, and a raw `pnpm test` failure would not be enough to judge worktree readiness."
+    },
+    {
+      "id": "a4",
+      "assumption": "Node 22 is the safest local baseline for the later execution phase because CI uses it and the repo does not pin a different Node or pnpm version locally.",
+      "confidence": 0.85,
+      "if_wrong": "An avoidable runtime mismatch could be mistaken for broken frontend dependencies or failing tests."
+    },
+    {
+      "id": "a5",
+      "assumption": "If the suite passes, documenting results per test file plus the overall Vitest summary should be sufficient for this task; individual `it(...)` cases do not need to be enumerated unless the task is clarified otherwise.",
+      "confidence": 0.72,
+      "if_wrong": "The later report could be either too coarse to satisfy the task or unnecessarily verbose."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

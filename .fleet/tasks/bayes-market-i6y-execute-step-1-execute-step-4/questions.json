@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact root service-index order should `payload[\"routes\"][\"accounts\"]` use once `/v1/accounts/{id}/positions` is added: append it after `/exposure`, insert it elsewhere, or reorder the whole account route list?",
+      "category": "requirements",
+      "why_it_matters": "The current `test_root_route_returns_service_index` assertion compares the full accounts-route array for exact equality, so route ordering is part of the frozen public contract rather than an internal detail."
+    },
+    {
+      "id": "q2",
+      "question": "What precise public payload should `get_account_positions(account_id)` expose under `account`: a new `positions` object with its own `updatedAt` and row schema, a direct alias of the existing `pnl.positions` list, or a different nested shape entirely?",
+      "category": "requirements",
+      "why_it_matters": "`backend/server.py` currently has `get_account_risk`, `get_account_pnl`, and `get_account_exposure`, each with a different nested shape, but no canonical `/positions` response contract yet."
+    },
+    {
+      "id": "q3",
+      "question": "Which backing state is supposed to drive `/v1/accounts/{id}/positions`: the live EventTrade projection in `ACCOUNT_EXPOSURE`, the replayed market-level positions from `compute_account_pnl(...)`, the per-market slices inside `ACCOUNT_RISK`, or a new combined projection?",
+      "category": "codebase",
+      "why_it_matters": "This checkout already has multiple position-like concepts with different semantics, and step 4 only makes sense once the source of truth for the new getter is fixed."
+    },
+    {
+      "id": "q4",
+      "question": "What are the intended empty-account semantics for `GET /v1/accounts/{id}/positions`: should it return `404 account_not_found` when there are no rows, `200` with an empty collection, or something that distinguishes live EventTrade positions from probability-edit-only accounts?",
+      "category": "requirements",
+      "why_it_matters": "Current account getters diverge here: `/risk` keys off stored account state, `/exposure` is projection-local and becomes `404` when all rows are pruned, and `/pnl` replays accepted orders, so the new route needs an explicit absence contract."
+    },
+    {
+      "id": "q5",
+      "question": "When broadening the existing account-route dispatcher, should `/pnl` remain inside the same shared `len(parts) == 4` matched-account-path branch alongside `risk`, `exposure`, and the new `positions`, with one common GET-only `405 method_not_allowed` path?",
+      "category": "design",
+      "why_it_matters": "The current router branch already handles `risk`, `pnl`, and `exposure` together, but the task wording only calls out `risk` and `exposure`, so a refactor could accidentally split or regress `/pnl` behavior."
+    },
+    {
+      "id": "q6",
+      "question": "Is this step intentionally limited to `backend/server.py` plus the direct route/service-index regressions, or should it also add threaded HTTP helper coverage and any client/query surfaces that currently mirror account read endpoints?",
+      "category": "design",
+      "why_it_matters": "The test suite has both direct and threaded HTTP assertions for `/risk` and `/exposure`, and the frontend API/query layer currently exposes account risk and P&L but no positions route, so step scope affects how far the change has to propagate."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new route belongs in `ACCOUNT_SERVICE_INDEX_ROUTES` and should be advertised through `service_index_payload()` in the same bare-path style as the existing account read endpoints.",
+      "confidence": 0.99,
+      "if_wrong": "The implementation would need a different service-index representation than the rest of the account surface, and the current root-route assertions would need a different update strategy."
+    },
+    {
+      "id": "a2",
+      "assumption": "The safest router change is to extend the existing shared account-path branch so `risk`, `pnl`, `exposure`, and `positions` all continue to share the same non-GET `405 method_not_allowed` behavior.",
+      "confidence": 0.97,
+      "if_wrong": "A separate `/positions` branch or a narrowed shared branch would be required, which increases the risk of drifting `405` details or unintentionally changing `/pnl` dispatch."
+    },
+    {
+      "id": "a3",
+      "assumption": "`get_account_positions(account_id)` should follow the established account getter envelope and return `(payload, 200)` with `{\"account\": {\"id\": account_id, ...}, \"meta\": make_meta()}` on success.",
+      "confidence": 0.88,
+      "if_wrong": "The new getter may need a different top-level envelope or status contract, which would make it inconsistent with the current account-read surface and require broader caller/test changes."
+    },
+    {
+      "id": "a4",
+      "assumption": "Adding `/positions` is not supposed to alter the existing `/risk`, `/pnl`, or `/exposure` success and error behavior beyond recognizing one more matched account leaf path.",
+      "confidence": 0.96,
+      "if_wrong": "Step 4 would become a broader account-read refactor rather than a targeted surface extension, and existing route regressions could need intentional behavior changes instead of strict preservation."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child tasks are needed because the unresolved points are local API-contract and scope questions that can be captured directly from the current backend/tests without parallel code exploration.",
+      "confidence": 0.95,
+      "if_wrong": "A follow-up child task would be needed to investigate a hidden positions projection or another branch that already defines the intended `/positions` contract."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

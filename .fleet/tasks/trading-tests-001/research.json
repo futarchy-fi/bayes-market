@@ -1,0 +1,102 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Mock useSession at module level with vi.mock('@/features/session/context'). This is the right approach for several reasons: (1) The task description explicitly says 'Mock useProbabilityEdit and useSession'. (2) All existing tests use vi.mock for module-level mocking (every test file mocks '@/lib/api/client'). (3) useSession is context-based (uses useContext) and throws without a SessionProvider, so module-level mocking is the cleanest way to control isConfigured and session values. (4) vi.mock overrides the module regardless of the component tree, so renderWithProviders (which includes SessionProvider) can still be used — the mock takes precedence over the real provider.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/session/context.tsx:60-64 (useSession uses useContext, throws without provider)",
+        "frontend/src/__tests__/MarketDetail.test.tsx:7 (vi.mock('@/lib/api/client'))",
+        "frontend/src/__tests__/Analytics.test.tsx:8 (vi.mock('@/lib/api/client'))",
+        "frontend/src/__tests__/MarketList.test.tsx:7 (vi.mock('@/lib/api/client'))",
+        "frontend/src/__tests__/helpers.tsx (renderWithProviders wraps with SessionProvider)"
+      ],
+      "uncertainty": "None significant — vi.mock is the established pattern and task explicitly requests it."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Mock useProbabilityEdit from '@/lib/query/hooks' directly, not the underlying '@/lib/api/client'. Rationale: (1) The task description explicitly says 'Mock useProbabilityEdit'. (2) TradingPanel renders distinct UI for isPending, isSuccess, and isError states. Mocking the hook lets us return controlled mutation state objects for each test case. (3) Mocking '@/lib/api/client' would test through react-query's mutation lifecycle, making it very hard to set up deterministic isPending/isSuccess/isError states for separate test assertions. (4) Although existing tests mock '@/lib/api/client', they test query hooks (useQuery), not mutation hooks. Mutation state control requires a different strategy.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/trading/TradingPanel.tsx:13 (mutation = useProbabilityEdit(market.id))",
+        "frontend/src/features/trading/TradingPanel.tsx:88-100 (isPending controls button disabled/text)",
+        "frontend/src/features/trading/TradingPanel.tsx:104-129 (isSuccess and isError render distinct UI)",
+        "frontend/src/lib/query/hooks.ts:145-155 (useProbabilityEdit wraps useMutation)"
+      ],
+      "uncertainty": "We need to ensure the mock returns a proper mutation-like object with mutate function. We'll need to construct mock return values carefully for each test case."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes, crypto.randomUUID() is available in the jsdom/vitest test environment. Confirmed by running `node -e \"console.log(typeof crypto.randomUUID === 'function')\"` which returns true. Node.js 19+ includes crypto.randomUUID as a global, and vitest runs on Node.js (the jsdom environment inherits Node globals). No polyfill or mock is needed. However, we may optionally mock it with vi.spyOn(crypto, 'randomUUID') if we want deterministic UUID values in assertions about the mutation payload.",
+      "confidence": 0.95,
+      "evidence": [
+        "Bash: node -e outputs 'true' for typeof crypto.randomUUID === 'function'",
+        "frontend/src/features/trading/TradingPanel.tsx:41 (idempotencyKey: crypto.randomUUID())"
+      ],
+      "uncertainty": "Vitest's jsdom environment could theoretically override crypto, but Node's global crypto is reliably available."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Use separate test cases for success and error message rendering. Rationale: (1) They are distinct UI states — success shows 'Order accepted: {orderId}' with green styling, error shows the error message with red styling. (2) Existing test files use separate it() blocks for each scenario (e.g., MarketDetail.test.tsx has separate tests for loading, error, and rendered states). (3) Since we're mocking useProbabilityEdit to return controlled state, each test can directly set the mutation state without needing to simulate the full submission flow. Suggested test cases: 'shows success message after order accepted', 'shows error message on trade failure'.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/trading/TradingPanel.tsx:104-115 (success rendering)",
+        "frontend/src/features/trading/TradingPanel.tsx:117-129 (error rendering)",
+        "frontend/src/__tests__/MarketDetail.test.tsx (separate it() blocks for loading/error/success states)"
+      ],
+      "uncertainty": "None significant — separate tests for each state is the clear pattern."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Use fireEvent.change for slider and select interactions. Rationale: (1) The codebase consistently uses fireEvent across all test files — Analytics.test.tsx uses fireEvent.change and fireEvent.click, MarketList.test.tsx uses fireEvent.change for filter inputs. (2) @testing-library/user-event is NOT installed as a dependency (checked package.json — only @testing-library/react and @testing-library/jest-dom are present). (3) For range inputs, fireEvent.change({ target: { value: '0.75' } }) is straightforward and sufficient. (4) Adding a new testing dependency just for this test file would be inconsistent.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/Analytics.test.tsx (uses fireEvent.change, fireEvent.click)",
+        "frontend/src/__tests__/MarketList.test.tsx (uses fireEvent.change for inputs)",
+        "frontend/package.json (no @testing-library/user-event dependency)"
+      ],
+      "uncertainty": "None — fireEvent is the established pattern and userEvent is not available."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "We will vi.mock('@/features/session/context') to control useSession return values per test. For unconfigured tests: return { isConfigured: false, session: { accountId: '', agentId: '' } }. For configured tests: return { isConfigured: true, session: { accountId: 'test-account', agentId: 'test-agent' }, setAccountId: vi.fn(), setAgentId: vi.fn() }."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "We will vi.mock('@/lib/query/hooks') and mock useProbabilityEdit to return controlled mutation state objects. Default idle state: { mutate: vi.fn(), isPending: false, isSuccess: false, isError: false, data: null, error: null }. Override per test case for pending/success/error states."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No polyfill or mock needed for crypto.randomUUID. Form submission tests will work without any special setup. Optionally spy on it for deterministic assertions."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Use fireEvent.change for both the select (outcome) and range input (probability). No new dependencies needed."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.7,
+      "impact": "vi.mock('@/features/session/context') overrides the entire module, including useSession, regardless of whether SessionProvider is in the tree. So renderWithProviders (which includes SessionProvider) is safe to use — the mock will take precedence. However, we could also use a simpler wrapper with just QueryClientProvider since the SessionProvider is effectively bypassed. Recommendation: use renderWithProviders for consistency with other tests, as the mock naturally overrides the real hook. If any issues arise, we can fall back to a custom wrapper with just QueryClientProvider."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Standard structure: describe('TradingPanel', () => { ... }), beforeEach for mock setup/reset, individual it() blocks for each test case."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

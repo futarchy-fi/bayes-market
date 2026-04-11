@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The task specifies a single file `ui-components.test.tsx` for all three components, but existing tests use one file per component (e.g., ErrorBoundary.test.tsx). Should we follow the task description (single file) or the existing convention (separate files)?",
+      "category": "design",
+      "why_it_matters": "Affects file organization and whether we create 1 or 3 test files. A single file deviates from the established pattern but matches the task spec."
+    },
+    {
+      "id": "q2",
+      "question": "Should `formatProbability` and `statusColor` utilities be mocked in the component tests, or should we use the real implementations? The format.test.ts already tests these utilities in isolation.",
+      "category": "design",
+      "why_it_matters": "Mocking keeps unit tests isolated but adds complexity. Using real implementations is simpler and the utilities are already tested separately. ErrorBoundary.test.tsx does not mock any utilities."
+    },
+    {
+      "id": "q3",
+      "question": "For ProbabilityBar, what edge cases should be covered? Candidates: empty outcomes array, missing marginal entries (defaults to 0), outcomes exceeding the 8-color palette (color wrapping), all-zero probabilities.",
+      "category": "requirements",
+      "why_it_matters": "The component handles these cases implicitly (nullish coalescing to 0, modulo on color index). Testing them ensures robustness but some may be over-testing for simple UI components."
+    },
+    {
+      "id": "q4",
+      "question": "Should Spinner's SVG structure (circle element, viewBox, animation keyframes) be tested via DOM queries, or is verifying it renders without crashing sufficient?",
+      "category": "design",
+      "why_it_matters": "SVG internals are implementation details. Testing them couples tests to markup. But the task says 'test visual output', which could mean verifying SVG attributes like width/height based on the size prop."
+    },
+    {
+      "id": "q5",
+      "question": "Do any of these components need `renderWithProviders` from the test helpers, or is plain `render` sufficient? ProbabilityBar, Spinner, and StatusBadge appear to have no context/router dependencies.",
+      "category": "codebase",
+      "why_it_matters": "Using plain `render` keeps tests simpler and faster. Using the wrong render function would either add unnecessary overhead or cause missing-provider errors."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Plain `render` from @testing-library/react is sufficient - none of the three components use React context, routing, or query providers.",
+      "confidence": 0.98,
+      "if_wrong": "Tests would fail with missing provider errors; would need to switch to `renderWithProviders` from helpers.tsx."
+    },
+    {
+      "id": "a2",
+      "assumption": "We should use real `formatProbability` and `statusColor` implementations rather than mocking them, matching the ErrorBoundary.test.tsx pattern of not mocking dependencies.",
+      "confidence": 0.85,
+      "if_wrong": "Tests could become fragile if utility output format changes, but format.test.ts already covers that."
+    },
+    {
+      "id": "a3",
+      "assumption": "We should create a single file `ui-components.test.tsx` as the task description specifies, even though the codebase convention is one file per component.",
+      "confidence": 0.9,
+      "if_wrong": "Would need to split into three separate test files to match codebase conventions."
+    },
+    {
+      "id": "a4",
+      "assumption": "The MarketOutcome type is simply `{ id: string; name: string }` based on the types.ts definition, so test fixtures are trivial to construct.",
+      "confidence": 0.99,
+      "if_wrong": "Would need to add additional required fields to test fixtures."
+    },
+    {
+      "id": "a5",
+      "assumption": "Spinner's `size` prop should be tested by checking SVG width/height attributes, and LoadingPage should be tested by verifying it renders a Spinner (SVG element present).",
+      "confidence": 0.9,
+      "if_wrong": "May need different query strategies if SVG attributes aren't accessible via testing-library."
+    },
+    {
+      "id": "a6",
+      "assumption": "StatusBadge renders the status text in uppercase via CSS `textTransform`, so `screen.getByText` should match the original (non-uppercased) status string.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to search for the uppercased version or use a case-insensitive matcher."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

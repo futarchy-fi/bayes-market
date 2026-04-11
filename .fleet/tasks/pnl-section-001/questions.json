@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Does AccountPnlSection need to be wrapped in any providers (MemoryRouter, QueryClientProvider) for rendering, or can it be tested with plain render() since it's a pure props component?",
+      "category": "codebase",
+      "why_it_matters": "StatusBadge or other child components may depend on providers. If we use renderWithProviders unnecessarily we add complexity; if we skip a needed provider, tests crash."
+    },
+    {
+      "id": "q2",
+      "question": "Should the tests mock formatCurrency/formatSignedCurrency utilities or let them execute with real values?",
+      "category": "design",
+      "why_it_matters": "Mocking formatters makes assertions simpler but couples tests to mock setup. Running real formatters tests the full rendering pipeline but means assertions must match exact formatted output like '$1.0K' or '+$500.00'."
+    },
+    {
+      "id": "q3",
+      "question": "What is the expected behavior when selectedMarketId does not match any position in the data? Does the selected market detail card simply not render?",
+      "category": "requirements",
+      "why_it_matters": "Determines whether we need a test case for 'selected market not in positions' vs just 'selected market in positions' and 'no selection'."
+    },
+    {
+      "id": "q4",
+      "question": "Should we test the toneForValue() color logic (green for positive, red for negative, default for zero) via style assertions, or treat it as an internal detail and only test that the correct formatted values appear?",
+      "category": "design",
+      "why_it_matters": "Style-based assertions are more brittle (tied to CSS variable names) but verify important visual behavior. Text-only assertions are more stable but miss the color-coding which is a key UX feature."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "AccountPnlSection can be rendered with plain render() from @testing-library/react without providers, since it receives all data via props and doesn't use hooks that require context (no useSession, useQuery, useParams internally).",
+      "confidence": 0.85,
+      "if_wrong": "We would need renderWithProviders from the test helpers, and possibly MemoryRouter if StatusBadge uses router links."
+    },
+    {
+      "id": "a2",
+      "assumption": "We should use real formatCurrency/formatSignedCurrency rather than mocking them, matching the pattern in AnalyticsSummaryCards.test.tsx which tests formatted output directly.",
+      "confidence": 0.9,
+      "if_wrong": "Tests would need vi.mock() calls for the format utilities and assertions would check raw numbers instead of formatted strings."
+    },
+    {
+      "id": "a3",
+      "assumption": "The component handles the case where selectedMarketId doesn't match any position by simply not rendering the selected market detail card, based on the .find() call in the component.",
+      "confidence": 0.95,
+      "if_wrong": "There might be a fallback UI or error state for missing selected market that needs its own test."
+    },
+    {
+      "id": "a4",
+      "assumption": "We should follow the existing test file naming convention: AccountPnlSection.test.tsx in frontend/src/__tests__/ directory.",
+      "confidence": 0.95,
+      "if_wrong": "Tests might need to go in a co-located __tests__ directory or have a different naming convention."
+    },
+    {
+      "id": "a5",
+      "assumption": "Error handling test should pass a truthy error value (e.g., new Error('Failed')) with no data, and assert that ErrorMessage renders. The exact error display is delegated to the ErrorMessage component.",
+      "confidence": 0.9,
+      "if_wrong": "The component might format or extract error messages itself, requiring more specific error assertions."
+    },
+    {
+      "id": "a6",
+      "assumption": "The positions table test should verify that all positions from the test data appear in the rendered output, checking market titles and formatted PnL values.",
+      "confidence": 0.95,
+      "if_wrong": "The table might have pagination or virtualization that limits visible rows."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

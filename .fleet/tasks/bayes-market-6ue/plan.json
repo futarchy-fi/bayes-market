@@ -1,0 +1,109 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Source the `/v1/version` response's `version` field from `server.ENGINE_CONFIG.version`, which already reflects `backend.inference.config.DEFAULT_ENGINE_CONFIG.version` and is the backend's existing public version contract.",
+      "based_on": [
+        "q1"
+      ],
+      "alternatives_rejected": [
+        "Reuse `frontend/package.json` version metadata in the backend response",
+        "Introduce a new backend/application version constant as part of this endpoint task"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Capture `git_sha` once at module import or process startup using `git rev-parse HEAD`, store the trimmed full SHA string, and fall back to the literal `\"unknown\"` if lookup fails.",
+      "based_on": [
+        "q2"
+      ],
+      "alternatives_rejected": [
+        "Resolve git revision on every request",
+        "Publish a short SHA or other derived revision string instead of the full HEAD revision"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Capture `build_timestamp` once at module import or process startup and keep it stable for the lifetime of the imported `backend/server.py` module.",
+      "based_on": [
+        "q3"
+      ],
+      "alternatives_rejected": [
+        "Generate a fresh timestamp for every `/v1/version` request",
+        "Treat `reset_state()` as a boundary that regenerates build metadata"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Return a flat `/v1/version` payload with only the task's four top-level fields and advertise the route from the existing root service index under `routes.health` so discoverability improves without expanding the service-index schema.",
+      "based_on": [
+        "q4"
+      ],
+      "alternatives_rejected": [
+        "Wrap the response in a `meta` envelope",
+        "Add extra health-style fields such as `status`, `timestamp`, or `components` to `/v1/version`",
+        "Introduce a new `routes.version` bucket in the root service index"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d5",
+      "decision": "Keep the implementation backend-only in `backend/server.py` and `tests/test_bayes_market_api.py`; frontend code remains unchanged and only benefits indirectly if it already renders the root service index.",
+      "based_on": [
+        "q5"
+      ],
+      "alternatives_rejected": [
+        "Add frontend client, type, or query wiring for `/v1/version` as part of this task",
+        "Update the `System` page to fetch and render build info directly"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Verify the new endpoint with one direct `route_request(...)` test and one HTTP integration test through `BayesHandler`, while updating the existing root service index assertion to cover route discoverability.",
+      "based_on": [
+        "q6"
+      ],
+      "alternatives_rejected": [
+        "Cover `/v1/version` only at the dispatch layer",
+        "Spend both tests on HTTP-only coverage and skip direct route dispatch validation"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add startup-scoped build metadata support in `backend/server.py`: define a `/v1/version` route constant, compute module-level `git_sha` and `build_timestamp` values, and add a small helper that builds the four-field payload using `ENGINE_CONFIG.version`.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Wire `/v1/version` into `route_request(...)` as a GET-only public endpoint with the existing 405 error shape for non-GET methods, and expose `/v1/version` from the root service index via the existing `routes.health` listing.",
+      "depends_on": [
+        1
+      ]
+    },
+    {
+      "step": 3,
+      "task": "Update `tests/test_bayes_market_api.py` to extend the root service index expectation and add a direct `route_request(...)` test that asserts the `/v1/version` payload shape, canonical version source, and stable startup-scoped build metadata contract.",
+      "depends_on": [
+        2
+      ]
+    },
+    {
+      "step": 4,
+      "task": "Add one HTTP integration test through the existing test server harness for `GET /v1/version`, then run the targeted backend tests covering the new endpoint and the touched service-index expectations.",
+      "depends_on": [
+        2,
+        3
+      ]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

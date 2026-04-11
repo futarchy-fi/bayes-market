@@ -1,0 +1,63 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The project uses vi.useFakeTimers() with beforeEach/afterEach pattern. There is NO shared test helper for time mocking — each test file manages timers independently. Two patterns exist: (1) DiscussionThread.test.tsx uses basic `vi.useFakeTimers()` + `vi.setSystemTime(new Date('...'))` in beforeEach, `vi.useRealTimers()` in afterEach. (2) MarketDetail.test.tsx uses `vi.useFakeTimers({ shouldAdvanceTime: true })` + `vi.setSystemTime(FAKE_NOW)` with a const. For format.test.ts (pure unit tests with no async/timer-advancing needs), the basic pattern from DiscussionThread is most appropriate: vi.useFakeTimers() in beforeEach, vi.setSystemTime() to pin the clock, vi.useRealTimers() in afterEach.",
+      "confidence": 0.97,
+      "evidence": [
+        "frontend/src/__tests__/DiscussionThread.test.tsx:158-167",
+        "frontend/src/__tests__/MarketDetail.test.tsx:188-211",
+        "frontend/src/__tests__/MarketList.test.tsx:19-26",
+        "frontend/src/__tests__/setup.ts (no timer config)",
+        "frontend/src/__tests__/helpers.tsx (no timer helpers)"
+      ],
+      "uncertainty": "Whether shouldAdvanceTime option is needed — likely not for pure unit tests of format functions."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes, negative numbers preserve their sign through K/M formatting. The implementation at format.ts:6-8 uses Math.abs(n) only for the >= threshold comparisons, but uses the original `n` (with sign) in the division and toFixed() calls. So -45000 → '-45.0K' and -1500000 → '-1.5M'. Tests should verify this explicitly.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/lib/utils/format.ts:6 — `if (Math.abs(n) >= 1_000_000) return \\`${(n / 1_000_000).toFixed(1)}M\\``",
+        "frontend/src/lib/utils/format.ts:7 — `if (Math.abs(n) >= 1_000) return \\`${(n / 1_000).toFixed(1)}K\\``",
+        "frontend/src/lib/utils/format.ts:8 — `return n.toFixed(2)` (also preserves sign for small negatives)"
+      ],
+      "uncertainty": "None — the code is clear and deterministic."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Confirmed: vi.useFakeTimers() and vi.setSystemTime() are used in DiscussionThread.test.tsx:158-159 and MarketDetail.test.tsx:191-192. The basic pattern (without shouldAdvanceTime) is suitable for format.test.ts since we only need to pin Date.now(), not advance timers."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Confirmed by reading format.ts:6-8. Math.abs is only for threshold comparison; the original signed `n` flows through to the output string. -45000 → '-45.0K', -1500000 → '-1.5M', -42.5 → '-42.50'."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The existing test file at frontend/src/__tests__/format.test.ts already imports and tests formatCurrency, truncateHash, formatProbability, and statusColor. New tests for formatRelativeTime, timeUntil, and additional edge cases should be added to this same file."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The 10 test cases from the task description cover the key untested functions (formatRelativeTime, timeUntil) and edge cases (negative currency, custom truncateHash length). These are the minimum required. The existing 9 tests already cover basic paths."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Confirmed: truncateHash signature is `truncateHash(hash: string, len = 8)` at format.ts:11. Custom length means passing a non-default second argument, e.g., truncateHash('abcdef0123456789', 4)."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

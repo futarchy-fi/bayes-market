@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Does the diagnostics type have optional fields (compile_time_ms, memory_bytes, last_updated) that need null/undefined handling in tests?",
+      "category": "codebase",
+      "why_it_matters": "The EngineStatsResponse type shows compile_time_ms, memory_bytes, and last_updated as optional. Tests must create fixtures that sometimes include and sometimes omit these to cover conditional rendering branches."
+    },
+    {
+      "id": "q2",
+      "question": "Should renderWithProviders from the existing helpers.tsx be used, and does it require any specific props for this component?",
+      "category": "codebase",
+      "why_it_matters": "BayesNetGraph.test.tsx uses renderWithProviders which wraps with QueryClientProvider/SessionProvider/MemoryRouter. JunctionTreePanel only needs marketId prop and useEngineStats is mocked, so providers should suffice without extra setup."
+    },
+    {
+      "id": "q3",
+      "question": "Is formatBytes exported or is it a module-internal function that needs testing via component rendering?",
+      "category": "codebase",
+      "why_it_matters": "The task requires testing formatBytes directly (test 15). If it's not exported, we either need to test it indirectly through rendered memory_bytes output or use a workaround to access it."
+    },
+    {
+      "id": "q4",
+      "question": "How does the existing test pattern handle toLocaleString() which produces locale-dependent output?",
+      "category": "design",
+      "why_it_matters": "The component uses toLocaleString() for states and request_count. Tests need to either match locale-specific output or use regex/contains matchers to remain portable across CI environments."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "vi.mock('@/lib/query/hooks') pattern from BayesNetGraph.test.tsx is the correct way to mock useEngineStats for this component",
+      "confidence": 0.98,
+      "if_wrong": "Would need a different mocking strategy, but this is the established repo pattern"
+    },
+    {
+      "id": "a2",
+      "assumption": "formatBytes is NOT exported (no export keyword visible), so it must be tested indirectly via the Memory MetricBox rendering",
+      "confidence": 0.95,
+      "if_wrong": "If exported, we can import and test it directly as a unit test which is cleaner"
+    },
+    {
+      "id": "a3",
+      "assumption": "The test file should be placed at frontend/src/__tests__/JunctionTreePanel.test.tsx following the flat test directory pattern used by other tests",
+      "confidence": 1.0,
+      "if_wrong": "Task description explicitly specifies this path"
+    },
+    {
+      "id": "a4",
+      "assumption": "MetricBox sub-component is tested indirectly through InferenceDiagnostics rendering (warn color test uses error_count > 0)",
+      "confidence": 0.9,
+      "if_wrong": "May need to render MetricBox directly, but since it's not exported, indirect testing through the parent is the standard approach"
+    },
+    {
+      "id": "a5",
+      "assumption": "The mock return type should match UseQueryResult shape: { data, isLoading, isError, error } cast as ReturnType<typeof useEngineStats>",
+      "confidence": 0.97,
+      "if_wrong": "Would need to check the exact react-query return type, but the existing BayesNetGraph test uses this exact pattern"
+    },
+    {
+      "id": "a6",
+      "assumption": "toLocaleString() in jsdom/vitest will produce simple numeric strings (e.g., '100' not '100') making text matching straightforward in CI",
+      "confidence": 0.85,
+      "if_wrong": "May need to use regex matchers or getAllByText with a function matcher to handle locale formatting"
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

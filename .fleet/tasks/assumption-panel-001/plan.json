@@ -1,0 +1,106 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Integration-style test: render real AssumptionBar (not mocked) so we can test 'clear all' and assumption tag rendering through the real component tree",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Mock AssumptionBar and test 'clear all' separately in AssumptionBar.test.tsx"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Mock VariableRow via vi.mock to isolate from its heavy internal hooks (useMarket, useSession, useProbabilityEdit, useAssumptions)",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Render real VariableRow and mock all its internal API calls — too complex and couples tests to VariableRow internals"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Mock useMarkets at module level (vi.mock('@/lib/query/hooks')) to control the markets list, following TradingPanel.test.tsx pattern",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Mock API client and let React Query process — adds unnecessary async complexity"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Test both empty states: (a) no assumptions → 'Showing marginal probabilities' text, (b) activeMarkets.length <= 1 → 'Create more markets' message",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Test only one empty state — misses a distinct conditional branch"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Wrap with AssumptionProvider locally in the test file, not in shared renderWithProviders helper",
+      "based_on": ["q5"],
+      "alternatives_rejected": ["Extend shared helpers.tsx with AssumptionProvider — affects all test files for a single feature"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Test 'rendering assumption list' covers both: VariableRow list (correct count/order with current market first) and AssumptionBar tags (GIVEN: labels with correct assumption data)",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Test only one of the two lists — misses coverage of the other"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create test file frontend/src/__tests__/AssumptionPanel.test.tsx with imports, vi.mock for VariableRow and useMarkets, and a local renderPanel helper that wraps with AssumptionProvider + renderWithProviders",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Write test: 'renders heading and marginal probabilities status when no assumptions' — render with empty assumptions, assert 'Variables & Assumptions' heading and 'Showing marginal probabilities' text present",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Write test: 'renders correct status text when assumptions are set' — use AssumptionProvider with pre-set assumptions, assert status shows 'Showing conditionals given N assumption(s)' with correct count and pluralization",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Write test: 'renders VariableRow for each active market with current market first' — mock useMarkets to return 3 markets, assert mocked VariableRow rendered 3 times, verify first call receives current market's id",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Write test: 'shows create-more-markets message when only one active market' — mock useMarkets with single active market, assert 'Create more markets to use assumptions' text visible",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Write test: 'hides create-more-markets message when multiple active markets' — mock useMarkets with 2+ active markets, assert message NOT present",
+      "depends_on": [1]
+    },
+    {
+      "step": 7,
+      "task": "Write test: 'AssumptionBar shows assumption tags with GIVEN label' — render with assumptions in context, assert 'GIVEN:' text and assumption labels visible in AssumptionBar",
+      "depends_on": [1]
+    },
+    {
+      "step": 8,
+      "task": "Write test: 'AssumptionBar hidden when no assumptions' — render with empty context, assert no 'GIVEN:' text in document",
+      "depends_on": [1]
+    },
+    {
+      "step": 9,
+      "task": "Write test: 'clear all button removes all assumptions' — render with assumptions, click 'Clear all' button, assert status reverts to 'Showing marginal probabilities' and GIVEN: disappears",
+      "depends_on": [1]
+    },
+    {
+      "step": 10,
+      "task": "Write test: 'remove individual assumption via tag close button' — render with 2 assumptions, click remove button on one, assert it disappears while the other remains",
+      "depends_on": [1]
+    },
+    {
+      "step": 11,
+      "task": "Run vitest on AssumptionPanel.test.tsx, fix any failures, confirm all tests pass",
+      "depends_on": [2, 3, 4, 5, 6, 7, 8, 9, 10]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

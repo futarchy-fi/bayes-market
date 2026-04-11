@@ -5,29 +5,56 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import html
 import importlib.util
 import json
 import math
 import os
+import re
+import subprocess
 import sys
 import threading
 import time
 from collections import deque
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from pathlib import Path
-from typing import Any
-from urllib.parse import parse_qs, urlparse
+from pathlib import Path, PurePosixPath
+from typing import Any, NamedTuple
+from urllib.parse import parse_qs, quote, urlparse
 
 BACKEND_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = str(BACKEND_DIR.parent)
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+
+def _utc_now_timestamp() -> str:
+    """Return the current UTC timestamp in ISO-8601 Zulu form."""
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _resolve_build_git_sha() -> str:
+    """Resolve the current git HEAD revision for build metadata when available."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+    except (FileNotFoundError, OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return "unknown"
+
+    git_sha = result.stdout.strip()
+    return git_sha or "unknown"
+
 from backend.inference import (
     CURRENT_MODEL_COMPILER,
     CURRENT_MODEL_QUERY_BACKEND,
+    CacheInvalidationManager,
     CompileResult,
     DEFAULT_ENGINE_CONFIG,
     EngineConfig,
@@ -97,11 +124,12 @@ INITIAL_MARKETS: dict[str, dict[str, Any]] = {
         "variableId": "fed_rate_cut_mar_2026",
         "status": "resolved",
         "resolution": "no",
+        "resolutionProbabilities": {"yes": 0.0, "no": 1.0},
         "outcomes": [
             {"id": "yes", "name": "Yes"},
             {"id": "no", "name": "No"},
         ],
-        "marginals": {"yes": 0.12, "no": 0.88},
+        "marginals": {"yes": 0.0, "no": 1.0},
         "liquidity": 200000.0,
         "volume": 120000.0,
         "created_at": "2026-02-15T00:00:00Z",
@@ -110,6 +138,8 @@ INITIAL_MARKETS: dict[str, dict[str, Any]] = {
 }
 
 ALLOWED_MARKET_STATUSES = frozenset({"active", "resolved", "closed", "draft"})
+ALLOWED_MARKET_SORTS = frozenset({"volume", "liquidity", "created"})
+ALLOWED_ANALYTICS_INTERVALS = frozenset({"hour", "day"})
 MARKET_SUMMARY_FIELDS = (
     "id",
     "title",
@@ -120,6 +150,38 @@ MARKET_SUMMARY_FIELDS = (
 )
 
 ACCOUNT_RISK_LIMIT = 100.0
+LEGACY_HEALTH_ROUTES = ("/health", "/healthz")
+VERSIONED_HEALTH_ROUTE = "/v1/health"
+PUBLIC_HEALTH_ROUTES = (*LEGACY_HEALTH_ROUTES, VERSIONED_HEALTH_ROUTE)
+VERSION_ROUTE = "/v1/version"
+HEALTH_SERVICE_INDEX_ROUTES = (*PUBLIC_HEALTH_ROUTES, VERSION_ROUTE)
+STATS_ROUTE = "/v1/stats"
+STATS_SERVICE_INDEX_ROUTES = (STATS_ROUTE,)
+max_position_size = 100.0
+ACCOUNT_SERVICE_INDEX_ROUTES = (
+    "/v1/accounts/{id}/risk",
+    "/v1/accounts/{id}/pnl",
+    "/v1/accounts/{id}/exposure",
+)
+MARKET_SERVICE_INDEX_ROUTES = (
+    "GET /v1/markets",
+    "POST /v1/markets",
+    "/v1/markets/{id}",
+    "GET /v1/markets/{id}/analytics",
+    "/v1/markets/{id}/meta",
+    "/v1/markets/{id}/events",
+    "/v1/markets/{id}/trades",
+    "GET /v1/markets/{id}/comments",
+    "POST /v1/markets/{id}/comments",
+    "/v1/markets/{id}/engine-stats",
+    "POST /v1/markets/{id}/close",
+    "POST /v1/markets/{id}/reopen",
+    "POST /v1/markets/{id}/resolve",
+)
+ORDER_SERVICE_INDEX_ROUTES = (
+    "POST /v1/markets/{id}/orders/probability-edit",
+    "POST /v1/markets/{id}/orders/event-trade",
+)
 ACCOUNT_LMSR_LEDGER_VERSION = "lmsr-ledger-v1"
 ACCOUNT_LMSR_RISK_READ_MODEL = "scalar-min-asset-v1"
 MAX_EVENT_FORMULA_CLAUSES = 16
@@ -130,6 +192,10 @@ AUTH_REQUIRE_AGENT_ID_ENV = "BAYES_REQUIRE_AGENT_ID"
 RATE_LIMIT_PER_MIN_ENV = "BAYES_RATE_LIMIT_PER_MIN"
 RATE_LIMIT_POLICY_VERSION = "bayes-agent-id-v1"
 RATE_LIMIT_WINDOW_SECONDS = 60
+MAX_COMMENT_BODY_LENGTH = 2000
+AGENT_ID_TOKEN_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
+MARKET_ADMIN_WRITE_CATEGORY = "market_admin"
+TRADE_WRITE_CATEGORY = "trade_write"
 ENGINE_CONFIG: EngineConfig = DEFAULT_ENGINE_CONFIG
 ENGINE_MODE = ENGINE_CONFIG.mode
 ENGINE_BACKEND = ENGINE_CONFIG.backend
@@ -137,41 +203,76 @@ ENGINE_VERSION = ENGINE_CONFIG.version
 ENGINE_PRECISION = ENGINE_CONFIG.precision
 ENGINE_COMPILE_TYPE = ENGINE_CONFIG.compile_type
 ENGINE_INFERENCE_SAMPLE_LIMIT = ENGINE_CONFIG.inference_sample_limit
+PUBLIC_ORIGIN_ENV = "BAYES_PUBLIC_ORIGIN"
+DEFAULT_PUBLIC_ORIGIN = "http://localhost"
+SITE_NAME = "Bayes Market"
+SITE_DESCRIPTION = "Create, trade, and resolve Bayesian prediction markets."
+OPEN_GRAPH_TYPE = "website"
+FRONTEND_MARKET_DETAIL_RE = re.compile(r"^/markets/(?P<market_id>[^/]+)$")
+TITLE_TAG_RE = re.compile(r"<title>.*?</title>", re.IGNORECASE | re.DOTALL)
+DESCRIPTION_META_TAG_RE = re.compile(r"<meta\b[^>]*\bname=[\"']description[\"'][^>]*>", re.IGNORECASE)
+OG_TITLE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:title[\"'][^>]*>", re.IGNORECASE)
+OG_DESCRIPTION_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:description[\"'][^>]*>", re.IGNORECASE)
+OG_TYPE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:type[\"'][^>]*>", re.IGNORECASE)
+OG_URL_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:url[\"'][^>]*>", re.IGNORECASE)
+PROCESS_START_MONOTONIC = time.monotonic()
+BUILD_GIT_SHA = _resolve_build_git_sha()
+BUILD_TIMESTAMP = _utc_now_timestamp()
 
 MARKETS: dict[str, dict[str, Any]] = deepcopy(INITIAL_MARKETS)
 CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {}
 ORDERS: dict[str, dict[str, Any]] = {}
 COMMANDS: dict[str, dict[str, Any]] = {}
 EVENTS: dict[str, dict[str, Any]] = {}
+COMMENTS: dict[str, dict[str, Any]] = {}
 TERMINAL_OUTCOMES: dict[str, dict[str, Any]] = {}
+COMMENT_POST_OUTCOMES: dict[str, dict[str, Any]] = {}
 IDEMPOTENCY_KEYS: dict[tuple[str, str, str], str] = {}
 MARKET_EVENT_SEQUENCES: dict[str, int] = {}
+MARKET_COMMENT_SEQUENCES: dict[str, int] = {}
 LAST_EVENT_HASHES: dict[str, str] = {}
 MARKET_WRITE_LOCKS: dict[str, threading.Lock] = {}
 _LOCK_REGISTRY_LOCK = threading.Lock()
+_EVENTS_LOCK = threading.RLock()
+_COMMENTS_LOCK = threading.RLock()
 ACCOUNT_RISK: dict[str, dict[str, Any]] = {}
+ACCOUNT_EXPOSURE: dict[str, dict[str, Any]] = {}
 MARKET_ENGINE_STATS: dict[str, dict[str, Any]] = {}
+CACHE_INVALIDATION_MANAGER = CacheInvalidationManager()
 _RATE_LIMIT_WINDOWS: dict[str, deque[float]] = {}
 _RATE_LIMIT_LOCK = threading.Lock()
 ORDER_COUNTER = 0
 COMMAND_COUNTER = 0
 EVENT_COUNTER = 0
+COMMENT_COUNTER = 0
 GENESIS_EVENT_HASH = f"sha256:{hashlib.sha256(b'').hexdigest()}"
+WRITE_ROUTE_POLICIES: dict[str, dict[str, bool]] = {
+    MARKET_ADMIN_WRITE_CATEGORY: {"requires_agent_id": True},
+    TRADE_WRITE_CATEGORY: {"requires_agent_id": True},
+}
+
+
+class WriteRequestAgentContext(NamedTuple):
+    """Describe one protected write request and its normalized agent identity."""
+
+    category: str
+    policy: dict[str, bool]
+    agent_id: str
 
 
 def get_market_write_lock(market_id: str) -> threading.Lock:
-    """Serialize same-market journal appends so seq and prevEventHash cannot fork."""
+    """Serialize same-market command lifecycles so state and journal heads stay coherent."""
     with _LOCK_REGISTRY_LOCK:
         lock = MARKET_WRITE_LOCKS.get(market_id)
         if lock is None:
-            lock = threading.Lock()
+            lock = threading.RLock()
             MARKET_WRITE_LOCKS[market_id] = lock
         return lock
 
 
 def utc_timestamp() -> str:
     """Return the current UTC timestamp in ISO-8601 Zulu form."""
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return _utc_now_timestamp()
 
 
 class ApiError(Exception):
@@ -194,24 +295,32 @@ class ApiError(Exception):
 
 def reset_state() -> None:
     """Reset all in-memory application state back to the initial fixtures."""
-    global ORDER_COUNTER, COMMAND_COUNTER, EVENT_COUNTER
+    global ORDER_COUNTER, COMMAND_COUNTER, EVENT_COUNTER, COMMENT_COUNTER
     MARKETS.clear()
     MARKETS.update(deepcopy(INITIAL_MARKETS))
     CONDITIONAL_MARGINALS.clear()
     ORDERS.clear()
     COMMANDS.clear()
-    EVENTS.clear()
+    with _EVENTS_LOCK:
+        EVENTS.clear()
+    with _COMMENTS_LOCK:
+        COMMENTS.clear()
     TERMINAL_OUTCOMES.clear()
+    COMMENT_POST_OUTCOMES.clear()
     IDEMPOTENCY_KEYS.clear()
     MARKET_EVENT_SEQUENCES.clear()
+    MARKET_COMMENT_SEQUENCES.clear()
     LAST_EVENT_HASHES.clear()
     MARKET_WRITE_LOCKS.clear()
     ACCOUNT_RISK.clear()
+    ACCOUNT_EXPOSURE.clear()
     MARKET_ENGINE_STATS.clear()
+    CACHE_INVALIDATION_MANAGER.reset()
     reset_rate_limit_state()
     ORDER_COUNTER = 0
     COMMAND_COUNTER = 0
     EVENT_COUNTER = 0
+    COMMENT_COUNTER = 0
 
 
 def generate_order_id() -> str:
@@ -233,6 +342,13 @@ def generate_event_id() -> str:
     global EVENT_COUNTER
     EVENT_COUNTER += 1
     return f"evt_{datetime.now(timezone.utc).strftime('%Y%m%d')}_{EVENT_COUNTER:06d}"
+
+
+def generate_comment_id() -> str:
+    """Return a unique comment identifier for the current process run."""
+    global COMMENT_COUNTER
+    COMMENT_COUNTER += 1
+    return f"cmt_{datetime.now(timezone.utc).strftime('%Y%m%d')}_{COMMENT_COUNTER:06d}"
 
 
 def canonical_json_hash(data: object) -> str:
@@ -283,20 +399,141 @@ def reset_rate_limit_state() -> None:
         _RATE_LIMIT_WINDOWS.clear()
 
 
+def request_agent_id_values(headers: Any) -> list[str]:
+    """Extract all raw Bayes agent id header values without normalization."""
+    get_all = getattr(headers, "get_all", None)
+    if callable(get_all):
+        values = get_all(AGENT_ID_HEADER, [])
+        if values:
+            return [str(value) for value in values if value is not None]
+
+    value = headers.get(AGENT_ID_HEADER)
+    if value is None:
+        return []
+    return [str(value)]
+
+
 def request_agent_id(headers: Any) -> str:
-    """Extract and normalize the Bayes agent id header value."""
-    return (headers.get(AGENT_ID_HEADER) or "").strip()
+    """Extract and normalize one Bayes agent id header value when available."""
+    values = request_agent_id_values(headers)
+    if len(values) != 1:
+        return ""
+    return values[0].strip()
 
 
-def enforce_agent_id(agent_id: str) -> None:
+def enforce_agent_id(agent_id: str, *, category: str | None = None) -> None:
     """Raise when write controls require an agent id and none is present."""
     if AUTH_REQUIRE_AGENT_ID and not agent_id:
+        details: dict[str, Any] = {"header": AGENT_ID_HEADER}
+        if category is not None:
+            details["category"] = category
         raise ApiError(
             401,
             "missing_agent_id",
             "Missing Bayes agent id header",
-            {"header": AGENT_ID_HEADER},
+            details,
         )
+
+
+def write_policy_requires_agent_id(policy: dict[str, bool]) -> bool:
+    """Return whether the matched write policy currently requires an agent id."""
+    return AUTH_REQUIRE_AGENT_ID and bool(policy.get("requires_agent_id"))
+
+
+def resolve_write_route_category(method: str, raw_path: str) -> str | None:
+    """Resolve the frozen T582 write-route category for a request, if any."""
+    if method != "POST":
+        return None
+
+    parsed = urlparse(raw_path)
+    path = normalize_path(parsed.path)
+    if path == "/v1/markets":
+        return MARKET_ADMIN_WRITE_CATEGORY
+
+    parts = [part for part in path.split("/") if part]
+    if len(parts) < 4 or parts[:2] != ["v1", "markets"]:
+        return None
+
+    if len(parts) == 4 and parts[3] in {"resolve", "close", "reopen"}:
+        return MARKET_ADMIN_WRITE_CATEGORY
+    if len(parts) == 4 and parts[3] == "comments":
+        return TRADE_WRITE_CATEGORY
+    if len(parts) == 5 and parts[3:] in (["orders", "probability-edit"], ["orders", "event-trade"]):
+        return TRADE_WRITE_CATEGORY
+    return None
+
+
+def _raise_invalid_agent_id(category: str, *, reason: str | None = None) -> None:
+    """Raise the stable invalid-agent-id error shape for protected write routes."""
+    details: dict[str, Any] = {
+        "header": AGENT_ID_HEADER,
+        "category": category,
+    }
+    if reason is not None:
+        details["reason"] = reason
+    raise ApiError(401, "invalid_agent_id", "Invalid Bayes agent id header", details)
+
+
+def _invalid_agent_id_reason(raw_agent_id: str, agent_id: str) -> str | None:
+    """Return the stable validation reason for one protected-write agent id value."""
+    if "," in raw_agent_id:
+        return "multiple_values"
+    if not AGENT_ID_TOKEN_RE.fullmatch(agent_id):
+        return "invalid_format"
+    return None
+
+
+def _normalize_write_request_agent_id(
+    raw_values: list[str],
+    *,
+    category: str,
+    require_agent_id: bool,
+) -> str:
+    """Normalize one protected-write agent id and preserve legacy error contracts."""
+    if not raw_values:
+        enforce_agent_id("", category=category)
+        return ""
+
+    if len(raw_values) > 1:
+        if require_agent_id:
+            _raise_invalid_agent_id(category, reason="multiple_values")
+        return ""
+
+    raw_agent_id = raw_values[0]
+    agent_id = raw_agent_id.strip()
+    if not agent_id:
+        if require_agent_id:
+            raise ApiError(
+                401,
+                "blank_agent_id",
+                "Blank Bayes agent id header",
+                {"header": AGENT_ID_HEADER, "category": category},
+            )
+        return ""
+
+    invalid_reason = _invalid_agent_id_reason(raw_agent_id, agent_id)
+    if invalid_reason is not None:
+        if require_agent_id:
+            _raise_invalid_agent_id(category, reason=invalid_reason)
+        return ""
+
+    return agent_id
+
+
+def resolve_write_request_agent(method: str, raw_path: str, headers: Any) -> WriteRequestAgentContext | None:
+    """Resolve and validate the agent identity for the frozen protected write surface."""
+    category = resolve_write_route_category(method, raw_path)
+    if category is None:
+        return None
+
+    policy = WRITE_ROUTE_POLICIES[category]
+    require_agent_id = write_policy_requires_agent_id(policy)
+    agent_id = _normalize_write_request_agent_id(
+        request_agent_id_values(headers),
+        category=category,
+        require_agent_id=require_agent_id,
+    )
+    return WriteRequestAgentContext(category=category, policy=policy, agent_id=agent_id)
 
 
 def enforce_rate_limit(agent_id: str) -> None:
@@ -369,6 +606,172 @@ def make_meta(**extra: object) -> dict[str, Any]:
     return meta
 
 
+def normalize_public_origin(origin: str) -> str:
+    """Normalize a configured public origin down to scheme + authority."""
+    raw_origin = origin.strip()
+    if not raw_origin:
+        return ""
+
+    parsed = urlparse(raw_origin)
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    return f"{scheme}://{parsed.netloc}"
+
+
+def header_first_value(headers: Any | None, name: str) -> str:
+    """Return the first comma-delimited header value when present."""
+    if headers is None:
+        return ""
+
+    value = headers.get(name)
+    if value is None:
+        return ""
+    return str(value).split(",")[0].strip()
+
+
+def normalize_origin_host(host: str) -> str:
+    """Sanitize a host header value before using it in an absolute URL."""
+    candidate = host.strip()
+    if not candidate:
+        return ""
+    if any(character.isspace() for character in candidate):
+        return ""
+    if any(character in candidate for character in "/?#"):
+        return ""
+    return candidate
+
+
+def configured_public_origin() -> str:
+    """Return the configured canonical public origin when available."""
+    return normalize_public_origin(os.environ.get(PUBLIC_ORIGIN_ENV, ""))
+
+
+def request_public_origin(headers: Any | None) -> str:
+    """Derive a public origin from forwarded headers or the request host."""
+    forwarded_host = header_first_value(headers, "X-Forwarded-Host")
+    host = normalize_origin_host(forwarded_host or header_first_value(headers, "Host"))
+    if not host:
+        return ""
+
+    forwarded_proto = header_first_value(headers, "X-Forwarded-Proto").lower()
+    scheme = forwarded_proto if forwarded_proto in {"http", "https"} else "http"
+    return f"{scheme}://{host}"
+
+
+def resolve_public_origin(headers: Any | None = None) -> str:
+    """Resolve the canonical public origin for absolute preview URLs."""
+    return configured_public_origin() or request_public_origin(headers) or DEFAULT_PUBLIC_ORIGIN
+
+
+def absolute_public_url(path: str, *, headers: Any | None = None) -> str:
+    """Build an absolute public URL for one application path."""
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    return f"{resolve_public_origin(headers)}{normalized_path}"
+
+
+def build_market_preview(market: dict[str, Any], *, headers: Any | None = None) -> dict[str, str]:
+    """Build the normalized share-preview payload for one market."""
+    market_id = str(market["id"])
+    return {
+        "marketId": market_id,
+        "title": str(market["title"]),
+        "description": str(market["description"]),
+        "url": absolute_public_url(f"/markets/{quote(market_id, safe='')}", headers=headers),
+        "siteName": SITE_NAME,
+        "type": OPEN_GRAPH_TYPE,
+    }
+
+
+def normalize_frontend_page_path(url_path: str) -> str:
+    """Normalize a frontend route path for preview URL generation."""
+    clean = normalize_path(url_path.split("?")[0].split("#")[0] or "/")
+    if clean == "/index.html":
+        return "/"
+    return clean
+
+
+def frontend_market_id(url_path: str) -> str | None:
+    """Return the market id encoded in a frontend market-detail route."""
+    match = FRONTEND_MARKET_DETAIL_RE.match(normalize_frontend_page_path(url_path))
+    if match is None:
+        return None
+
+    market_id = match.group("market_id")
+    if market_id == "new":
+        return None
+    return market_id
+
+
+def build_default_preview(url_path: str, *, headers: Any | None = None) -> dict[str, str]:
+    """Build the generic SPA preview payload for non-market pages."""
+    normalized_path = normalize_frontend_page_path(url_path)
+    return {
+        "title": SITE_NAME,
+        "description": SITE_DESCRIPTION,
+        "url": absolute_public_url(normalized_path, headers=headers),
+        "siteName": SITE_NAME,
+        "type": OPEN_GRAPH_TYPE,
+    }
+
+
+def preview_for_frontend_path(url_path: str, *, headers: Any | None = None) -> dict[str, str]:
+    """Choose market-specific or generic preview metadata for one SPA route."""
+    market_id = frontend_market_id(url_path)
+    if market_id is not None:
+        market = MARKETS.get(market_id)
+        if market is not None:
+            return build_market_preview(market, headers=headers)
+    return build_default_preview(url_path, headers=headers)
+
+
+def replace_or_insert_head_tag(document: str, pattern: re.Pattern[str], replacement: str) -> str:
+    """Replace one existing head tag or insert it before the closing head tag."""
+    if pattern.search(document):
+        return pattern.sub(replacement, document, count=1)
+
+    if "</head>" in document:
+        return document.replace("</head>", f"    {replacement}\n  </head>", 1)
+    return f"{document}\n{replacement}"
+
+
+def render_frontend_index_html(document: str, url_path: str, *, headers: Any | None = None) -> bytes:
+    """Inject crawler-visible title and Open Graph tags into the SPA shell."""
+    preview = preview_for_frontend_path(url_path, headers=headers)
+    escaped_title = html.escape(preview["title"], quote=False)
+    escaped_description = html.escape(preview["description"], quote=True)
+    escaped_url = html.escape(preview["url"], quote=True)
+    escaped_type = html.escape(preview["type"], quote=True)
+
+    rendered = replace_or_insert_head_tag(document, TITLE_TAG_RE, f"<title>{escaped_title}</title>")
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        DESCRIPTION_META_TAG_RE,
+        f'<meta name="description" content="{escaped_description}" />',
+    )
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        OG_TITLE_META_TAG_RE,
+        f'<meta property="og:title" content="{escaped_title}" />',
+    )
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        OG_DESCRIPTION_META_TAG_RE,
+        f'<meta property="og:description" content="{escaped_description}" />',
+    )
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        OG_TYPE_META_TAG_RE,
+        f'<meta property="og:type" content="{escaped_type}" />',
+    )
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        OG_URL_META_TAG_RE,
+        f'<meta property="og:url" content="{escaped_url}" />',
+    )
+    return rendered.encode("utf-8")
+
+
 def error_payload(code: str, message: str, **details: object) -> dict[str, Any]:
     """Build the standard JSON error envelope used by the API."""
     return {
@@ -381,6 +784,81 @@ def error_payload(code: str, message: str, **details: object) -> dict[str, Any]:
     }
 
 
+def uptime_seconds() -> float:
+    """Return process uptime in seconds for the imported server module."""
+    return round(time.monotonic() - PROCESS_START_MONOTONIC, 3)
+
+
+SERVICE_HEALTH_STATUSES = frozenset({"ok", "degraded", "unhealthy"})
+
+
+def _reduce_service_health_statuses(statuses: list[str]) -> str:
+    """Reduce validated component statuses down to one service status."""
+    if not statuses:
+        raise ValueError("components must not be empty")
+
+    aggregate = "ok"
+    for status in statuses:
+        if status == "unhealthy":
+            return "unhealthy"
+        if status == "degraded":
+            aggregate = "degraded"
+            continue
+        if status != "ok":
+            raise ValueError(f"unexpected service health status: {status!r}")
+    return aggregate
+
+
+def aggregate_component_status(components: dict[str, dict[str, Any]]) -> str:
+    """Aggregate component health records into one service status."""
+    component_statuses: list[str] = []
+
+    for component_name, component in components.items():
+        try:
+            status = component["status"]
+        except (KeyError, TypeError):
+            raise ValueError(f"component {component_name!r} is missing status") from None
+        if not isinstance(status, str) or status not in SERVICE_HEALTH_STATUSES:
+            raise ValueError(f"component {component_name!r} has unexpected status: {status!r}")
+        component_statuses.append(status)
+
+    return _reduce_service_health_statuses(component_statuses)
+
+
+def db_health_component() -> dict[str, Any]:
+    """Build the database component record for the v1 health contract."""
+    return {
+        "status": "ok",
+        "kind": "in_memory",
+    }
+
+
+def inference_health_component() -> dict[str, Any]:
+    """Build the inference component record for the v1 health contract."""
+    return {
+        "status": "ok",
+        "backend": ENGINE_CONFIG.backend,
+        "version": ENGINE_CONFIG.version,
+    }
+
+
+def auth_health_component() -> dict[str, Any]:
+    """Build the auth component record for the v1 health contract."""
+    return {
+        "status": "ok",
+        "requires_agent_id": AUTH_REQUIRE_AGENT_ID,
+    }
+
+
+def v1_health_components() -> dict[str, dict[str, Any]]:
+    """Build v1 health component records from in-process configuration only."""
+    return {
+        "db": db_health_component(),
+        "inference": inference_health_component(),
+        "auth": auth_health_component(),
+    }
+
+
 def health_payload() -> dict[str, Any]:
     """Build the service health response payload."""
     return {
@@ -390,24 +868,38 @@ def health_payload() -> dict[str, Any]:
     }
 
 
+def v1_health_payload() -> dict[str, Any]:
+    """Build the versioned service health response payload."""
+    payload = health_payload().copy()
+    components = v1_health_components()
+    payload["status"] = aggregate_component_status(components)
+    payload["version"] = ENGINE_CONFIG.version
+    payload["uptime_seconds"] = uptime_seconds()
+    payload["components"] = components
+    return payload
+
+
+def v1_version_payload() -> dict[str, str]:
+    """Build the public version/build metadata payload."""
+    return {
+        "service": "bayes-market",
+        "version": ENGINE_CONFIG.version,
+        "git_sha": BUILD_GIT_SHA,
+        "build_timestamp": BUILD_TIMESTAMP,
+    }
+
+
 def service_index_payload() -> dict[str, Any]:
     """Build the root index payload describing the public HTTP surface."""
     return {
         "service": "bayes-market",
         "status": "ok",
         "routes": {
-            "health": ["/health", "/healthz"],
-            "markets": [
-                "/v1/markets",
-                "/v1/markets/{id}",
-                "/v1/markets/{id}/events",
-                "/v1/markets/{id}/engine-stats",
-            ],
-            "orders": [
-                "POST /v1/markets/{id}/orders/probability-edit",
-                "POST /v1/markets/{id}/orders/event-trade",
-            ],
-            "accounts": ["/v1/accounts/{id}/risk"],
+            "health": list(HEALTH_SERVICE_INDEX_ROUTES),
+            "markets": list(MARKET_SERVICE_INDEX_ROUTES),
+            "orders": list(ORDER_SERVICE_INDEX_ROUTES),
+            "accounts": list(ACCOUNT_SERVICE_INDEX_ROUTES),
+            "stats": list(STATS_SERVICE_INDEX_ROUTES),
         },
         "meta": make_meta(),
     }
@@ -491,10 +983,22 @@ def compile_market_for_inference(
     if market is None:
         raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
 
+    conditional_marginals = CONDITIONAL_MARGINALS.get(market_id, {})
+
+    # Build outcome-count mapping for context variables referenced by conditional marginals.
+    market_outcomes_by_variable: dict[str, int] = {}
+    for context_key in conditional_marginals:
+        for assignment in context_key.split("|"):
+            variable_id, separator, _outcome_id = assignment.partition("=")
+            if separator and variable_id and variable_id not in market_outcomes_by_variable:
+                ref_market = find_market_by_variable_id(variable_id)
+                market_outcomes_by_variable[variable_id] = len(ref_market["outcomes"]) if ref_market else 0
+
     try:
         return CURRENT_MODEL_COMPILER.compile_result(
             market_snapshot=deepcopy(market),
-            conditional_marginals=deepcopy(CONDITIONAL_MARGINALS.get(market_id, {})),
+            conditional_marginals=deepcopy(conditional_marginals),
+            market_outcomes_by_variable=market_outcomes_by_variable or None,
             compile_time_ms=round(float(compile_time_ms), 3),
             last_updated=last_updated or utc_timestamp(),
         )
@@ -548,62 +1052,6 @@ def query_market_atomic_probability_for_inference(market_id: str, outcome_id: st
     return float(query_result.probability)
 
 
-def parse_context_key_variable_ids(context_key: str) -> list[str]:
-    """Extract variable ids from a serialized context-state key."""
-    if not context_key:
-        return []
-
-    variable_ids: list[str] = []
-    for assignment in context_key.split("|"):
-        variable_id, separator, _outcome_id = assignment.partition("=")
-        if separator and variable_id:
-            variable_ids.append(variable_id)
-    return variable_ids
-
-
-def clique_state_count(variable_ids: tuple[str, ...]) -> int:
-    """Estimate the discrete state count for a clique of market variables."""
-    state_count = 1
-    for variable_id in variable_ids:
-        market = find_market_by_variable_id(variable_id)
-        outcome_count = len(market["outcomes"]) if market else 0
-        state_count *= max(outcome_count, 1)
-    return state_count
-
-
-def build_market_cliques(market_id: str) -> list[dict[str, Any]]:
-    """Build clique summaries implied by a market and its conditional contexts."""
-    market = MARKETS[market_id]
-    raw_cliques: set[tuple[str, ...]] = {(str(market["variableId"]),)}
-    for context_key in CONDITIONAL_MARGINALS.get(market_id, {}):
-        clique_nodes = {str(market["variableId"]), *parse_context_key_variable_ids(context_key)}
-        raw_cliques.add(tuple(sorted(clique_nodes)))
-
-    return [
-        {
-            "id": f"{market_id}-c{index}",
-            "nodes": list(variable_ids),
-            "size": len(variable_ids),
-            "states": clique_state_count(variable_ids),
-        }
-        for index, variable_ids in enumerate(sorted(raw_cliques), start=1)
-    ]
-
-
-def estimate_market_engine_memory_bytes(cliques: list[dict[str, Any]] | tuple[CliqueSummary, ...]) -> int:
-    """Estimate memory use for a compiled market from its clique summaries."""
-    total = 0
-    for clique in cliques:
-        if isinstance(clique, CliqueSummary):
-            states = int(clique.states)
-            size = int(clique.size)
-        else:
-            states = int(clique["states"])
-            size = int(clique["size"])
-        total += states * 32 + size * 64
-    return total
-
-
 def build_market_compile_result(market_id: str, *, compile_time_ms: float | None = None) -> CompileResult:
     """Compile a market and normalize the optional compile-time measurement."""
     return compile_market_for_inference(
@@ -613,8 +1061,21 @@ def build_market_compile_result(market_id: str, *, compile_time_ms: float | None
 
 
 def refresh_market_compile_snapshot(market_id: str, *, compile_time_ms: float | None = None) -> None:
-    """Refresh cached compile diagnostics for a market."""
+    """Refresh cached compile diagnostics for a market.
+
+    Uses the global CACHE_INVALIDATION_MANAGER to skip redundant recompilation
+    when the market's source state has not changed.
+    """
     state = ensure_market_engine_state(market_id)
+    new_hash = market_replay_state_hash(market_id)
+    result = CACHE_INVALIDATION_MANAGER.check(market_id, new_hash)
+
+    state["cache_hits"] = CACHE_INVALIDATION_MANAGER.cache_hits
+    state["cache_misses"] = CACHE_INVALIDATION_MANAGER.cache_misses
+
+    if not result.needs_recompile:
+        return
+
     compile_result = build_market_compile_result(market_id, compile_time_ms=compile_time_ms)
     state["compile_id"] = compile_result.compile_id
     state["compile_type"] = compile_result.compile_type
@@ -781,6 +1242,235 @@ def ensure_account_risk_state(account_id: str, timestamp: str) -> dict[str, Any]
     return account
 
 
+def round_exposure_value(value: Any, *, default: float = 0.0) -> float:
+    """Normalize one exposure scalar to the backend's canonical precision."""
+    if value is None:
+        return round_risk_value(default)
+    return round_risk_value(float(value))
+
+
+def account_exposure_position_key(market_id: str, outcome_id: str) -> str:
+    """Build the flat composite storage key for one exposure position row."""
+    return f"{market_id}|{outcome_id}"
+
+
+def build_account_exposure_position(
+    market_id: str,
+    outcome_id: str,
+    timestamp: str,
+    *,
+    net_size: float = 0.0,
+    last_trade_price: float = 0.0,
+    last_order_id: str | None = None,
+    last_command_id: str | None = None,
+) -> dict[str, Any]:
+    """Build the canonical mutable state for one live exposure position."""
+    return {
+        "marketId": str(market_id),
+        "outcomeId": str(outcome_id),
+        "netSize": round_exposure_value(net_size),
+        "lastTradePrice": round_exposure_value(last_trade_price),
+        "updatedAt": timestamp,
+        "lastOrderId": None if last_order_id is None else str(last_order_id),
+        "lastCommandId": None if last_command_id is None else str(last_command_id),
+    }
+
+
+def build_account_exposure_state(
+    account_id: str,
+    timestamp: str,
+    *,
+    positions: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build the default live-exposure projection for one account."""
+    return {
+        "accountId": str(account_id),
+        "updatedAt": timestamp,
+        "positions": deepcopy(positions) if positions is not None else {},
+    }
+
+
+def ensure_account_exposure_state(account_id: str, timestamp: str) -> dict[str, Any]:
+    """Return an exposure account document, creating or normalizing it as needed."""
+    account = ACCOUNT_EXPOSURE.get(account_id)
+    if account is None:
+        account = build_account_exposure_state(account_id, timestamp)
+        ACCOUNT_EXPOSURE[account_id] = account
+        return account
+
+    account["accountId"] = str(account_id)
+    if not isinstance(account.get("updatedAt"), str):
+        account["updatedAt"] = timestamp
+    positions = account.get("positions")
+    if not isinstance(positions, dict):
+        account["positions"] = {}
+    return account
+
+
+def ensure_account_exposure_position(
+    account: dict[str, Any],
+    market_id: str,
+    outcome_id: str,
+    timestamp: str,
+) -> dict[str, Any]:
+    """Return one canonical exposure position row for mutation-oriented callers."""
+    positions = account.get("positions")
+    if not isinstance(positions, dict):
+        positions = {}
+        account["positions"] = positions
+
+    composite_key = account_exposure_position_key(market_id, outcome_id)
+    position = positions.get(composite_key)
+    if not isinstance(position, dict):
+        position = build_account_exposure_position(market_id, outcome_id, timestamp)
+        positions[composite_key] = position
+        return position
+
+    position["marketId"] = str(market_id)
+    position["outcomeId"] = str(outcome_id)
+    position["netSize"] = round_exposure_value(position.get("netSize"))
+    position["lastTradePrice"] = round_exposure_value(position.get("lastTradePrice"))
+    if not isinstance(position.get("updatedAt"), str):
+        position["updatedAt"] = timestamp
+    position["lastOrderId"] = None if position.get("lastOrderId") is None else str(position["lastOrderId"])
+    position["lastCommandId"] = None if position.get("lastCommandId") is None else str(position["lastCommandId"])
+    return position
+
+
+def build_event_trade_position_net_change(
+    position: dict[str, Any] | None,
+    order: dict[str, Any],
+) -> dict[str, float]:
+    """Compute the signed net-size transition for one accepted EventTrade."""
+    current_net_size = 0.0 if position is None else round_exposure_value(position.get("netSize"))
+    size = round_exposure_value(order.get("size"))
+    side = str(order.get("side"))
+    if side == "buy":
+        signed_delta = size
+    elif side == "sell":
+        signed_delta = round_risk_value(-size)
+    else:
+        raise ValueError(f"Unsupported event-trade side: {side}")
+
+    resulting_net_size = round_risk_value(current_net_size + signed_delta)
+    if resulting_net_size == -0.0:
+        resulting_net_size = 0.0
+    return {
+        "currentNetSize": current_net_size,
+        "signedDelta": signed_delta,
+        "resultingNetSize": resulting_net_size,
+    }
+
+
+def preview_event_trade_position_net_change(
+    account_id: str,
+    market_id: str,
+    normalized_payload: dict[str, Any],
+) -> dict[str, float]:
+    """Preview one normalized EventTrade net-size transition without mutating exposure state."""
+    literal = normalized_payload["formula"][0][0]
+    outcome_id = str(literal["outcomeId"])
+    composite_key = account_exposure_position_key(market_id, outcome_id)
+
+    position: dict[str, Any] | None = None
+    account = ACCOUNT_EXPOSURE.get(account_id)
+    if isinstance(account, dict):
+        positions = account.get("positions")
+        if isinstance(positions, dict):
+            stored_position = positions.get(composite_key)
+            if isinstance(stored_position, dict):
+                position = stored_position
+
+    return build_event_trade_position_net_change(position, normalized_payload)
+
+
+def sync_account_exposure_state(order: dict[str, Any]) -> dict[str, Any]:
+    """Apply one accepted EventTrade order to the live account-exposure projection."""
+    account_id = str(order["accountId"])
+    market_id = str(order.get("targetMarketId") or order["marketId"])
+    outcome_id = str(order.get("targetOutcomeId") or order["payload"]["formula"][0][0]["outcomeId"])
+    timestamp = str(order["filledAt"])
+
+    account = ensure_account_exposure_state(account_id, timestamp)
+    position = ensure_account_exposure_position(account, market_id, outcome_id, timestamp)
+    net_change = build_event_trade_position_net_change(position, order)
+    composite_key = account_exposure_position_key(market_id, outcome_id)
+    positions = account["positions"]
+
+    if net_change["resultingNetSize"] == 0.0:
+        positions.pop(composite_key, None)
+        if positions:
+            account["updatedAt"] = timestamp
+        else:
+            ACCOUNT_EXPOSURE.pop(account_id, None)
+    else:
+        position["netSize"] = net_change["resultingNetSize"]
+        position["lastTradePrice"] = round_exposure_value(order.get("price"))
+        position["updatedAt"] = timestamp
+        position["lastOrderId"] = str(order["id"])
+        position["lastCommandId"] = str(order["commandId"])
+        account["updatedAt"] = timestamp
+
+    return {
+        "accountId": account_id,
+        "marketId": market_id,
+        "outcomeId": outcome_id,
+        **net_change,
+    }
+
+
+def settle_market_account_exposure(market_id: str, timestamp: str) -> list[dict[str, Any]]:
+    """Remove one resolved market from the live account-exposure projection."""
+    cleanup: list[dict[str, Any]] = []
+    composite_key_prefix = f"{market_id}|"
+
+    for account_id in sorted(list(ACCOUNT_EXPOSURE)):
+        account = ACCOUNT_EXPOSURE.get(account_id)
+        if not isinstance(account, dict):
+            continue
+
+        positions = account.get("positions")
+        if not isinstance(positions, dict):
+            continue
+
+        removed_keys = [
+            composite_key
+            for composite_key, position in list(positions.items())
+            if (
+                isinstance(position, dict)
+                and str(position.get("marketId")) == market_id
+            )
+            or (
+                isinstance(composite_key, str)
+                and composite_key.startswith(composite_key_prefix)
+            )
+        ]
+        if not removed_keys:
+            continue
+
+        for composite_key in removed_keys:
+            positions.pop(composite_key, None)
+
+        remaining_live_positions = serialize_account_exposure_positions(account)
+        pruned = not remaining_live_positions
+        if pruned:
+            ACCOUNT_EXPOSURE.pop(account_id, None)
+        else:
+            account["updatedAt"] = timestamp
+
+        cleanup.append(
+            {
+                "accountId": account_id,
+                "marketId": market_id,
+                "removedPositionCount": len(removed_keys),
+                "remainingPositionCount": len(remaining_live_positions),
+                "pruned": pruned,
+            }
+        )
+
+    return cleanup
+
+
 def preview_account_min_asset(account_id: str, impact_score: float) -> dict[str, Any]:
     """Preview the account-wide min-asset effect of a proposed impact score."""
     account = ACCOUNT_RISK.get(account_id)
@@ -936,6 +1626,72 @@ def sync_account_risk_state(order: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def serialize_account_exposure_position(position: dict[str, Any]) -> dict[str, Any] | None:
+    """Project one canonical exposure row into the public response shape."""
+    net_size = round_exposure_value(position.get("netSize"))
+    if net_size == 0.0:
+        return None
+
+    return {
+        "marketId": str(position["marketId"]),
+        "outcomeId": str(position["outcomeId"]),
+        "netSize": net_size,
+        "absSize": round_risk_value(abs(net_size)),
+        "lastTradePrice": round_exposure_value(position.get("lastTradePrice")),
+        "updatedAt": str(position["updatedAt"]),
+        "lastOrderId": position.get("lastOrderId"),
+        "lastCommandId": position.get("lastCommandId"),
+    }
+
+
+def serialize_account_exposure_positions(account: dict[str, Any]) -> list[dict[str, Any]]:
+    """Project all live exposure rows in deterministic lexical order."""
+    positions = account.get("positions")
+    if not isinstance(positions, dict):
+        return []
+
+    serialized_positions: list[dict[str, Any]] = []
+    for position in positions.values():
+        if not isinstance(position, dict):
+            continue
+        serialized_position = serialize_account_exposure_position(position)
+        if serialized_position is not None:
+            serialized_positions.append(serialized_position)
+
+    serialized_positions.sort(key=lambda position: (position["marketId"], position["outcomeId"]))
+    return serialized_positions
+
+
+def serialize_account_exposure(account: dict[str, Any]) -> dict[str, Any]:
+    """Project one stored exposure account into the public account.exposure shape."""
+    return {
+        "maxPositionSize": round_risk_value(max_position_size),
+        "updatedAt": str(account["updatedAt"]),
+        "positions": serialize_account_exposure_positions(account),
+    }
+
+
+def get_account_exposure(account_id: str) -> tuple[dict[str, Any], int]:
+    """Return the read model for one account's current live EventTrade exposure."""
+    account = ACCOUNT_EXPOSURE.get(account_id)
+    if account is None:
+        raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
+
+    exposure = serialize_account_exposure(account)
+    if not exposure["positions"]:
+        # Exposure existence is projection-local: once all live rows are pruned,
+        # the account disappears from this read model and resolves as 404 again.
+        raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
+
+    return {
+        "account": {
+            "id": account_id,
+            "exposure": exposure,
+        },
+        "meta": make_meta(),
+    }, 200
+
+
 def get_account_risk(account_id: str) -> tuple[dict[str, Any], int]:
     """Return the read model for one account's current risk state."""
     account = ACCOUNT_RISK.get(account_id)
@@ -975,47 +1731,966 @@ def get_account_risk(account_id: str) -> tuple[dict[str, Any], int]:
     }, 200
 
 
-def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
-    """Return the market collection, optionally filtered by status."""
-    statuses = query.get("status", [])
-    if len(statuses) > 1:
+def parse_iso_timestamp(timestamp: str) -> datetime:
+    """Parse an ISO-8601 timestamp into a UTC datetime."""
+    normalized = str(timestamp).replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def format_iso_timestamp(timestamp: datetime) -> str:
+    """Serialize a UTC datetime using the backend's Z suffix convention."""
+    return timestamp.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def parse_analytics_interval_query(query: dict[str, list[str]]) -> str:
+    """Parse the optional analytics bucket interval query parameter."""
+    values = query.get("interval", [])
+    if len(values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "interval must be provided at most once",
+            {"parameter": "interval", "received": values},
+        )
+
+    if not values:
+        return "day"
+
+    interval = values[0]
+    if interval not in ALLOWED_ANALYTICS_INTERVALS:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "interval must be one of the supported bucket intervals",
+            {
+                "parameter": "interval",
+                "received": interval,
+                "allowed": sorted(ALLOWED_ANALYTICS_INTERVALS),
+            },
+        )
+    return interval
+
+
+def parse_boolean_query_param(
+    query: dict[str, list[str]],
+    name: str,
+    *,
+    default: bool,
+) -> bool:
+    """Parse a single boolean query parameter using the API's lowercase wire format."""
+    values = query.get(name, [])
+    if len(values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            f"{name} must be provided at most once",
+            {"parameter": name, "received": values},
+        )
+
+    if not values:
+        return default
+
+    raw_value = values[0]
+    if raw_value == "true":
+        return True
+    if raw_value == "false":
+        return False
+
+    raise ApiError(
+        400,
+        "invalid_query",
+        f"{name} must be true or false",
+        {"parameter": name, "received": raw_value, "allowed": ["false", "true"]},
+    )
+
+
+def parse_market_list_query(query: dict[str, list[str]]) -> dict[str, Any]:
+    """Parse and normalize the supported GET /v1/markets query parameters."""
+    status_values = query.get("status", [])
+    if len(status_values) > 1:
         raise ApiError(
             400,
             "invalid_query",
             "status must be provided at most once",
-            {"parameter": "status", "received": statuses},
+            {"parameter": "status", "received": status_values},
         )
 
-    status = statuses[0] if statuses else None
-    markets = list(MARKETS.values())
-    if status is not None:
-        if status not in ALLOWED_MARKET_STATUSES:
-            raise ApiError(
-                400,
-                "invalid_query",
-                "status must be one of the supported market states",
-                {"parameter": "status", "received": status, "allowed": sorted(ALLOWED_MARKET_STATUSES)},
+    sort_values = query.get("sort", [])
+    if len(sort_values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "sort must be provided at most once",
+            {"parameter": "sort", "received": sort_values},
+        )
+
+    query_values = query.get("q", [])
+    if len(query_values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "q must be provided at most once",
+            {"parameter": "q", "received": query_values},
+        )
+
+    raw_status = status_values[0] if status_values else None
+    status: str | None = raw_status
+    if status == "all":
+        status = None
+    elif status is not None and status not in ALLOWED_MARKET_STATUSES:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "status must be one of the supported market states",
+            {"parameter": "status", "received": status, "allowed": sorted(ALLOWED_MARKET_STATUSES | {'all'})},
+        )
+
+    sort = sort_values[0] if sort_values else None
+    if sort is not None and sort not in ALLOWED_MARKET_SORTS:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "sort must be one of the supported market sort orders",
+            {"parameter": "sort", "received": sort, "allowed": sorted(ALLOWED_MARKET_SORTS)},
+        )
+
+    title_query = query_values[0].strip() if query_values else None
+    if title_query == "":
+        title_query = None
+
+    include_resolved = parse_boolean_query_param(query, "include_resolved", default=False)
+    # status=all and status=resolved both implicitly include resolved markets.
+    effective_include_resolved = include_resolved or raw_status == "all" or status == "resolved"
+
+    return {
+        "status": status,
+        "sort": sort,
+        "q": title_query,
+        "include_resolved": effective_include_resolved,
+    }
+
+
+def snapshot_market_analytics_state(market_id: str) -> dict[str, Any]:
+    """Snapshot the mutable state needed to project one market analytics response."""
+    with get_market_write_lock(market_id):
+        market = MARKETS.get(market_id)
+        if market is None:
+            raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+        commands_snapshot = COMMANDS.copy()
+        orders_snapshot = ORDERS.copy()
+        with _EVENTS_LOCK:
+            events_snapshot = EVENTS.copy()
+
+        return {
+            "market": deepcopy(market),
+            "commands": {
+                command_id: deepcopy(command)
+                for command_id, command in commands_snapshot.items()
+                if str(command.get("marketId")) == market_id
+            },
+            "orders": [
+                deepcopy(order)
+                for order in orders_snapshot.values()
+                if str(order.get("marketId")) == market_id
+            ],
+            "events": [
+                deepcopy(event)
+                for event in events_snapshot.values()
+                if str(event.get("marketId")) == market_id
+            ],
+        }
+
+
+def normalize_accepted_activity_rows(
+    market_id: str,
+    commands: dict[str, dict[str, Any]],
+    orders: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Join accepted orders to their terminal events for analytics projections."""
+    del market_id
+
+    accepted_events_by_command: dict[str, dict[str, Any]] = {}
+    for event in events:
+        if str(event.get("eventType")) != "CommandAccepted":
+            continue
+        command_id = str(event.get("commandId"))
+        command = commands.get(command_id)
+        if not isinstance(command, dict):
+            continue
+        if str(command.get("commandType")) not in {"ProbabilityEdit", "EventTrade"}:
+            continue
+        accepted_events_by_command[command_id] = event
+
+    activity_rows: list[dict[str, Any]] = []
+    for order in orders:
+        command_id = str(order.get("commandId"))
+        command = commands.get(command_id)
+        event = accepted_events_by_command.get(command_id)
+        if not isinstance(command, dict) or not isinstance(event, dict):
+            continue
+
+        command_type = str(command.get("commandType"))
+        if command_type == "ProbabilityEdit":
+            volume = round_risk_value(float(order.get("impactScore", 0.0)))
+        elif command_type == "EventTrade":
+            volume = round_risk_value(float(order.get("notional", 0.0)))
+        else:
+            continue
+
+        activity_rows.append(
+            {
+                "commandId": command_id,
+                "orderId": str(order.get("id")),
+                "marketId": str(order.get("marketId")),
+                "accountId": str(order.get("accountId")),
+                "commandType": command_type,
+                "submittedAt": str(command.get("submittedAt")),
+                "acceptedAt": str(event.get("emittedAt")),
+                "seq": int(event.get("seq", 0)),
+                "eventId": str(event.get("eventId")),
+                "volume": volume,
+                "order": deepcopy(order),
+                "event": deepcopy(event),
+            }
+        )
+
+    activity_rows.sort(key=lambda row: (int(row["seq"]), str(row["eventId"])))
+    return activity_rows
+
+
+def build_market_price_series(
+    market: dict[str, Any],
+    commands: dict[str, dict[str, Any]],
+    orders: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build the unconditional per-outcome price history for one market."""
+    outcome_ids = [str(outcome["id"]) for outcome in market["outcomes"]]
+    outcome_names = {
+        str(outcome["id"]): str(outcome["name"])
+        for outcome in market["outcomes"]
+    }
+    series_points: dict[str, list[dict[str, Any]]] = {
+        outcome_id: []
+        for outcome_id in outcome_ids
+    }
+
+    accepted_orders_by_command = {
+        str(order["commandId"]): order
+        for order in orders
+    }
+    accepted_events = sorted(
+        (
+            event
+            for event in events
+            if str(event.get("eventType")) == "CommandAccepted"
+        ),
+        key=lambda event: (int(event["seq"]), str(event["eventId"])),
+    )
+
+    has_marginal_history = False
+    for event in accepted_events:
+        command = commands.get(str(event["commandId"]))
+        if not isinstance(command, dict):
+            continue
+
+        command_type = str(command.get("commandType"))
+        if command_type == "ProbabilityEdit":
+            order = accepted_orders_by_command.get(str(command["commandId"]))
+            if not isinstance(order, dict):
+                continue
+            payload = order.get("payload", {})
+            if isinstance(payload, dict) and payload.get("context"):
+                continue
+
+            has_marginal_history = True
+            for outcome_id in outcome_ids:
+                if outcome_id not in order["newMarginals"]:
+                    continue
+                series_points[outcome_id].append(
+                    {
+                        "seq": int(event["seq"]),
+                        "emittedAt": str(event["emittedAt"]),
+                        "probability": round_risk_value(float(order["newMarginals"][outcome_id])),
+                    }
+                )
+            continue
+
+        if command_type == "AdminOp" and command.get("payload", {}).get("kind") == "ResolveMarket":
+            has_marginal_history = True
+            resolution_marginals = build_market_resolution_marginals(
+                market,
+                str(command["payload"]["outcomeId"]),
             )
+            for outcome_id in outcome_ids:
+                series_points[outcome_id].append(
+                    {
+                        "seq": int(event["seq"]),
+                        "emittedAt": str(event["emittedAt"]),
+                        "probability": round_risk_value(float(resolution_marginals[outcome_id])),
+                    }
+                )
+
+    baseline_market = INITIAL_MARKETS.get(str(market["id"]))
+    if baseline_market is None and not has_marginal_history:
+        baseline_market = market
+
+    if isinstance(baseline_market, dict):
+        baseline_emitted_at = str(baseline_market["created_at"])
+        for outcome_id in outcome_ids:
+            if outcome_id not in baseline_market["marginals"]:
+                continue
+            series_points[outcome_id].insert(
+                0,
+                {
+                    "seq": 0,
+                    "emittedAt": baseline_emitted_at,
+                    "probability": round_risk_value(float(baseline_market["marginals"][outcome_id])),
+                },
+            )
+
+    return [
+        {
+            "outcomeId": outcome_id,
+            "outcomeName": outcome_names[outcome_id],
+            "points": series_points[outcome_id],
+        }
+        for outcome_id in outcome_ids
+    ]
+
+
+def bucket_events_by_interval(activity_rows: list[dict[str, Any]], interval: str) -> list[dict[str, Any]]:
+    """Aggregate accepted activity into sparse UTC time buckets."""
+    buckets: dict[datetime, dict[str, Any]] = {}
+    for row in activity_rows:
+        accepted_at = parse_iso_timestamp(str(row["acceptedAt"]))
+        if interval == "hour":
+            bucket_start = accepted_at.replace(minute=0, second=0, microsecond=0)
+            bucket_end = bucket_start + timedelta(hours=1)
+        else:
+            bucket_start = accepted_at.replace(hour=0, minute=0, second=0, microsecond=0)
+            bucket_end = bucket_start + timedelta(days=1)
+
+        bucket = buckets.get(bucket_start)
+        if bucket is None:
+            bucket = {
+                "bucketStart": format_iso_timestamp(bucket_start),
+                "bucketEnd": format_iso_timestamp(bucket_end),
+                "tradeCount": 0,
+                "volume": 0.0,
+            }
+            buckets[bucket_start] = bucket
+
+        bucket["tradeCount"] += 1
+        bucket["volume"] = round_risk_value(float(bucket["volume"]) + float(row["volume"]))
+
+    return [buckets[key] for key in sorted(buckets)]
+
+
+def rank_traders_by_volume(activity_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rank traders by accepted activity volume with deterministic tie-breaking."""
+    traders: dict[str, dict[str, Any]] = {}
+    for row in activity_rows:
+        account_id = str(row["accountId"])
+        trader = traders.get(account_id)
+        if trader is None:
+            trader = {
+                "accountId": account_id,
+                "tradeCount": 0,
+                "volume": 0.0,
+                "lastActivityAt": str(row["acceptedAt"]),
+            }
+            traders[account_id] = trader
+
+        trader["tradeCount"] += 1
+        trader["volume"] = round_risk_value(float(trader["volume"]) + float(row["volume"]))
+        if str(row["acceptedAt"]) > str(trader["lastActivityAt"]):
+            trader["lastActivityAt"] = str(row["acceptedAt"])
+
+    ranked = sorted(
+        traders.values(),
+        key=lambda trader: (
+            -float(trader["volume"]),
+            -parse_iso_timestamp(str(trader["lastActivityAt"])).timestamp(),
+            str(trader["accountId"]),
+        ),
+    )
+    return [
+        {
+            "accountId": str(trader["accountId"]),
+            "tradeCount": int(trader["tradeCount"]),
+            "volume": round_risk_value(float(trader["volume"])),
+        }
+        for trader in ranked
+    ]
+
+
+def get_market_analytics(
+    market_id: str,
+    query: dict[str, list[str]] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Return the market analytics projection for one market."""
+    normalized_query = query or {}
+    interval = parse_analytics_interval_query(normalized_query)
+    snapshot = snapshot_market_analytics_state(market_id)
+    activity_rows = normalize_accepted_activity_rows(
+        market_id,
+        snapshot["commands"],
+        snapshot["orders"],
+        snapshot["events"],
+    )
+    price_series = build_market_price_series(
+        snapshot["market"],
+        snapshot["commands"],
+        snapshot["orders"],
+        snapshot["events"],
+    )
+
+    accepted_event_times = [
+        str(event["emittedAt"])
+        for event in snapshot["events"]
+        if str(event.get("eventType")) == "CommandAccepted"
+    ]
+    total_volume = round_risk_value(sum(float(row["volume"]) for row in activity_rows))
+
+    return {
+        "marketId": market_id,
+        "summary": {
+            "totalTrades": len(activity_rows),
+            "totalVolume": total_volume,
+            "uniqueTraders": len({str(row["accountId"]) for row in activity_rows}),
+            "bucketInterval": interval,
+            "lastUpdated": max(accepted_event_times) if accepted_event_times else str(snapshot["market"]["created_at"]),
+        },
+        "priceSeries": price_series,
+        "volumeBuckets": bucket_events_by_interval(activity_rows, interval),
+        "topTraders": rank_traders_by_volume(activity_rows),
+        "meta": make_meta(interval=interval),
+    }, 200
+
+
+def snapshot_account_pnl_state(account_id: str) -> dict[str, Any]:
+    """Snapshot the mutable state needed to compute one account's P&L."""
+    orders_snapshot = ORDERS.copy()
+    account_orders = [
+        deepcopy(order)
+        for order in orders_snapshot.values()
+        if str(order.get("accountId")) == account_id
+    ]
+    market_ids = sorted({str(order["marketId"]) for order in account_orders})
+
+    locks = [get_market_write_lock(market_id) for market_id in market_ids]
+    for lock in locks:
+        lock.acquire()
+
+    try:
+        markets = {
+            market_id: deepcopy(MARKETS[market_id])
+            for market_id in market_ids
+            if market_id in MARKETS
+        }
+        conditional_marginals = {
+            market_id: deepcopy(CONDITIONAL_MARGINALS.get(market_id, {}))
+            for market_id in markets
+        }
+        account = deepcopy(ACCOUNT_RISK.get(account_id))
+        with _EVENTS_LOCK:
+            events_snapshot = EVENTS.copy()
+    finally:
+        for lock in reversed(locks):
+            lock.release()
+
+    relevant_market_ids = frozenset(markets)
+    relevant_events = [
+        deepcopy(event)
+        for event in events_snapshot.values()
+        if str(event.get("marketId")) in relevant_market_ids
+    ]
+
+    return {
+        "account": account,
+        "orders": account_orders,
+        "markets": markets,
+        "conditionalMarginals": conditional_marginals,
+        "events": relevant_events,
+    }
+
+
+def valuation_distribution_for_slice(
+    market: dict[str, Any],
+    conditional_marginals: dict[str, dict[str, float]],
+    context_key: str,
+) -> dict[str, float]:
+    """Resolve the current valuation distribution for one probability-edit slice."""
+    if str(market.get("status")) == "resolved" and isinstance(market.get("resolution"), str):
+        return build_market_resolution_marginals(market, str(market["resolution"]))
+
+    if context_key:
+        conditional = conditional_marginals.get(context_key)
+        if isinstance(conditional, dict):
+            return deepcopy(conditional)
+
+    return deepcopy(market["marginals"])
+
+
+def ensure_account_pnl_position(
+    positions: dict[str, dict[str, Any]],
+    market: dict[str, Any],
+) -> dict[str, Any]:
+    """Ensure the public P&L row exists for one market."""
+    market_id = str(market["id"])
+    position = positions.get(market_id)
+    if position is None:
+        position = {
+            "marketId": market_id,
+            "marketTitle": str(market["title"]),
+            "marketStatus": str(market["status"]),
+            "realizedPnl": 0.0,
+            "unrealizedPnl": 0.0,
+            "costBasis": 0.0,
+            "markedValue": 0.0,
+        }
+        positions[market_id] = position
+    else:
+        position["marketTitle"] = str(market["title"])
+        position["marketStatus"] = str(market["status"])
+    return position
+
+
+def accumulate_account_pnl_position(
+    position: dict[str, Any],
+    *,
+    cost_basis: float,
+    marked_value: float,
+    realized_pnl: float,
+    unrealized_pnl: float,
+) -> None:
+    """Accumulate one valuation leg into a market-level P&L row."""
+    position["costBasis"] = round_risk_value(float(position["costBasis"]) + float(cost_basis))
+    position["markedValue"] = round_risk_value(float(position["markedValue"]) + float(marked_value))
+    position["realizedPnl"] = round_risk_value(float(position["realizedPnl"]) + float(realized_pnl))
+    position["unrealizedPnl"] = round_risk_value(float(position["unrealizedPnl"]) + float(unrealized_pnl))
+
+
+def compute_account_pnl(account_id: str) -> dict[str, Any]:
+    """Compute per-market and total account P&L by replaying accepted orders."""
+    snapshot = snapshot_account_pnl_state(account_id)
+    account = snapshot["account"]
+    account_orders = snapshot["orders"]
+
+    if not account_orders and account is None:
+        raise ApiError(404, "account_not_found", "Account not found", {"accountId": account_id})
+
+    positions: dict[str, dict[str, Any]] = {}
+    probability_slices: dict[str, dict[str, Any]] = {}
+    probability_orders = sorted(
+        (
+            order
+            for order in account_orders
+            if str(order.get("type")) == "ProbabilityEdit"
+        ),
+        key=lambda order: (str(order["filledAt"]), str(order["id"])),
+    )
+    for order in probability_orders:
+        market_id = str(order["marketId"])
+        market = snapshot["markets"].get(market_id)
+        if not isinstance(market, dict):
+            continue
+
+        payload = order.get("payload", {})
+        context = deepcopy(payload.get("context", [])) if isinstance(payload, dict) else []
+        context_key = context_state_key(context)
+        slice_key = account_lmsr_slice_key(market_id, context)
+        slice_state = probability_slices.get(slice_key)
+        if slice_state is None:
+            slice_state = {
+                "marketId": market_id,
+                "contextKey": context_key,
+                "scoreByOutcome": {},
+                "costBasis": 0.0,
+            }
+            probability_slices[slice_key] = slice_state
+
+        score_delta = _round_score_by_outcome(
+            lmsr.lmsr_score_delta(
+                order["previousMarginals"],
+                order["newMarginals"],
+                float(market["liquidity"]),
+            )
+        )
+        slice_state["scoreByOutcome"] = _accumulate_score_by_outcome(slice_state["scoreByOutcome"], score_delta)
+        slice_state["costBasis"] = round_risk_value(float(slice_state["costBasis"]) + float(order["impactScore"]))
+
+    for slice_state in probability_slices.values():
+        market_id = str(slice_state["marketId"])
+        market = snapshot["markets"].get(market_id)
+        if not isinstance(market, dict):
+            continue
+
+        valuation_distribution = valuation_distribution_for_slice(
+            market,
+            snapshot["conditionalMarginals"].get(market_id, {}),
+            str(slice_state["contextKey"]),
+        )
+        marked_value = round_risk_value(
+            sum(
+                float(valuation_distribution.get(outcome_id, 0.0)) * float(score)
+                for outcome_id, score in slice_state["scoreByOutcome"].items()
+            )
+        )
+        cost_basis = round_risk_value(float(slice_state["costBasis"]))
+        net_pnl = round_risk_value(marked_value - cost_basis)
+        position = ensure_account_pnl_position(positions, market)
+        if str(market["status"]) == "resolved":
+            accumulate_account_pnl_position(
+                position,
+                cost_basis=cost_basis,
+                marked_value=marked_value,
+                realized_pnl=net_pnl,
+                unrealized_pnl=0.0,
+            )
+        else:
+            accumulate_account_pnl_position(
+                position,
+                cost_basis=cost_basis,
+                marked_value=marked_value,
+                realized_pnl=0.0,
+                unrealized_pnl=net_pnl,
+            )
+
+    event_trade_orders = sorted(
+        (
+            order
+            for order in account_orders
+            if str(order.get("type")) == "EventTrade"
+        ),
+        key=lambda order: (str(order["filledAt"]), str(order["id"])),
+    )
+    for order in event_trade_orders:
+        market_id = str(order["marketId"])
+        market = snapshot["markets"].get(market_id)
+        if not isinstance(market, dict):
+            continue
+
+        signed_size = float(order["size"]) if str(order["side"]) == "buy" else -float(order["size"])
+        cost_basis = round_risk_value(signed_size * float(order["price"]))
+        if str(market["status"]) == "resolved" and isinstance(market.get("resolution"), str):
+            marked_probability = 1.0 if str(order["targetOutcomeId"]) == str(market["resolution"]) else 0.0
+        else:
+            marked_probability = float(market["marginals"].get(str(order["targetOutcomeId"]), 0.0))
+
+        marked_value = round_risk_value(signed_size * marked_probability)
+        net_pnl = round_risk_value(marked_value - cost_basis)
+        position = ensure_account_pnl_position(positions, market)
+        if str(market["status"]) == "resolved":
+            accumulate_account_pnl_position(
+                position,
+                cost_basis=cost_basis,
+                marked_value=marked_value,
+                realized_pnl=net_pnl,
+                unrealized_pnl=0.0,
+            )
+        else:
+            accumulate_account_pnl_position(
+                position,
+                cost_basis=cost_basis,
+                marked_value=marked_value,
+                realized_pnl=0.0,
+                unrealized_pnl=net_pnl,
+            )
+
+    ordered_positions = [positions[market_id] for market_id in sorted(positions)]
+    totals = {
+        "costBasis": round_risk_value(sum(float(position["costBasis"]) for position in ordered_positions)),
+        "markedValue": round_risk_value(sum(float(position["markedValue"]) for position in ordered_positions)),
+        "realizedPnl": round_risk_value(sum(float(position["realizedPnl"]) for position in ordered_positions)),
+        "unrealizedPnl": round_risk_value(sum(float(position["unrealizedPnl"]) for position in ordered_positions)),
+    }
+    totals["netPnl"] = round_risk_value(float(totals["realizedPnl"]) + float(totals["unrealizedPnl"]))
+
+    updated_at_candidates = [
+        str(order["filledAt"])
+        for order in account_orders
+    ]
+    updated_at_candidates.extend(
+        str(event["emittedAt"])
+        for event in snapshot["events"]
+        if str(event.get("eventType")) == "CommandAccepted"
+    )
+    if isinstance(account, dict) and isinstance(account.get("updatedAt"), str):
+        updated_at_candidates.append(str(account["updatedAt"]))
+
+    return {
+        "account": {
+            "id": account_id,
+            "pnl": {
+                "totals": totals,
+                "positions": ordered_positions,
+                "updatedAt": max(updated_at_candidates) if updated_at_candidates else utc_timestamp(),
+            },
+        },
+        "meta": make_meta(),
+    }
+
+
+def get_account_pnl(account_id: str) -> tuple[dict[str, Any], int]:
+    """Return the replayed P&L projection for one account."""
+    return compute_account_pnl(account_id), 200
+
+
+def aggregate_platform_stats() -> dict[str, int | float]:
+    """Aggregate platform-wide totals for the stats read model."""
+    market_snapshot = list(MARKETS.values())
+    order_snapshot = list(ORDERS.values())
+    trade_orders = [
+        order
+        for order in order_snapshot
+        if order["status"] == "filled" and order["type"] in {"ProbabilityEdit", "EventTrade"}
+    ]
+    total_volume = sum(float(market["volume"]) for market in market_snapshot)
+
+    return {
+        "total_markets": len(market_snapshot),
+        "active_markets": sum(1 for market in market_snapshot if market["status"] == "active"),
+        "resolved_markets": sum(1 for market in market_snapshot if market["status"] == "resolved"),
+        "total_volume": round_risk_value(total_volume),
+        "total_trades": len(trade_orders),
+        "total_accounts": len({order["accountId"] for order in trade_orders}),
+    }
+
+
+def platform_stats_payload() -> dict[str, Any]:
+    """Build the versioned platform stats response."""
+    return {**aggregate_platform_stats(), "meta": make_meta()}
+
+
+def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
+    """Return the market collection with optional status, title, and sort filters."""
+    filters = parse_market_list_query(query)
+    markets = list(MARKETS.values())
+    status = filters["status"]
+    sort = filters["sort"]
+    title_query = filters["q"]
+    include_resolved = filters["include_resolved"]
+
+    if not include_resolved:
+        markets = [market for market in markets if market["status"] != "resolved"]
+    if status is not None:
         markets = [market for market in markets if market["status"] == status]
+    if title_query is not None:
+        needle = title_query.casefold()
+        markets = [market for market in markets if needle in str(market["title"]).casefold()]
+    if sort == "volume":
+        markets = sorted(markets, key=lambda market: float(market["volume"]), reverse=True)
+    elif sort == "liquidity":
+        markets = sorted(markets, key=lambda market: float(market["liquidity"]), reverse=True)
+    elif sort == "created":
+        markets = sorted(
+            markets,
+            key=lambda market: parse_iso_timestamp(str(market["created_at"])),
+            reverse=True,
+        )
 
     summaries = [market_summary(market) for market in markets]
     return {
         "markets": summaries,
         "count": len(summaries),
-        "meta": make_meta(filters={"status": status}),
+        "meta": make_meta(filters=filters),
     }, 200
 
 
-def get_market_detail(market_id: str) -> tuple[dict[str, Any], int]:
+def create_market(body: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
+    """Create a new market from a POST payload."""
+    if not body:
+        raise ApiError(400, "invalid_payload", "Request body is required")
+
+    title = body.get("title")
+    description = body.get("description", "")
+    outcomes = body.get("outcomes")
+    expires_at = body.get("expires_at")
+    liquidity = body.get("liquidity", 10000.0)
+
+    if not title or not isinstance(title, str):
+        raise ApiError(400, "invalid_payload", "title is required and must be a string")
+    if not outcomes or not isinstance(outcomes, list) or len(outcomes) < 2:
+        raise ApiError(400, "invalid_payload", "outcomes must be a list with at least 2 entries")
+    for o in outcomes:
+        if not isinstance(o, dict) or "id" not in o or "name" not in o:
+            raise ApiError(400, "invalid_payload", "each outcome must have id and name")
+    if not expires_at or not isinstance(expires_at, str):
+        raise ApiError(400, "invalid_payload", "expires_at is required (ISO 8601 string)")
+
+    # Check for duplicate outcome IDs
+    outcome_ids = [o["id"] for o in outcomes]
+    if len(outcome_ids) != len(set(outcome_ids)):
+        raise ApiError(400, "invalid_payload", "outcome IDs must be unique")
+
+    # Generate variable ID from title
+    variable_id = title.lower().replace(" ", "_")[:40]
+    existing_market = next(
+        (market for market in MARKETS.values() if str(market.get("variableId")) == variable_id),
+        None,
+    )
+    if existing_market is not None:
+        raise ApiError(
+            409,
+            "market_already_exists",
+            "A market with this title already exists",
+            {
+                "title": title,
+                "variableId": variable_id,
+                "existingMarketId": str(existing_market["id"]),
+            },
+        )
+
+    # Generate market ID
+    market_num = len(MARKETS) + 1
+    market_id = f"m{market_num}"
+    while market_id in MARKETS:
+        market_num += 1
+        market_id = f"m{market_num}"
+
+    # Uniform prior
+    uniform_p = round(1.0 / len(outcomes), 6)
+    marginals = {}
+    for i, o in enumerate(outcomes):
+        if i < len(outcomes) - 1:
+            marginals[o["id"]] = uniform_p
+        else:
+            marginals[o["id"]] = round(1.0 - uniform_p * (len(outcomes) - 1), 6)
+
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    market: dict[str, Any] = {
+        "id": market_id,
+        "title": title,
+        "description": description,
+        "variableId": variable_id,
+        "status": "active",
+        "outcomes": [{"id": o["id"], "name": o["name"]} for o in outcomes],
+        "marginals": marginals,
+        "liquidity": float(liquidity),
+        "volume": 0.0,
+        "created_at": now,
+        "expires_at": expires_at,
+    }
+
+    MARKETS[market_id] = market
+    ensure_market_engine_state(market_id)
+
+    return {
+        "market": deepcopy(market),
+        "meta": make_meta(),
+    }, 201
+
+
+def parse_market_context_query(
+    query: dict[str, list[str]],
+    *,
+    target_variable_id: str,
+) -> list[dict[str, str]]:
+    """Parse repeated context query params into normalized condition assignments."""
+    raw_context_values = query.get("context", [])
+    if not raw_context_values:
+        return []
+
+    context_assignments: list[dict[str, str]] = []
+    for index, raw_context in enumerate(raw_context_values):
+        variable_id, separator, outcome_id = raw_context.partition("=")
+        if not separator or not variable_id.strip() or not outcome_id.strip():
+            raise ApiError(
+                400,
+                "invalid_query",
+                "context entries must use variableId=outcomeId",
+                {
+                    "parameter": "context",
+                    "index": index,
+                    "received": raw_context,
+                },
+            )
+        context_assignments.append(
+            {
+                "variableId": variable_id,
+                "outcomeId": outcome_id,
+            }
+        )
+
+    try:
+        return normalize_context_assignments(target_variable_id, context_assignments)
+    except ApiError as exc:
+        if exc.code != "invalid_probability_edit":
+            raise
+        details = {"parameter": "context", **exc.details}
+        raise ApiError(400, "invalid_query", exc.message, details) from exc
+
+
+def get_market_detail(
+    market_id: str,
+    query: dict[str, list[str]] | None = None,
+) -> tuple[dict[str, Any], int]:
     """Return the full market payload for one market id."""
     market = MARKETS.get(market_id)
     if not market:
         raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
 
+    market_payload = deepcopy(market)
+    context = parse_market_context_query(query or {}, target_variable_id=str(market["variableId"]))
+    if context:
+        market_payload["marginals"] = query_market_marginals_for_inference(market_id, context)
+
     return {
-        "market": deepcopy(market),
+        "market": market_payload,
         "meta": make_meta(),
     }, 200
+
+
+def get_market_preview_response(
+    market_id: str,
+    *,
+    headers: Any | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Return the normalized share-preview payload for one market id."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    return {
+        "preview": build_market_preview(market, headers=headers),
+        "meta": make_meta(),
+    }, 200
+
+
+def parse_optional_string_query_param(
+    query: dict[str, list[str]],
+    name: str,
+) -> str | None:
+    """Parse and validate one optional single-valued string query parameter."""
+    values = query.get(name, [])
+    if len(values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            f"{name} must be provided at most once",
+            {"parameter": name, "received": values},
+        )
+
+    if not values:
+        return None
+
+    raw_value = values[0]
+    if not raw_value:
+        raise ApiError(
+            400,
+            "invalid_query",
+            f"{name} must not be blank",
+            {"parameter": name, "received": raw_value},
+        )
+
+    return raw_value
 
 
 def parse_integer_query_param(
@@ -1077,17 +2752,21 @@ def get_market_events(market_id: str, query: dict[str, list[str]]) -> tuple[dict
     from_seq = parse_integer_query_param(query, "fromSeq", default=1, minimum=1)
     limit = parse_integer_query_param(query, "limit", default=100, minimum=1, maximum=100)
 
-    market_events = sorted(
-        (
-            deepcopy(event)
-            for event in EVENTS.values()
-            if str(event["marketId"]) == market_id and int(event["seq"]) >= from_seq
-        ),
-        key=lambda event: int(event["seq"]),
-    )
-    page_events = market_events[:limit]
-    head_seq = MARKET_EVENT_SEQUENCES.get(market_id, 0)
-    head_hash = LAST_EVENT_HASHES.get(market_id, GENESIS_EVENT_HASH)
+    with get_market_write_lock(market_id):
+        with _EVENTS_LOCK:
+            event_records = list(EVENTS.values())
+        market_events = sorted(
+            (
+                deepcopy(event)
+                for event in event_records
+                if str(event["marketId"]) == market_id and int(event["seq"]) >= from_seq
+            ),
+            key=lambda event: int(event["seq"]),
+        )
+        page_events = market_events[:limit]
+        head_seq = MARKET_EVENT_SEQUENCES.get(market_id, 0)
+        head_hash = LAST_EVENT_HASHES.get(market_id, GENESIS_EVENT_HASH)
+
     next_from_seq = None
     if page_events:
         tail_seq = int(page_events[-1]["seq"])
@@ -1106,6 +2785,128 @@ def get_market_events(market_id: str, query: dict[str, list[str]]) -> tuple[dict
             "fromSeq": from_seq,
             "limit": limit,
             "returned": len(page_events),
+            "nextFromSeq": next_from_seq,
+        },
+        "meta": make_meta(),
+    }, 200
+
+
+ORDER_ID_SEQUENCE_RE = re.compile(r"^ord_(?P<date>\d{8})_(?P<counter>\d+)$")
+
+
+def market_trade_fill_sequence(order_id: str, snapshot_index: int) -> tuple[int, int, int]:
+    """Build a stable newest-first sort key from an order id or snapshot position."""
+    match = ORDER_ID_SEQUENCE_RE.match(order_id)
+    if match is None:
+        return (0, 0, snapshot_index)
+    return (int(match.group("date")), int(match.group("counter")), snapshot_index)
+
+
+def serialize_market_trade(order: dict[str, Any]) -> dict[str, Any]:
+    """Project one stored EventTrade order into the public trade-history shape."""
+    target_outcome_id = str(order.get("targetOutcomeId") or order["payload"]["formula"][0][0]["outcomeId"])
+    side = str(order.get("side") or order["payload"]["side"])
+    return {
+        "id": str(order["id"]),
+        "accountId": str(order["accountId"]),
+        "targetOutcomeId": target_outcome_id,
+        "side": side,
+        "size": round_risk_value(abs(float(order["size"]))),
+        "price": round_risk_value(float(order["price"])),
+        "notional": round_risk_value(float(order["notional"])),
+        "filledAt": str(order["filledAt"]),
+    }
+
+
+def get_market_trades(market_id: str, query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
+    """Return the paginated accepted-trade feed for a market."""
+    if market_id not in MARKETS:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    before_id = parse_optional_string_query_param(query, "before_id")
+    limit = parse_integer_query_param(query, "limit", default=100, minimum=1, maximum=100)
+
+    with get_market_write_lock(market_id):
+        order_records = deepcopy(list(ORDERS.copy().values()))
+
+    trade_feed = sorted(
+        (
+            (market_trade_fill_sequence(str(order["id"]), snapshot_index), serialize_market_trade(order))
+            for snapshot_index, order in enumerate(order_records)
+            if str(order.get("marketId")) == market_id
+            and str(order.get("type")) == "EventTrade"
+            and str(order.get("status")) == "filled"
+        ),
+        key=lambda item: item[0],
+        reverse=True,
+    )
+    trades = [trade for _, trade in trade_feed]
+
+    start_index = 0
+    if before_id is not None:
+        cursor_index = next((index for index, trade in enumerate(trades) if trade["id"] == before_id), None)
+        if cursor_index is None:
+            raise ApiError(
+                400,
+                "invalid_query",
+                "before_id must reference a known trade in this market feed",
+                {"parameter": "before_id", "received": before_id, "marketId": market_id},
+            )
+        start_index = cursor_index + 1
+
+    page_trades = trades[start_index : start_index + limit]
+    next_before_id = None
+    if page_trades and start_index + len(page_trades) < len(trades):
+        next_before_id = str(page_trades[-1]["id"])
+
+    return {
+        "marketId": market_id,
+        "trades": page_trades,
+        "pagination": {
+            "beforeId": before_id,
+            "limit": limit,
+            "returned": len(page_trades),
+            "nextBeforeId": next_before_id,
+        },
+        "meta": make_meta(),
+    }, 200
+
+
+def get_market_comments(market_id: str, query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
+    """Return the paginated discussion thread for a market."""
+    if market_id not in MARKETS:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    from_seq = parse_integer_query_param(query, "fromSeq", default=1, minimum=1)
+    limit = parse_integer_query_param(query, "limit", default=100, minimum=1, maximum=100)
+
+    with get_market_write_lock(market_id):
+        with _COMMENTS_LOCK:
+            comment_records = list(COMMENTS.values())
+        market_comments = sorted(
+            (
+                deepcopy(comment)
+                for comment in comment_records
+                if str(comment["marketId"]) == market_id and int(comment["seq"]) >= from_seq
+            ),
+            key=lambda comment: int(comment["seq"]),
+        )
+        page_comments = market_comments[:limit]
+        head_seq = MARKET_COMMENT_SEQUENCES.get(market_id, 0)
+
+    next_from_seq = None
+    if page_comments:
+        tail_seq = int(page_comments[-1]["seq"])
+        if tail_seq < head_seq:
+            next_from_seq = tail_seq + 1
+
+    return {
+        "marketId": market_id,
+        "comments": page_comments,
+        "pagination": {
+            "fromSeq": from_seq,
+            "limit": limit,
+            "returned": len(page_comments),
             "nextFromSeq": next_from_seq,
         },
         "meta": make_meta(),
@@ -1641,6 +3442,34 @@ def preview_unconditional_probability_edit(
     }
 
 
+def min_asset_check(
+    market_id: str,
+    payload: dict[str, Any],
+    account_id: str,
+) -> dict[str, Any] | None:
+    """Reject unconditional edits that would drive account min-asset below zero."""
+    if payload["context"]:
+        return None
+
+    preview = preview_unconditional_probability_edit(market_id, payload, account_id)
+    asset_preview = preview["assetDelta"]
+    if asset_preview["afterMinAsset"] < 0:
+        raise ApiError(
+            422,
+            "min_asset_violation",
+            "Edit would produce negative state-contingent assets",
+            {
+                "accountId": account_id,
+                "marketId": market_id,
+                "riskLimit": asset_preview["riskLimit"],
+                "beforeMinAsset": asset_preview["beforeMinAsset"],
+                "impactScore": asset_preview["impactScore"],
+                "afterMinAsset": asset_preview["afterMinAsset"],
+            },
+        )
+    return preview
+
+
 def create_probability_edit_order(
     command: dict[str, Any],
     preview: dict[str, Any] | None = None,
@@ -1667,6 +3496,7 @@ def create_probability_edit_order(
             marginals=previous_marginals,
         )
         market_conditionals[context_key] = deepcopy(updated_marginals)
+        impact_score = kl_divergence(previous_marginals, updated_marginals)
     else:
         if preview is None:
             preview = preview_unconditional_probability_edit(
@@ -1677,6 +3507,8 @@ def create_probability_edit_order(
         previous_marginals = deepcopy(preview["previousMarginals"])
         updated_marginals = deepcopy(preview["newMarginals"])
         market["marginals"] = deepcopy(updated_marginals)
+        CONDITIONAL_MARGINALS.pop(market_id, None)
+        impact_score = round_risk_value(float(preview["impactScore"]))
 
     timestamp = utc_timestamp()
     order = {
@@ -1690,11 +3522,7 @@ def create_probability_edit_order(
         "payload": deepcopy(payload),
         "previousMarginals": previous_marginals,
         "newMarginals": deepcopy(updated_marginals),
-        "impactScore": (
-            round_risk_value(float(preview["impactScore"]))
-            if preview is not None
-            else kl_divergence(previous_marginals, updated_marginals)
-        ),
+        "impactScore": impact_score,
         "createdAt": timestamp,
         "filledAt": timestamp,
     }
@@ -1703,6 +3531,220 @@ def create_probability_edit_order(
         order["idempotencyKey"] = idempotency_key
     ORDERS[order["id"]] = deepcopy(order)
     return order
+
+
+def build_market_resolution_marginals(market: dict[str, Any], outcome_id: str) -> dict[str, float]:
+    """Build a point-mass marginal distribution for a resolved market."""
+    outcome_ids = _market_outcome_ids(market)
+    if outcome_id not in outcome_ids:
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "outcomeId must match a known market outcome",
+            {
+                "field": "outcomeId",
+                "marketId": str(market["id"]),
+                "received": outcome_id,
+                "allowed": sorted(outcome_ids),
+            },
+        )
+
+    return {candidate: 1.0 if candidate == outcome_id else 0.0 for candidate in outcome_ids}
+
+
+def normalize_market_resolution_probabilities(
+    market: dict[str, Any],
+    raw_final_probabilities: Any,
+) -> dict[str, float]:
+    """Normalize and validate an explicit market-resolution probability map."""
+    if not isinstance(raw_final_probabilities, dict):
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "finalProbabilities must be an object",
+            {"field": "finalProbabilities"},
+        )
+
+    market_id = str(market["id"])
+    outcome_ids = _market_outcome_ids(market)
+    missing_outcome_ids = [outcome_id for outcome_id in outcome_ids if outcome_id not in raw_final_probabilities]
+    unexpected_outcome_ids = sorted(str(outcome_id) for outcome_id in raw_final_probabilities if str(outcome_id) not in outcome_ids)
+    if missing_outcome_ids or unexpected_outcome_ids:
+        details: dict[str, Any] = {
+            "field": "finalProbabilities",
+            "marketId": market_id,
+        }
+        if missing_outcome_ids:
+            details["missing"] = missing_outcome_ids
+        if unexpected_outcome_ids:
+            details["unexpected"] = unexpected_outcome_ids
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "finalProbabilities must contain exactly one value for each market outcome",
+            details,
+        )
+
+    normalized: dict[str, float] = {}
+    for outcome_id in outcome_ids:
+        value = raw_final_probabilities[outcome_id]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+            raise ApiError(
+                400,
+                "invalid_market_resolution",
+                "finalProbabilities must contain finite numeric values for all market outcomes",
+                {
+                    "field": f"finalProbabilities.{outcome_id}",
+                    "marketId": market_id,
+                    "outcomeId": outcome_id,
+                },
+            )
+
+        normalized[outcome_id] = float(value)
+        if normalized[outcome_id] < 0:
+            raise ApiError(
+                400,
+                "invalid_market_resolution",
+                "finalProbabilities must preserve non-negative values for all outcomes",
+                {
+                    "field": f"finalProbabilities.{outcome_id}",
+                    "marketId": market_id,
+                    "outcomeId": outcome_id,
+                },
+            )
+
+    total_probability = sum(normalized.values())
+    if not math.isclose(total_probability, 1.0, abs_tol=1e-9):
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "finalProbabilities must sum to 1.0",
+            {
+                "field": "finalProbabilities",
+                "marketId": market_id,
+                "sum": total_probability,
+            },
+        )
+
+    return normalized
+
+
+def resolve_market_resolution_outcome_id(
+    market: dict[str, Any],
+    final_probabilities: dict[str, float],
+) -> str:
+    """Resolve a validated final-probabilities map to the current point-mass settlement outcome."""
+    point_mass_outcomes = [
+        outcome_id
+        for outcome_id, probability in final_probabilities.items()
+        if math.isclose(probability, 1.0, abs_tol=1e-9)
+    ]
+    if len(point_mass_outcomes) != 1:
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "finalProbabilities must encode a point-mass distribution",
+            {
+                "field": "finalProbabilities",
+                "marketId": str(market["id"]),
+            },
+        )
+
+    outcome_id = point_mass_outcomes[0]
+    expected_distribution = build_market_resolution_marginals(market, outcome_id)
+    if any(
+        not math.isclose(probability, expected_distribution[candidate], abs_tol=1e-9)
+        for candidate, probability in final_probabilities.items()
+    ):
+        raise ApiError(
+            400,
+            "invalid_market_resolution",
+            "finalProbabilities must encode a point-mass distribution",
+            {
+                "field": "finalProbabilities",
+                "marketId": str(market["id"]),
+            },
+        )
+    return outcome_id
+
+
+def normalize_market_resolution_payload(market_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize and validate a market-resolution request body."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    if not isinstance(payload, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
+
+    has_outcome_id = "outcomeId" in payload
+    raw_outcome_id = payload.get("outcomeId")
+    outcome_id: str | None = None
+    if has_outcome_id:
+        if not isinstance(raw_outcome_id, str) or not raw_outcome_id.strip():
+            raise ApiError(400, "invalid_market_resolution", "outcomeId is required", {"field": "outcomeId"})
+        outcome_id = raw_outcome_id.strip()
+        build_market_resolution_marginals(market, outcome_id)
+
+    has_final_probabilities = "finalProbabilities" in payload
+    if has_final_probabilities:
+        normalized_final_probabilities = normalize_market_resolution_probabilities(
+            market,
+            payload.get("finalProbabilities"),
+        )
+        resolved_outcome_id = resolve_market_resolution_outcome_id(market, normalized_final_probabilities)
+        if outcome_id is not None and outcome_id != resolved_outcome_id:
+            raise ApiError(
+                400,
+                "invalid_market_resolution",
+                "outcomeId must match finalProbabilities when both are provided",
+                {
+                    "field": "outcomeId",
+                    "marketId": market_id,
+                    "received": outcome_id,
+                    "expected": resolved_outcome_id,
+                },
+            )
+        outcome_id = resolved_outcome_id
+        final_probabilities = build_market_resolution_marginals(market, outcome_id)
+    else:
+        if outcome_id is None:
+            raise ApiError(400, "invalid_market_resolution", "outcomeId is required", {"field": "outcomeId"})
+        final_probabilities = build_market_resolution_marginals(market, outcome_id)
+
+    return {
+        "kind": "ResolveMarket",
+        "outcomeId": outcome_id,
+        "finalProbabilities": final_probabilities,
+    }
+
+
+def normalize_market_close_payload(market_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize and validate a market-close request body."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    if not isinstance(payload, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
+
+    return {
+        "kind": "CloseMarket",
+    }
+
+
+def normalize_market_reopen_payload(market_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize and validate a market-reopen request body."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    if not isinstance(payload, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
+
+    return {
+        "kind": "ReopenMarket",
+    }
 
 
 def normalize_probability_edit_payload(market_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1798,6 +3840,119 @@ def materialize_probability_edit_command(
     return command
 
 
+def materialize_admin_op_command(
+    market_id: str,
+    normalized_payload: dict[str, Any],
+    account_id: str,
+    command_id: str,
+    submitted_at: str,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Build and persist an AdminOp command envelope."""
+    command = {
+        "schemaVersion": "bayes-command/v1",
+        "commandId": command_id,
+        "marketId": market_id,
+        "accountId": account_id,
+        "commandType": "AdminOp",
+        "submittedAt": submitted_at,
+        "payload": deepcopy(normalized_payload),
+        "meta": {
+            "source": "api",
+        },
+    }
+    if idempotency_key is not None:
+        command["idempotencyKey"] = idempotency_key
+
+    COMMANDS[command_id] = deepcopy(command)
+    return command
+
+
+def materialize_market_resolution_command(
+    market_id: str,
+    normalized_payload: dict[str, Any],
+    account_id: str,
+    command_id: str,
+    submitted_at: str,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Build and persist an AdminOp command envelope for market resolution."""
+    return materialize_admin_op_command(
+        market_id=market_id,
+        normalized_payload=normalized_payload,
+        account_id=account_id,
+        command_id=command_id,
+        submitted_at=submitted_at,
+        idempotency_key=idempotency_key,
+    )
+
+
+def materialize_market_close_command(
+    market_id: str,
+    normalized_payload: dict[str, Any],
+    account_id: str,
+    command_id: str,
+    submitted_at: str,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Build and persist an AdminOp command envelope for market close."""
+    return materialize_admin_op_command(
+        market_id=market_id,
+        normalized_payload=normalized_payload,
+        account_id=account_id,
+        command_id=command_id,
+        submitted_at=submitted_at,
+        idempotency_key=idempotency_key,
+    )
+
+
+def materialize_market_reopen_command(
+    market_id: str,
+    normalized_payload: dict[str, Any],
+    account_id: str,
+    command_id: str,
+    submitted_at: str,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Build and persist an AdminOp command envelope for market reopen."""
+    return materialize_admin_op_command(
+        market_id=market_id,
+        normalized_payload=normalized_payload,
+        account_id=account_id,
+        command_id=command_id,
+        submitted_at=submitted_at,
+        idempotency_key=idempotency_key,
+    )
+
+
+def materialize_comment_post_command(
+    market_id: str,
+    normalized_payload: dict[str, Any],
+    account_id: str,
+    command_id: str,
+    submitted_at: str,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    """Build and persist a comment-post command envelope for idempotent replay."""
+    command = {
+        "schemaVersion": "bayes-command/v1",
+        "commandId": command_id,
+        "marketId": market_id,
+        "accountId": account_id,
+        "commandType": "CommentPost",
+        "submittedAt": submitted_at,
+        "payload": deepcopy(normalized_payload),
+        "meta": {
+            "source": "api",
+        },
+    }
+    if idempotency_key is not None:
+        command["idempotencyKey"] = idempotency_key
+
+    COMMANDS[command_id] = deepcopy(command)
+    return command
+
+
 def emit_terminal_event(command: dict[str, Any], event_type: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Append a terminal event to the per-market event journal."""
     market_id = str(command["marketId"])
@@ -1819,7 +3974,8 @@ def emit_terminal_event(command: dict[str, Any], event_type: str, payload: dict[
         event["eventHash"] = canonical_json_hash(event)
         MARKET_EVENT_SEQUENCES[market_id] = seq
         LAST_EVENT_HASHES[market_id] = str(event["eventHash"])
-        EVENTS[str(event["eventId"])] = deepcopy(event)
+        with _EVENTS_LOCK:
+            EVENTS[str(event["eventId"])] = deepcopy(event)
         return event
 
 
@@ -1844,6 +4000,15 @@ def build_terminal_result(event: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def command_response_meta_kwargs(command: dict[str, Any]) -> dict[str, Any]:
+    """Build response meta fields shared by idempotent command responses."""
+    meta_kwargs: dict[str, Any] = {}
+    idempotency_key = command.get("idempotencyKey")
+    if isinstance(idempotency_key, str):
+        meta_kwargs["idempotencyKeyEcho"] = idempotency_key
+    return meta_kwargs
+
+
 def record_terminal_outcome(
     command: dict[str, Any],
     event: dict[str, Any],
@@ -1856,6 +4021,7 @@ def record_terminal_outcome(
     TERMINAL_OUTCOMES[command_id] = {
         "eventId": str(event["eventId"]),
         "eventType": str(event["eventType"]),
+        "eventPayload": deepcopy(event["payload"]),
         "status": status,
         "response": deepcopy(response),
     }
@@ -1866,6 +4032,31 @@ def record_terminal_outcome(
 def replay_terminal_outcome(command_id: str) -> tuple[dict[str, Any], int]:
     """Replay a previously persisted terminal command outcome."""
     outcome = TERMINAL_OUTCOMES[command_id]
+    response = deepcopy(outcome["response"])
+    response.setdefault("meta", {})
+    response["meta"]["replayed"] = True
+    return response, int(outcome["status"])
+
+
+def record_comment_post_outcome(
+    command: dict[str, Any],
+    status: int,
+    response: dict[str, Any],
+    scope_key: tuple[str, str, str] | None = None,
+) -> None:
+    """Persist the final response for a comment post, including idempotency binding."""
+    command_id = str(command["commandId"])
+    COMMENT_POST_OUTCOMES[command_id] = {
+        "status": status,
+        "response": deepcopy(response),
+    }
+    if scope_key is not None:
+        IDEMPOTENCY_KEYS[scope_key] = command_id
+
+
+def replay_comment_post_outcome(command_id: str) -> tuple[dict[str, Any], int]:
+    """Replay a previously persisted comment-post outcome."""
+    outcome = COMMENT_POST_OUTCOMES[command_id]
     response = deepcopy(outcome["response"])
     response.setdefault("meta", {})
     response["meta"]["replayed"] = True
@@ -1895,6 +4086,24 @@ def build_idempotency_conflict_response(
     }, 409
 
 
+def build_terminal_response(
+    command: dict[str, Any],
+    *,
+    event_type: str,
+    event_payload: dict[str, Any],
+    status: int,
+    response_fields: dict[str, Any],
+    scope_key: tuple[str, str, str] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Emit, record, and return a terminal command response."""
+    event = emit_terminal_event(command, event_type, event_payload)
+    response = deepcopy(response_fields)
+    response["result"] = build_terminal_result(event)
+    response["meta"] = make_meta(**command_response_meta_kwargs(command))
+    record_terminal_outcome(command, event, status, response, scope_key)
+    return response, status
+
+
 def build_terminal_rejection_response(
     command: dict[str, Any],
     code: str,
@@ -1905,30 +4114,24 @@ def build_terminal_rejection_response(
     scope_key: tuple[str, str, str] | None = None,
 ) -> tuple[dict[str, Any], int]:
     """Emit and persist a terminal rejection response for a command."""
-    event = emit_terminal_event(
+    return build_terminal_response(
         command,
-        "CommandRejected",
-        {
+        event_type="CommandRejected",
+        event_payload={
             "reasonCode": code,
             "reason": message,
             "retryHint": retry_hint,
         },
-    )
-    meta_kwargs: dict[str, Any] = {}
-    idempotency_key = command.get("idempotencyKey")
-    if isinstance(idempotency_key, str):
-        meta_kwargs["idempotencyKeyEcho"] = idempotency_key
-    response = {
-        "error": {
-            "code": code,
-            "message": message,
-            "details": deepcopy(details),
+        status=status,
+        response_fields={
+            "error": {
+                "code": code,
+                "message": message,
+                "details": deepcopy(details),
+            },
         },
-        "result": build_terminal_result(event),
-        "meta": make_meta(**meta_kwargs),
-    }
-    record_terminal_outcome(command, event, status, response, scope_key)
-    return response, status
+        scope_key=scope_key,
+    )
 
 
 def build_terminal_acceptance_response(
@@ -1948,10 +4151,10 @@ def build_terminal_acceptance_response(
     if order["payload"]["context"]:
         delta["context"] = deepcopy(order["payload"]["context"])
 
-    event = emit_terminal_event(
+    return build_terminal_response(
         command,
-        "CommandAccepted",
-        {
+        event_type="CommandAccepted",
+        event_payload={
             "effects": {
                 "marginalDelta": [delta],
                 "assetDelta": [deepcopy(asset_delta)],
@@ -1962,18 +4165,330 @@ def build_terminal_acceptance_response(
             },
             "replayStateHash": market_replay_state_hash(str(command["marketId"])),
         },
+        status=201,
+        response_fields={
+            "order": deepcopy(order),
+        },
+        scope_key=scope_key,
     )
-    meta_kwargs: dict[str, Any] = {}
-    idempotency_key = command.get("idempotencyKey")
-    if isinstance(idempotency_key, str):
-        meta_kwargs["idempotencyKeyEcho"] = idempotency_key
-    response = {
-        "order": deepcopy(order),
-        "result": build_terminal_result(event),
-        "meta": make_meta(**meta_kwargs),
+
+
+def settle_market_account_risk(market_id: str, timestamp: str) -> list[dict[str, Any]]:
+    """Release current market exposure from account risk and LMSR read models."""
+    asset_deltas: list[dict[str, Any]] = []
+
+    for account_id in sorted(ACCOUNT_RISK):
+        account = ACCOUNT_RISK[account_id]
+        markets = account.get("markets")
+        if not isinstance(markets, dict):
+            continue
+
+        removed_market = markets.pop(market_id, None)
+        lmsr_state = ensure_account_lmsr_state(account)
+        slices = lmsr_state["slices"]
+        slice_keys_to_remove = [
+            slice_key
+            for slice_key, slice_state in list(slices.items())
+            if isinstance(slice_state, dict) and str(slice_state.get("marketId")) == market_id
+        ]
+        for slice_key in slice_keys_to_remove:
+            del slices[slice_key]
+
+        if removed_market is None and not slice_keys_to_remove:
+            continue
+
+        before_min_asset = round_risk_value(float(account["minAsset"]))
+        risk_limit = round_risk_value(float(account["riskLimit"]))
+        remaining_consumed = round_risk_value(
+            sum(float(market_state["capacityConsumed"]) for market_state in markets.values())
+        )
+        after_min_asset = round_risk_value(risk_limit - remaining_consumed)
+        account["minAsset"] = after_min_asset
+        account["updatedAt"] = timestamp
+
+        if removed_market is not None:
+            asset_deltas.append(
+                {
+                    "accountId": account_id,
+                    "marketId": market_id,
+                    "beforeMinAsset": before_min_asset,
+                    "afterMinAsset": after_min_asset,
+                }
+            )
+
+    return asset_deltas
+
+
+def transition_market_to_resolved(
+    market_id: str,
+    outcome_id: str,
+    final_probabilities: dict[str, float],
+    *,
+    resolved_at: str,
+) -> dict[str, Any]:
+    """Apply the replay-relevant market mutation for an accepted resolution."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    status = str(market["status"])
+    if status == "resolved":
+        raise ApiError(
+            409,
+            "market_already_resolved",
+            "Market is already resolved",
+            {
+                "marketId": market_id,
+                "status": status,
+                "currentResolution": market.get("resolution"),
+            },
+        )
+    if status not in {"active", "closed"}:
+        raise ApiError(
+            409,
+            "market_not_resolvable",
+            "Market can only be resolved from active or closed status",
+            {
+                "marketId": market_id,
+                "status": status,
+                "allowedStatuses": ["active", "closed"],
+            },
+        )
+
+    previous_marginals = deepcopy(market["marginals"])
+    new_marginals = deepcopy(final_probabilities)
+    market["status"] = "resolved"
+    market["resolution"] = outcome_id
+    market["resolutionProbabilities"] = deepcopy(new_marginals)
+    market["marginals"] = deepcopy(new_marginals)
+    CONDITIONAL_MARGINALS.pop(market_id, None)
+
+    return {
+        "market": deepcopy(market),
+        "previousMarginals": previous_marginals,
+        "newMarginals": deepcopy(new_marginals),
+        "resolvedAt": resolved_at,
     }
-    record_terminal_outcome(command, event, 201, response, scope_key)
-    return response, 201
+
+
+def build_closed_market_snapshot(market: dict[str, Any]) -> dict[str, Any]:
+    """Canonicalize the market snapshot exposed by an accepted close."""
+    closed_market = deepcopy(market)
+    closed_market["status"] = "closed"
+    closed_market.pop("closedAt", None)
+    closed_market.pop("resolution", None)
+    closed_market.pop("resolutionProbabilities", None)
+    return closed_market
+
+
+def transition_market_to_closed(
+    market_id: str,
+    *,
+    closed_at: str | None = None,
+) -> dict[str, Any]:
+    """Return a closed market snapshot for an active market without mutating stored state."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    status = str(market["status"])
+    if status == "closed":
+        raise ApiError(
+            409,
+            "market_already_closed",
+            "Market is already closed",
+            {
+                "marketId": market_id,
+                "status": status,
+            },
+        )
+    if status != "active":
+        raise ApiError(
+            409,
+            "market_not_closable",
+            "Market can only be closed from active status",
+            {
+                "marketId": market_id,
+                "status": status,
+                "allowedStatuses": ["active"],
+            },
+        )
+
+    transition_timestamp = utc_timestamp() if closed_at is None else str(closed_at)
+    return {
+        "market": build_closed_market_snapshot(market),
+        "closedAt": transition_timestamp,
+    }
+
+
+def resolve_market_command(command: dict[str, Any]) -> dict[str, Any]:
+    """Apply a market-resolution AdminOp and return the accepted event inputs."""
+    market_id = str(command["marketId"])
+    resolved_at = utc_timestamp()
+    resolution = transition_market_to_resolved(
+        market_id,
+        str(command["payload"]["outcomeId"]),
+        deepcopy(command["payload"]["finalProbabilities"]),
+        resolved_at=resolved_at,
+    )
+    resolution["assetDelta"] = settle_market_account_risk(market_id, resolved_at)
+    resolution["exposureCleanup"] = settle_market_account_exposure(market_id, resolved_at)
+    return resolution
+
+
+def close_market_command(command: dict[str, Any]) -> dict[str, Any]:
+    """Apply a market-close AdminOp and return the accepted event inputs."""
+    market_id = str(command["marketId"])
+    closure = transition_market_to_closed(market_id)
+    MARKETS[market_id] = deepcopy(closure["market"])
+    return closure
+
+
+def transition_market_to_reopened(
+    market_id: str,
+    *,
+    reopened_at: str | None = None,
+) -> dict[str, Any]:
+    """Apply the replay-relevant mutation for an accepted reopen on a closed market."""
+    market = MARKETS.get(market_id)
+    if not market:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    status = str(market["status"])
+    if status != "closed":
+        raise ApiError(
+            409,
+            "market_not_reopenable",
+            "Market can only be reopened from closed status",
+            {
+                "marketId": market_id,
+                "status": status,
+                "allowedStatuses": ["closed"],
+            },
+        )
+
+    market["status"] = "active"
+    market.pop("resolution", None)
+    market.pop("resolutionProbabilities", None)
+
+    transition_timestamp = utc_timestamp() if reopened_at is None else str(reopened_at)
+    return {
+        "market": deepcopy(market),
+        "reopenedAt": transition_timestamp,
+    }
+
+
+def reopen_market_command(command: dict[str, Any]) -> dict[str, Any]:
+    """Apply a market-reopen AdminOp and return the accepted event inputs."""
+    market_id = str(command["marketId"])
+    return transition_market_to_reopened(market_id)
+
+
+def build_market_resolution_acceptance_response(
+    command: dict[str, Any],
+    resolution: dict[str, Any],
+    scope_key: tuple[str, str, str] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Emit and persist a terminal acceptance response for a market resolution."""
+    market = MARKETS[str(command["marketId"])]
+    marginal_delta = [
+        {
+            "variableId": str(market["variableId"]),
+            "outcomeId": outcome_id,
+            "before": resolution["previousMarginals"][outcome_id],
+            "after": resolution["newMarginals"][outcome_id],
+        }
+        for outcome_id in _market_outcome_ids(market)
+        if resolution["previousMarginals"][outcome_id] != resolution["newMarginals"][outcome_id]
+    ]
+
+    return build_terminal_response(
+        command,
+        event_type="CommandAccepted",
+        event_payload={
+            "resolution": {
+                "outcomeId": str(command["payload"]["outcomeId"]),
+                "finalProbabilities": deepcopy(command["payload"]["finalProbabilities"]),
+                "resolvedAt": str(resolution["resolvedAt"]),
+            },
+            "effects": {
+                "marginalDelta": marginal_delta,
+                "assetDelta": deepcopy(resolution["assetDelta"]),
+            },
+            "pricing": {
+                "cost": 0.0,
+                "fee": 0.0,
+            },
+            "replayStateHash": market_replay_state_hash(str(command["marketId"])),
+        },
+        status=201,
+        response_fields={
+            "market": deepcopy(resolution["market"]),
+        },
+        scope_key=scope_key,
+    )
+
+
+def build_market_close_acceptance_response(
+    command: dict[str, Any],
+    closure: dict[str, Any],
+    scope_key: tuple[str, str, str] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Emit and persist a terminal acceptance response for a market close."""
+    return build_terminal_response(
+        command,
+        event_type="CommandAccepted",
+        event_payload={
+            "closure": {
+                "closedAt": str(closure["closedAt"]),
+            },
+            "effects": {
+                "marginalDelta": [],
+                "assetDelta": [],
+            },
+            "pricing": {
+                "cost": 0.0,
+                "fee": 0.0,
+            },
+            "replayStateHash": market_replay_state_hash(str(command["marketId"])),
+        },
+        status=201,
+        response_fields={
+            "market": deepcopy(closure["market"]),
+        },
+        scope_key=scope_key,
+    )
+
+
+def build_market_reopen_acceptance_response(
+    command: dict[str, Any],
+    reopened: dict[str, Any],
+    scope_key: tuple[str, str, str] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Emit and persist a terminal acceptance response for a market reopen."""
+    return build_terminal_response(
+        command,
+        event_type="CommandAccepted",
+        event_payload={
+            "reopen": {
+                "reopenedAt": str(reopened["reopenedAt"]),
+            },
+            "effects": {
+                "marginalDelta": [],
+                "assetDelta": [],
+            },
+            "pricing": {
+                "cost": 0.0,
+                "fee": 0.0,
+            },
+            "replayStateHash": market_replay_state_hash(str(command["marketId"])),
+        },
+        status=201,
+        response_fields={
+            "market": deepcopy(reopened["market"]),
+        },
+        scope_key=scope_key,
+    )
 
 
 def materialize_event_trade_command(
@@ -2049,10 +4564,10 @@ def build_event_trade_acceptance_response(
 ) -> tuple[dict[str, Any], int]:
     """Emit and persist a terminal acceptance response for an event trade."""
     literal = order["payload"]["formula"][0][0]
-    event = emit_terminal_event(
+    return build_terminal_response(
         command,
-        "CommandAccepted",
-        {
+        event_type="CommandAccepted",
+        event_payload={
             "effects": {
                 "marginalDelta": [],
                 "assetDelta": [],
@@ -2072,18 +4587,160 @@ def build_event_trade_acceptance_response(
             },
             "replayStateHash": market_replay_state_hash(str(command["marketId"])),
         },
+        status=201,
+        response_fields={
+            "order": deepcopy(order),
+        },
+        scope_key=scope_key,
     )
-    meta_kwargs: dict[str, Any] = {}
-    idempotency_key = command.get("idempotencyKey")
-    if isinstance(idempotency_key, str):
-        meta_kwargs["idempotencyKeyEcho"] = idempotency_key
-    response = {
-        "order": deepcopy(order),
-        "result": build_terminal_result(event),
-        "meta": make_meta(**meta_kwargs),
+
+
+def normalize_comment_post_payload(market_id: str, body: dict[str, Any]) -> dict[str, str]:
+    """Normalize one comment-post payload."""
+    if market_id not in MARKETS:
+        raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
+
+    comment_body = body.get("body")
+    if not isinstance(comment_body, str):
+        raise ApiError(400, "invalid_comment", "body is required", {"field": "body"})
+
+    normalized_body = comment_body.strip()
+    if not normalized_body:
+        raise ApiError(400, "invalid_comment", "body is required", {"field": "body"})
+    if len(normalized_body) > MAX_COMMENT_BODY_LENGTH:
+        raise ApiError(
+            400,
+            "invalid_comment",
+            f"body must be at most {MAX_COMMENT_BODY_LENGTH} characters",
+            {"field": "body", "maximum": MAX_COMMENT_BODY_LENGTH},
+        )
+
+    return {"body": normalized_body}
+
+
+def create_market_comment(command: dict[str, Any]) -> dict[str, Any]:
+    """Materialize and persist a market comment."""
+    market_id = str(command["marketId"])
+    seq = MARKET_COMMENT_SEQUENCES.get(market_id, 0) + 1
+    comment = {
+        "commentId": generate_comment_id(),
+        "marketId": market_id,
+        "seq": seq,
+        "accountId": str(command["accountId"]),
+        "body": str(command["payload"]["body"]),
+        "createdAt": str(command["submittedAt"]),
     }
-    record_terminal_outcome(command, event, 201, response, scope_key)
+    MARKET_COMMENT_SEQUENCES[market_id] = seq
+    with _COMMENTS_LOCK:
+        COMMENTS[str(comment["commentId"])] = deepcopy(comment)
+    return comment
+
+
+def build_comment_post_acceptance_response(
+    command: dict[str, Any],
+    comment: dict[str, Any],
+    scope_key: tuple[str, str, str] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Persist and return an accepted comment-post response."""
+    response = {
+        "comment": deepcopy(comment),
+        "meta": make_meta(**command_response_meta_kwargs(command)),
+    }
+    record_comment_post_outcome(command, 201, response, scope_key)
     return response, 201
+
+
+def build_comment_post_rejection_response(
+    command: dict[str, Any],
+    *,
+    code: str,
+    message: str,
+    details: dict[str, Any],
+    status: int,
+    scope_key: tuple[str, str, str] | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Persist and return a rejected comment-post response."""
+    response = {
+        "error": {
+            "code": code,
+            "message": message,
+            "details": deepcopy(details),
+        },
+        "meta": make_meta(**command_response_meta_kwargs(command)),
+    }
+    record_comment_post_outcome(command, status, response, scope_key)
+    return response, status
+
+
+def handle_comment_post(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
+    """Handle the full comment-post request lifecycle for one market."""
+    body = payload if payload is not None else {}
+    if not isinstance(body, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
+
+    account_id = body.get("accountId")
+    if not isinstance(account_id, str) or not account_id.strip():
+        raise ApiError(400, "invalid_comment", "accountId is required", {"field": "accountId"})
+
+    idempotency_key = body.get("idempotencyKey")
+    if idempotency_key is not None:
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise ApiError(
+                400,
+                "invalid_comment",
+                "idempotencyKey must be a non-empty string when provided",
+                {"field": "idempotencyKey"},
+            )
+        idempotency_key = idempotency_key.strip()
+
+    account_id = account_id.strip()
+    scope_key = (
+        idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
+    )
+
+    with get_market_write_lock(market_id):
+        normalized_payload = normalize_comment_post_payload(market_id, body)
+        if scope_key is not None:
+            existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
+            if existing_command_id is not None:
+                existing_command = COMMANDS[existing_command_id]
+                if existing_command["commandType"] != "CommentPost" or existing_command["payload"] != normalized_payload:
+                    return build_idempotency_conflict_response(
+                        existing_command_id,
+                        idempotency_key,
+                        market_id,
+                        account_id,
+                        "CommentPost",
+                    )
+                return replay_comment_post_outcome(existing_command_id)
+
+        submitted_at = utc_timestamp()
+        command = materialize_comment_post_command(
+            market_id=market_id,
+            normalized_payload=normalized_payload,
+            account_id=account_id,
+            command_id=generate_command_id(),
+            submitted_at=submitted_at,
+            idempotency_key=idempotency_key,
+        )
+        market = MARKETS[market_id]
+        if market["status"] != "active":
+            return build_comment_post_rejection_response(
+                command,
+                code="market_not_active",
+                message="Comments are only allowed for active markets",
+                details={
+                    "marketId": market_id,
+                    "status": market["status"],
+                    "allowedStatus": "active",
+                    "commandId": command["commandId"],
+                },
+                status=409,
+                scope_key=scope_key,
+            )
+
+        comment = create_market_comment(command)
+        return build_comment_post_acceptance_response(command, comment, scope_key)
 
 
 def handle_probability_edit(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
@@ -2107,74 +4764,61 @@ def handle_probability_edit(market_id: str, payload: dict[str, Any] | None) -> t
             )
         idempotency_key = idempotency_key.strip()
 
-    normalized_payload = normalize_probability_edit_payload(market_id, body)
     account_id = account_id.strip()
     scope_key = idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
-    if scope_key is not None:
-        existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
-        if existing_command_id is not None:
-            existing_command = COMMANDS[existing_command_id]
-            if existing_command["payload"] != normalized_payload:
-                return build_idempotency_conflict_response(
-                    existing_command_id,
-                    idempotency_key,
-                    market_id,
-                    account_id,
-                    "ProbabilityEdit",
+    with get_market_write_lock(market_id):
+        normalized_payload = normalize_probability_edit_payload(market_id, body)
+        if scope_key is not None:
+            existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
+            if existing_command_id is not None:
+                existing_command = COMMANDS[existing_command_id]
+                if existing_command["payload"] != normalized_payload:
+                    return build_idempotency_conflict_response(
+                        existing_command_id,
+                        idempotency_key,
+                        market_id,
+                        account_id,
+                        "ProbabilityEdit",
                 )
-            return replay_terminal_outcome(existing_command_id)
+                return replay_terminal_outcome(existing_command_id)
 
-    submitted_at = utc_timestamp()
-    command = materialize_probability_edit_command(
-        market_id=market_id,
-        normalized_payload=normalized_payload,
-        account_id=account_id,
-        command_id=generate_command_id(),
-        submitted_at=submitted_at,
-        idempotency_key=idempotency_key,
-    )
-    market = MARKETS[market_id]
-    if market["status"] != "active":
-        return build_terminal_rejection_response(
-            command,
-            code="market_not_active",
-            message="ProbabilityEdit is only allowed for active markets",
-            details={
-                "marketId": market_id,
-                "status": market["status"],
-                "allowedStatus": "active",
-                "commandId": command["commandId"],
-            },
-            retry_hint="submit against an active market",
-            status=409,
-            scope_key=scope_key,
-        )
-    preview: dict[str, Any] | None = None
-    if not normalized_payload["context"]:
-        preview = preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
-        asset_preview = preview["assetDelta"]
-        if asset_preview["afterMinAsset"] < 0:
+        market = MARKETS[market_id]
+        if market["status"] != "active":
+            command = materialize_probability_edit_command(
+                market_id=market_id,
+                normalized_payload=normalized_payload,
+                account_id=account_id,
+                command_id=generate_command_id(),
+                submitted_at=utc_timestamp(),
+                idempotency_key=idempotency_key,
+            )
             return build_terminal_rejection_response(
                 command,
-                code="min_asset_violation",
-                message="Edit would produce negative state-contingent assets",
+                code="market_not_active",
+                message="ProbabilityEdit is only allowed for active markets",
                 details={
-                    "accountId": account_id,
                     "marketId": market_id,
+                    "status": market["status"],
+                    "allowedStatus": "active",
                     "commandId": command["commandId"],
-                    "riskLimit": asset_preview["riskLimit"],
-                    "beforeMinAsset": asset_preview["beforeMinAsset"],
-                    "impactScore": asset_preview["impactScore"],
-                    "afterMinAsset": asset_preview["afterMinAsset"],
                 },
-                retry_hint="reduce probability target",
+                retry_hint="submit against an active market",
                 status=409,
                 scope_key=scope_key,
             )
+        preview = min_asset_check(market_id, normalized_payload, account_id)
+        command = materialize_probability_edit_command(
+            market_id=market_id,
+            normalized_payload=normalized_payload,
+            account_id=account_id,
+            command_id=generate_command_id(),
+            submitted_at=utc_timestamp(),
+            idempotency_key=idempotency_key,
+        )
 
-    order = create_probability_edit_order(command, preview=preview)
-    asset_delta = sync_account_risk_state(order)
-    return build_terminal_acceptance_response(command, order, asset_delta, scope_key)
+        order = create_probability_edit_order(command, preview=preview)
+        asset_delta = sync_account_risk_state(order)
+        return build_terminal_acceptance_response(command, order, asset_delta, scope_key)
 
 
 def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
@@ -2198,7 +4842,95 @@ def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[
             )
         idempotency_key = idempotency_key.strip()
 
-    normalized_payload = normalize_event_trade_payload(market_id, body)
+    account_id = account_id.strip()
+    scope_key = idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
+    with get_market_write_lock(market_id):
+        normalized_payload = normalize_event_trade_payload(market_id, body)
+        if scope_key is not None:
+            existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
+            if existing_command_id is not None:
+                existing_command = COMMANDS[existing_command_id]
+                if existing_command["payload"] != normalized_payload:
+                    return build_idempotency_conflict_response(
+                        existing_command_id,
+                        idempotency_key,
+                        market_id,
+                        account_id,
+                        "EventTrade",
+                    )
+                return replay_terminal_outcome(existing_command_id)
+
+        preview = preview_event_trade_position_net_change(account_id, market_id, normalized_payload)
+        if abs(preview["resultingNetSize"]) > max_position_size:
+            raise ApiError(
+                400,
+                "position_limit_exceeded",
+                "Trade would exceed max position size",
+                {
+                    "accountId": account_id,
+                    "marketId": market_id,
+                    "outcomeId": normalized_payload["formula"][0][0]["outcomeId"],
+                    "side": normalized_payload["side"],
+                    "requestedSize": normalized_payload["size"],
+                    "currentNetSize": preview["currentNetSize"],
+                    "resultingNetSize": preview["resultingNetSize"],
+                    "maxPositionSize": max_position_size,
+                },
+            )
+
+        submitted_at = utc_timestamp()
+        command = materialize_event_trade_command(
+            market_id=market_id,
+            normalized_payload=normalized_payload,
+            account_id=account_id,
+            command_id=generate_command_id(),
+            submitted_at=submitted_at,
+            idempotency_key=idempotency_key,
+        )
+        market = MARKETS[market_id]
+        if market["status"] != "active":
+            return build_terminal_rejection_response(
+                command,
+                code="market_not_active",
+                message="EventTrade is only allowed for active markets",
+                details={
+                    "marketId": market_id,
+                    "status": market["status"],
+                    "allowedStatus": "active",
+                    "commandId": command["commandId"],
+                },
+                retry_hint="submit against an active market",
+                status=409,
+                scope_key=scope_key,
+            )
+
+        order = create_event_trade_order(command)
+        sync_account_exposure_state(order)
+        return build_event_trade_acceptance_response(command, order, scope_key)
+
+
+def handle_market_resolution(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
+    """Handle the full AdminOp-backed market-resolution lifecycle for one market."""
+    body = payload if payload is not None else {}
+    if not isinstance(body, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
+
+    account_id = body.get("accountId")
+    if not isinstance(account_id, str) or not account_id.strip():
+        raise ApiError(400, "invalid_market_resolution", "accountId is required", {"field": "accountId"})
+
+    idempotency_key = body.get("idempotencyKey")
+    if idempotency_key is not None:
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise ApiError(
+                400,
+                "invalid_market_resolution",
+                "idempotencyKey must be a non-empty string when provided",
+                {"field": "idempotencyKey"},
+            )
+        idempotency_key = idempotency_key.strip()
+
+    normalized_payload = normalize_market_resolution_payload(market_id, body)
     account_id = account_id.strip()
     scope_key = idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
     if scope_key is not None:
@@ -2211,12 +4943,12 @@ def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[
                     idempotency_key,
                     market_id,
                     account_id,
-                    "EventTrade",
+                    "AdminOp",
                 )
             return replay_terminal_outcome(existing_command_id)
 
     submitted_at = utc_timestamp()
-    command = materialize_event_trade_command(
+    command = materialize_market_resolution_command(
         market_id=market_id,
         normalized_payload=normalized_payload,
         account_id=account_id,
@@ -2225,27 +4957,203 @@ def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[
         idempotency_key=idempotency_key,
     )
     market = MARKETS[market_id]
-    if market["status"] != "active":
+    if market["status"] == "resolved":
         return build_terminal_rejection_response(
             command,
-            code="market_not_active",
-            message="EventTrade is only allowed for active markets",
+            code="market_already_resolved",
+            message="Market is already resolved",
             details={
                 "marketId": market_id,
                 "status": market["status"],
-                "allowedStatus": "active",
+                "currentResolution": market.get("resolution"),
                 "commandId": command["commandId"],
             },
-            retry_hint="submit against an active market",
+            retry_hint="reuse the original idempotency key to replay the prior outcome",
+            status=409,
+            scope_key=scope_key,
+        )
+    if market["status"] not in {"active", "closed"}:
+        return build_terminal_rejection_response(
+            command,
+            code="market_not_resolvable",
+            message="Market can only be resolved from active or closed status",
+            details={
+                "marketId": market_id,
+                "status": market["status"],
+                "allowedStatuses": ["active", "closed"],
+                "commandId": command["commandId"],
+            },
+            retry_hint="resolve an active or closed market",
             status=409,
             scope_key=scope_key,
         )
 
-    order = create_event_trade_order(command)
-    return build_event_trade_acceptance_response(command, order, scope_key)
+    resolution = resolve_market_command(command)
+    return build_market_resolution_acceptance_response(command, resolution, scope_key)
 
 
-def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None) -> tuple[dict[str, Any], int]:
+def handle_market_close(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
+    """Handle the full AdminOp-backed market-close lifecycle for one market."""
+    body = payload if payload is not None else {}
+    if not isinstance(body, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
+
+    account_id = body.get("accountId")
+    if not isinstance(account_id, str) or not account_id.strip():
+        raise ApiError(400, "invalid_market_close", "accountId is required", {"field": "accountId"})
+
+    idempotency_key = body.get("idempotencyKey")
+    if idempotency_key is not None:
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise ApiError(
+                400,
+                "invalid_market_close",
+                "idempotencyKey must be a non-empty string when provided",
+                {"field": "idempotencyKey"},
+            )
+        idempotency_key = idempotency_key.strip()
+
+    account_id = account_id.strip()
+    scope_key = idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
+
+    with get_market_write_lock(market_id):
+        normalized_payload = normalize_market_close_payload(market_id, body)
+        if scope_key is not None:
+            existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
+            if existing_command_id is not None:
+                existing_command = COMMANDS[existing_command_id]
+                if existing_command["payload"] != normalized_payload:
+                    return build_idempotency_conflict_response(
+                        existing_command_id,
+                        idempotency_key,
+                        market_id,
+                        account_id,
+                        "AdminOp",
+                    )
+                return replay_terminal_outcome(existing_command_id)
+
+        submitted_at = utc_timestamp()
+        command = materialize_market_close_command(
+            market_id=market_id,
+            normalized_payload=normalized_payload,
+            account_id=account_id,
+            command_id=generate_command_id(),
+            submitted_at=submitted_at,
+            idempotency_key=idempotency_key,
+        )
+        market = MARKETS[market_id]
+        market_status = str(market["status"])
+        if market_status == "closed":
+            return build_terminal_rejection_response(
+                command,
+                code="market_already_closed",
+                message="Market is already closed",
+                details={
+                    "marketId": market_id,
+                    "status": market_status,
+                    "commandId": command["commandId"],
+                },
+                retry_hint="reuse the original idempotency key to replay the prior outcome",
+                status=409,
+                scope_key=scope_key,
+            )
+        if market_status != "active":
+            return build_terminal_rejection_response(
+                command,
+                code="market_not_closable",
+                message="Market can only be closed from active status",
+                details={
+                    "marketId": market_id,
+                    "status": market_status,
+                    "allowedStatuses": ["active"],
+                    "commandId": command["commandId"],
+                },
+                retry_hint="close an active market",
+                status=409,
+                scope_key=scope_key,
+            )
+
+        closure = close_market_command(command)
+        return build_market_close_acceptance_response(command, closure, scope_key)
+
+
+def handle_market_reopen(market_id: str, payload: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
+    """Handle the full AdminOp-backed market-reopen lifecycle for one market."""
+    body = payload if payload is not None else {}
+    if not isinstance(body, dict):
+        raise ApiError(400, "invalid_body", "payload must be an object")
+
+    account_id = body.get("accountId")
+    if not isinstance(account_id, str) or not account_id.strip():
+        raise ApiError(400, "invalid_market_reopen", "accountId is required", {"field": "accountId"})
+
+    idempotency_key = body.get("idempotencyKey")
+    if idempotency_key is not None:
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise ApiError(
+                400,
+                "invalid_market_reopen",
+                "idempotencyKey must be a non-empty string when provided",
+                {"field": "idempotencyKey"},
+            )
+        idempotency_key = idempotency_key.strip()
+
+    account_id = account_id.strip()
+    scope_key = idempotency_scope_key(market_id, account_id, idempotency_key) if idempotency_key is not None else None
+
+    with get_market_write_lock(market_id):
+        normalized_payload = normalize_market_reopen_payload(market_id, body)
+        if scope_key is not None:
+            existing_command_id = IDEMPOTENCY_KEYS.get(scope_key)
+            if existing_command_id is not None:
+                existing_command = COMMANDS[existing_command_id]
+                if existing_command["payload"] != normalized_payload:
+                    return build_idempotency_conflict_response(
+                        existing_command_id,
+                        idempotency_key,
+                        market_id,
+                        account_id,
+                        "AdminOp",
+                    )
+                return replay_terminal_outcome(existing_command_id)
+
+        submitted_at = utc_timestamp()
+        command = materialize_market_reopen_command(
+            market_id=market_id,
+            normalized_payload=normalized_payload,
+            account_id=account_id,
+            command_id=generate_command_id(),
+            submitted_at=submitted_at,
+            idempotency_key=idempotency_key,
+        )
+        market = MARKETS[market_id]
+        market_status = str(market["status"])
+        if market_status != "closed":
+            return build_terminal_rejection_response(
+                command,
+                code="market_not_reopenable",
+                message="Market can only be reopened from closed status",
+                details={
+                    "marketId": market_id,
+                    "status": market_status,
+                    "allowedStatuses": ["closed"],
+                    "commandId": command["commandId"],
+                },
+                retry_hint="reopen a closed market",
+                status=409,
+                scope_key=scope_key,
+            )
+
+        reopened = reopen_market_command(command)
+        return build_market_reopen_acceptance_response(command, reopened, scope_key)
+
+
+def route_request(
+    method: str,
+    raw_path: str,
+    body: dict[str, Any] | None = None,
+    headers: Any | None = None,
+) -> tuple[dict[str, Any], int]:
     """Route one HTTP request into the backend's in-memory handlers."""
     parsed = urlparse(raw_path)
     path = normalize_path(parsed.path)
@@ -2253,21 +5161,53 @@ def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None
     if method == "GET" and path == "/":
         return service_index_payload(), 200
 
-    if method == "GET" and path in {"/health", "/healthz"}:
+    if method == "GET" and path in LEGACY_HEALTH_ROUTES:
         return health_payload(), 200
 
+    if path == VERSIONED_HEALTH_ROUTE:
+        if method == "GET":
+            return v1_health_payload(), 200
+        raise ApiError(
+            405,
+            "method_not_allowed",
+            f"{method} is not allowed for this resource",
+            {"method": method, "path": path},
+        )
+
+    if path == VERSION_ROUTE:
+        if method == "GET":
+            return v1_version_payload(), 200
+        raise ApiError(
+            405,
+            "method_not_allowed",
+            f"{method} is not allowed for this resource",
+            {"method": method, "path": path},
+        )
+
+    if path == STATS_ROUTE:
+        if method == "GET":
+            return platform_stats_payload(), 200
+        raise ApiError(
+            405,
+            "method_not_allowed",
+            f"{method} is not allowed for this resource",
+            {"method": method, "path": path},
+        )
+
     if path == "/v1/markets":
-        if method != "GET":
-            raise ApiError(
-                405,
-                "method_not_allowed",
-                f"{method} is not allowed for this resource",
-                {"method": method, "path": path},
-            )
-        return list_markets(parse_qs(parsed.query, keep_blank_values=True))
+        if method == "GET":
+            return list_markets(parse_qs(parsed.query, keep_blank_values=True))
+        if method == "POST":
+            return create_market(body)
+        raise ApiError(
+            405,
+            "method_not_allowed",
+            f"{method} is not allowed for this resource",
+            {"method": method, "path": path},
+        )
 
     parts = [part for part in path.split("/") if part]
-    if len(parts) == 4 and parts[:2] == ["v1", "accounts"] and parts[3] == "risk":
+    if len(parts) == 4 and parts[:2] == ["v1", "accounts"] and parts[3] in {"risk", "pnl", "exposure"}:
         account_id = parts[2]
         if method != "GET":
             raise ApiError(
@@ -2276,7 +5216,11 @@ def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None
                 f"{method} is not allowed for this resource",
                 {"method": method, "path": path},
             )
-        return get_account_risk(account_id)
+        if parts[3] == "risk":
+            return get_account_risk(account_id)
+        if parts[3] == "pnl":
+            return get_account_pnl(account_id)
+        return get_account_exposure(account_id)
 
     if len(parts) >= 3 and parts[:2] == ["v1", "markets"]:
         market_id = parts[2]
@@ -2288,7 +5232,17 @@ def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None
                     f"{method} is not allowed for this resource",
                     {"method": method, "path": path},
                 )
-            return get_market_detail(market_id)
+            return get_market_detail(market_id, parse_qs(parsed.query, keep_blank_values=True))
+
+        if len(parts) == 4 and parts[3] == "meta":
+            if method != "GET":
+                raise ApiError(
+                    405,
+                    "method_not_allowed",
+                    f"{method} is not allowed for this resource",
+                    {"method": method, "path": path},
+                )
+            return get_market_preview_response(market_id, headers=headers)
 
         if len(parts) == 4 and parts[3] == "engine-stats":
             if method != "GET":
@@ -2300,6 +5254,16 @@ def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None
                 )
             return get_market_engine_stats(market_id)
 
+        if len(parts) == 4 and parts[3] == "analytics":
+            if method != "GET":
+                raise ApiError(
+                    405,
+                    "method_not_allowed",
+                    f"{method} is not allowed for this resource",
+                    {"method": method, "path": path},
+                )
+            return get_market_analytics(market_id, parse_qs(parsed.query, keep_blank_values=True))
+
         if len(parts) == 4 and parts[3] == "events":
             if method != "GET":
                 raise ApiError(
@@ -2309,6 +5273,109 @@ def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None
                     {"method": method, "path": path},
                 )
             return get_market_events(market_id, parse_qs(parsed.query, keep_blank_values=True))
+
+        if len(parts) == 4 and parts[3] == "trades":
+            if method != "GET":
+                raise ApiError(
+                    405,
+                    "method_not_allowed",
+                    f"{method} is not allowed for this resource",
+                    {"method": method, "path": path},
+                )
+            return get_market_trades(market_id, parse_qs(parsed.query, keep_blank_values=True))
+
+        if len(parts) == 4 and parts[3] == "comments":
+            if method == "GET":
+                return get_market_comments(market_id, parse_qs(parsed.query, keep_blank_values=True))
+            if method == "POST":
+                return handle_comment_post(market_id, body)
+            raise ApiError(
+                405,
+                "method_not_allowed",
+                f"{method} is not allowed for this resource",
+                {"method": method, "path": path},
+            )
+
+        if len(parts) == 4 and parts[3] == "resolve":
+            if method != "POST":
+                raise ApiError(
+                    405,
+                    "method_not_allowed",
+                    f"{method} is not allowed for this resource",
+                    {"method": method, "path": path},
+                )
+            started_at = time.perf_counter()
+            try:
+                payload, status = handle_market_resolution(market_id, body)
+            except ApiError:
+                if market_id in MARKETS:
+                    record_market_engine_request(
+                        market_id,
+                        (time.perf_counter() - started_at) * 1000.0,
+                        error=True,
+                    )
+                raise
+
+            if market_id in MARKETS:
+                duration_ms = (time.perf_counter() - started_at) * 1000.0
+                record_market_engine_request(market_id, duration_ms, error=status >= 400)
+                if status == 201:
+                    refresh_market_compile_snapshot(market_id, compile_time_ms=duration_ms)
+            return payload, status
+
+        if len(parts) == 4 and parts[3] == "close":
+            if method != "POST":
+                raise ApiError(
+                    405,
+                    "method_not_allowed",
+                    f"{method} is not allowed for this resource",
+                    {"method": method, "path": path},
+                )
+            started_at = time.perf_counter()
+            try:
+                payload, status = handle_market_close(market_id, body)
+            except ApiError:
+                if market_id in MARKETS:
+                    record_market_engine_request(
+                        market_id,
+                        (time.perf_counter() - started_at) * 1000.0,
+                        error=True,
+                    )
+                raise
+
+            if market_id in MARKETS:
+                duration_ms = (time.perf_counter() - started_at) * 1000.0
+                record_market_engine_request(market_id, duration_ms, error=status >= 400)
+                if status == 201:
+                    refresh_market_compile_snapshot(market_id, compile_time_ms=duration_ms)
+            return payload, status
+
+        if len(parts) == 4 and parts[3] == "reopen":
+            if method != "POST":
+                raise ApiError(
+                    405,
+                    "method_not_allowed",
+                    f"{method} is not allowed for this resource",
+                    {"method": method, "path": path},
+                )
+            started_at = time.perf_counter()
+            try:
+                payload, status = handle_market_reopen(market_id, body)
+            except ApiError:
+                if market_id in MARKETS:
+                    record_market_engine_request(
+                        market_id,
+                        (time.perf_counter() - started_at) * 1000.0,
+                        error=True,
+                    )
+                raise
+
+            if market_id in MARKETS:
+                duration_ms = (time.perf_counter() - started_at) * 1000.0
+                record_market_engine_request(market_id, duration_ms, error=status >= 400)
+                if status == 201:
+                    refresh_market_compile_snapshot(market_id, compile_time_ms=duration_ms)
+            return payload, status
 
         if len(parts) == 5 and parts[3:] == ["orders", "probability-edit"]:
             if method != "POST":
@@ -2365,6 +5432,32 @@ def route_request(method: str, raw_path: str, body: dict[str, Any] | None = None
     raise ApiError(404, "not_found", "Not found", {"path": path})
 
 
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+MIME_TYPES: dict[str, str] = {
+    ".html": "text/html",
+    ".js": "application/javascript",
+    ".css": "text/css",
+    ".json": "application/json",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
+    ".ttf": "font/ttf",
+}
+
+
+def should_fallback_to_frontend_index(url_path: str) -> bool:
+    """Return whether a request path should load the SPA shell."""
+    clean = url_path.split("?")[0].split("#")[0] or "/"
+    if clean in {"/", "/index.html"}:
+        return True
+    if clean == "/assets" or clean.startswith("/assets/"):
+        return False
+    return PurePosixPath(clean).suffix == ""
+
+
 class BayesHandler(BaseHTTPRequestHandler):
     """HTTP handler that exposes the Bayes Market API over JSON."""
 
@@ -2391,13 +5484,12 @@ class BayesHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _enforce_write_controls(self, method: str) -> str:
-        if method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        write_request = resolve_write_request_agent(method, self.path, self.headers)
+        if write_request is None:
             return ""
 
-        agent_id = request_agent_id(self.headers)
-        enforce_agent_id(agent_id)
-        enforce_rate_limit(agent_id)
-        return agent_id
+        enforce_rate_limit(write_request.agent_id)
+        return write_request.agent_id
 
     def _read_json_body(self) -> dict[str, Any] | None:
         try:
@@ -2424,7 +5516,7 @@ class BayesHandler(BaseHTTPRequestHandler):
         try:
             body = self._read_json_body() if method in {"POST", "PUT", "PATCH"} else None
             agent_id = self._enforce_write_controls(method)
-            payload, status = route_request(method, self.path, body)
+            payload, status = route_request(method, self.path, body, headers=self.headers)
             if status < 400:
                 extra_headers = rate_limit_headers(agent_id)
         except ApiError as exc:
@@ -2435,9 +5527,62 @@ class BayesHandler(BaseHTTPRequestHandler):
                 extra_headers.update(rate_limit_headers(str(exc.details.get("agentId", ""))))
         self.send_json(payload, status, extra_headers=extra_headers)
 
+    def _serve_static(self, url_path: str) -> bool:
+        """Try to serve a static file from frontend/dist/. Return True if served."""
+        if not FRONTEND_DIST.is_dir():
+            return False
+
+        requested_path = normalize_frontend_page_path(url_path)
+        clean = requested_path
+        if clean == "/":
+            clean = "/index.html"
+
+        dist_root = FRONTEND_DIST.resolve()
+        candidate = (dist_root / clean.lstrip("/")).resolve()
+        try:
+            candidate.relative_to(dist_root)
+        except ValueError:
+            return False
+
+        if not candidate.is_file():
+            if not should_fallback_to_frontend_index(clean):
+                return False
+            candidate = dist_root / "index.html"
+            if not candidate.is_file():
+                return False
+
+        if candidate == dist_root / "index.html":
+            content = render_frontend_index_html(
+                candidate.read_text(encoding="utf-8"),
+                requested_path,
+                headers=self.headers,
+            )
+        else:
+            content = candidate.read_bytes()
+        ext = candidate.suffix.lower()
+        mime = MIME_TYPES.get(ext, "application/octet-stream")
+        self.send_response(200)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(content)))
+        if candidate == dist_root / "index.html":
+            self.send_header("Cache-Control", "no-store")
+        elif clean.startswith("/assets/") or ext in {".js", ".css", ".woff2", ".woff", ".ttf", ".png", ".svg", ".ico"}:
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        self.end_headers()
+        self.wfile.write(content)
+        return True
+
     def do_GET(self) -> None:  # noqa: N802
-        """Serve an HTTP GET request."""
-        self.handle_api("GET")
+        """Serve API routes first, fall back to static frontend files."""
+        path = normalize_path(urlparse(self.path).path)
+        if path.startswith("/v1/") or path in PUBLIC_HEALTH_ROUTES:
+            self.handle_api("GET")
+            return
+        if path == "/" and "application/json" in (self.headers.get("Accept") or ""):
+            self.handle_api("GET")
+            return
+        if not self._serve_static(self.path):
+            self.handle_api("GET")
 
     def do_POST(self) -> None:  # noqa: N802
         """Serve an HTTP POST request."""

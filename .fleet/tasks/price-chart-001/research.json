@@ -1,0 +1,106 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Verify that <path> elements are rendered with a non-empty `d` attribute, NOT exact path strings. buildLinePath is already unit-tested in chartUtils.test.ts with precision checks (2 decimal places, M/L commands). Duplicating exact coordinate assertions would couple the component test to both buildLinePath internals AND scaleNumber's pixel mapping. The VolumeChart.test.tsx pattern validates element counts and relative sizing (height ratios via toBeCloseTo), not exact coordinate strings. Follow the same philosophy: assert path elements exist, have non-empty `d`, and have the correct stroke color.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/chartUtils.test.ts:buildLinePath tests cover exact path string output",
+        "frontend/src/__tests__/VolumeChart.test.tsx:41-59:uses toBeCloseTo for height ratios, not exact pixel values",
+        "frontend/src/features/analytics/PriceChart.tsx:150-159:path elements with stroke from getOutcomeColor"
+      ],
+      "uncertainty": "None significant. The codebase pattern clearly favors behavioral over exact-value assertions for rendered SVG."
+    },
+    {
+      "question_id": "q2",
+      "answer": "PriceChart can be rendered with plain render() from @testing-library/react. The component takes only props (series, interval) and uses no hooks for routing, queries, session, or any context. It imports only pure utility functions (formatProbability, buildLinePath, formatTimestampLabel, getOutcomeColor, scaleNumber) and types. VolumeChart.test.tsx uses plain render() for the same reason. No need for renderWithProviders.",
+      "confidence": 0.98,
+      "evidence": [
+        "frontend/src/features/analytics/PriceChart.tsx:imports only chartUtils and format utils, no useContext/useQuery/useNavigate",
+        "frontend/src/__tests__/VolumeChart.test.tsx:uses plain render() from @testing-library/react",
+        "frontend/src/__tests__/helpers.tsx:renderWithProviders exists but is for components needing QueryClient/Session/Router"
+      ],
+      "uncertainty": "None. The component source code confirms no provider dependencies."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Test both the SVG viewBox attribute AND the style attributes. In jsdom we can verify: (1) viewBox='0 0 760 320' is set correctly, (2) style.width='100%', (3) style.minWidth is set (the component uses 460 for the outer div's minWidth and the SVG itself gets width:100%), (4) style.height='auto'. We CANNOT test actual responsive reflow behavior. The VolumeChart test doesn't test sizing explicitly, but PriceChart's wrapper div has overflowX:'auto' and minWidth:460px which are testable via container queries. Focus on asserting the SVG has the correct viewBox and that the wrapper div exists with overflow styling.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/analytics/PriceChart.tsx:63-64:wrapper div with overflowX:'auto', minWidth:460",
+        "frontend/src/features/analytics/PriceChart.tsx:65-68:SVG with viewBox, width:100%, height:auto",
+        "frontend/src/__tests__/VolumeChart.test.tsx:no explicit sizing tests in the pattern"
+      ],
+      "uncertainty": "Exact minWidth value on the SVG vs the wrapper div - need to verify which element gets which style. The wrapper div has minWidth:460, the SVG has width:100% and height:auto."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Test exact hex values from getOutcomeColor(index) for each series, not just distinctness. Rationale: (1) getOutcomeColor is a simple lookup with modulo wrapping - calling it in the test to compute expected values is trivial and not brittle. (2) This provides integration confidence that PriceChart correctly passes the outcome index to getOutcomeColor. (3) The test imports getOutcomeColor and uses it to compute expected colors, so if the palette changes, the test auto-updates. This is NOT hardcoding hex strings - it's verifying the component uses the same function the test uses.",
+      "confidence": 0.92,
+      "evidence": [
+        "frontend/src/features/analytics/chartUtils.ts:4-15:OUTCOME_COLORS array and getOutcomeColor function",
+        "frontend/src/features/analytics/PriceChart.tsx:150-170:uses getOutcomeColor(outcomeIndex) for path stroke and circle fill",
+        "frontend/src/__tests__/VolumeChart.test.tsx:no color tests in VolumeChart (single-color bars)"
+      ],
+      "uncertainty": "Whether to also test legend dot colors or just SVG path/circle colors. Legend dots also use getOutcomeColor."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Assert the exact formatted strings ('0.0%', '25.0%', '50.0%', '75.0%', '100.0%') for Y-axis labels. Rationale: (1) formatProbability is trivially simple ((p * 100).toFixed(1) + '%'), so exact strings are stable and readable. (2) The VolumeChart test uses exact text matching via screen.getByText() for its Y-axis labels. (3) This validates the integration: PriceChart renders gridlines at the correct probability values (0, 0.25, 0.5, 0.75, 1.0) AND passes them through formatProbability. (4) The set of gridline values is hardcoded in PriceChart, so these strings won't change unless the gridlines change.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/lib/utils/format.ts:1-3:formatProbability is (p * 100).toFixed(1) + '%'",
+        "frontend/src/features/analytics/PriceChart.tsx:71-94:gridlines at [1, 0.75, 0.5, 0.25, 0]",
+        "frontend/src/__tests__/VolumeChart.test.tsx:61-69:uses screen.getByText for exact label matching"
+      ],
+      "uncertainty": "None significant. The gridline values are hardcoded and the formatter is deterministic."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "PriceChart imports only pure utility functions and types. No useContext, useQuery, useNavigate, or any provider-dependent hooks. Plain render() is correct."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "VolumeChart.test.tsx uses: makeBucket factory, container.querySelectorAll for SVG elements, screen.getByTestId('volume-chart'). PriceChart has data-testid='price-chart' and the same SVG structure. Following this pattern is the right approach."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.92,
+      "impact": "Verifying non-empty `d` attribute + correct stroke color is sufficient. buildLinePath and scaleNumber are unit-tested in chartUtils.test.ts. Component test should focus on integration: correct number of paths, correct colors, paths have content."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "PriceChart uses getOutcomeColor(outcomeIndex) for both path stroke and circle fill (lines 150-170). Legend dots also use getOutcomeColor (line 54). Testing both SVG elements and legend dots covers the full color integration. Color cycling beyond palette length is handled by getOutcomeColor's modulo logic, already tested in chartUtils.test.ts."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "PriceChart SVG has viewBox='0 0 760 320', width:100%, height:auto. Wrapper div has overflowX:'auto', minWidth:460. Testing the SVG attributes and wrapper div styles covers responsive sizing in jsdom."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Empty state (series=[]) should render the SVG with axes and gridlines but no paths or circles. VolumeChart.test.tsx has an explicit empty state test (lines 71-84) that verifies SVG presence, zero bars, and gridlines still rendered. PriceChart should follow the same pattern."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.88,
+      "impact": "The legend is part of PriceChart's output (lines 48-60) and uses getOutcomeColor for dot backgrounds. Testing legend text and dot colors as part of 'rendering with mock price series data' is appropriate and matches the holistic testing approach."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

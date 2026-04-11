@@ -1,0 +1,109 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use toHaveStyle() from jest-dom for all inline style assertions (beacon colors, CountCard colors, boxShadow glow), matching established codebase patterns in AccountPnlSection.test.tsx and AnalyticsFilters.test.tsx",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Direct element.style property access — less idiomatic, not the project convention",
+        "getComputedStyle — overkill for inline styles, less readable"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use mockReturnValue(new Promise(() => {})) (never-resolving promise) on API client mocks to simulate loading state, matching Analytics.test.tsx:71 pattern",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Mocking react-query hook state directly — breaks existing mock-at-client-level pattern",
+        "Using msw/fake timers — unnecessary complexity when never-resolving promise works"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Test both Error branches: mockRejectedValue(new Error('msg')) for error.message display AND a non-Error rejection for 'Connection failed' fallback, covering both branches of the instanceof check at System.tsx:56",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Only testing one branch — leaves the other untested, defeating coverage goal",
+        "Using BayesApiError — extends Error so tests same branch as standard Error"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Verify actual formatted string output from formatCurrency (e.g., assert '2.0K' appears for volume=2000) to test the integration of data computation → formatting → rendering",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Simple presence check — misses computation bugs in the sum/reduce logic",
+        "Mocking formatCurrency — defeats integration testing purpose"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Keep all new tests in the existing System.test.tsx file, mocking at @/lib/api/client level using the existing vi.hoisted + vi.mock pattern",
+      "based_on": ["q1", "q2", "q3", "q4"],
+      "alternatives_rejected": [
+        "Separate test files per concern — unnecessary fragmentation for one component",
+        "Mocking hooks directly — inconsistent with existing test architecture"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add health loading state test: mock getHealth with never-resolving promise, assert 'Checking...' text and orange beacon via toHaveStyle({ background: 'var(--color-warning, orange)' })",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add health error state test (Error instance): mock getHealth with mockRejectedValue(new Error('Network error')), assert error.message text appears and red beacon via toHaveStyle({ background: 'var(--color-danger)' })",
+      "depends_on": []
+    },
+    {
+      "step": 3,
+      "task": "Add health error state test (non-Error fallback): mock getHealth with mockRejectedValue('string error'), assert 'Connection failed' fallback text appears",
+      "depends_on": []
+    },
+    {
+      "step": 4,
+      "task": "Add healthy beacon style test: verify green beacon has toHaveStyle({ background: 'var(--color-success)' }) and glow toHaveStyle({ boxShadow: '0 0 8px var(--color-success)' }) when health returns ok",
+      "depends_on": []
+    },
+    {
+      "step": 5,
+      "task": "Add markets loading state test: mock listMarkets with never-resolving promise, assert loading indicator appears in the Markets section (LoadingPage component)",
+      "depends_on": []
+    },
+    {
+      "step": 6,
+      "task": "Add platform stats formatCurrency integration test: provide mock markets with known volumes/liquidity (e.g., 500+1500=2000), assert formatted output '2.0K' renders for Total Volume",
+      "depends_on": []
+    },
+    {
+      "step": 7,
+      "task": "Add CountCard color assertion test: verify that status count cards apply correct colors via toHaveStyle({ color: 'var(--color-success)' }) for active markets count",
+      "depends_on": []
+    },
+    {
+      "step": 8,
+      "task": "Add empty markets array test: provide empty markets array, assert all status counts render as 0 and totals render as '$0'",
+      "depends_on": []
+    },
+    {
+      "step": 9,
+      "task": "Add API info section test: verify apiVersion from index.data.meta renders, and multiple route groups are displayed correctly",
+      "depends_on": []
+    },
+    {
+      "step": 10,
+      "task": "Run full test suite (vitest run System) to verify all new tests pass alongside existing tests, fix any failures",
+      "depends_on": [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

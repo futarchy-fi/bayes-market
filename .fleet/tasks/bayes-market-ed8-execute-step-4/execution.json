@@ -1,0 +1,25 @@
+{
+  "phase": "execute",
+  "status": "completed",
+  "gated": true,
+  "steps": [
+    {
+      "step": 1,
+      "description": "Focused backend health-route gate over the six public route-facing assertions.",
+      "command": "python3 -m pytest tests/test_bayes_market_api.py -k 'test_root_route_returns_service_index or test_legacy_health_routes_return_legacy_health_payload or test_v1_health_route_returns_versioned_health_payload or test_v1_health_route_is_method_not_allowed_for_non_get or test_legacy_health_http_routes_return_service_payload or test_v1_health_http_returns_versioned_service_payload' -v --tb=short",
+      "outcome": "passed",
+      "summary": "6 passed, 236 deselected in 0.65s"
+    },
+    {
+      "step": 2,
+      "description": "Broader backend API module run executed only after the focused gate passed.",
+      "command": "python3 -m pytest tests/test_bayes_market_api.py -v --tb=short",
+      "outcome": "passed",
+      "summary": "242 passed in 5.69s"
+    }
+  ],
+  "notes": [
+    "The focused selector passed first, so the broader module run remained fail-fast and in-sequence.",
+    "backend/server.py now uses shared health-route constants so the service index, router, and GET dispatch stay aligned when the health surface changes."
+  ]
+}

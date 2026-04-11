@@ -1,0 +1,87 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Does step 4 assume earlier plan work has already landed the `/v1/markets/{id}/close` implementation, service-index entry, and market-admin route dispatch, or must this branch backfill those seams first because the current checkout still only recognizes `/resolve`?",
+      "category": "codebase",
+      "why_it_matters": "The task is scoped to extending direct backend regressions, but `backend/server.py` currently has no `/close` route, no close handler, and no close entry in `service_index_payload(...)`, so the test target is missing in the code as checked out."
+    },
+    {
+      "id": "q2",
+      "question": "What exact root service-index and router contract should the new direct tests freeze for close: should `payload[\"routes\"][\"markets\"]` include `POST /v1/markets/{id}/close`, and should `/v1/markets/{id}/close` follow the same market-scoped POST-only dispatch with `405 method_not_allowed` details as `/resolve`?",
+      "category": "requirements",
+      "why_it_matters": "The existing root-route and route-dispatch regressions assert exact route strings and exact `method_not_allowed` payload details, so the close tests need the precise public surface rather than an inferred approximation."
+    },
+    {
+      "id": "q3",
+      "question": "What accepted close contract should the direct backend tests assert for a successful transition from `active`: response status, mutated market fields, persisted command payload shape (`AdminOp` with `{\"kind\": \"CloseMarket\"}` or similar), and accepted event payload fields such as `closedAt`, empty deltas, and replay hash?",
+      "category": "requirements",
+      "why_it_matters": "The current codebase only defines the `ResolveMarket` admin-op path, and the tests freeze exact response, command, and event shapes for admin operations rather than only checking status changes."
+    },
+    {
+      "id": "q4",
+      "question": "What exact distinction should the new regressions freeze between idempotent replay and `market_already_closed`: does reusing the same idempotency key after a successful close replay the original `201`, while a later close attempt with a different or absent key on a closed market returns a replayable `409 market_already_closed` terminal rejection?",
+      "category": "design",
+      "why_it_matters": "The repo’s command lifecycle persists terminal outcomes and only replays them when an idempotency scope key matches an existing command, so the tests need the intended boundary between replay and a fresh closed-market rejection."
+    },
+    {
+      "id": "q5",
+      "question": "What precise rejection contracts are required for `market_already_closed` and `market_not_closable` from `draft` and `resolved`: exact user-facing messages, `retryHint`, `error.details` fields, and whether rejected close attempts still persist the command, `CommandRejected` event, terminal outcome, and idempotency binding?",
+      "category": "requirements",
+      "why_it_matters": "Existing direct regression tests freeze exact terminal-rejection payloads, including `commandId` in details and replay behavior, so the close tests need the final rejection schema before they can be written accurately."
+    },
+    {
+      "id": "q6",
+      "question": "Which concrete stores count as the required 'marginals, conditional state, risk, and exposure' invariants in this checkout: only `MARKETS[market_id][\"marginals\"]`, `CONDITIONAL_MARGINALS`, and `ACCOUNT_RISK`, or also `ACCOUNT_RISK[*][\"lmsrState\"]`, PnL/read-model projections, and analytics history?",
+      "category": "codebase",
+      "why_it_matters": "The task names exposure as an invariant, but this repo has no standalone exposure registry; the closest state is spread across account-risk and PnL-related projections, so the direct tests need a clear snapshot boundary."
+    },
+    {
+      "id": "q7",
+      "question": "How should the new direct regressions prove that close keeps later `/resolve` support intact: is it enough to assert that a market closed through `/close` can still be resolved successfully, or must the test also verify the usual resolve side effects such as point-mass marginals, conditional cleanup, and account-risk settlement after the close?",
+      "category": "design",
+      "why_it_matters": "The current suite already proves `/resolve` accepts a manually closed market, but this task specifically wants invariants around the new close path while preserving downstream resolve behavior, so the integration point needs to be explicit."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Step 4 is intended to add direct backend regressions around `server.route_request(...)` near the existing market-resolution unit tests, not new HTTP integration coverage.",
+      "confidence": 0.97,
+      "if_wrong": "The work would need to span additional HTTP helper coverage and potentially duplicate assertions across both direct and integration test classes."
+    },
+    {
+      "id": "a2",
+      "assumption": "Close should mirror the existing market-admin write mechanics: market-scoped POST routing, service-index advertisement, market-admin auth categorization, idempotency replay/conflict handling, and terminal outcome persistence.",
+      "confidence": 0.92,
+      "if_wrong": "The new tests would need a different router/auth/replay model than the rest of the admin-op surface, which would materially change both backend design and regression scope."
+    },
+    {
+      "id": "a3",
+      "assumption": "A successful close is economically inert until a later resolve: it changes market status to `closed` but leaves marginals, conditional marginals, and account-risk/exposure state unchanged and emits zero-cost, zero-fee effects.",
+      "confidence": 0.99,
+      "if_wrong": "The direct regressions would need to assert settlement or projection changes on close itself, which is not suggested by the current task wording."
+    },
+    {
+      "id": "a4",
+      "assumption": "The status matrix is `active -> accepted close`, `closed -> market_already_closed`, and `draft` or `resolved` -> `market_not_closable` with `allowedStatuses` equal to `[\"active\"]`.",
+      "confidence": 0.94,
+      "if_wrong": "The close tests would freeze the wrong rejection mapping and the wrong stable `error.details` payload for non-active states."
+    },
+    {
+      "id": "a5",
+      "assumption": "In this checkout, 'exposure' most likely refers to the account-risk/LMSR state already stored inside `ACCOUNT_RISK`, because there is no separate exposure store in `backend/server.py`.",
+      "confidence": 0.76,
+      "if_wrong": "The invariants would be incomplete, and the direct regressions would need to snapshot an additional projection or ledger that was overlooked during codebase inspection."
+    },
+    {
+      "id": "a6",
+      "assumption": "After closing a market through the new endpoint, the later `/resolve` path should still behave exactly like the existing closed-market resolve flow, including conditional cleanup and account-risk settlement at resolution time.",
+      "confidence": 0.95,
+      "if_wrong": "The close endpoint would introduce a new state transition that changes how resolve works on closed markets, so the planned regression scope would need broader downstream assertions."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

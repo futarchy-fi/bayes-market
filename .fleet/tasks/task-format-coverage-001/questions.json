@@ -1,0 +1,51 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Does the project use vi.useFakeTimers with a specific setup/teardown pattern (e.g., beforeEach/afterEach) or is there a shared test helper for time mocking?",
+      "category": "codebase",
+      "why_it_matters": "formatRelativeTime and timeUntil depend on Date.now(). Need to confirm the correct vitest fake timer pattern used in this project to stay consistent."
+    },
+    {
+      "id": "q2",
+      "question": "Should negative numbers in formatCurrency preserve the sign through K/M formatting (e.g., -45000 → '-45.0K')?",
+      "category": "requirements",
+      "why_it_matters": "The implementation uses Math.abs for threshold checks but passes original n to toFixed/division, so sign is preserved. Tests should verify this behavior explicitly."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "vi.useFakeTimers() and vi.setSystemTime() are the correct APIs for controlling Date.now() in this project's vitest setup.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to use a different mocking approach or a project-specific time helper."
+    },
+    {
+      "id": "a2",
+      "assumption": "formatCurrency preserves negative sign through K/M formatting since Math.abs is only used for threshold comparison, not for the final output.",
+      "confidence": 0.99,
+      "if_wrong": "Would need to adjust expected test values."
+    },
+    {
+      "id": "a3",
+      "assumption": "All new tests should be added to the existing frontend/src/__tests__/format.test.ts file, not a separate file.",
+      "confidence": 0.99,
+      "if_wrong": "Would need to create a new test file."
+    },
+    {
+      "id": "a4",
+      "assumption": "The 10 specific test cases listed in the task description are exhaustive — no additional edge cases beyond those are required.",
+      "confidence": 0.95,
+      "if_wrong": "May need to add more tests, but the listed 10 are the minimum requirement."
+    },
+    {
+      "id": "a5",
+      "assumption": "truncateHash with custom length parameter means passing a non-default value for the len parameter (e.g., truncateHash('abcdef0123456789', 4)).",
+      "confidence": 0.99,
+      "if_wrong": "Would need clarification on what 'custom length' means."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

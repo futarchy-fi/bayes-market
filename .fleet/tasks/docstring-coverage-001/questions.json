@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should docstrings follow the existing Sphinx/RST style (e.g., `*param*`, `:class:` cross-refs) used in the `check` method, or switch to Google/NumPy style with explicit Parameters/Returns sections?",
+      "category": "requirements",
+      "why_it_matters": "The file already has partial docstrings using RST-style markup. Mixing styles would be inconsistent; we need to pick one and apply it uniformly."
+    },
+    {
+      "id": "q2",
+      "question": "Should we add docstrings to `__init__`, the `cache_hits` property, and the `cache_misses` property — or only to the two properties since `__init__` is trivially self-documenting?",
+      "category": "requirements",
+      "why_it_matters": "The task says 'public methods' — `__init__` is debatable (some style guides skip it for simple constructors), and properties are debatable too. The existing `check` and `reset` already have docstrings, so the gap is small."
+    },
+    {
+      "id": "q3",
+      "question": "Should we add usage examples (as the task description suggests 'where helpful') given the class is only used in one place (server.py line 241) and the tests already demonstrate all usage patterns?",
+      "category": "requirements",
+      "why_it_matters": "Adding examples bloats a 72-line file. The existing tests in test_bayes_market_inference_module.py already serve as living documentation. Examples in docstrings may go stale."
+    },
+    {
+      "id": "q4",
+      "question": "Should the existing class-level and method-level docstrings be enhanced (e.g., adding Parameters/Returns sections to `check`) or left as-is, with new docstrings only added where none exist?",
+      "category": "requirements",
+      "why_it_matters": "The task says 'add docstrings' which could mean only filling gaps or also upgrading existing ones. The `check` method docstring already describes behavior but lacks formal parameter/return documentation."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "We should match the existing Sphinx/RST docstring style used in the `check` method and across the inference module (contracts.py, config.py).",
+      "confidence": 0.85,
+      "if_wrong": "We'd need to rewrite all existing docstrings to the chosen style, increasing scope significantly."
+    },
+    {
+      "id": "a2",
+      "assumption": "The three undocumented members (`__init__`, `cache_hits`, `cache_misses`) plus enhancing the existing `check` docstring with Parameters/Returns sections covers the full scope of work.",
+      "confidence": 0.8,
+      "if_wrong": "We might over-document trivial members or miss that the user wants a deeper rewrite of existing docstrings."
+    },
+    {
+      "id": "a3",
+      "assumption": "No usage examples are needed in docstrings since tests provide comprehensive examples and the class API is small (3 public methods + 2 properties).",
+      "confidence": 0.7,
+      "if_wrong": "We'd need to add doctest-style examples, which would roughly double the file length."
+    },
+    {
+      "id": "a4",
+      "assumption": "This task does not require changes to `InvalidationResult` since it already has a class docstring and its fields are self-documenting dataclass attributes.",
+      "confidence": 0.9,
+      "if_wrong": "We'd need to add field-level documentation to the dataclass, possibly using Attributes sections."
+    },
+    {
+      "id": "a5",
+      "assumption": "Thread safety does not need to be documented even though the manager is used as a module-level singleton in server.py, because the file itself has no threading logic.",
+      "confidence": 0.65,
+      "if_wrong": "We should add a note about thread safety (or lack thereof) to the class docstring since server.py uses it alongside write locks."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

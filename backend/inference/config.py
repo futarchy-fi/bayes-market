@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Final
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,7 @@ class EngineConfig:
     precision: str
     compile_type: str
     inference_sample_limit: int
+    max_treewidth: int = 8
 
     def __post_init__(self) -> None:
         if not self.mode:
@@ -29,9 +31,11 @@ class EngineConfig:
             raise ValueError("Engine compile_type must be non-empty")
         if self.inference_sample_limit < 0:
             raise ValueError("Engine inference_sample_limit must be non-negative")
+        if self.max_treewidth < 0:
+            raise ValueError("Engine max_treewidth must be non-negative")
 
 
-DEFAULT_ENGINE_CONFIG = EngineConfig(
+DEFAULT_ENGINE_CONFIG: Final[EngineConfig] = EngineConfig(
     mode="EXACT",
     backend="junction_tree",
     version="0.1.0",
@@ -40,4 +44,4 @@ DEFAULT_ENGINE_CONFIG = EngineConfig(
     inference_sample_limit=100,
 )
 
-__all__ = ["DEFAULT_ENGINE_CONFIG", "EngineConfig"]
+__all__: list[str] = ["DEFAULT_ENGINE_CONFIG", "EngineConfig"]

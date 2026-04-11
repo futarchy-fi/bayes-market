@@ -1,0 +1,89 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Import directly from @/features/assumptions/AssumptionContext (no barrel export exists)",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Relative imports (project convention uses @/ alias everywhere)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use simple wrapper pattern with renderHook, matching session.test.tsx style — no renderWithProviders needed",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Using helpers.tsx renderWithProviders (doesn't include AssumptionProvider, adds unnecessary providers)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Skip referential stability testing for contextPayload — test functional correctness only",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Testing that contextPayload creates new reference each render (over-testing implementation details, out of task scope)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Use explicit vitest imports (describe, it, expect, vi) for consistency with session.test.tsx",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Relying on vitest globals without import (works but inconsistent with existing tests)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "No mocking required — AssumptionContext is pure in-memory state with no external dependencies",
+      "based_on": ["q2"],
+      "alternatives_rejected": [],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create test file at frontend/src/__tests__/AssumptionContext.test.tsx with imports from vitest, @testing-library/react, and @/features/assumptions/AssumptionContext. Define wrapper function using AssumptionProvider.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Write 'initial state' test group: verify assumptions starts as empty array, hasAssumption returns false, getAssumption returns undefined, contextPayload is empty array.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Write 'addAssumption' test group: add single assumption and verify it appears in assumptions array; add multiple assumptions with different variableIds; add assumption with same variableId to verify replace behavior (filters old, appends new, exactly one entry with updated values).",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Write 'removeAssumption' test group: add then remove by variableId, verify it's gone; verify removing non-existent variableId is a no-op.",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Write 'clearAll' test group: add multiple assumptions then clearAll, verify empty state.",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Write 'hasAssumption' and 'getAssumption' test group: verify hasAssumption returns true/false correctly; verify getAssumption returns matching Assumption or undefined.",
+      "depends_on": [1]
+    },
+    {
+      "step": 7,
+      "task": "Write 'contextPayload' test group: add assumptions and verify contextPayload contains only { variableId, outcomeId } (no label field).",
+      "depends_on": [1]
+    },
+    {
+      "step": 8,
+      "task": "Write 'useAssumptions outside provider' test group: verify it throws 'useAssumptions must be used within AssumptionProvider' with console.error suppression pattern from session.test.tsx.",
+      "depends_on": [1]
+    },
+    {
+      "step": 9,
+      "task": "Run vitest on the new test file to confirm all tests pass.",
+      "depends_on": [2, 3, 4, 5, 6, 7, 8]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

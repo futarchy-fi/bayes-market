@@ -1,0 +1,146 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "`MarketList` should mirror `status`, `sort`, and committed `search` into URL search params instead of keeping them only in local route state. `Analytics` already uses search params as the source of truth for top-level route filters, normalizes defaults into the URL, and updates params on control changes; `MarketList` is the current outlier with only local `status` state. Putting the list filters in the URL gives canonical route state for back/forward navigation, sharable filtered views, and predictable `useMarkets(filters)` wiring.",
+      "confidence": 0.84,
+      "evidence": [
+        "frontend/src/routes/Analytics.tsx:22",
+        "frontend/src/routes/Analytics.tsx:26",
+        "frontend/src/routes/Analytics.tsx:37",
+        "frontend/src/routes/Analytics.tsx:79",
+        "frontend/src/routes/MarketList.tsx:10",
+        "frontend/src/routes/MarketList.tsx:11"
+      ],
+      "uncertainty": "The repo does not state a blanket policy that every filter-heavy route must use URL state; this is based on the closest existing route precedent.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "Ship a neutral default option that omits `sort`, not an implicit `created` request. That matches the existing client pattern of omitting empty filters and the already-recorded backend decision to preserve current order when `sort` is absent. For the dropdown, use `Default order` first, then explicit descending sorts in the existing contract order: `Volume`, `Liquidity`, and `Newest` for `created`.",
+      "confidence": 0.69,
+      "evidence": [
+        "frontend/src/lib/api/client.ts:66",
+        "frontend/src/lib/api/types.ts:8",
+        "frontend/src/routes/MarketList.tsx:58",
+        "frontend/src/routes/MarketList.tsx:59",
+        ".fleet/tasks/bayes-market-qg9/plan.json:27",
+        "tests/test_bayes_market_api.py:936"
+      ],
+      "uncertainty": "The codebase fixes the backend sort values and directions, but it does not contain existing user-facing copy for the sort labels.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "The search field should fetch after a short debounce, then commit the normalized term into URL/query state. A debounce around 300 ms is the best fit here: `useMarkets` refetches whenever its key changes and already polls every 5 seconds, so every-keystroke fetching would create noisy requests and cache keys, while submit-only would make search behave differently from the route's live select controls and the `Analytics` filter pattern.",
+      "confidence": 0.67,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:24",
+        "frontend/src/lib/query/hooks.ts:28",
+        "frontend/src/routes/Analytics.tsx:79",
+        "frontend/src/routes/Analytics.tsx:87",
+        "frontend/src/routes/MarketList.tsx:33",
+        ".fleet/tasks/bayes-market-qg9/validation.json:4"
+      ],
+      "uncertainty": "There is no existing debounce helper or documented standard debounce interval in the frontend, so the exact delay remains an implementation choice.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "When the user selects the all-markets status, the frontend should keep omitting `status` as the canonical representation rather than serializing `status=all`. The backend accepts `status=all` only as an alias and normalizes it back to `None`, and the current client already omits empty status filters. Omitting the param keeps URLs, request serialization, and React Query keys canonical instead of supporting two equivalent encodings.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:1172",
+        "backend/server.py:1196",
+        "tests/test_bayes_market_api.py:894",
+        "tests/test_bayes_market_api.py:900",
+        "frontend/src/lib/api/client.ts:66",
+        "frontend/src/routes/MarketList.tsx:8"
+      ],
+      "uncertainty": "If product explicitly wants visible `status=all` URLs for readability, that would be a product-level override rather than a codebase-driven one.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "The frontend should trim search text and omit blank `q` before calling `listMarkets`. The backend already normalizes `q` with `strip()` and collapses whitespace-only input to no filter, and the client/hook layer benefits from doing the same normalization so whitespace-only edits do not generate distinct URLs, cache keys, or avoidable requests. Raw textbox state can stay local until commit, but the API-facing filter should be normalized first.",
+      "confidence": 0.91,
+      "evidence": [
+        "backend/server.py:1192",
+        "backend/server.py:1199",
+        "tests/test_bayes_market_api.py:920",
+        "tests/test_bayes_market_api.py:928",
+        "frontend/src/lib/api/client.ts:69",
+        "frontend/src/lib/query/hooks.ts:24"
+      ],
+      "uncertainty": "This only settles the request/query-key representation; it does not by itself dictate whether the textbox preserves the user's original spacing before submit.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q6",
+      "answer": "The expected frontend verification is all three: API client URL serialization, `useMarkets` query-key coverage for `status` + `sort` + `q`, and `MarketList` interaction tests. The prior plan explicitly split the work into client/hook changes plus route/UI tests, and the validation called the branch incomplete because the client still only serialized `status`, the hook still keyed only by `status`, and the route still lacked sort/search controls.",
+      "confidence": 0.96,
+      "evidence": [
+        ".fleet/tasks/bayes-market-qg9/plan.json:58",
+        ".fleet/tasks/bayes-market-qg9/plan.json:63",
+        ".fleet/tasks/bayes-market-qg9/plan.json:68",
+        ".fleet/tasks/bayes-market-qg9/validation.json:4",
+        ".fleet/tasks/bayes-market-qg9/validation.json:8",
+        "frontend/src/__tests__/api-client.test.ts:27",
+        "frontend/src/__tests__/MarketList.test.tsx:23",
+        "frontend/src/lib/query/hooks.ts:24"
+      ],
+      "uncertainty": "The repo does not prescribe an exact file-by-file test matrix, only the coverage areas that must be exercised.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q7",
+      "answer": "The expected local workflow is the same one used in CI: install frontend dependencies with `pnpm --dir frontend install`, then run `pnpm --dir frontend test`, and run `pnpm --dir frontend build` for full parity. The repo does not define another bootstrap command or root-level frontend wrapper; the workflow is pinned directly to `frontend/`.",
+      "confidence": 0.97,
+      "evidence": [
+        ".github/workflows/ci.yml:35",
+        ".github/workflows/ci.yml:38",
+        ".github/workflows/ci.yml:41",
+        ".github/workflows/ci.yml:45",
+        "frontend/package.json:6",
+        ".fleet/tasks/bayes-market-qg9/validation.json:4"
+      ],
+      "uncertainty": "The repo assumes Node and pnpm are available locally; it does not vendor them or document alternate package-manager support.",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The frontend can treat the backend list contract as fixed and should normalize around it: single-valued `status`/`sort`/`q`, `status=all` aliasing to no filter, blank `q` collapsing to no filter, and normalized values echoed in `meta.filters`."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.93,
+      "impact": "The least disruptive frontend change is to widen the existing `queryKeys.markets(...)` and `useMarkets(...)` interface around `MarketListFilters`, preserving all current zero-argument callers instead of introducing a separate market-list hook."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "The UI should keep the existing `active`, `resolved`, `closed`, and `draft` status options and layer sort/search on top, rather than narrowing the status contract in this phase."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.84,
+      "impact": "Frontend tests should avoid equal-value sort fixtures and focus on parameter wiring plus clearly ordered non-tied examples, because the codebase still does not document a stable tie-break rule for equal `volume`, `liquidity`, or `created` values."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Local frontend verification requires dependency bootstrap first, so the task workflow should assume `pnpm --dir frontend install` before running Vitest or frontend builds in this worktree."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

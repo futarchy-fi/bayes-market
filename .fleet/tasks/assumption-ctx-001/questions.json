@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the test file import Assumption type directly from AssumptionContext.tsx, or is there a barrel export (index.ts) in the assumptions feature directory?",
+      "category": "codebase",
+      "why_it_matters": "Determines the correct import path for the Assumption type and exported functions in the test file."
+    },
+    {
+      "id": "q2",
+      "question": "Are there any additional test utilities or custom render functions beyond helpers.tsx that should be used, or is the simple wrapper pattern from session.test.tsx sufficient for this pure-context test?",
+      "category": "codebase",
+      "why_it_matters": "AssumptionContext has no external dependencies (no API calls, no localStorage), so the simpler wrapper pattern should suffice, but need to confirm no project convention requires the full renderWithProviders helper."
+    },
+    {
+      "id": "q3",
+      "question": "Should contextPayload be tested for referential stability (i.e., that it produces a new array reference on each render since it's computed inline without useMemo)?",
+      "category": "design",
+      "why_it_matters": "contextPayload is computed inline (not memoized), which means it creates a new array every render. This could be a performance concern worth documenting via test, or it could be intentional and not worth testing."
+    },
+    {
+      "id": "q4",
+      "question": "Does the project use path aliases like @/ in test files, or should relative imports be used?",
+      "category": "codebase",
+      "why_it_matters": "session.test.tsx uses @/features/session/context, suggesting the @/ alias is configured for tests. Need to confirm this applies to the assumptions path as well."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The test should use renderHook from @testing-library/react with a simple AssumptionProvider wrapper, following the same pattern as session.test.tsx.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to use renderWithProviders or a different test utility setup."
+    },
+    {
+      "id": "a2",
+      "assumption": "The @/ path alias resolves correctly in test files, so imports should use @/features/assumptions/AssumptionContext.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to use relative imports instead."
+    },
+    {
+      "id": "a3",
+      "assumption": "No mocking is required since AssumptionContext is a pure in-memory state container with no external dependencies (no API calls, no localStorage, no side effects).",
+      "confidence": 0.99,
+      "if_wrong": "Would need to mock some dependency, but the source code shows none."
+    },
+    {
+      "id": "a4",
+      "assumption": "Tests should use vitest globals (describe, it, expect, vi) without explicit imports, matching the vitest.config.ts globals: true setting, though session.test.tsx explicitly imports them — will follow the explicit import pattern for consistency.",
+      "confidence": 0.9,
+      "if_wrong": "Minor style difference only; both approaches work with globals: true."
+    },
+    {
+      "id": "a5",
+      "assumption": "The test for 'replacing existing assumption with same variableId' should verify that addAssumption filters out the old entry and appends the new one, resulting in exactly one assumption with the updated outcomeId/label.",
+      "confidence": 0.98,
+      "if_wrong": "The replace behavior is clearly implemented at line 28 of AssumptionContext.tsx; this is straightforward."
+    },
+    {
+      "id": "a6",
+      "assumption": "The test file should be placed at frontend/src/__tests__/AssumptionContext.test.tsx as specified in the task description.",
+      "confidence": 1.0,
+      "if_wrong": "Task description is explicit about the path."
+    },
+    {
+      "id": "a7",
+      "assumption": "useAssumptions should throw 'useAssumptions must be used within AssumptionProvider' when called outside the provider, and this should be tested with console.error suppression like session.test.tsx does.",
+      "confidence": 0.98,
+      "if_wrong": "Error message text might differ, but it's visible at line 65 of AssumptionContext.tsx."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

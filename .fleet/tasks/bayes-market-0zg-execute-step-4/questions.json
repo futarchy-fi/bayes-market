@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Does step 4 assume earlier frontend groundwork has already landed `includeResolved` across `frontend/src/lib/api/types.ts`, `frontend/src/lib/marketListFilters.ts`, `frontend/src/lib/api/client.ts`, and `frontend/src/lib/query/hooks.ts`, or must this branch backfill those seams first because the current checkout still only supports `{ status, sort, q }`?",
+      "category": "codebase",
+      "why_it_matters": "Every requested call-site change to `useMarkets(...)` depends on the filter type, query-key normalization, and client querystring serializer understanding `includeResolved`; as checked out, those pieces do not exist yet."
+    },
+    {
+      "id": "q2",
+      "question": "What should happen to the unmentioned `useMarkets()` consumer in `frontend/src/routes/Analytics.tsx`: leave it on the new default hidden-resolved behavior, or opt it into `includeResolved: true` so resolved markets remain selectable and deep links to resolved-market analytics keep working?",
+      "category": "requirements",
+      "why_it_matters": "`Analytics.tsx` is a real call site outside the task's explicit list, and the new default changes both the market picker contents and the fallback selection logic when `?market=` points at a resolved market."
+    },
+    {
+      "id": "q3",
+      "question": "For `frontend/src/routes/MarketList.tsx`, should the route keep exposing only `status`, `sort`, and `q` in URL state with no separate resolved-visibility toggle, relying on the backend/filter model to make `status=resolved` work without `includeResolved: true`?",
+      "category": "design",
+      "why_it_matters": "The current search-param helpers only round-trip `status`, `sort`, and `q`; once the default list hides resolved rows, any need for an explicit 'show resolved too' mode would require UI and URL-contract changes beyond the listed call-site edit."
+    },
+    {
+      "id": "q4",
+      "question": "Is it intentional that `frontend/src/routes/Portfolio.tsx` stay on the new default even though it uses `useMarkets()` only to map market IDs to titles, which means positions in resolved markets may now fall back to raw IDs when those summaries are excluded?",
+      "category": "design",
+      "why_it_matters": "Leaving `Portfolio` on the default is explicitly requested, but it has a user-visible consequence that does not exist today because resolved market summaries are currently still loaded."
+    },
+    {
+      "id": "q5",
+      "question": "What regression coverage is expected for this step: should we only adjust the existing `MarketList`, `System`, and API-client tests, or are new component tests required for `BayesNetGraph` and any intentionally changed default-behavior routes such as `Analytics` or `Portfolio`?",
+      "category": "requirements",
+      "why_it_matters": "The repository already has tests around `MarketList`, `System`, and the API client, but it has no coverage for most of the listed `useMarkets()` consumers, so the desired proof surface changes the implementation scope."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Step 4 is intended to be a narrow frontend follow-up that updates `useMarkets(...)` call sites after `includeResolved` has already been added to the shared market-list filter model in earlier plan steps.",
+      "confidence": 0.97,
+      "if_wrong": "This branch would need to implement the missing type, query-key, and client-serialization support before any call-site change could compile or function."
+    },
+    {
+      "id": "a2",
+      "assumption": "`System.tsx` and `frontend/src/features/graph/BayesNetGraph.tsx` must opt into `includeResolved: true` because both surfaces are meant to reflect the full market universe, including resolved rows.",
+      "confidence": 0.96,
+      "if_wrong": "Those pages would intentionally undercount or omit resolved markets, and the task description calling out those files would need a different rationale."
+    },
+    {
+      "id": "a3",
+      "assumption": "`Portfolio.tsx`, `AssumptionPanel.tsx`, and `ConditionalEditor.tsx` are safe on the new default because the latter two already filter to active markets in-component, and Portfolio is expected to tolerate missing summaries via its `marketTitles.get(...) ?? mr.marketId` fallback.",
+      "confidence": 0.79,
+      "if_wrong": "At least one of those surfaces still relies on resolved summaries being present, so the explicit 'leave on default' instruction would cause a user-facing regression that needs a different data-loading strategy."
+    },
+    {
+      "id": "a4",
+      "assumption": "`MarketList.tsx` should continue to drive resolved discoverability solely through the existing status selector and not add a new visible toggle or query param for `includeResolved` in this step.",
+      "confidence": 0.82,
+      "if_wrong": "The market list route would need broader UI, URL-state, and helper changes than a simple call-site update."
+    },
+    {
+      "id": "a5",
+      "assumption": "`frontend/src/routes/Analytics.tsx` is omitted intentionally and should inherit the new default hidden-resolved behavior unless the plan explicitly says otherwise.",
+      "confidence": 0.44,
+      "if_wrong": "Step 4 is incomplete as written, and `Analytics.tsx` should be updated alongside `System.tsx` and `BayesNetGraph.tsx` to preserve access to resolved-market analytics."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

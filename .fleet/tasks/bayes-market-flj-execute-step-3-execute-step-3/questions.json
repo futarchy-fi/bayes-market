@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Which earlier plan step is supposed to add the `/v1/markets/{id}/close` surface and the `handle_market_close(...)` seam, given that the current checkout still only wires `/resolve` plus market-resolution helpers?",
+      "category": "codebase",
+      "why_it_matters": "This step is scoped to the close-status branches inside `handle_market_close(...)`, but `backend/server.py` does not yet contain that handler, a `/close` route, or any close-specific normalizer/materializer to edit."
+    },
+    {
+      "id": "q2",
+      "question": "What exact request and persisted command contract should the close path use: is the body only `{accountId, idempotencyKey?}`, and should the stored command mirror resolve with `commandType = \"AdminOp\"` plus a canonical payload such as `{\"kind\":\"CloseMarket\"}`?",
+      "category": "requirements",
+      "why_it_matters": "The status branches need a concrete command envelope before they can emit replayable accept/reject terminals, but the current codebase only defines the `ResolveMarket` admin-op payload."
+    },
+    {
+      "id": "q3",
+      "question": "What accepted response and event schema is frozen for a successful close from `active`: which closure metadata fields belong in the accepted event payload, does the API return the mutated `market` object, and is `closedAt` event-only or also persisted on the market record?",
+      "category": "requirements",
+      "why_it_matters": "The task requires a terminal `201` with closure metadata and zero economic deltas, but the exact public contract is not present anywhere in `backend/server.py` or `tests/test_bayes_market_api.py` yet."
+    },
+    {
+      "id": "q4",
+      "question": "What exact terminal rejection contracts are required for `market_already_closed` and `market_not_closable`: the user-facing messages, `retryHint`, `error.details` fields, and the precise status mapping of `closed` versus `draft` and `resolved`?",
+      "category": "requirements",
+      "why_it_matters": "The task names the rejection codes and allowed statuses, but the terminal-response helpers and tests in this repo freeze exact strings and detail payloads for stable replay."
+    },
+    {
+      "id": "q5",
+      "question": "For rejected close attempts, which stores are allowed to change for replayability and which must remain frozen: should the handler still materialize a command, append a `CommandRejected` event, persist a terminal outcome, and bind the idempotency key while leaving marginals, conditional state, resolution data, account risk, and exposure untouched?",
+      "category": "design",
+      "why_it_matters": "The task explicitly forbids mutating the economic/read-model state on rejection, but replayable `409` responses in this codebase normally require command/event/outcome persistence."
+    },
+    {
+      "id": "q6",
+      "question": "Do any downstream read models need explicit `CloseMarket` handling, or should they only observe `market.status = \"closed\"` and the new accepted/rejected terminal event without changing price-series, volume, or other projections?",
+      "category": "design",
+      "why_it_matters": "`build_market_price_series(...)` special-cases `ResolveMarket` today, and there is no existing `CloseMarket` branch to show whether close should be projection-neutral beyond the market status change."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Step 3 assumes earlier plan work will introduce the `/close` route and a `handle_market_close(...)` entry point; otherwise this step expands beyond status branches into route wiring and command-shape setup.",
+      "confidence": 0.97,
+      "if_wrong": "The implementation cannot stay scoped to status branching and will need to backfill the missing close surface first."
+    },
+    {
+      "id": "a2",
+      "assumption": "Close is intended to reuse the existing admin-operation machinery: `commandType = \"AdminOp\"`, terminal event persistence, terminal outcome replay, and idempotency-key binding just like market resolution.",
+      "confidence": 0.93,
+      "if_wrong": "The close flow needs new command typing or a different replay contract, which changes both the handler structure and the tests."
+    },
+    {
+      "id": "a3",
+      "assumption": "The acceptance matrix is exactly `active -> accepted 201 and status becomes closed`, `closed -> replayable 409 market_already_closed`, and `draft` or `resolved` -> replayable 409 market_not_closable with `allowedStatuses: [\"active\"]`.",
+      "confidence": 0.95,
+      "if_wrong": "The close handler would encode the wrong status gate and emit the wrong stable rejection codes."
+    },
+    {
+      "id": "a4",
+      "assumption": "Successful close is economically inert: marginals, conditional marginals, resolution fields, account risk, and exposure remain unchanged; the accepted event reports empty `marginalDelta` and `assetDelta` plus zero `cost` and `fee`.",
+      "confidence": 0.99,
+      "if_wrong": "The implementation would need additional settlement or projection updates that are not implied by the current task wording."
+    },
+    {
+      "id": "a5",
+      "assumption": "Rejected close attempts may still persist the command, `CommandRejected` event, terminal outcome, and idempotency mapping, but must not mutate the economic or market-resolution state named in the task.",
+      "confidence": 0.91,
+      "if_wrong": "The handler would need to reject earlier as a plain `ApiError` or preserve a different replay model than the repo's existing terminal rejections."
+    },
+    {
+      "id": "a6",
+      "assumption": "Any `closedAt` metadata is more likely to be event-scoped than stored directly on the market record, matching the existing `resolvedAt` pattern in accepted resolution events.",
+      "confidence": 0.76,
+      "if_wrong": "The close change would also alter the market read-model schema returned by `GET /v1/markets` and `GET /v1/markets/{id}`."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

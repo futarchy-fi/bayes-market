@@ -1,0 +1,74 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes, tests should verify that rank numbers display correctly (index+1) for each row. This is not trivial React behavior — it's component-specific logic that computes the rank from the array index. The task says 'proper ordering', which means verifying both that rows render in array order AND that the displayed rank numbers (#1, #2, #3) are correct. The AnalyticsSummaryCards.test.tsx pattern confirms we should test rendered DOM content. A simple test with 3 rows verifying '#' column values of 1, 2, 3 covers this.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/analytics/TraderLeaderboard.tsx:33 — rank computed as `index + 1`",
+        "frontend/src/__tests__/AnalyticsSummaryCards.test.tsx:18-24 — sibling test verifies rendered label text",
+        "frontend/src/features/analytics/TraderLeaderboard.tsx:19 — data-testid='trader-leaderboard' available for querying"
+      ],
+      "uncertainty": "Whether 'proper ordering' requires testing with intentionally unordered data to prove the component does NOT re-sort. The component has no sorting logic, so this is more of a documentation concern."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Tests should verify end-to-end formatted output in the DOM for representative values, NOT mock formatCurrency. The AnalyticsSummaryCards.test.tsx pattern (lines 27-36) calls formatCurrency directly to compute the expected value and then checks it appears in the DOM. This is the established pattern: import formatCurrency, use it to compute expected output, and assert the DOM matches. Cover a few representative values (small number, thousands with K suffix, millions with M suffix). No need to exhaustively test formatCurrency edge cases — that's covered in format.test.ts.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/AnalyticsSummaryCards.test.tsx:31 — uses `formatCurrency(summary.totalVolume)` as expected value",
+        "frontend/src/__tests__/AnalyticsSummaryCards.test.tsx:52 — tests formatCurrency(0) in zero-value edge case",
+        "frontend/src/__tests__/format.test.ts:10-14 — formatCurrency has its own dedicated tests for K/M/decimal",
+        "frontend/src/lib/utils/format.ts:5-9 — formatCurrency implementation with M/K/decimal thresholds"
+      ],
+      "uncertainty": "None significant. The pattern is clearly established by sibling test."
+    },
+    {
+      "question_id": "q3",
+      "answer": "TraderLeaderboard can and should use bare render() from @testing-library/react, without any providers. The component is purely presentational: it imports only a type and a pure utility function (formatCurrency). It uses no hooks (useState, useEffect, useQuery), no React context, no routing (useNavigate, useParams, Link), and no global state. The sibling AnalyticsSummaryCards.test.tsx uses bare render() for the same reason — it's also a pure presentational component with the same import pattern (type + formatCurrency). In contrast, Analytics.test.tsx uses renderWithProviders because the Analytics route component uses react-query hooks and routing.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/features/analytics/TraderLeaderboard.tsx:1-2 — only imports: type + formatCurrency (no hooks/context/routing)",
+        "frontend/src/__tests__/AnalyticsSummaryCards.test.tsx:2 — uses bare `render` from @testing-library/react",
+        "frontend/src/__tests__/helpers.tsx:36-51 — renderWithProviders wraps with QueryClient/Session/Router — none needed here",
+        "frontend/src/features/analytics/TraderLeaderboard.tsx:4-46 — component body has no hook calls"
+      ],
+      "uncertainty": "None. This is definitively a pure presentational component."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Confirmed: TraderLeaderboard imports only a type and a pure function. No hooks, context, or routing. Bare render() is correct."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Confirmed: The component has zero sorting logic (TraderLeaderboard.tsx:31-43 just maps over rows with index). 'Proper ordering' means verifying array-order-to-rank mapping."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Confirmed: AnalyticsSummaryCards.test.tsx uses makeSummary() factory, vitest + @testing-library/react, and tests rendered DOM content. This is the exact pattern to follow."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Confirmed: AnalyticsSummaryCards.test.tsx:31 uses `formatCurrency(summary.totalVolume)` as the expected value — testing the formatted output end-to-end without mocking. Same approach for TraderLeaderboard."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "Confirmed: TraderLeaderboard.tsx:15 renders exactly 'No accepted activity yet.' when rows.length === 0."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

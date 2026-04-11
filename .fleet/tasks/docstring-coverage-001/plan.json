@@ -1,0 +1,57 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use existing Sphinx/RST docstring style to match the check method and other files in the inference module (contracts.py, config.py).",
+      "based_on": ["q1", "a1"],
+      "alternatives_rejected": ["Google style with Parameters/Returns sections", "NumPy style"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Add docstrings to __init__, cache_hits property, and cache_misses property. Enhance check with :param/:returns: sections. Leave reset as-is (already documented).",
+      "based_on": ["q2", "q4", "a2"],
+      "alternatives_rejected": ["Skip __init__ as trivially self-documenting", "Only add docstrings where none exist without enhancing existing ones"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Do not add usage examples in docstrings. Tests already serve as living documentation and the API is small.",
+      "based_on": ["q3", "a3"],
+      "alternatives_rejected": ["Add doctest-style examples to check method"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Do not add docstrings to InvalidationResult fields. It is a frozen dataclass with self-documenting field names and already has a class docstring.",
+      "based_on": ["a4"],
+      "alternatives_rejected": ["Add Attributes section documenting each dataclass field"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add a one-line docstring to __init__ describing initialization of internal hash store and counters.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add :param: and :returns: sections to the existing check method docstring using RST style.",
+      "depends_on": []
+    },
+    {
+      "step": 3,
+      "task": "Add one-line docstrings to cache_hits and cache_misses properties.",
+      "depends_on": []
+    },
+    {
+      "step": 4,
+      "task": "Run existing tests (pytest backend/inference/test_* or similar) to confirm no regressions.",
+      "depends_on": [1, 2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

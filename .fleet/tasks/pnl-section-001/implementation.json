@@ -1,0 +1,18 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    { "step": 1, "task": "Create test file with imports, types, and makeAccountPnlData factory function", "files_created": ["frontend/src/__tests__/AccountPnlSection.test.tsx"], "files_modified": [], "verified": true },
+    { "step": 2, "task": "Test: shows empty state when no accountId is set", "files_created": [], "files_modified": ["frontend/src/__tests__/AccountPnlSection.test.tsx"], "verified": true },
+    { "step": 3, "task": "Test: shows loading state when isLoading is true", "files_created": [], "files_modified": ["frontend/src/__tests__/AccountPnlSection.test.tsx"], "verified": true },
+    { "step": 4, "task": "Test: shows error message when error is truthy", "files_created": [], "files_modified": ["frontend/src/__tests__/AccountPnlSection.test.tsx"], "verified": true },
+    { "step": 5, "task": "Test: renders all PnL metric cards with correct formatted values", "files_created": [], "files_modified": ["frontend/src/__tests__/AccountPnlSection.test.tsx"], "verified": true },
+    { "step": 6, "task": "Test: applies correct color tones for positive/negative/zero P&L values", "files_created": [], "files_modified": ["frontend/src/__tests__/AccountPnlSection.test.tsx"], "verified": true },
+    { "step": 7, "task": "Test: renders selected market detail card when selectedMarketId matches a position", "files_created": [], "files_modified": ["frontend/src/__tests__/AccountPnlSection.test.tsx"], "verified": true },
+    { "step": 8, "task": "Test: shows fallback message when selectedMarketId does not match any position", "files_created": [], "files_modified": ["frontend/src/__tests__/AccountPnlSection.test.tsx"], "verified": true },
+    { "step": 9, "task": "Test: renders positions table with all positions", "files_created": [], "files_modified": ["frontend/src/__tests__/AccountPnlSection.test.tsx"], "verified": true },
+    { "step": 10, "task": "Test: highlights the selected market row in the positions table", "files_created": [], "files_modified": ["frontend/src/__tests__/AccountPnlSection.test.tsx"], "verified": true },
+    { "step": 11, "task": "Test: shows empty positions message when positions array is empty", "files_created": [], "files_modified": ["frontend/src/__tests__/AccountPnlSection.test.tsx"], "verified": true },
+    { "step": 12, "task": "Run vitest to verify all 10 tests pass", "files_created": [], "files_modified": [], "verified": true }
+  ],
+  "all_steps_done": true
+}

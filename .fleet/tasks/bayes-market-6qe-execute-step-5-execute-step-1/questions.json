@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should this task treat `/v1/markets/{id}/trades` as a missing seam to add now, or was a partial implementation expected to already exist on this branch? `backend/server.py` currently has neither a `/trades` route branch nor a market service-index entry.",
+      "category": "codebase",
+      "why_it_matters": "The planned regressions in `tests/test_bayes_market_api.py` can only target a stable contract if the route scope is clear; otherwise the test work would be asserting behavior that the current checkout does not expose."
+    },
+    {
+      "id": "q2",
+      "question": "What exact root service-index string should be frozen for the new route: `/v1/markets/{id}/trades` or `GET /v1/markets/{id}/trades`?",
+      "category": "requirements",
+      "why_it_matters": "The existing market index mixes bare paths and method-qualified entries, and `test_root_route_returns_service_index` asserts exact strings rather than normalizing them."
+    },
+    {
+      "id": "q3",
+      "question": "What successful `GET /v1/markets/{id}/trades` payload shape should the regressions assert: full accepted EventTrade order rows from `ORDERS` or a narrower projection, and which pagination fields beyond `nextBeforeId` are required?",
+      "category": "requirements",
+      "why_it_matters": "There is no existing `/trades` coverage to copy, so the happy-path assertions cannot be written until the response contract is explicit."
+    },
+    {
+      "id": "q4",
+      "question": "What are the canonical ordering and cursor semantics for trade history: newest-first by `(filledAt, id)`, id-only ordering, or another stable key, and how should invalid or cross-market `before_id` values fail?",
+      "category": "design",
+      "why_it_matters": "The missing regressions need deterministic pagination assertions and negative-query coverage, but unlike `/events` there is no existing sequence-based contract for trades."
+    },
+    {
+      "id": "q5",
+      "question": "Should the new regressions mirror the existing market-read pattern exactly with direct `route_request(...)` tests for empty state, populated state, unknown market, invalid query, and `405`, or is some of that matrix intentionally out of scope for the targeted slice?",
+      "category": "design",
+      "why_it_matters": "The nearby `/events` and `/engine-stats` sections establish a consistent route-level pattern, and this task is specifically about slotting `/trades` into that structure without over- or under-testing."
+    },
+    {
+      "id": "q6",
+      "question": "When building trade-history fixtures, should tests exercise the public `POST /orders/event-trade`, `close`, and `resolve` flows to prove reads survive market lifecycle changes, or is direct fixture seeding of `ORDERS` acceptable for cursor edge cases?",
+      "category": "design",
+      "why_it_matters": "The established read-route tests usually build state through public writes, but trade pagination may require precise record layouts that are easier to seed directly."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The established baseline for market-read regressions is the direct `server.route_request(...)` pattern already used for `/events` and `/engine-stats`, with the root service-index assertion living in `test_root_route_returns_service_index`.",
+      "confidence": 0.98,
+      "if_wrong": "The new `/trades` coverage belongs in a different test layer or section, and copying the nearby structure would misplace the regressions."
+    },
+    {
+      "id": "a2",
+      "assumption": "Any successful `/trades` read model will most likely derive from accepted `EventTrade` orders in `ORDERS`, because `create_event_trade_order(...)` persists the filled trade shape there and there is no separate trade-history store in the backend.",
+      "confidence": 0.92,
+      "if_wrong": "The tests would need to assert against a transformed source such as joined command or event data rather than raw order records."
+    },
+    {
+      "id": "a3",
+      "assumption": "Adding the missing regressions will also require touching `backend/server.py`, because the current checkout omits both the `/v1/markets/{id}/trades` route branch and its service-index entry.",
+      "confidence": 0.99,
+      "if_wrong": "A hidden or delegated implementation already provides the route, and this phase only needs tests or task artifacts."
+    },
+    {
+      "id": "a4",
+      "assumption": "If trade history exposes newest-first pagination, the stable sort key will probably be reverse `(filledAt, id)`, matching the ascending order already used when replaying EventTrade orders in account read models.",
+      "confidence": 0.76,
+      "if_wrong": "The cursor tests could encode the wrong order and hide duplicate or skipped-row bugs."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child tasks are needed because the unanswered questions are limited to local backend and test contracts in `backend/server.py` and `tests/test_bayes_market_api.py`.",
+      "confidence": 0.97,
+      "if_wrong": "A separate subtask would be needed to inspect another source of truth for the `/trades` API contract."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

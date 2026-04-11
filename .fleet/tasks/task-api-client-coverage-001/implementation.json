@@ -1,0 +1,48 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Add imports for all 10 uncovered functions to api-client.test.ts",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/api-client.test.ts"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Add tests for simple GET functions: getEngineStats, getHealth, getServiceIndex",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/api-client.test.ts"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Add tests for GET functions with optional pagination: getMarketEvents (2 tests), getMarketComments (2 tests)",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/api-client.test.ts"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Add tests for createMarket POST with optional session: without session and with session (verifying X-Bayes-Agent-Id)",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/api-client.test.ts"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Add tests for POST functions with required session: submitProbabilityEdit, resolveMarket, submitEventTrade, submitMarketComment — each verifies method, URL, JSON body, Content-Type, and X-Bayes-Agent-Id header",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/api-client.test.ts"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Run vitest to verify all existing + new tests pass",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}

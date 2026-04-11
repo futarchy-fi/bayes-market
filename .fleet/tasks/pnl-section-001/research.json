@@ -1,0 +1,89 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "AccountPnlSection can be tested with plain render() from @testing-library/react. It is a pure presentational component with zero hooks — no useState, useEffect, useQuery, useSession, useParams, or any context consumers. All child components (StatusBadge, ErrorMessage, LoadingPage, PnlMetricCard, SelectedMetric) are also pure presentational with no provider dependencies. StatusBadge just renders a styled span with a color derived from a pure utility function (statusColor). No MemoryRouter or QueryClientProvider needed.",
+      "confidence": 0.98,
+      "evidence": [
+        "frontend/src/features/analytics/AccountPnlSection.tsx:1-46",
+        "frontend/src/components/ui/StatusBadge.tsx",
+        "frontend/src/components/ui/Spinner.tsx",
+        "frontend/src/__tests__/AnalyticsSummaryCards.test.tsx"
+      ],
+      "uncertainty": "None — verified by reading the full component source; it has no hooks or context usage."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Tests should use real formatCurrency/formatSignedCurrency rather than mocking them. The functions are simple, deterministic pure functions (formatCurrency: >=1M → 'X.XM', >=1K → 'X.XK', else 'X.XX'; formatSignedCurrency: prepends '+' for positive). The existing AnalyticsSummaryCards.test.tsx tests formatted output directly without mocking. Exact outputs are predictable: e.g., 1500 → '1.5K', -250 → '-250.00', 500 → '+500.00'.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/lib/utils/format.ts:5-9",
+        "frontend/src/features/analytics/chartUtils.ts:67-70",
+        "frontend/src/__tests__/AnalyticsSummaryCards.test.tsx"
+      ],
+      "uncertainty": "None — the formatters are trivial pure functions with no side effects or locale dependency."
+    },
+    {
+      "question_id": "q3",
+      "answer": "When selectedMarketId doesn't match any position, the component renders the fallback text 'No recorded exposure in the selected market yet.' instead of the selected market detail card. This is explicit at line 86-88 — the ternary checks `selectedMarketPosition ? <detail card> : <empty state message>`. There is no error state or special handling.",
+      "confidence": 0.99,
+      "evidence": [
+        "frontend/src/features/analytics/AccountPnlSection.tsx:56",
+        "frontend/src/features/analytics/AccountPnlSection.tsx:85-88"
+      ],
+      "uncertainty": "None — the conditional rendering is clearly visible in the source."
+    },
+    {
+      "question_id": "q4",
+      "answer": "We should test toneForValue color logic via style assertions on the rendered elements. The function is simple (>0 → 'var(--color-success)', <0 → 'var(--color-danger)', 0 → 'var(--color-text)') and color-coding is a key UX feature. The colors are applied via inline styles (the `color` property on metric values and table cells), making them easily assertable with `element.style.color` or `toHaveStyle()`. This is not brittle since the CSS variable names are stable project tokens, not implementation detail.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/features/analytics/AccountPnlSection.tsx:170-180",
+        "frontend/src/features/analytics/AccountPnlSection.tsx:63-65",
+        "frontend/src/features/analytics/AccountPnlSection.tsx:121-122"
+      ],
+      "uncertainty": "Slight risk that testing-library's style assertions may not resolve CSS variable names reliably in jsdom, but since we're checking the raw variable string (not computed color), it should work. Could verify with a quick spike."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Confirmed: plain render() is sufficient. No providers needed."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Confirmed: use real formatters. Output is deterministic and predictable (e.g., 1500 → '1.5K')."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Confirmed: shows 'No recorded exposure in the selected market yet.' when no match. Worth adding a test case for this."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Confirmed: test should go in frontend/src/__tests__/AccountPnlSection.test.tsx following existing naming convention."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Confirmed: the component passes a hardcoded string to ErrorMessage: 'Unable to load account P&L right now. Market analytics is still available.' — the error prop is only used as a truthy check, not displayed directly."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "Confirmed: no pagination or virtualization. All positions render in a simple <tbody> map. Each position row shows marketTitle, status badge, costBasis, markedValue, realizedPnl, unrealizedPnl."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

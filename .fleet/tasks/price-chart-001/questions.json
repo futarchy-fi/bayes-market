@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the test verify exact SVG path `d` attribute strings from `buildLinePath`, or just confirm that a <path> element is rendered with a non-empty `d` attribute?",
+      "category": "design",
+      "why_it_matters": "buildLinePath is already unit-tested in chartUtils.test.ts. Duplicating exact output checks couples the component test to utility internals and makes tests brittle. But if the goal is integration-level confidence, exact values matter."
+    },
+    {
+      "id": "q2",
+      "question": "Does the test need `renderWithProviders` (SessionProvider, QueryClient, MemoryRouter) or can PriceChart be rendered with plain `render()` since it has no context/routing dependencies?",
+      "category": "codebase",
+      "why_it_matters": "PriceChart takes only props (series, interval) and uses no hooks for routing, queries, or session. Using plain render() keeps tests simpler and faster, matching the VolumeChart.test.tsx pattern which also uses plain render()."
+    },
+    {
+      "id": "q3",
+      "question": "How should responsive sizing be tested given jsdom has no real layout engine—should we verify the SVG `style` attributes (minWidth, width: 100%) or the `viewBox` attribute instead?",
+      "category": "design",
+      "why_it_matters": "jsdom doesn't compute layout. We can only verify that the correct CSS properties and viewBox are set on the SVG element, not actual responsive behavior. Need to decide what 'responsive sizing' means in a unit test context."
+    },
+    {
+      "id": "q4",
+      "question": "Should outcome color tests verify the exact hex values from the OUTCOME_COLORS palette (#818cf8, #22c55e, etc.) or just that each outcome gets a distinct color?",
+      "category": "design",
+      "why_it_matters": "Testing exact hex values couples to the color palette. Testing distinctness is more resilient but less precise. The VolumeChart tests don't test colors at all, so this is new territory for the test suite."
+    },
+    {
+      "id": "q5",
+      "question": "The Y-axis labels use `formatProbability` which outputs '50.0%' style strings. Should the test assert these exact formatted strings or just that text elements exist in the gridline area?",
+      "category": "requirements",
+      "why_it_matters": "formatProbability is a pure function (p * 100).toFixed(1) + '%'. Testing exact label text provides integration confidence that the component uses the formatter correctly at 0%, 25%, 50%, 75%, 100% gridlines."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "PriceChart can be rendered with plain render() from @testing-library/react without any providers, since it only depends on props and imported utility functions.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to use renderWithProviders from helpers.tsx, adding setup overhead."
+    },
+    {
+      "id": "a2",
+      "assumption": "The test file should follow the VolumeChart.test.tsx pattern: factory function for mock data, container.querySelectorAll for SVG elements, screen.getByTestId for the SVG root.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to adopt a different testing pattern, but VolumeChart is the closest analogue."
+    },
+    {
+      "id": "a3",
+      "assumption": "Testing 'SVG path generation' means verifying that <path> elements are rendered with the correct stroke color and a non-empty `d` attribute, rather than computing exact coordinate values.",
+      "confidence": 0.8,
+      "if_wrong": "Would need to compute expected coordinates from scaleNumber and buildLinePath to assert exact path data, making tests more complex but more thorough."
+    },
+    {
+      "id": "a4",
+      "assumption": "Testing 'outcome colors' means verifying that the fill/stroke attributes on circles and paths match getOutcomeColor(index) for each series entry.",
+      "confidence": 0.9,
+      "if_wrong": "Might need to test legend dot colors as well, or test color cycling beyond the palette length."
+    },
+    {
+      "id": "a5",
+      "assumption": "Testing 'responsive sizing' means asserting the SVG element has viewBox='0 0 760 320', style.width='100%', style.minWidth=460, and style.height='auto'.",
+      "confidence": 0.9,
+      "if_wrong": "Might need to test the wrapper div's overflowX:'auto' or other container-level responsive properties."
+    },
+    {
+      "id": "a6",
+      "assumption": "An empty series test (series=[]) is worth including to verify the chart renders axes/gridlines without crashing, mirroring VolumeChart's empty state test.",
+      "confidence": 0.85,
+      "if_wrong": "The task description doesn't explicitly mention empty state, but it's a common edge case."
+    },
+    {
+      "id": "a7",
+      "assumption": "The legend rendering (outcome names with colored dots) should be tested as part of 'rendering with mock price series data'.",
+      "confidence": 0.85,
+      "if_wrong": "Legend might be considered out of scope if the task is strictly about the chart SVG area."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

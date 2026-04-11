@@ -1,0 +1,57 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "config.py already has type annotations on all dataclass fields and the __post_init__ method. The only unannotated symbols are the module-level constants DEFAULT_ENGINE_CONFIG and __all__. Should we add explicit type annotations to these (e.g., `DEFAULT_ENGINE_CONFIG: Final[EngineConfig]` and `__all__: list[str]`), or is implicit typing from assignment sufficient?",
+      "category": "requirements",
+      "why_it_matters": "If the goal is 'add any missing type annotations', the answer determines whether there is any work to do at all. Without this clarification the task may be a no-op."
+    },
+    {
+      "id": "q2",
+      "question": "Should string fields like `mode`, `precision`, `compile_type`, and `backend` use `Literal` types to restrict them to known valid values (e.g., Literal['EXACT'] for mode, Literal['float64'] for precision) rather than plain `str`?",
+      "category": "design",
+      "why_it_matters": "Literal types would make the annotations more precise and catch invalid values at type-check time, but would narrow the public API and could break downstream code that passes arbitrary strings."
+    },
+    {
+      "id": "q3",
+      "question": "Is there a type checker (mypy, pyright, pytype) configured for this project, and if so what strictness level is it set to?",
+      "category": "codebase",
+      "why_it_matters": "No mypy.ini, pyproject.toml, or pyright config was found. Knowing the target checker and strictness determines which annotations are actually enforced and whether we need py.typed markers or stub files."
+    },
+    {
+      "id": "q4",
+      "question": "The task says 'do not change functionality'. Does adding `typing.Final` to DEFAULT_ENGINE_CONFIG count as a functionality change, since it would make reassignment a type error?",
+      "category": "requirements",
+      "why_it_matters": "Final is the most impactful annotation we could add here. If it's in scope, it's the primary deliverable; if it's out of scope, there is essentially nothing to change."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The file is already well-typed: all 7 dataclass fields have explicit type annotations, __post_init__ has -> None, and `from __future__ import annotations` enables PEP 604 union syntax. The only possible additions are Final for constants and explicit annotations on __all__.",
+      "confidence": 0.95,
+      "if_wrong": "There may be unannotated code paths or fields we missed, but the file is only 47 lines so this is unlikely."
+    },
+    {
+      "id": "a2",
+      "assumption": "Plain `str` is acceptable for the string fields rather than Literal types, since the task description says 'add type hints' not 'add stricter types', and Literal types would narrow the public interface.",
+      "confidence": 0.8,
+      "if_wrong": "We would need to audit all callers of EngineConfig to determine valid Literal values, and potentially update downstream code."
+    },
+    {
+      "id": "a3",
+      "assumption": "Adding `Final` to DEFAULT_ENGINE_CONFIG is in-scope since it purely adds type safety without changing runtime behavior (the dataclass is already frozen).",
+      "confidence": 0.75,
+      "if_wrong": "The task becomes a true no-op since every other symbol is already annotated."
+    },
+    {
+      "id": "a4",
+      "assumption": "No type checker is configured for the project, so annotations serve as documentation and IDE support rather than CI enforcement.",
+      "confidence": 0.85,
+      "if_wrong": "We would need to ensure our changes pass the configured checker at its strictness level."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

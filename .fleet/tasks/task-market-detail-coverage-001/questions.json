@@ -1,0 +1,87 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The existing tests mock `api.getMarket` at the client level. The task description says to mock `useMarket`, `useMarketEvents`, `useAccountRisk`, `useSession` (hook-level mocking). Should we switch to hook-level mocking for the new tests, or keep the existing client-level mocking pattern and add hook-level mocking only where needed (e.g., useSession for isConfigured, useAccountRisk for PositionCard)?",
+      "category": "design",
+      "why_it_matters": "The existing 7 tests mock `@/lib/api/client` and let hooks call through. Switching entirely to hook-level mocking would be inconsistent with existing tests unless we refactor them too. Hook-level mocking is needed for loading/error states and for controlling useSession.isConfigured."
+    },
+    {
+      "id": "q2",
+      "question": "For the loading state test, should we mock `useMarket` to return `{ isLoading: true }` (hook-level), or mock `api.getMarket` to return a never-resolving promise (client-level)? The component checks `isLoading` from `useMarket` on line 25.",
+      "category": "design",
+      "why_it_matters": "A never-resolving promise at the client level is fragile and timing-dependent. Hook-level mocking gives deterministic control over the loading state. This decision affects whether we need to add `vi.mock('@/lib/query/hooks')` alongside the existing client mock."
+    },
+    {
+      "id": "q3",
+      "question": "The PositionCard and EventRow are internal (non-exported) components defined inside MarketDetail.tsx. Should the tests exercise them purely through the parent MarketDetail component (integration style), or should we export them for direct unit testing?",
+      "category": "design",
+      "why_it_matters": "Testing through MarketDetail requires setting up all mocks (market data, events, session, account risk). Direct testing would be lighter but requires exporting internal components, changing the module's public API."
+    },
+    {
+      "id": "q4",
+      "question": "For the EventRow expand/click test, the component uses `useState` for expansion. Does `@testing-library/react`'s `userEvent.click()` or `fireEvent.click()` work reliably on `<tr>` elements within a `<table>` in the current test setup (jsdom)?",
+      "category": "codebase",
+      "why_it_matters": "If click events on `<tr>` elements don't propagate correctly in jsdom, the expansion test could be flaky. Need to confirm the test infrastructure supports this interaction pattern."
+    },
+    {
+      "id": "q5",
+      "question": "The ResolveMarketPanel renders different UIs based on market status. The task asks to test that it 'renders for resolvable market'. What counts as resolvable — status === 'active', status === 'closed', or both? The component is always rendered (line 50) regardless of status.",
+      "category": "requirements",
+      "why_it_matters": "The component is rendered unconditionally on line 50. The test needs to verify it appears in the DOM with the right content. Understanding what 'resolvable' means determines the mock market status to use."
+    },
+    {
+      "id": "q6",
+      "question": "For time-dependent tests (timeUntil for expiry display, formatRelativeTime for event timestamps), should we use `vi.useFakeTimers()` as seen in DiscussionThread.test.tsx, or set mock data timestamps far enough in the future that tests remain stable?",
+      "category": "design",
+      "why_it_matters": "The existing MarketDetail tests use an `expires_at` of 2026-12-31 which will eventually become a past date. Using fake timers ensures deterministic output. The pattern exists in the codebase (DiscussionThread.test.tsx)."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "We should mock hooks (useMarket, useMarketEvents, useAccountRisk, useSession) for the new tests while keeping the existing 7 tests unchanged with their client-level mocking approach.",
+      "confidence": 0.75,
+      "if_wrong": "If we should refactor existing tests too, the scope is larger. If we should only use client-level mocking, loading/error state tests become harder to write deterministically."
+    },
+    {
+      "id": "a2",
+      "assumption": "PositionCard and EventRow should be tested through the parent MarketDetail component (integration style) since they are private/inline components, matching the existing test pattern.",
+      "confidence": 0.85,
+      "if_wrong": "If they should be exported and tested directly, we'd need to modify MarketDetail.tsx to export them, but the tests would be simpler and more focused."
+    },
+    {
+      "id": "a3",
+      "assumption": "The `userEvent.click()` from @testing-library works on <tr> elements in jsdom, so we can test EventRow expansion by clicking the table row.",
+      "confidence": 0.8,
+      "if_wrong": "We may need to add a clickable wrapper element or use fireEvent.click instead, or test with a data-testid on the row."
+    },
+    {
+      "id": "a4",
+      "assumption": "'Resolvable market' in the task description means a market with status 'active' (not yet resolved), where the ResolveMarketPanel shows a resolve form rather than a resolution summary.",
+      "confidence": 0.7,
+      "if_wrong": "If it means 'closed' status, or if we need to test both active and resolved states, the test fixtures need adjustment."
+    },
+    {
+      "id": "a5",
+      "assumption": "We should use vi.useFakeTimers() for time-dependent assertions (Volume/Liquidity/Expires display, event timestamps) to ensure deterministic test output.",
+      "confidence": 0.85,
+      "if_wrong": "Tests using future-dated mock data without fake timers would work for now but become flaky as dates pass."
+    },
+    {
+      "id": "a6",
+      "assumption": "All 10 new test cases should be added to the existing describe('MarketDetail') block in MarketDetail.test.tsx, possibly with nested describe blocks for PositionCard and EventRow groups.",
+      "confidence": 0.9,
+      "if_wrong": "If separate test files are preferred, we'd need to create new files, but the task explicitly says to update the existing test file."
+    },
+    {
+      "id": "a7",
+      "assumption": "The mock for useSession can follow the pattern from ResolveMarketPanel.test.tsx: `vi.mock('@/features/session/context')` with `vi.mocked(useSession).mockReturnValue({ session: { accountId: 'acc1', agentId: '' }, isConfigured: true, ... })`.",
+      "confidence": 0.9,
+      "if_wrong": "If the SessionProvider wrapper in helpers.tsx conflicts with the mock, we may need to adjust the test rendering setup."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

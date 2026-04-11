@@ -1,0 +1,121 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use a hybrid approach: keep the existing 7 tests with client-level mocking unchanged. For the new tests that need fine-grained control (loading/error states, PositionCard visibility, session state), add hook-level mocking via vi.mock('@/lib/query/hooks') and vi.mock('@/features/session/context'). This matches the pattern in ResolveMarketPanel.test.tsx (which mocks useSession and useResolveMarket at the hook level) and DiscussionThread.test.tsx (which mocks useSession, useMarketComments, usePostMarketComment at the hook level). The new tests should go in a separate describe block or the same block with the hook mocks scoped properly. Since vi.mock is hoisted to the top of the file, adding hook-level mocks will affect ALL tests in the file. Therefore, the existing client-level mocks should be removed and all tests should be converted to hook-level mocking for consistency.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/__tests__/MarketDetail.test.tsx:7-11 (existing client-level mock setup)",
+        "frontend/src/__tests__/ResolveMarketPanel.test.tsx:13-31 (hook-level mock pattern for useSession + useResolveMarket)",
+        "frontend/src/__tests__/DiscussionThread.test.tsx:157-168 (hook-level mock pattern for useSession + useMarketComments)"
+      ],
+      "uncertainty": "Whether refactoring the existing 7 tests to use hook-level mocking is acceptable scope. Since vi.mock is hoisted, mixing approaches in one file is difficult without jest.isolateModules. The cleanest approach is to convert everything to hook-level mocking."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Mock useMarket at the hook level to return { isLoading: true, data: undefined, error: undefined }. This is deterministic and matches the pattern in DiscussionThread.test.tsx where hooks are mocked to return specific states. The component checks isLoading from useMarket on line 25 (MarketDetail.tsx). A never-resolving promise at the client level would be fragile. Hook-level mocking gives direct control over the exact state seen by the component.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/routes/MarketDetail.tsx:21 (const { data, isLoading, error } = useMarket(marketId!))",
+        "frontend/src/routes/MarketDetail.tsx:25 (if (isLoading) return <LoadingPage />)",
+        "frontend/src/routes/MarketDetail.tsx:26 (if (error) return <ErrorMessage ...>)"
+      ],
+      "uncertainty": "None - hook-level mocking is clearly the right approach for loading/error state testing."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Test PositionCard and EventRow through the parent MarketDetail component (integration style). They are private functions (not exported) in MarketDetail.tsx. Testing through the parent matches the existing test pattern and avoids modifying the module's public API. For PositionCard, mock useAccountRisk to return risk data and useSession to return isConfigured: true. For EventRow, mock useMarketEvents to return events with payloads. This approach tests real integration between parent state and child rendering.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/routes/MarketDetail.tsx:97 (function PositionCard - not exported)",
+        "frontend/src/routes/MarketDetail.tsx:145 (function EventRow - not exported)",
+        "frontend/src/routes/MarketDetail.tsx:48 (PositionCard rendered with props from parent state)",
+        "frontend/src/routes/MarketDetail.tsx:83-85 (EventRow rendered via map over events.data.events)"
+      ],
+      "uncertainty": "None - the components are private functions so they cannot be imported directly without modification."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes, userEvent.click() works on <tr> elements in jsdom. The EventRow component attaches onClick directly to the <tr> element (line 152). React synthetic events handle click propagation regardless of the HTML element type. @testing-library/user-event dispatches a real click event, which will fire the React onClick handler. The row can be found via its text content (event type, hash, etc.) and clicked. Note: the click handler has a guard (hasPayload && setExpanded(!expanded)) on line 152, so the test must provide events with non-empty payload objects.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/routes/MarketDetail.tsx:151-153 (<tr onClick={() => hasPayload && setExpanded(!expanded)}>)",
+        "frontend/src/routes/MarketDetail.tsx:147 (const hasPayload = Object.keys(event.payload).length > 0)",
+        "frontend/src/routes/MarketDetail.tsx:165-171 ({expanded && <tr>...payload JSON...</tr>})"
+      ],
+      "uncertainty": "Very minor risk of jsdom not propagating click events on <tr> correctly, but React attaches handlers at the root level so this should work fine. If not, we can use fireEvent.click as a fallback."
+    },
+    {
+      "question_id": "q5",
+      "answer": "'Resolvable market' means a market with status 'active' or 'closed', AND the session has a configured accountId. ResolveMarketPanel.tsx lines 32-38 show the guard clauses: it returns null if status is neither 'active' nor 'closed', and returns null if !session.accountId. The ResolveMarketPanel is rendered unconditionally on MarketDetail.tsx line 50, but its internal guards control visibility. For testing 'renders for resolvable market', use an active market with a configured session to verify the 'Resolve Market' heading and form appear. The existing tests already use status 'active' but with unconfigured session (no accountId), so ResolveMarketPanel currently renders null in those tests.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/market/ResolveMarketPanel.tsx:32-34 (if (market.status !== 'active' && market.status !== 'closed') return null)",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:36-38 (if (!session.accountId) return null)",
+        "frontend/src/features/market/ResolveMarketPanel.tsx:69 (span: 'Resolve Market')",
+        "frontend/src/routes/MarketDetail.tsx:50 (<ResolveMarketPanel market={m} /> - unconditional)",
+        "frontend/src/features/session/context.tsx:53 (isConfigured: session.accountId.length > 0)"
+      ],
+      "uncertainty": "None - the code is clear about what conditions make a market resolvable."
+    },
+    {
+      "question_id": "q6",
+      "answer": "Use vi.useFakeTimers() with vi.setSystemTime() for all time-dependent tests. This is the established pattern in DiscussionThread.test.tsx (lines 157-168). The existing MarketDetail tests use expires_at of 2026-12-31 which will eventually become a past date and cause 'expired' to display instead of the expected time format. Set fake time to a known date (e.g., 2025-01-15T12:00:00Z as in DiscussionThread) and use timestamps relative to that frozen time for deterministic output. Important: set fake timers in beforeEach and restore with vi.useRealTimers() in afterEach.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/DiscussionThread.test.tsx:157-168 (vi.useFakeTimers() + vi.setSystemTime() pattern)",
+        "frontend/src/lib/utils/format.ts:27-35 (timeUntil uses Date.now())",
+        "frontend/src/lib/utils/format.ts:16-25 (formatRelativeTime uses Date.now())",
+        "frontend/src/__tests__/MarketDetail.test.tsx:28 (expires_at: '2026-12-31T23:59:59Z' - will become stale)"
+      ],
+      "uncertainty": "vi.useFakeTimers() can sometimes interfere with React Testing Library's waitFor/timers. Need to ensure the fake timer setup doesn't break async rendering. DiscussionThread.test.tsx proves it works in this codebase."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.75,
+      "impact": "Since vi.mock() is hoisted to file scope, adding hook-level mocks for new tests will affect existing tests too. The cleanest approach is to convert all tests to hook-level mocking. This increases scope slightly but ensures consistency and avoids mock conflicts. The existing tests can be adapted by mocking useMarket/useMarketEvents to return the same data they get today via client-level mocks."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "PositionCard and EventRow are private functions in MarketDetail.tsx. They cannot be imported without exporting them. Testing through MarketDetail is the right approach and matches existing patterns."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "React synthetic events on <tr> elements work in jsdom. The onClick handler is attached directly to the <tr> element. The test must ensure events have non-empty payload objects for the hasPayload guard to allow expansion."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "WRONG",
+      "confidence": 0.95,
+      "impact": "'Resolvable' means status is 'active' OR 'closed' (not just 'active'), AND session.accountId is set. ResolveMarketPanel.tsx line 32 explicitly checks both statuses. Additionally, the session must be configured (accountId non-empty) for the resolve form to appear. The test should mock useSession to return a configured session with an accountId."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "vi.useFakeTimers() is the right approach. The pattern is proven in DiscussionThread.test.tsx. This ensures deterministic output for timeUntil and formatRelativeTime."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "All tests should be in the existing describe('MarketDetail') block. Nested describe blocks for PositionCard and EventRow groups would improve organization. Since the mocking strategy needs to change (hook-level for the whole file), the existing tests will also need minor refactoring."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.7,
+      "impact": "The test helpers wrap components in SessionProvider (helpers.tsx line 27). Mocking useSession with vi.mock('@/features/session/context') will replace the entire module including SessionProvider, which could break the test wrapper. Two options: (1) mock useSession selectively while keeping SessionProvider real, or (2) adjust the test wrapper to not include SessionProvider when we mock it. The ResolveMarketPanel.test.tsx solves this by mocking the entire context module and providing a mockSessionProvider that just renders children. Need to verify this pattern works with renderWithProviders."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

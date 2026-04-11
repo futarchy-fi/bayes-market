@@ -1,0 +1,92 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use a hybrid approach: mock useMarket and useProbabilityEdit at module level (like TradingPanel.test.tsx), mock useSession via partial import (preserving SessionProvider), and wrap VariableRow in a real AssumptionProvider with the Seeder pattern (like AssumptionPanel.test.tsx) for assumption tests. This matches proven codebase patterns. The key reason: VariableRow calls addAssumption/removeAssumption which modify shared context state — mocking useAssumptions would only test that the mock was called, not that the toggle logic (lines 30-40) actually works with the real context. The Seeder pattern is already validated and allows pre-seeding assumptions before render, then verifying real state changes via UI output (e.g., the 'ASSUMED: outcomeId' badge appearing/disappearing).",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/AssumptionPanel.test.tsx:103-137",
+        "frontend/src/__tests__/TradingPanel.test.tsx:13-31",
+        "frontend/src/features/assumptions/VariableRow.tsx:17",
+        "frontend/src/features/assumptions/VariableRow.tsx:30-40",
+        "frontend/src/features/assumptions/AssumptionContext.tsx:1-68"
+      ],
+      "uncertainty": "None significant — both patterns are well-established in the codebase."
+    },
+    {
+      "question_id": "q2",
+      "answer": "crypto.randomUUID() is available in Node.js (confirmed working in this environment), but it is irrelevant for these tests because useProbabilityEdit should be mocked at module level (matching TradingPanel.test.tsx pattern). The mock replaces the entire mutation, so crypto.randomUUID() is never actually called during tests. The TradingPanel tests follow this exact pattern — they mock useProbabilityEdit and verify mockMutate was called with the right payload shape, asserting idempotencyKey is merely toBeDefined() (line 163). No polyfill needed.",
+      "confidence": 0.98,
+      "evidence": [
+        "frontend/src/__tests__/TradingPanel.test.tsx:23-25",
+        "frontend/src/__tests__/TradingPanel.test.tsx:154-164",
+        "frontend/src/__tests__/setup.ts:1-2",
+        "frontend/src/features/assumptions/VariableRow.tsx:55"
+      ],
+      "uncertainty": "None — mocking useProbabilityEdit completely sidesteps the issue, and crypto.randomUUID is available anyway."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Test the exact mutation payload shape, especially the conditional variableId logic. The TradingPanel.test.tsx precedent (lines 154-164) verifies individual payload fields (accountId, variableId, target shape, idempotencyKey, session). For VariableRow, this is even more important because of the conditional logic on line 52: `variableId: isTargetMarket ? targetMarket.variableId : m.variableId`. This means the variableId differs depending on whether the VariableRow's marketId matches targetMarket.id. Two test cases are needed: one where marketId === targetMarket.id (uses targetMarket.variableId) and one where they differ (uses m.variableId). Also verify that contextPayload from assumptions is passed through.",
+      "confidence": 0.92,
+      "evidence": [
+        "frontend/src/__tests__/TradingPanel.test.tsx:139-165",
+        "frontend/src/features/assumptions/VariableRow.tsx:49-58",
+        "frontend/src/features/assumptions/VariableRow.tsx:52"
+      ],
+      "uncertainty": "The contextPayload assertion depends on whether we use real AssumptionProvider (contextPayload reflects real state) or mock it. With the hybrid approach from q1, we can seed assumptions and verify they appear in the payload."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes, include mutation success/error message rendering tests. The TradingPanel.test.tsx file tests these exact patterns (lines 177-203) and they are trivial to add — just override the mock mutation state with isSuccess/isError flags and verify the message renders. VariableRow has the same pattern (lines 162-171): success shows 'Edit accepted: {orderId}', error shows the error message or 'Edit failed'. These are visible UI features that should be covered, and the effort is minimal.",
+      "confidence": 0.93,
+      "evidence": [
+        "frontend/src/__tests__/TradingPanel.test.tsx:167-203",
+        "frontend/src/features/assumptions/VariableRow.tsx:162-171",
+        "frontend/src/__tests__/TradingPanel.test.tsx:68-87"
+      ],
+      "uncertainty": "None — the pattern is identical to TradingPanel and already proven in the codebase."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The hybrid approach is validated: mock useMarket/useProbabilityEdit/useSession at module level, use real AssumptionProvider with Seeder for assumption tests. This matches AssumptionPanel.test.tsx (Seeder pattern) and TradingPanel.test.tsx (hook mocking pattern)."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "crypto.randomUUID() is available in this Node environment, but more importantly it's moot — mocking useProbabilityEdit means crypto.randomUUID() is never called in tests. No polyfill needed."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "All 14+ existing test files use fireEvent from @testing-library/react. No test file imports @testing-library/user-event. Confirmed in AssumptionPanel.test.tsx, TradingPanel.test.tsx, MarketDetail.test.tsx, Analytics.test.tsx, MarketList.test.tsx."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "Line 116 of VariableRow.tsx: `{!isTargetMarket && (<button onClick={() => handleAssume(o.id)} ...>`. The Assume button is only rendered when the VariableRow's market is NOT the target market. Tests must use a different marketId from targetMarket.id to test assumption toggling."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.93,
+      "impact": "Including mutation success/error tests is validated by the TradingPanel.test.tsx precedent which tests the exact same pattern. The defaultMutationState helper can be reused with overrides for isSuccess/isError/data/error."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "All test files in frontend/src/__tests__/ follow flat naming: ComponentName.test.tsx. No subdirectories. File should be VariableRow.test.tsx."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

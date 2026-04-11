@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact `ApiError` contract is frozen for `position_limit_exceeded`: status/code/message plus the precise `error.details` fields and field names that must be returned when `abs(resultingNetSize)` exceeds `max_position_size`?",
+      "category": "requirements",
+      "why_it_matters": "The repository has no existing `position_limit_exceeded` contract, so the backend handler and test assertions need a canonical payload before implementation can start."
+    },
+    {
+      "id": "q2",
+      "question": "Where should `max_position_size` come from, and what is its canonical value/type: a new backend constant, per-market metadata, account-level config, or some other source?",
+      "category": "requirements",
+      "why_it_matters": "There is currently no `max_position_size` field or config in `backend/server.py`, so the preview gate cannot be implemented deterministically without knowing the source of truth."
+    },
+    {
+      "id": "q3",
+      "question": "What is the exact netting scope for `currentNetSize` and `resultingNetSize`: per `(accountId, marketId, outcomeId)`, per market across all outcomes, or some broader event-formula equivalence class?",
+      "category": "design",
+      "why_it_matters": "EventTrade normalization currently reduces requests to a single atomic literal, but the repo does not yet define what position bucket the new limit should apply to."
+    },
+    {
+      "id": "q4",
+      "question": "What state should back the new EventTrade preview and accepted-trade sync: recompute signed net size from accepted `ORDERS`, introduce a dedicated exposure projection/read model, or maintain both?",
+      "category": "codebase",
+      "why_it_matters": "Accepted EventTrades currently create an order and journal event only; there is no persisted exposure state analogous to `ACCOUNT_RISK` or the LMSR ledger."
+    },
+    {
+      "id": "q5",
+      "question": "Should `position_limit_exceeded` behave like the existing pre-command `min_asset_violation` path, meaning repeated submissions with the same idempotency key recompute the preview and raise again because no command/outcome is persisted?",
+      "category": "requirements",
+      "why_it_matters": "The requested flow runs idempotency replay/conflict checks before the new preview but also says to raise before any EventTrade command is materialized, which changes the usual replay/binding semantics."
+    },
+    {
+      "id": "q6",
+      "question": "If EventTrade market-status verification now happens before command materialization, should `market_not_active` remain the current terminal rejection with a command id and journal append, or should non-active-market EventTrade failures also move to a plain pre-command error contract?",
+      "category": "design",
+      "why_it_matters": "The current `handle_event_trade(...)` materializes a command before checking market status specifically so it can emit a `CommandRejected` terminal outcome; the requested new sequence changes that boundary."
+    },
+    {
+      "id": "q7",
+      "question": "Which downstream lifecycle paths must keep the new exposure projection in sync beyond fresh accepts: market resolution, state reset/reseed helpers, and any replay or settlement flows that currently only touch `ACCOUNT_RISK` and LMSR slices?",
+      "category": "codebase",
+      "why_it_matters": "The task says accepted EventTrades should sync exposure projection without changing `/risk` behavior, so any new projection needs a clear maintenance story or it will drift from replayed account state."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new limit applies only to the currently supported atomic EventTrade path, because `normalize_event_trade_payload(...)` rejects multi-clause, multi-literal, and negated formulas before `handle_event_trade(...)` continues.",
+      "confidence": 0.98,
+      "if_wrong": "The preview logic would need a broader position model that can aggregate unsupported or future formula shapes instead of just one atomic literal leg."
+    },
+    {
+      "id": "a2",
+      "assumption": "Signed net size should reuse the existing EventTrade sign convention in `compute_account_pnl(...)`: buys add positive size and sells add negative size.",
+      "confidence": 0.96,
+      "if_wrong": "The preview could enforce the wrong limit direction and accepted-trade sync would diverge from the repo's current EventTrade valuation semantics."
+    },
+    {
+      "id": "a3",
+      "assumption": "The `/v1/accounts/{id}/risk` contract must remain unchanged, so any new EventTrade exposure projection should live outside the existing `ACCOUNT_RISK` read model and min-asset math.",
+      "confidence": 0.97,
+      "if_wrong": "Implementation scope expands into the public risk endpoint, the stored account-risk schema, and the existing probability-edit risk tests."
+    },
+    {
+      "id": "a4",
+      "assumption": "Fresh `position_limit_exceeded` failures should remain pre-command and non-terminal, like unconditional `min_asset_violation`, so they do not bind `IDEMPOTENCY_KEYS` or append market events.",
+      "confidence": 0.79,
+      "if_wrong": "The patch would need a new way to persist and replay a pre-acceptance EventTrade rejection without violating the requested 'before any EventTrade command is materialized' boundary."
+    },
+    {
+      "id": "a5",
+      "assumption": "This step likely needs new EventTrade exposure helpers/state in addition to reordering `handle_event_trade(...)`, because the current repo has no persisted `currentNetSize` projection to preview against or sync on acceptance.",
+      "confidence": 0.94,
+      "if_wrong": "The implementation could stay much smaller by deriving everything from existing accepted orders at preview time and skipping a new projection layer."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

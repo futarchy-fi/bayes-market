@@ -1,0 +1,104 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Mock at the hook level. The codebase has clearly converged on hook-level mocking for component tests. BayesNetGraph, ConditionalEditor, VariableRow, TradingPanel, EventTradePanel, ResolveMarketPanel, and DiscussionThread all mock hooks via vi.mock('@/lib/query/hooks') and vi.mock('@/features/session/context'). The pattern is: (1) vi.mock the module with vi.fn() stubs, (2) import the hooks, (3) vi.mocked() to get typed references, (4) set return values in beforeEach. For useSession, use the partial-import pattern (vi.importActual + spread + override useSession) so SessionProvider is preserved. For useAccountRisk and useMarkets, mock the entire @/lib/query/hooks module. This gives direct control over isLoading/error/data states without needing to simulate React Query internals.",
+      "confidence": 0.97,
+      "evidence": [
+        "frontend/src/__tests__/BayesNetGraph.test.tsx:11-21",
+        "frontend/src/__tests__/ConditionalEditor.test.tsx:13-35",
+        "frontend/src/__tests__/VariableRow.test.tsx:14-34",
+        "frontend/src/__tests__/TradingPanel.test.tsx:13-31",
+        "frontend/src/__tests__/EventTradePanel.test.tsx:13-31",
+        "frontend/src/__tests__/ResolveMarketPanel.test.tsx:13-31",
+        "frontend/src/__tests__/DiscussionThread.test.tsx:13-21"
+      ],
+      "uncertainty": "None. The pattern is well-established and clearly preferred for new tests."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes, refactor the existing test to use hook-level mocking. The existing test mocks api.listMarkets but the component doesn't call api.listMarkets directly—it calls useMarkets() and useAccountRisk() hooks, which internally use React Query. The current test only works because SessionProvider defaults to an unconfigured state, so the hooks never actually fire. With hook-level mocking, we can explicitly control useSession to return isConfigured: false, making the test's intent much clearer. Having two mocking strategies in one file is confusing. The refactor is minimal: replace vi.mock('@/lib/api/client') with vi.mock('@/lib/query/hooks') + vi.mock('@/features/session/context'), and set mockUseSession to return { isConfigured: false, session: { accountId: '', agentId: '' } }.",
+      "confidence": 0.93,
+      "evidence": [
+        "frontend/src/__tests__/Portfolio.test.tsx:7-18",
+        "frontend/src/routes/Portfolio.tsx:8-10",
+        "frontend/src/__tests__/ConditionalEditor.test.tsx:13-21"
+      ],
+      "uncertainty": "Small risk that refactoring the existing test changes its behavior subtly, but the test is so simple (just checking unconfigured prompt text) that risk is negligible."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Test inline CSS style values. The component applies color via inline style on the MetricCard value div: `style={{ color: color ?? 'var(--color-text)' }}`. The healthColor is computed as 'var(--color-success)' / 'var(--color-warning)' / 'var(--color-danger)' based on cap.status. Since this is the actual mechanism the component uses, testing inline styles is the correct approach. We can find the MetricCard with label 'Health', then check its sibling/child div's style.color property. The approach is: find the text matching the status value (e.g., 'healthy'), get its element, check element.style.color. No test IDs or component modifications are needed—the text content of the Health MetricCard is the status string itself ('healthy', 'warning', 'critical'), which is unique enough to query.",
+      "confidence": 0.92,
+      "evidence": [
+        "frontend/src/routes/Portfolio.tsx:31-33",
+        "frontend/src/routes/Portfolio.tsx:44",
+        "frontend/src/routes/Portfolio.tsx:90-102"
+      ],
+      "uncertainty": "The element querying strategy may need adjustment depending on how testing-library resolves the DOM structure. May need to use container.querySelector or getByText with a parent traversal to find the styled element."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Use the same toLocaleString() call in the assertion to match the rendered output, following the AnalyticsSummaryCards test pattern. That test file does `expect(screen.getByText(new Date(summary.lastUpdated).toLocaleString())).toBeInTheDocument()` — it constructs the same locale-dependent string in the test that the component produces, so the test passes regardless of locale. For Portfolio, the test should: (1) set a known updatedAt value in mock data, (2) assert `screen.getByText` matches a string containing `new Date(knownTimestamp).toLocaleString()`. This avoids locale sensitivity since both test and component use the same environment locale. Alternatively, just check for 'Last updated' text presence if exact format testing isn't needed.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/routes/Portfolio.tsx:49",
+        "frontend/src/__tests__/AnalyticsSummaryCards.test.tsx:33"
+      ],
+      "uncertainty": "None significant. The AnalyticsSummaryCards pattern is proven and the approach is straightforward."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "This is the right approach. 7+ test files in the codebase use hook-level mocking. The pattern for useSession specifically uses vi.importActual to preserve SessionProvider while mocking useSession."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.93,
+      "impact": "Refactoring the existing test is minimal work (change mock target, add hook return values) and eliminates confusion from mixed strategies. The test's assertion stays the same."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.92,
+      "impact": "MetricCard applies color via inline style at line 99: `color: color ?? 'var(--color-text)'`. We can assert element.style.color equals the expected CSS variable string. No component modifications needed."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.90,
+      "impact": "Checking 'Last updated' text presence is the simplest approach. But the AnalyticsSummaryCards test shows we can also match exact format by using `new Date(timestamp).toLocaleString()` in the assertion. Either approach works; the latter is more thorough and still locale-safe."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Confirmed from Portfolio.tsx lines 8-10, 29-30: useAccountRisk returns { data, isLoading, error } where data.account.risk has { minAssets: { overall, markets[] }, capacityIndicators: { limit, available, consumed, utilization, status }, updatedAt }. The hook is at hooks.ts:118-124."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Confirmed from Portfolio.tsx lines 10-14: useMarkets returns { data: { markets: MarketSummary[] } }. The component only uses market id and title for the lookup map. We need to mock data with markets that have id and title matching the marketIds in the risk positions."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Confirmed from Portfolio.tsx line 72: `<Link to={/markets/${mr.marketId}}>`. MemoryRouter in renderWithProviders handles Link rendering. Links render as <a> tags with href='/markets/{marketId}'. Can assert via screen.getByRole('link', { name: marketTitle }) and check href attribute."
+    },
+    {
+      "assumption_id": "a8",
+      "verdict": "CORRECT",
+      "confidence": 0.90,
+      "impact": "Confirmed: MetricCard renders label and value as plain text in separate divs. We can query by text content (e.g., 'Health', 'Limit', 'Available'). The Health card's value text is the status string itself ('healthy'/'warning'/'critical') which is unique. For style assertions, we can get the element by text and check its style. No test IDs needed."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

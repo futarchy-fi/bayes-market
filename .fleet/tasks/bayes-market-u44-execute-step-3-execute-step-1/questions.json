@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should step 1 update `test_market_resolve_http_requires_valid_agent_id_when_enabled` so its successful resolve case asserts `X-RateLimit-*` header presence when `RATE_LIMIT_PER_MIN > 0`, or should resolve keep a separate auth-only test and move the success-header contract into a new dedicated resolve test?",
+      "category": "requirements",
+      "why_it_matters": "The current auth/rate-limit class already has one resolve helper and two resolve auth tests, but the newer helper-based test still expects headers to be absent on the successful resolve path, which conflicts with the shared `handle_api()` success-header seam."
+    },
+    {
+      "id": "q2",
+      "question": "For the uncovered success seams, should `BayesMarketApiAuthRateLimitTests` gain first-class helpers for `POST /v1/markets`, `POST /v1/markets/{id}/comments`, and `POST /v1/markets/{id}/orders/event-trade`, parallel to `probability_edit_with_headers(...)` and `market_resolution_with_headers(...)`, or is direct `request_with_headers(...)` usage preferred for those routes?",
+      "category": "design",
+      "why_it_matters": "Probability-edit already uses a dedicated helper plus shared header assertions, resolve already has a route helper, and the missing create/comment/event coverage can either follow that pattern or stay inline; the choice affects how readable and maintainable the new breadth tests will be."
+    },
+    {
+      "id": "q3",
+      "question": "Should comment-post coverage in this step stop at a new success-path rate-limit-header assertion, or should it also backfill the missing auth-validation matrix for `POST /v1/markets/{id}/comments` because that protected route currently has no coverage in `BayesMarketApiAuthRateLimitTests` at all?",
+      "category": "requirements",
+      "why_it_matters": "Comment post is part of the protected POST surface selected by `resolve_write_route_category(...)`, but unlike probability-edit, create-market, and resolve, the auth/rate-limit suite does not exercise it yet, so the requested 'first-class coverage' still has a scope decision attached."
+    },
+    {
+      "id": "q4",
+      "question": "For the explicit breadth checks on create-market and event-trade, should the new tests reuse the same `X-Bayes-Agent-Id` across different protected POST route types to prove quota accounting is shared cross-route, or is one independent success assertion per route enough?",
+      "category": "design",
+      "why_it_matters": "The in-memory limiter bucket is keyed only by agent id and `_enforce_write_controls()` runs before route dispatch, so mixed-route reuse is the strongest proof that all protected POSTs converge on the same write-control and header-emission seam."
+    },
+    {
+      "id": "q5",
+      "question": "Should the header contract for protected POST routes remain 'successful responses and `429 rate_limit_exceeded` only', leaving ordinary `400`, `401`, `404`, and `409` failures header-free even when an agent id is present?",
+      "category": "requirements",
+      "why_it_matters": "The current backend attaches quota headers only on `status < 400` and on the explicit `rate_limit_exceeded` branch, while existing probability-edit auth tests already assert header absence on missing/invalid-agent failures; the new breadth tests need that contract to stay fixed."
+    },
+    {
+      "id": "q6",
+      "question": "If the server audit already shows all five protected POST routes flow through `resolve_write_route_category(...)`, `_enforce_write_controls()`, and `BayesHandler.handle_api()` before route-specific handling, is the implementation phase expected to be tests-only unless the new assertions expose a real bypass?",
+      "category": "codebase",
+      "why_it_matters": "The current checkout does not show route-specific header emission logic outside `rate_limit_headers(...)`, so clarifying whether backend refactoring is still desired prevents unnecessary server churn if the gap is purely stale or missing test coverage."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The stale success expectation is the `valid_headers` assertion in `test_market_resolve_http_requires_valid_agent_id_when_enabled`, and it should become a header-presence assertion whenever the limiter is enabled for that successful resolve request.",
+      "confidence": 0.97,
+      "if_wrong": "The implementation phase may need to preserve that test as auth-only and add a separate resolve-header test instead of changing the existing assertion in place."
+    },
+    {
+      "id": "a2",
+      "assumption": "The existing reusable pattern to extend is `probability_edit_with_headers(...)` plus `assert_rate_limit_headers(...)`, while resolve already has a route helper but not a matching success-header assertion.",
+      "confidence": 0.99,
+      "if_wrong": "The new tests may need a different abstraction pattern, and mirroring the ProbabilityEdit helper style would add the wrong shape to the auth/rate-limit suite."
+    },
+    {
+      "id": "a3",
+      "assumption": "The uncovered success-path seams in `BayesMarketApiAuthRateLimitTests` are `POST /v1/markets`, `POST /v1/markets/{id}/comments`, and `POST /v1/markets/{id}/orders/event-trade`; create-market has only a missing-agent auth test, event-trade has no auth/rate-limit tests, and comment-post currently has no coverage there at all.",
+      "confidence": 0.98,
+      "if_wrong": "There is already equivalent helper-based coverage elsewhere in the class, and the implementation plan should update existing tests rather than introduce new route helpers or success assertions."
+    },
+    {
+      "id": "a4",
+      "assumption": "The backend already centralizes protected-route quota handling: `resolve_write_route_category(...)` selects the five POST routes, `_enforce_write_controls()` enforces auth/rate limits before dispatch, and `BayesHandler.handle_api()` is the only place that adds success-path and 429 headers.",
+      "confidence": 0.99,
+      "if_wrong": "A route-specific bypass exists, and the implementation phase will need server changes rather than only test updates."
+    },
+    {
+      "id": "a5",
+      "assumption": "Non-429 error responses on protected POST routes should remain header-free, matching the existing probability-edit tests for missing or invalid agent ids and the current `handle_api()` branching.",
+      "confidence": 0.91,
+      "if_wrong": "The new breadth tests would need to expect quota headers on ordinary validation or business failures, which implies a broader behavioral change in the HTTP handler."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

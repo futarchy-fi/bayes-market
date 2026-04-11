@@ -1,0 +1,57 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Annotate DEFAULT_ENGINE_CONFIG with Final[EngineConfig] and __all__ with list[str]. These are the only unannotated module-level symbols.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Do nothing (treat as no-op) — rejected because adding Final and list[str] adds genuine type safety without changing runtime behavior",
+        "Only annotate __all__ but not DEFAULT_ENGINE_CONFIG — rejected because Final is valuable since the dataclass is already frozen, making the constant fully immutable at the type level"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep string fields as plain str, not Literal types.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Use Literal types for mode, precision, compile_type, backend — rejected because the task says 'add type hints' not 'add stricter types', and Literal types would narrow the public API potentially breaking downstream callers"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Use typing.Final (not typing_extensions) since the project already uses from __future__ import annotations.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Use typing_extensions.Final — rejected because typing.Final is available in Python 3.8+ and the project shows no signs of supporting older versions"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add 'from typing import Final' to the imports in backend/inference/config.py",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Annotate DEFAULT_ENGINE_CONFIG with 'Final[EngineConfig]' type annotation (change assignment line to 'DEFAULT_ENGINE_CONFIG: Final[EngineConfig] = EngineConfig(...)')",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Annotate __all__ with 'list[str]' type annotation (change to '__all__: list[str] = [...]')",
+      "depends_on": []
+    },
+    {
+      "step": 4,
+      "task": "Run existing tests to verify no functionality was changed",
+      "depends_on": [1, 2, 3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

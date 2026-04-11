@@ -1,0 +1,67 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use vi.useFakeTimers() with beforeEach/afterEach pattern (basic, no shouldAdvanceTime) for formatRelativeTime and timeUntil tests",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "shouldAdvanceTime option — unnecessary for pure unit tests that only need pinned Date.now()",
+        "Shared test helper — project has no shared time helper; each file manages independently"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Test that negative numbers preserve sign through K/M formatting (e.g., -45000 → '-45.0K')",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Only test positive numbers — would miss verifying the Math.abs threshold vs signed output behavior"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Add all 10 new tests to the existing frontend/src/__tests__/format.test.ts file, adding new describe blocks for formatRelativeTime and timeUntil",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Separate test file — existing file already tests all format.ts exports; keeping tests co-located is consistent"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add formatRelativeTime and timeUntil imports to format.test.ts",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add describe('formatRelativeTime') block with vi.useFakeTimers() in beforeEach (pinned to a known date) and vi.useRealTimers() in afterEach. Add 4 tests: 'just now' (<1 min), minutes ago, hours ago, days ago",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add describe('timeUntil') block with same fake timer pattern. Add 3 tests: expired (past date), hours+minutes remaining, days+hours remaining",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Add negative number test to existing formatCurrency describe block: -45000 → '-45.0K', -1500000 → '-1.5M'",
+      "depends_on": []
+    },
+    {
+      "step": 5,
+      "task": "Add 2 tests to existing truncateHash describe block: custom length param (e.g., truncateHash('sha256:abcdef0123456789', 4)), and non-sha256 long string truncation",
+      "depends_on": []
+    },
+    {
+      "step": 6,
+      "task": "Run vitest on format.test.ts to verify all 19 tests (9 existing + 10 new) pass",
+      "depends_on": [2, 3, 4, 5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

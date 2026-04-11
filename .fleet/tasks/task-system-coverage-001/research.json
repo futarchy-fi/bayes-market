@@ -1,0 +1,97 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use `toHaveStyle()` from jest-dom (imported via setup.ts) with CSS variable values. This is the established pattern across the codebase. Examples: AccountPnlSection.test.tsx uses `expect(el).toHaveStyle({ color: 'var(--color-success)' })`, AnalyticsFilters.test.tsx uses `expect(button).toHaveStyle({ borderColor: 'var(--color-primary)' })`. For the health beacon, find the beacon element via its parent text and use `container.querySelector` or closest traversal, then assert `toHaveStyle({ background: 'var(--color-warning, orange)' })` for loading, `toHaveStyle({ background: 'var(--color-success)' })` for healthy, `toHaveStyle({ background: 'var(--color-danger)' })` for error. For boxShadow, assert `toHaveStyle({ boxShadow: '0 0 8px var(--color-success)' })` on the healthy beacon.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/AccountPnlSection.test.tsx:117-128",
+        "frontend/src/__tests__/AnalyticsFilters.test.tsx:89-102",
+        "frontend/src/__tests__/Analytics.test.tsx:126-135",
+        "frontend/src/__tests__/PriceChart.test.tsx:138-139",
+        "frontend/src/__tests__/setup.ts:1"
+      ],
+      "uncertainty": "The beacon element lacks a test-id so we'll need to locate it via DOM traversal (e.g., sibling of the status text span). This is a minor selector concern, not a pattern concern."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Use `mockReturnValue(new Promise(() => {}))` (never-resolving promise) on the API client mock. This is the exact pattern used in Analytics.test.tsx line 71: `vi.mocked(api.listMarkets).mockReturnValue(new Promise(() => {}))` to keep the component in loading state. For the health loading test, apply this to `mockClient.getHealth`. The test QueryClient has `retry: false` (helpers.tsx) so there are no retry delays to worry about.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/Analytics.test.tsx:70-73",
+        "frontend/src/__tests__/helpers.tsx:createTestQueryClient"
+      ],
+      "uncertainty": "None significant. The pattern is well-established and the test QueryClient config confirms retry:false."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Use `mockRejectedValue(new Error('Network error'))` with a standard Error. The component at System.tsx:56 checks `health.error instanceof Error` and shows `health.error.message` if true, otherwise 'Connection failed'. Using a standard Error tests the primary branch. A separate test could use a non-Error rejection to test the fallback 'Connection failed' branch. The existing codebase pattern in Analytics.test.tsx:77 uses `mockRejectedValue(new Error('Network failure'))` for error state testing. The test QueryClient has `retry: false` so error state propagates immediately.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/routes/System.tsx:54-58",
+        "frontend/src/__tests__/Analytics.test.tsx:66-77",
+        "frontend/src/__tests__/helpers.tsx:createTestQueryClient",
+        "frontend/src/lib/api/client.ts:BayesApiError"
+      ],
+      "uncertainty": "None. Both Error and non-Error paths are testable. BayesApiError extends Error so it would also satisfy the instanceof check and show error.message."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Verify the actual formatted string output (e.g., '2.0K' for volume 2000). While formatCurrency has its own unit tests in format.test.ts, the System test should verify integration — that the component passes the correct computed values to formatCurrency and renders the result. This tests the data flow: mock data → reduce/sum → formatCurrency → rendered text. For example, with markets having volume 500 + 1500 = 2000 total, assert that '2.0K' appears in the document. This matches the project pattern in other tests like AnalyticsSummaryCards.test.tsx which verify formatted output values.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/__tests__/format.test.ts:10-14",
+        "frontend/src/routes/System.tsx:66-67",
+        "frontend/src/lib/utils/format.ts:5-9"
+      ],
+      "uncertainty": "Minor concern: if formatCurrency output format changes, both unit and integration tests break. But this is acceptable for integration testing — it catches real regressions."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Confirmed. The existing System.test.tsx mocks at the @/lib/api/client level using vi.hoisted + vi.mock. This is consistent with Analytics.test.tsx which also mocks the API client directly. No need to change the mock strategy."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Confirmed. The codebase uses `toHaveStyle()` extensively (AccountPnlSection, Analytics, AnalyticsFilters, PriceChart tests) for asserting inline styles including CSS custom variables. jest-dom is imported in setup.ts. React inline styles map to DOM element.style and toHaveStyle works with them. For edge cases, direct `element.style.property` access is also used (PriceChart.test.tsx:139)."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Confirmed. Analytics.test.tsx:71 uses exactly `mockReturnValue(new Promise(() => {}))` to keep loading state. Test QueryClient has retry:false so react-query stays in isLoading until the promise resolves (which it never does)."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Confirmed. Analytics.test.tsx:77 uses `mockRejectedValue(new Error('Network failure'))` and immediately asserts error state with waitFor. Test QueryClient has retry:false (helpers.tsx) so error propagates without retries."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Verified that formatCurrency has unit tests in format.test.ts but the System integration test should still verify actual formatted output to test the data flow (sum computation → formatCurrency → render). This catches bugs in the computation logic even if formatCurrency itself is correct."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Confirmed. All needed assertion utilities (toHaveStyle, toBeInTheDocument, waitFor, screen) are already available. The mock setup pattern is in place. No additional test infrastructure or custom matchers needed."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Confirmed. CountCard (System.tsx:126) applies color as an inline style: `color: color ?? 'var(--color-text)'`. The value can be found by its text content and then asserted with toHaveStyle({ color: 'var(--color-success)' }). This matches the Portfolio.test.tsx pattern (line 206) which asserts `toHaveStyle({ color })` on text elements."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

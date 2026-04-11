@@ -1,0 +1,131 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Test ContextRow within ConditionalEditor's test suite (integration-style, nested describe) since ContextRow is a non-exported local function and cannot be imported separately.",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Separate test file for ContextRow (impossible — not exported)", "Exporting ContextRow just for testing (unnecessary coupling)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Mock useMarkets and useMarket alongside useProbabilityEdit and useSession in the vi.mock('@/lib/query/hooks') block. useMarkets returns { data: { markets: MarketSummary[] } } and useMarket returns { data: { market: { outcomes: [...] } } }.",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Only mocking useProbabilityEdit (context dropdowns would be empty)", "Using MSW for network-level mocking (diverges from established test patterns)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "No crypto.randomUUID() mock needed — Node 19+ provides it globally and TradingPanel tests already exercise this path without mocking.",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["vi.stubGlobal('crypto', ...) — unnecessary since it already works"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Use same mutation response shape { order: { orderId: string } } as TradingPanel since both use useProbabilityEdit hitting the same endpoint.",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Different response shape — not applicable, same hook"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Test the notation display (P(outcome | conditions) = probability) as it's a key UX feature. Verify both unconditional and conditional notation strings.",
+      "based_on": ["q5"],
+      "alternatives_rejected": ["Skip notation testing — would miss a core feature of the component"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Follow TradingPanel.test.tsx patterns exactly: vi.mock with importActual for session, vi.mock for hooks, vi.mocked() for per-test control, renderWithProviders helper, same fixture structure.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": ["Custom test utilities — unnecessary divergence from established patterns"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create test file frontend/src/__tests__/ConditionalEditor.test.tsx with mock setup: vi.mock session context (with importActual), vi.mock hooks (useProbabilityEdit, useMarkets, useMarket all as vi.fn()), import and vi.mocked() all mocked hooks.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Define fixtures: mockMarket (same shape as TradingPanel but distinct ids), configuredSession, unconfiguredSession, mockOtherMarkets (2-3 MarketSummary items: one active, one inactive, one matching current market.id to test filtering), mockContextMarketOutcomes (outcomes for a context market returned by useMarket), defaultMutationState helper (reuse pattern from TradingPanel).",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Write beforeEach: vi.clearAllMocks, set default returns for useSession (configured), useProbabilityEdit (idle), useMarkets (returns mockOtherMarkets list), useMarket (returns context market with outcomes).",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Write test: 'shows setup message when session is not configured' — set useSession to unconfigured, verify guard message text, verify no form rendered.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Write test: 'renders form with outcome select, probability slider, and submit button' — verify heading, outcome options with current probabilities, slider, submit button text ('Submit Unconditional Edit' when no context).",
+      "depends_on": [3]
+    },
+    {
+      "step": 6,
+      "task": "Write test: 'shows unconditional notation without context' — verify notation shows 'Set P(OutcomeName) = 50.0%' initially.",
+      "depends_on": [3]
+    },
+    {
+      "step": 7,
+      "task": "Write test: 'Add condition button adds a context row' — click '+ Add condition', verify a context row appears with market select and outcome select. Also test that add button is disabled when otherMarkets is empty.",
+      "depends_on": [3]
+    },
+    {
+      "step": 8,
+      "task": "Write test: 'context row market select shows only other active markets' — after adding a context row, verify the market dropdown contains only active markets that are not the current market (the inactive one and current-market-id one should be filtered out).",
+      "depends_on": [3]
+    },
+    {
+      "step": 9,
+      "task": "Write test: 'selecting a market in context row populates outcome dropdown' — add context row, select a market, verify useMarket was called with the selected market id, verify outcome options appear from the mocked useMarket response.",
+      "depends_on": [3]
+    },
+    {
+      "step": 10,
+      "task": "Write test: 'remove button removes a context row' — add a context row, click the remove (×) button, verify the row is removed.",
+      "depends_on": [3]
+    },
+    {
+      "step": 11,
+      "task": "Write test: 'notation updates when conditions are added' — add context row, select market and outcome, verify notation changes to conditional format 'P(... | variableId=outcomeId) = ...'.",
+      "depends_on": [3]
+    },
+    {
+      "step": 12,
+      "task": "Write test: 'submits correct payload with context conditions' — add context, select market+outcome, submit, verify mutate called with payload containing accountId, variableId, target, context array with valid entries only, idempotencyKey, and session.",
+      "depends_on": [3]
+    },
+    {
+      "step": 13,
+      "task": "Write test: 'submit button shows conditional text and pending state' — verify button says 'Submit Conditional Edit' when context exists, and 'Submitting…' / disabled when isPending.",
+      "depends_on": [3]
+    },
+    {
+      "step": 14,
+      "task": "Write test: 'shows success message with conditional prefix' — mock isSuccess with data, verify 'Conditional edit accepted: orderId' message.",
+      "depends_on": [3]
+    },
+    {
+      "step": 15,
+      "task": "Write test: 'shows error message when mutation fails' — mock isError with Error, verify error message rendered.",
+      "depends_on": [3]
+    },
+    {
+      "step": 16,
+      "task": "Run vitest on the new test file to verify all tests pass. Fix any failures.",
+      "depends_on": [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

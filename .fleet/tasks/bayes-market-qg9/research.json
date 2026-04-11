@@ -1,0 +1,136 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The current contract does not accept `status=all`; the codebase models \"all markets\" by omitting `status`. If the follow-up implementation chooses to accept `status=all`, it should be an alias for omitting `status`, not a distinct filter mode.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:1714",
+        "backend/server.py:1726",
+        "backend/server.py:1739",
+        "tests/test_bayes_market_api.py:885",
+        "frontend/src/routes/MarketList.tsx:11"
+      ],
+      "uncertainty": "The task title mentions `active/resolved/all`, but no existing backend validator, test, or frontend caller uses the literal `all` value.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q2",
+      "answer": "For compatibility, `closed` and `draft` should remain supported unless someone explicitly wants a breaking contract change. The existing backend validator, frontend status union, and `MarketList` dropdown already expose those states.",
+      "confidence": 0.82,
+      "evidence": [
+        "backend/server.py:113",
+        "backend/server.py:1726",
+        "frontend/src/routes/MarketList.tsx:8",
+        "frontend/src/lib/api/types.ts:9",
+        ".fleet/tasks/bayes-market-qg9/questions.json:12"
+      ],
+      "uncertainty": "The task wording quoted in the question file narrows the human-facing examples to `active/resolved/all`, so a deliberate deprecation is still possible even though the codebase does not signal one.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q3",
+      "answer": "There is no current sort contract. When `sort` is omitted, the least disruptive default is to preserve the existing `list(MARKETS.values())` order. If explicit sorts are added, the most defensible directions are descending for `volume`, descending for `liquidity`, and descending for `created` (newest first), because that surfaces the largest/newest markets first.",
+      "confidence": 0.63,
+      "evidence": [
+        "backend/server.py:146",
+        "backend/server.py:1724",
+        "backend/server.py:1735",
+        "backend/server.py:60",
+        ".fleet/tasks/bayes-market-qg9/questions.json:18"
+      ],
+      "uncertainty": "The repo does not currently define any sort order beyond Python dict insertion order, so the direction for each named sort is still a product decision.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes. `sort=created` should use the existing `created_at` field internally, and the list summary response should stay unchanged. The backend already stores `created_at` on full market records, while `MARKET_SUMMARY_FIELDS` and the list tests intentionally exclude it from the summary payload.",
+      "confidence": 0.94,
+      "evidence": [
+        "backend/server.py:74",
+        "backend/server.py:91",
+        "backend/server.py:108",
+        "backend/server.py:115",
+        "backend/server.py:537",
+        "tests/test_bayes_market_api.py:887",
+        "frontend/src/lib/api/types.ts:6",
+        "frontend/src/lib/api/types.ts:15"
+      ],
+      "uncertainty": "If someone wants the frontend to display creation time in the list later, that would be a separate schema expansion from the sorting work itself.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q5",
+      "answer": "No existing code defines `q` semantics. The best fit with the task wording is a single-valued, case-insensitive substring match against `title` only, with leading/trailing whitespace trimmed before matching. I recommend treating `q=` or whitespace-only input as 'no filter' after trimming, because the current frontend pattern omits empty filters instead of sending sentinel values, but that empty-input behavior is not established elsewhere in the backend and should be confirmed.",
+      "confidence": 0.66,
+      "evidence": [
+        ".fleet/tasks/bayes-market-qg9/questions.json:29",
+        "backend/server.py:3454",
+        "backend/server.py:1714",
+        "backend/server.py:1723",
+        "backend/server.py:1115",
+        "frontend/src/routes/MarketList.tsx:11"
+      ],
+      "uncertainty": "Current query validators typically reject invalid provided values, and there is no existing search box or backend search helper to settle whether blank `q` should be ignored or rejected.",
+      "decision_needed": true
+    },
+    {
+      "question_id": "q6",
+      "answer": "Yes. The most codebase-consistent contract is to expand `meta.filters` to include the normalized applied `status`, `sort`, and `q` values, and to reject duplicate `sort`/`q` params with the same `400 invalid_query` pattern already used for `status` and `interval`. `make_meta(...)` already supports additive metadata, and the list response already echoes `status` inside `meta.filters`.",
+      "confidence": 0.89,
+      "evidence": [
+        "backend/server.py:480",
+        "backend/server.py:1714",
+        "backend/server.py:1739",
+        "backend/server.py:1113",
+        "tests/test_bayes_market_api.py:885",
+        "tests/test_bayes_market_api.py:899"
+      ],
+      "uncertainty": "The frontend `Meta` type does not currently model `filters`, so if the UI starts reading these fields later, the TypeScript types may need tightening.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q7",
+      "answer": "Backend-only work is enough to add the HTTP contract, but it is not enough to deliver the feature end to end. The current frontend API client, React Query hook, and `MarketList` route only send `status`, so supporting user-visible `sort` and `q` requires frontend updates too. The question file also records that the bd issue description mentions making `MarketList` pass these params.",
+      "confidence": 0.78,
+      "evidence": [
+        ".fleet/tasks/bayes-market-qg9/questions.json:42",
+        "frontend/src/lib/api/client.ts:66",
+        "frontend/src/lib/query/hooks.ts:10",
+        "frontend/src/routes/MarketList.tsx:8",
+        "frontend/src/__tests__/api-client.test.ts:35"
+      ],
+      "uncertainty": "I could not inspect the bd issue description directly from the repo, so the frontend scope signal comes from the question file plus the current frontend implementation gap.",
+      "decision_needed": true
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.99,
+      "impact": "The GET `/v1/markets` route goes straight to `list_markets(parse_qs(...))`, so the follow-up implementation should target `backend/server.py:list_markets`."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.6,
+      "impact": "Conjunctive filtering then sorting is the natural extension, but current code only implements `status`, so combined `status + q + sort` behavior still needs an explicit test-level decision."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.93,
+      "impact": "Existing query parsing consistently rejects duplicates and unsupported values with `400 invalid_query`, so new params should follow that style unless the contract intentionally diverges."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Current list tests and `MARKET_SUMMARY_FIELDS` freeze a compact summary shape, so filtering/search/sorting can ship without widening the response schema."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

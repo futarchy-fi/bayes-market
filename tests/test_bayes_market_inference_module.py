@@ -11,6 +11,7 @@ from backend.inference import (
     CURRENT_MODEL_COMPILER,
     CURRENT_MODEL_QUERY_BACKEND,
     CURRENT_MODEL_EXACT_ELIGIBILITY_REASON,
+    CacheInvalidationManager,
     CliqueSummary,
     CompileResult,
     CurrentModelCompileArtifact,
@@ -19,6 +20,7 @@ from backend.inference import (
     EngineConfig,
     InferenceQueryError,
     InferenceUnsupportedQueryError,
+    InvalidationResult,
     MarginalQueryResult,
     compile_current_market_artifact,
 )
@@ -398,6 +400,87 @@ class BayesMarketInferenceModuleTests(unittest.TestCase):
 
         with self.assertRaises(server.InferenceCompileError):
             compile_current_market_artifact(market_snapshot=missing_outcome_probability)
+
+
+class CacheInvalidationManagerTests(unittest.TestCase):
+    def test_hash_match_returns_cache_hit_and_skips_recompile(self):
+        manager = CacheInvalidationManager()
+        # First call is always a miss (no previous hash).
+        manager.check("m1", "sha256:aaa")
+        result = manager.check("m1", "sha256:aaa")
+
+        self.assertIsInstance(result, InvalidationResult)
+        self.assertFalse(result.needs_recompile)
+        self.assertFalse(result.clear_conditional_marginals)
+        self.assertEqual(result.previous_hash, "sha256:aaa")
+        self.assertEqual(result.current_hash, "sha256:aaa")
+
+    def test_hash_mismatch_returns_cache_miss_and_triggers_recompile(self):
+        manager = CacheInvalidationManager()
+        result = manager.check("m1", "sha256:aaa")
+
+        self.assertTrue(result.needs_recompile)
+        self.assertTrue(result.clear_conditional_marginals)
+        self.assertIsNone(result.previous_hash)
+        self.assertEqual(result.current_hash, "sha256:aaa")
+
+        result2 = manager.check("m1", "sha256:bbb")
+        self.assertTrue(result2.needs_recompile)
+        self.assertTrue(result2.clear_conditional_marginals)
+        self.assertEqual(result2.previous_hash, "sha256:aaa")
+        self.assertEqual(result2.current_hash, "sha256:bbb")
+
+    def test_conditional_marginals_flagged_for_clearing_on_state_change(self):
+        manager = CacheInvalidationManager()
+        manager.check("m1", "sha256:before")
+        result = manager.check("m1", "sha256:after")
+
+        self.assertTrue(result.clear_conditional_marginals)
+        self.assertTrue(result.needs_recompile)
+
+    def test_counter_tracking_across_multiple_invalidation_calls(self):
+        manager = CacheInvalidationManager()
+
+        # First call — miss (no previous hash)
+        manager.check("m1", "sha256:aaa")
+        self.assertEqual(manager.cache_hits, 0)
+        self.assertEqual(manager.cache_misses, 1)
+
+        # Same hash — hit
+        manager.check("m1", "sha256:aaa")
+        self.assertEqual(manager.cache_hits, 1)
+        self.assertEqual(manager.cache_misses, 1)
+
+        # Different hash — miss
+        manager.check("m1", "sha256:bbb")
+        self.assertEqual(manager.cache_hits, 1)
+        self.assertEqual(manager.cache_misses, 2)
+
+        # Same hash again — hit
+        manager.check("m1", "sha256:bbb")
+        self.assertEqual(manager.cache_hits, 2)
+        self.assertEqual(manager.cache_misses, 2)
+
+        # Different market — miss (no previous for m2)
+        manager.check("m2", "sha256:xxx")
+        self.assertEqual(manager.cache_hits, 2)
+        self.assertEqual(manager.cache_misses, 3)
+
+    def test_reset_clears_hashes_and_counters(self):
+        manager = CacheInvalidationManager()
+        manager.check("m1", "sha256:aaa")
+        manager.check("m1", "sha256:aaa")
+        self.assertEqual(manager.cache_hits, 1)
+        self.assertEqual(manager.cache_misses, 1)
+
+        manager.reset()
+        self.assertEqual(manager.cache_hits, 0)
+        self.assertEqual(manager.cache_misses, 0)
+
+        # After reset, same hash is a miss (no stored hash).
+        result = manager.check("m1", "sha256:aaa")
+        self.assertTrue(result.needs_recompile)
+        self.assertEqual(manager.cache_misses, 1)
 
 
 if __name__ == "__main__":

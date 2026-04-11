@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact wire contract should `include_resolved` accept, and how should it normalize in `meta.filters`: strict booleans like `true|false`, a broader truthy/falsy set such as `1|0` or `yes|no`, or some other enum; and when the param is omitted should the normalized value be `false` or `null`?",
+      "category": "requirements",
+      "why_it_matters": "`parse_market_list_query(...)` currently only returns string-or-None filters and the repo has no existing boolean query parser for `/v1/markets`, so the accepted literals and normalized metadata shape directly determine validation logic, default behavior, and regression tests."
+    },
+    {
+      "id": "q2",
+      "question": "What is the intended precedence matrix between `status` and `include_resolved`, especially for `status=resolved` with omitted or false `include_resolved`, and for non-resolved statuses with `include_resolved=true`?",
+      "category": "design",
+      "why_it_matters": "The task explicitly says `status=resolved` must still work on its own, which implies an internal resolved-visibility mode beyond a simple independent filter, but it does not define whether conflicting combinations are normalized, ignored, or rejected."
+    },
+    {
+      "id": "q3",
+      "question": "When `include_resolved` is omitted, should `GET /v1/markets` now exclude only `status == \"resolved\"` rows while preserving the existing `closed`, `draft`, and `status=all` compatibility, or is a broader status-contract change intended?",
+      "category": "requirements",
+      "why_it_matters": "Today the default list includes the seed resolved market `m3`, and the current validator still accepts `active|resolved|closed|draft` plus the `all` alias, so this feature changes visible results unless the compatibility boundary is explicit."
+    },
+    {
+      "id": "q4",
+      "question": "Should `include_resolved` follow the existing single-value query contract and return `400 invalid_query` for duplicates or unsupported values, and if so what exact `error.details.allowed` payload should the tests freeze?",
+      "category": "codebase",
+      "why_it_matters": "`parse_market_list_query(...)` already rejects repeated `status`, `sort`, and `q`, so the new parameter should either match that contract exactly or intentionally diverge with new validation behavior."
+    },
+    {
+      "id": "q5",
+      "question": "Should `meta.filters.include_resolved` echo the normalized requested parameter, or the effective resolved-inclusion mode after combining `status` and `include_resolved`?",
+      "category": "design",
+      "why_it_matters": "`status=resolved` can force resolved markets to appear even when `include_resolved` is omitted, so the response metadata needs a defined meaning before the endpoint contract can be tested."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The implementation seam for this step is the existing `backend/server.py` pair `parse_market_list_query(...)` and `list_markets(...)`, because `route_request(...)` already hands `GET /v1/markets` query params directly to that path.",
+      "confidence": 0.99,
+      "if_wrong": "A wrapper or adapter elsewhere may own the new param, and patching only `backend/server.py` would miss the real contract boundary."
+    },
+    {
+      "id": "a2",
+      "assumption": "The feature's default behavior is to hide resolved markets when no explicit `status=resolved` or opt-in `include_resolved` is provided.",
+      "confidence": 0.77,
+      "if_wrong": "Adding `include_resolved` would be mostly inert for the default listing path, and tests expecting the default `/v1/markets` count to drop would be wrong."
+    },
+    {
+      "id": "a3",
+      "assumption": "Existing status compatibility should remain intact: `active`, `resolved`, `closed`, and `draft` stay valid filters, and `status=all` remains an alias for omitting `status`.",
+      "confidence": 0.86,
+      "if_wrong": "The parser and list tests would need a breaking-contract update instead of layering `include_resolved` on top of the current status model."
+    },
+    {
+      "id": "a4",
+      "assumption": "`include_resolved` should use the repo's normal query-validation style: single-valued, normalized once, and rejected with `400 invalid_query` when repeated or unsupported.",
+      "confidence": 0.91,
+      "if_wrong": "The endpoint would need looser coercion or multi-value semantics that do not match the current `/v1/markets` parser pattern."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

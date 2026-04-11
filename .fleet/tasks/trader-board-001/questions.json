@@ -1,0 +1,57 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the test verify that rank numbers (index+1) display correctly for each row, or is that considered trivial React behavior?",
+      "category": "requirements",
+      "why_it_matters": "The component computes rank as `index + 1`. The task says 'proper ordering' - we need to know if that means verifying the displayed rank numbers or verifying that the component respects the input array order."
+    },
+    {
+      "id": "q2",
+      "question": "Should volume formatting tests cover edge cases like zero, thousands (K suffix), and millions (M suffix), or just confirm formatCurrency is called?",
+      "category": "requirements",
+      "why_it_matters": "The task says 'formatting of volumes'. formatCurrency already has its own test suite in format.test.ts. We could either test the formatted output end-to-end in the DOM or just verify the component renders the expected formatted string for a few representative values."
+    },
+    {
+      "id": "q3",
+      "question": "Does the component need to be rendered with providers (QueryClientProvider, SessionProvider, MemoryRouter) or can it use bare render()?",
+      "category": "codebase",
+      "why_it_matters": "TraderLeaderboard is a pure presentational component with no hooks, no routing, and no context usage. The sibling AnalyticsSummaryCards.test.tsx uses bare render(). Using bare render() keeps tests simpler and faster."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The component is purely presentational and can be tested with bare render() from @testing-library/react, without any providers.",
+      "confidence": 0.98,
+      "if_wrong": "Would need to wrap with renderWithProviders from helpers.tsx, adding unnecessary complexity."
+    },
+    {
+      "id": "a2",
+      "assumption": "The 'proper ordering' requirement means verifying that rows render in the order provided (array index maps to rank), not that the component sorts data itself.",
+      "confidence": 0.95,
+      "if_wrong": "If the component were expected to sort, we'd need tests for sort logic - but the component has no sorting code; it renders rows as given."
+    },
+    {
+      "id": "a3",
+      "assumption": "We should follow the AnalyticsSummaryCards.test.tsx pattern: factory function for test data, vitest + @testing-library/react, testing rendered DOM content.",
+      "confidence": 0.95,
+      "if_wrong": "Different testing pattern would need to be adopted, but this is the established pattern for pure analytics components in this codebase."
+    },
+    {
+      "id": "a4",
+      "assumption": "Volume formatting tests should verify end-to-end formatted output in the DOM (e.g., '56.8K' appears for 56789) rather than mocking formatCurrency.",
+      "confidence": 0.9,
+      "if_wrong": "Would need vi.mock for formatCurrency, but that's over-isolation for a pure utility with its own tests."
+    },
+    {
+      "id": "a5",
+      "assumption": "Empty state test should verify the text 'No accepted activity yet.' appears when rows is an empty array.",
+      "confidence": 0.99,
+      "if_wrong": "Empty state message might differ, but it's clearly visible in the source code at line 15."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

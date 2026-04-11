@@ -1,0 +1,79 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use plain render() from @testing-library/react, not renderWithProviders",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["renderWithProviders — unnecessary since component has no context/provider dependencies"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Handle locale-dependent formatting by computing expected values with the same toLocaleString() calls in test assertions rather than hardcoding strings",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Mocking toLocaleString — adds complexity for no benefit", "Hardcoding locale strings — brittle across environments", "Using regex partial matches — less precise"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Test formatCurrency only through component integration (rendered output), not as separate unit tests in this file",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Duplicating formatCurrency unit tests — already covered in format.test.ts"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Explicitly import describe/it/expect from vitest, following established codebase convention",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Relying on vitest globals — works but breaks convention used in all 14 existing test files"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Test edge cases: zero values, large numbers (millions range for volume, thousands for trades), and typical mid-range values",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Testing negative numbers — not meaningful in prediction market context", "Testing invalid dates — low priority and not in task scope"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create test file at frontend/src/__tests__/AnalyticsSummaryCards.test.tsx with imports: vitest (describe, it, expect), @testing-library/react (render, screen), and the AnalyticsSummaryCards component",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Write test: renders all four card labels (Total Activity, Total Volume, Unique Traders, Last Update) with typical mid-range summary data",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Write test: renders correctly formatted values — totalTrades and uniqueTraders via .toLocaleString() comparison, totalVolume via formatCurrency output, lastUpdated via new Date().toLocaleString() comparison",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Write test: renders the 'Last Update' caption text ('Accepted activity freshness for the selected market.') only under the Last Update card",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Write test: handles zero values (totalTrades=0, totalVolume=0, uniqueTraders=0) — verifies component renders without errors and shows formatted zeros",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Write test: handles large numbers — totalVolume in millions (triggers $X.XXM format), totalTrades in thousands (triggers locale thousands separator)",
+      "depends_on": [1]
+    },
+    {
+      "step": 7,
+      "task": "Run vitest on the new test file to verify all tests pass",
+      "depends_on": [2, 3, 4, 5, 6]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

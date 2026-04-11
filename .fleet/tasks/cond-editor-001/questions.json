@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should tests for the ContextRow sub-component be covered within the ConditionalEditor test suite (integration-style), or should ContextRow get its own describe block / file?",
+      "category": "design",
+      "why_it_matters": "ContextRow uses its own useMarket hook and has independent behavior (market select, outcome select, remove button). Testing it only through ConditionalEditor requires deeper mock orchestration for useMarket per-row."
+    },
+    {
+      "id": "q2",
+      "question": "The useMarkets hook returns MarketSummary[] (not Market[]) for the list, but ContextRow calls useMarket(variableId) to fetch full Market data including outcomes. Should the tests mock useMarket to return outcomes for each context market, or is there a simpler approach?",
+      "category": "codebase",
+      "why_it_matters": "The two-step data flow (useMarkets for list → useMarket for outcomes) requires coordinated mocking. Getting this wrong means context outcome dropdowns won't populate in tests, making conditional context building untestable."
+    },
+    {
+      "id": "q3",
+      "question": "The component uses crypto.randomUUID() for idempotencyKey. Does the test environment (jsdom/vitest) support this, or does it need to be mocked?",
+      "category": "codebase",
+      "why_it_matters": "If crypto.randomUUID() is unavailable in the jsdom test environment, handleSubmit will throw, breaking all submit-related tests. The existing TradingPanel test just checks idempotencyKey is defined, suggesting it works but should be verified."
+    },
+    {
+      "id": "q4",
+      "question": "What is the expected shape of the mutation.data response for conditional edits? TradingPanel tests use { order: { orderId: string } } — does ConditionalEditor use the same shape?",
+      "category": "requirements",
+      "why_it_matters": "The success message renders mutation.data.order.orderId. If the response shape differs for conditional edits, the success-state test would need a different fixture."
+    },
+    {
+      "id": "q5",
+      "question": "Should the test verify the mathematical notation string (e.g. 'P(Yes | market-2=OutcomeA) = 50.0%') updates correctly as conditions are added/changed?",
+      "category": "requirements",
+      "why_it_matters": "The notation display is a key UX feature — it shows P(outcome | conditions) = probability. Testing it requires full interaction flow: selecting outcomes, adding context rows, selecting context markets and outcomes. This is non-trivial but is explicitly called out in the task description as 'conditional context building'."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The test should follow the same mocking pattern as TradingPanel.test.tsx: vi.mock the session context and query hooks, then use vi.mocked() for per-test control.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to use a different mocking strategy, possibly MSW or custom providers, which would diverge from established patterns."
+    },
+    {
+      "id": "a2",
+      "assumption": "useMarkets needs to be mocked (not just useProbabilityEdit and useSession) because ConditionalEditor calls useMarkets() to get the list of other markets for context conditions.",
+      "confidence": 0.99,
+      "if_wrong": "If useMarkets isn't mocked, React Query will try to fetch real data, and the otherMarkets list will be empty, making context-related tests fail."
+    },
+    {
+      "id": "a3",
+      "assumption": "useMarket also needs to be mocked because ContextRow calls useMarket(assignment.variableId) to fetch outcomes for the selected context market.",
+      "confidence": 0.99,
+      "if_wrong": "Without mocking useMarket, context rows won't have outcome options, and tests for selecting context outcomes will fail."
+    },
+    {
+      "id": "a4",
+      "assumption": "The mutation response shape is { order: { orderId: string } }, same as TradingPanel, because both use useProbabilityEdit which hits the same endpoint.",
+      "confidence": 0.9,
+      "if_wrong": "The success message test would render incorrectly. Would need to check the actual API response type."
+    },
+    {
+      "id": "a5",
+      "assumption": "crypto.randomUUID() works in the vitest/jsdom environment since TradingPanel tests already exercise the same code path without mocking it.",
+      "confidence": 0.85,
+      "if_wrong": "Would need to add a global mock: vi.stubGlobal('crypto', { randomUUID: () => 'test-uuid' })."
+    },
+    {
+      "id": "a6",
+      "assumption": "The task scope covers: (1) unconfigured session guard, (2) rendering the form with outcome select and probability slider, (3) adding/removing context conditions, (4) selecting markets and outcomes in context rows, (5) submit payload with valid context, (6) pending/success/error states, (7) notation display updates.",
+      "confidence": 0.9,
+      "if_wrong": "Might be over- or under-testing. The task description says 'rendering variable list, outcome selection for conditionals, conditional context building' which maps to items 2-5."
+    },
+    {
+      "id": "a7",
+      "assumption": "The otherMarkets filtering (excluding current market, only active status) should be tested since it's core logic that determines which markets appear as context options.",
+      "confidence": 0.85,
+      "if_wrong": "Might be considered an implementation detail not worth testing directly, but it's important for correctness."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

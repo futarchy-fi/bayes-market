@@ -3,10 +3,20 @@ export interface MarketOutcome {
   name: string;
 }
 
+export type MarketStatus = "active" | "resolved" | "closed" | "draft";
+export type MarketListStatusFilter = MarketStatus | "all";
+export type MarketListSort = "volume" | "liquidity" | "created";
+
+export interface MarketListFilters {
+  status?: MarketListStatusFilter;
+  sort?: MarketListSort;
+  q?: string;
+}
+
 export interface MarketSummary {
   id: string;
   title: string;
-  status: "active" | "resolved" | "closed" | "draft";
+  status: MarketStatus;
   liquidity: number;
   volume: number;
   expires_at: string;
@@ -17,8 +27,9 @@ export interface Market {
   title: string;
   description: string;
   variableId: string;
-  status: "active" | "resolved" | "closed" | "draft";
+  status: MarketStatus;
   resolution?: string;
+  resolutionProbabilities?: Record<string, number>;
   outcomes: MarketOutcome[];
   marginals: Record<string, number>;
   liquidity: number;
@@ -38,6 +49,20 @@ export interface MarketDetailResponse {
   meta: Meta;
 }
 
+export interface MarketPreview {
+  marketId: string;
+  title: string;
+  description: string;
+  url: string;
+  siteName: string;
+  type: string;
+}
+
+export interface MarketPreviewResponse {
+  preview: MarketPreview;
+  meta: Meta;
+}
+
 export interface MarketEvent {
   eventId: string;
   marketId: string;
@@ -51,6 +76,29 @@ export interface MarketEvent {
 
 export interface MarketEventsResponse {
   events: MarketEvent[];
+  meta: Meta;
+}
+
+export interface MarketComment {
+  commentId: string;
+  marketId: string;
+  seq: number;
+  accountId: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface PaginatedCollection {
+  fromSeq: number;
+  limit: number;
+  returned: number;
+  nextFromSeq: number | null;
+}
+
+export interface MarketCommentsResponse {
+  marketId: string;
+  comments: MarketComment[];
+  pagination: PaginatedCollection;
   meta: Meta;
 }
 
@@ -102,6 +150,50 @@ export interface EngineStatsResponse {
   meta: Meta;
 }
 
+export type AnalyticsInterval = "hour" | "day";
+
+export interface MarketAnalyticsPoint {
+  seq: number;
+  emittedAt: string;
+  probability: number;
+}
+
+export interface MarketAnalyticsSeries {
+  outcomeId: string;
+  outcomeName: string;
+  points: MarketAnalyticsPoint[];
+}
+
+export interface MarketAnalyticsVolumeBucket {
+  bucketStart: string;
+  bucketEnd: string;
+  tradeCount: number;
+  volume: number;
+}
+
+export interface MarketAnalyticsTraderRow {
+  accountId: string;
+  tradeCount: number;
+  volume: number;
+}
+
+export interface MarketAnalyticsSummary {
+  totalTrades: number;
+  totalVolume: number;
+  uniqueTraders: number;
+  bucketInterval: AnalyticsInterval;
+  lastUpdated: string;
+}
+
+export interface MarketAnalyticsResponse {
+  marketId: string;
+  summary: MarketAnalyticsSummary;
+  priceSeries: MarketAnalyticsSeries[];
+  volumeBuckets: MarketAnalyticsVolumeBucket[];
+  topTraders: MarketAnalyticsTraderRow[];
+  meta: Meta;
+}
+
 export interface MarketRisk {
   marketId: string;
   minAsset: number;
@@ -114,9 +206,11 @@ export interface MarketRisk {
 }
 
 export interface CapacityIndicators {
-  headroom: number;
+  limit: number;
+  available: number;
+  consumed: number;
   utilization: number;
-  healthLabel: string;
+  status: "healthy" | "warning" | "critical";
 }
 
 export interface AccountRiskResponse {
@@ -128,6 +222,36 @@ export interface AccountRiskResponse {
         markets: MarketRisk[];
       };
       capacityIndicators: CapacityIndicators;
+      updatedAt: string;
+    };
+  };
+  meta: Meta;
+}
+
+export interface AccountPnlTotals {
+  costBasis: number;
+  markedValue: number;
+  realizedPnl: number;
+  unrealizedPnl: number;
+  netPnl: number;
+}
+
+export interface AccountPnlPosition {
+  marketId: string;
+  marketTitle: string;
+  marketStatus: Market["status"];
+  realizedPnl: number;
+  unrealizedPnl: number;
+  costBasis: number;
+  markedValue: number;
+}
+
+export interface AccountPnlResponse {
+  account: {
+    id: string;
+    pnl: {
+      totals: AccountPnlTotals;
+      positions: AccountPnlPosition[];
       updatedAt: string;
     };
   };
@@ -178,6 +302,11 @@ export interface ApiError {
 export interface Meta {
   apiVersion: string;
   timestamp: string;
+  filters?: {
+    status?: MarketStatus | null;
+    sort?: MarketListSort | null;
+    q?: string | null;
+  };
 }
 
 export interface ProbabilityEditPayload {
@@ -197,6 +326,20 @@ export interface EventTradePayload {
   formula: Array<Array<{ variableId: string; outcomeId: string; negated: boolean }>>;
   side: "buy" | "sell";
   idempotencyKey?: string;
+}
+
+export interface CommentPayload {
+  accountId: string;
+  body: string;
+  idempotencyKey?: string;
+}
+
+export interface CommentResponse {
+  comment: MarketComment;
+  meta: Meta & {
+    idempotencyKeyEcho?: string;
+    replayed?: boolean;
+  };
 }
 
 export interface Session {

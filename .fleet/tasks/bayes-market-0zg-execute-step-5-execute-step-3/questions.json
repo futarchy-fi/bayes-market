@@ -1,0 +1,45 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Does this step assume the shared `includeResolved` contract has already landed across `frontend/src/lib/api/types.ts`, `frontend/src/lib/marketListFilters.ts`, `frontend/src/lib/api/client.ts`, `frontend/src/lib/query/hooks.ts`, and `frontend/src/routes/System.tsx`, or must this branch backfill those seams first because the current checkout still only supports `{ status, sort, q }` and `System` still calls `useMarkets()` with no opt-in?",
+      "category": "codebase",
+      "why_it_matters": "`System.test.tsx` cannot assert an explicit `{ includeResolved: true }` call until the filter type, query-key normalization, client serializer, and route call site all understand that option."
+    },
+    {
+      "id": "q2",
+      "question": "For the refreshed `System.test.tsx` fixtures, should every mocked `MarketListResponse` now carry `meta.filters.include_resolved` that matches the returned collection semantics, with the default shared fixture excluding resolved markets and only the explicit opt-in fixture returning mixed active+resolved rows?",
+      "category": "requirements",
+      "why_it_matters": "The task explicitly says to keep `meta.filters.include_resolved` aligned with the returned collection, but the current test file has one shared fixture and no `filters` metadata at all, so the expected per-case contract needs to be clear."
+    },
+    {
+      "id": "q3",
+      "question": "How exact should the new aggregate assertions be in `frontend/src/__tests__/System.test.tsx`: freeze the rendered card values themselves (for example `2.0K` total volume, `3.0K` total liquidity, and `1/1` active-resolved counts in both sections), or only prove headings plus the opt-in call?",
+      "category": "design",
+      "why_it_matters": "`System.tsx` renders duplicate `Active` and `Resolved` labels in separate sections and formats totals through `formatCurrency`, so the test needs a deliberate assertion strategy to avoid either brittleness or undercoverage."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This step is intended to sit on top of earlier production work that adds `includeResolved`/`include_resolved` to the market-list contract and updates `System.tsx` to opt into `{ includeResolved: true }`.",
+      "confidence": 0.95,
+      "if_wrong": "The task expands from a test refresh into backfilling the missing frontend/backend contract changes before the suite can compile or pass."
+    },
+    {
+      "id": "a2",
+      "assumption": "The refreshed `System` suite should use backend-shaped fixtures whose `markets`, `count`, and `meta.filters.include_resolved` stay internally consistent for each mocked request.",
+      "confidence": 0.94,
+      "if_wrong": "The tests could keep looser mocks, but they would stop proving the response contract the task explicitly calls out."
+    },
+    {
+      "id": "a3",
+      "assumption": "The aggregate-stats case is supposed to assert exact rendered totals and counts from a mixed active+resolved fixture, not just the presence of section headings.",
+      "confidence": 0.78,
+      "if_wrong": "A lighter assertion strategy is acceptable, but the task's request to verify rendered aggregate counts and stats would be satisfied with narrower coverage."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

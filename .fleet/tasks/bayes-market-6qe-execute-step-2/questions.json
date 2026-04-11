@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exact read contract is frozen for `GET /v1/markets/{id}/trades`: should each `trades[]` item be the full accepted `EventTrade` order object from `ORDERS`, or a narrower projection, and which `pagination` fields beyond `nextBeforeId` are required?",
+      "category": "requirements",
+      "why_it_matters": "The checkout has accepted EventTrade write contracts and read contracts for `/events` and `/comments`, but no existing trade-history surface, so the helper cannot be verified until the response shape is explicit."
+    },
+    {
+      "id": "q2",
+      "question": "What are the canonical query and validation rules for the new backward-pagination cursor: what `limit` default/max should the helper expect, and how should it behave when `before_id` is repeated, blank, or references an order id that is not in this market's accepted EventTrade history?",
+      "category": "requirements",
+      "why_it_matters": "Existing read surfaces use `parse_integer_query_param(...)` with sequence pagination, but there is no string-cursor parser or prior `before_id` contract in the repo."
+    },
+    {
+      "id": "q3",
+      "question": "What exactly defines 'newest-first by fill order' for this route: reverse chronological `(filledAt, id)` ordering, `id` ordering alone, or some event-sequence-based comparator?",
+      "category": "design",
+      "why_it_matters": "Current replay code orders accepted trades ascending by `(filledAt, id)`, while `generate_order_id()` also embeds a monotonic counter, so the cursor will only be stable if the canonical sort key is fixed."
+    },
+    {
+      "id": "q4",
+      "question": "Is `ORDERS` alone the authoritative source of accepted market trades for this helper, or must it also consult `COMMANDS` and/or `EVENTS` to prove acceptance or attach additional fields such as accepted-event metadata?",
+      "category": "codebase",
+      "why_it_matters": "The task says to snapshot `ORDERS`, but adjacent analytics code joins accepted orders to terminal events, so it is still ambiguous whether raw orders are sufficient for the read model."
+    },
+    {
+      "id": "q5",
+      "question": "Which stored market field should define trade-history membership for filtering: `marketId`, `targetMarketId`, or both?",
+      "category": "design",
+      "why_it_matters": "Accepted EventTrade orders currently persist both fields and they are equal today, but the helper needs one canonical filter to avoid freezing the wrong market-binding rule."
+    },
+    {
+      "id": "q6",
+      "question": "Should the helper follow the existing market read-surface behavior of `404 market_not_found` for unknown markets and `200` with an empty `trades` array plus `nextBeforeId: null` for known markets with no accepted EventTrade history?",
+      "category": "requirements",
+      "why_it_matters": "Both `get_market_events(...)` and `get_market_comments(...)` establish that pattern today, but the trade-history task description does not state whether it must match them exactly."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Presence in `ORDERS` is currently equivalent to an accepted order, and rejected EventTrade requests never persist an order row.",
+      "confidence": 0.99,
+      "if_wrong": "The helper would need to join against terminal events or command outcomes before returning any trade rows."
+    },
+    {
+      "id": "a2",
+      "assumption": "Canonical fill ordering should mirror the existing replay key `(filledAt, id)`, but reversed so the history endpoint is newest-first.",
+      "confidence": 0.92,
+      "if_wrong": "Cursor pagination could skip or duplicate trades when timestamps collide or when id order diverges from the intended fill order."
+    },
+    {
+      "id": "a3",
+      "assumption": "The route will probably inherit the same pagination defaults and envelope style as `/v1/markets/{id}/events` and `/v1/markets/{id}/comments`: bounded `limit`, deterministic page size, and standard `meta.timestamp`.",
+      "confidence": 0.84,
+      "if_wrong": "The helper will need a separate pagination contract rather than reusing the existing market read-surface conventions."
+    },
+    {
+      "id": "a4",
+      "assumption": "A stable `nextBeforeId` most likely means returning the last trade id from the current page when older rows still remain, because the cursor is exclusive and the list is newest-first.",
+      "confidence": 0.78,
+      "if_wrong": "The helper would need different cursor handoff semantics, such as returning the first omitted row's id or another derived marker."
+    },
+    {
+      "id": "a5",
+      "assumption": "Filtering by `order[\"marketId\"]` is sufficient for this step because the public EventTrade route is market-scoped and `create_event_trade_order(...)` currently sets `marketId` and `targetMarketId` to the same value.",
+      "confidence": 0.87,
+      "if_wrong": "The history helper could silently include or exclude the wrong trades once those fields diverge."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

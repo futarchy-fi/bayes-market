@@ -1,5 +1,6 @@
 import { Outlet, NavLink } from "react-router-dom";
 import { useSession } from "@/features/session/context";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 
 export function AppLayout() {
   const { session, setAccountId, setAgentId } = useSession();
@@ -18,6 +19,7 @@ export function AppLayout() {
         <nav style={{ display: "flex", gap: "var(--space-md)" }}>
           <NavLink to="/markets" style={navLinkStyle}>Markets</NavLink>
           <NavLink to="/portfolio" style={navLinkStyle}>Portfolio</NavLink>
+          <NavLink to="/system" style={navLinkStyle}>System</NavLink>
         </nav>
         <div style={{ marginLeft: "auto", display: "flex", gap: "var(--space-sm)", alignItems: "center" }}>
           <input
@@ -35,7 +37,9 @@ export function AppLayout() {
         </div>
       </header>
       <main style={{ flex: 1, padding: "var(--space-lg)", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
-        <Outlet />
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   );
