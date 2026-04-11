@@ -17,6 +17,7 @@ import type {
   EventTradePayload,
   Session,
   MarketListFilters,
+  CptResponse,
 } from "./types";
 import { normalizeMarketListFilters } from "@/lib/marketListFilters";
 
@@ -152,6 +153,14 @@ export function getEngineStats(
 ): Promise<EngineStatsResponse> {
   return request<EngineStatsResponse>(
     `/v1/markets/${encodeURIComponent(marketId)}/engine-stats`,
+  );
+}
+
+export function getMarketCpt(
+  marketId: string,
+): Promise<CptResponse> {
+  return request<CptResponse>(
+    `/v1/markets/${encodeURIComponent(marketId)}/cpt`,
   );
 }
 

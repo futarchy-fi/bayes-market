@@ -1,0 +1,99 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Render CptPanel as an inline section in MarketDetail.tsx, following the existing CSS grid + panelStyle pattern used by all 6 existing panels.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Floating overlay anchored to SVG node — no modal/portal/overlay system exists in codebase, would require building from scratch",
+        "Modal dialog — zero modal infrastructure exists, inconsistent with all existing panels"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Show the CPT panel for the focusMarketId only (the currently-viewed market), without requiring a node click to open it. Panel renders automatically as part of the market detail page.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Click-to-open on BayesNetGraph nodes — nodes have no click handlers and panel is inline not a popover",
+        "Open for any clicked node — would require cross-market data fetching and complex state management"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Add a new lightweight backend endpoint GET /v1/markets/{id}/cpt that returns all entries from CONDITIONAL_MARGINALS[marketId] in one response, avoiding N separate API calls.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "N API calls (one per parent configuration) — inefficient, poor UX with loading states",
+        "Derive from engine-stats clique data — cliques don't contain actual probability values"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Use single-outcome edits via the existing useProbabilityEdit hook and ProbabilityEditPayload. Backend auto-normalizes other outcomes via rescale_probability_edit. Frontend shows visual feedback of normalization but does not enforce sum-to-1.0 pre-submission.",
+      "based_on": ["q4", "q7"],
+      "alternatives_rejected": [
+        "Bulk CPT edit endpoint — unnecessary since backend normalizes per-outcome edits automatically",
+        "Frontend pre-submission normalization — redundant with backend behavior, would add complexity"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Derive parent variables from conditional edges (directional from→to) already available as component props via deriveEdges.ts. Use mergeEdges() output to identify which variables condition the focus market.",
+      "based_on": ["q5", "q8"],
+      "alternatives_rejected": [
+        "Add parent IDs to Market API type — requires backend schema change for data already derivable",
+        "Parse graph edges internally — edges are already exposed as props, no internal parsing needed"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "CPT panel shows conditional probabilities in a table format. For nodes without parents, display a single-row CPT (equivalent to marginal) rather than hiding the panel or duplicating VariableRow's marginal editor.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Duplicate marginal editing — creates two edit surfaces for same data, UX confusion",
+        "Hide panel for parentless nodes — inconsistent UX, panel disappears unpredictably"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add backend endpoint GET /v1/markets/{id}/cpt in server.py that reads CONDITIONAL_MARGINALS[marketId] and returns all context→outcome→probability entries as JSON. Include the market's outcome labels and parent variable names for display.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add frontend API client function getMarketCpt(marketId) in client.ts and corresponding TypeScript types (CptEntry, CptResponse) in types.ts for the new endpoint response.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Create a useCpt hook that fetches CPT data via getMarketCpt, derives parent variables from conditional edges (using deriveEdges.ts utilities), and transforms raw data into a structured table model: rows keyed by parent configuration, columns by outcome.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Create CptPanel React component that renders the CPT as an HTML table with parent configurations as rows and outcomes as columns. Each cell shows the conditional probability. Use existing panelStyle for consistent look. Handle the single-row (no parents) case.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Add inline editing to CptPanel cells: clicking a probability cell activates a slider/input (reusing patterns from ConditionalEditor/VariableRow), submits via useProbabilityEdit with the appropriate context array, and refreshes the table to show backend-normalized values.",
+      "depends_on": [4]
+    },
+    {
+      "step": 6,
+      "task": "Integrate CptPanel into MarketDetail.tsx as a sibling panel in the CSS grid layout. Pass focusMarketId, market data, and conditional edges as props. Position it after AssumptionPanel and before or after the graph panel.",
+      "depends_on": [5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
