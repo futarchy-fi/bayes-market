@@ -1,0 +1,21 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "File content will be 'Hello World!' followed by a trailing newline, per POSIX text file convention and git best practices.",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["No trailing newline - would cause git diff noise and violate standard conventions"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create frontend/hello.txt with content 'Hello World!' followed by a trailing newline.",
+      "depends_on": []
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
