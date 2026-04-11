@@ -1,32 +1,30 @@
-[Task cgroup-freeze-test-001-research-child-beta] PHASE 2: RESEARCH & DECISION
+[Task cgroup-freeze-test-001-research-child-beta] PHASE 3b: IMPLEMENT
 Title: Create backend/test_beta.py
 
-Read .fleet/tasks/cgroup-freeze-test-001-research-child-beta/questions.json for the questions to answer.
-Research each question in the codebase. Provide answers with confidence scores.
+Read your plan at .fleet/tasks/cgroup-freeze-test-001-research-child-beta/plan.json.
 
-YOU MUST create .fleet/tasks/cgroup-freeze-test-001-research-child-beta/research.json with this structure:
+YOU MUST IMPLEMENT the plan completely. This is the critical execution phase.
+
+For EACH step in plan.json, you MUST:
+1. Announce: "=== Step N: {task description} ==="
+2. Execute the step — create/modify the actual source files
+3. Verify it worked (check file exists, run code, test passes)
+4. Announce: "=== Step N complete ===" before moving to next
+
+DO NOT STOP until ALL steps are executed and verified.
+DO NOT just read the plan — you must CREATE the files it specifies.
+
+DEPENDENCIES: Fresh worktree — install before testing:
+  - Node: pnpm install or npm install
+  - Python: pip install -r requirements.txt
+
+After all steps are complete, write .fleet/tasks/cgroup-freeze-test-001-research-child-beta/implementation.json:
 {
-  "phase": "research",
-  "answers": [
-    {
-      "question_id": "q1",
-      "answer": "...",
-      "confidence": 0.0-1.0,
-      "evidence": ["file:line", ...],
-      "uncertainty": "what you're not sure about"
-    }
+  "phase": "implement",
+  "steps_completed": [
+    { "step": 1, "task": "...", "files_created": ["..."], "files_modified": ["..."], "verified": true }
   ],
-  "assumption_checks": [
-    { "assumption_id": "a1", "verdict": "CORRECT|WRONG|UNCERTAIN", "confidence": 0.0-1.0, "impact": "..." }
-  ],
-  "spawn_children": false,
-  "children": []
+  "all_steps_done": true
 }
 
-DO NOT STOP until research.json exists and contains answers to all questions.
-Verify: ls -la .fleet/tasks/cgroup-freeze-test-001-research-child-beta/ to confirm the file was written.
-
-DECOMPOSITION: Set spawn_children=true for low-confidence answers (< 0.5) or
-complex questions needing their own research cycle.
-
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "research: cgroup-freeze-test-001-research-child-beta"
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "execute: cgroup-freeze-test-001-research-child-beta"
