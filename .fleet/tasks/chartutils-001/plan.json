@@ -1,0 +1,56 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Pin TZ=UTC via beforeAll(process.env.TZ='UTC') for deterministic locale-dependent output in formatTimestampLabel and formatBucketRangeLabel tests, allowing exact .toBe() assertions",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Structural/regex assertions — less precise, doesn't match repo style of exact .toBe()",
+        "Setting TZ in vitest.config.ts env — would affect all tests globally, not just this file"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use @/ path aliases for imports, matching existing test convention — vitest.config.ts already has resolve.alias configured",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Relative imports — would work but breaks repo convention"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Test formatSignedCurrency as composed behavior (no mocking of formatCurrency), matching repo convention of no mocks for pure utility functions",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Mock formatCurrency with vi.mock() — over-isolation for pure functions, breaks repo convention"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Test getOutcomeColor fallback path with NaN and negative index inputs to validate the ?? defensive coding",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Skip edge cases — would leave defensive code untested"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create test file at frontend/src/__tests__/chartUtils.test.ts with describe blocks for all 6 exported functions: getOutcomeColor, scaleNumber, buildLinePath, formatTimestampLabel, formatBucketRangeLabel, formatSignedCurrency. Pin TZ=UTC in beforeAll. Use @/ imports, exact .toBe() assertions, no mocks.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Run vitest on the new test file to verify all tests pass. If TZ=UTC doesn't work in jsdom, fall back to structural assertions for locale-dependent functions.",
+      "depends_on": [1]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
