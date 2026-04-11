@@ -983,10 +983,22 @@ def compile_market_for_inference(
     if market is None:
         raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
 
+    conditional_marginals = CONDITIONAL_MARGINALS.get(market_id, {})
+
+    # Build outcome-count mapping for context variables referenced by conditional marginals.
+    market_outcomes_by_variable: dict[str, int] = {}
+    for context_key in conditional_marginals:
+        for assignment in context_key.split("|"):
+            variable_id, separator, _outcome_id = assignment.partition("=")
+            if separator and variable_id and variable_id not in market_outcomes_by_variable:
+                ref_market = find_market_by_variable_id(variable_id)
+                market_outcomes_by_variable[variable_id] = len(ref_market["outcomes"]) if ref_market else 0
+
     try:
         return CURRENT_MODEL_COMPILER.compile_result(
             market_snapshot=deepcopy(market),
-            conditional_marginals=deepcopy(CONDITIONAL_MARGINALS.get(market_id, {})),
+            conditional_marginals=deepcopy(conditional_marginals),
+            market_outcomes_by_variable=market_outcomes_by_variable or None,
             compile_time_ms=round(float(compile_time_ms), 3),
             last_updated=last_updated or utc_timestamp(),
         )
@@ -1038,62 +1050,6 @@ def query_market_atomic_probability_for_inference(market_id: str, outcome_id: st
         raise_inference_adapter_error(market_id, "query_atomic_event", exc)
 
     return float(query_result.probability)
-
-
-def parse_context_key_variable_ids(context_key: str) -> list[str]:
-    """Extract variable ids from a serialized context-state key."""
-    if not context_key:
-        return []
-
-    variable_ids: list[str] = []
-    for assignment in context_key.split("|"):
-        variable_id, separator, _outcome_id = assignment.partition("=")
-        if separator and variable_id:
-            variable_ids.append(variable_id)
-    return variable_ids
-
-
-def clique_state_count(variable_ids: tuple[str, ...]) -> int:
-    """Estimate the discrete state count for a clique of market variables."""
-    state_count = 1
-    for variable_id in variable_ids:
-        market = find_market_by_variable_id(variable_id)
-        outcome_count = len(market["outcomes"]) if market else 0
-        state_count *= max(outcome_count, 1)
-    return state_count
-
-
-def build_market_cliques(market_id: str) -> list[dict[str, Any]]:
-    """Build clique summaries implied by a market and its conditional contexts."""
-    market = MARKETS[market_id]
-    raw_cliques: set[tuple[str, ...]] = {(str(market["variableId"]),)}
-    for context_key in CONDITIONAL_MARGINALS.get(market_id, {}):
-        clique_nodes = {str(market["variableId"]), *parse_context_key_variable_ids(context_key)}
-        raw_cliques.add(tuple(sorted(clique_nodes)))
-
-    return [
-        {
-            "id": f"{market_id}-c{index}",
-            "nodes": list(variable_ids),
-            "size": len(variable_ids),
-            "states": clique_state_count(variable_ids),
-        }
-        for index, variable_ids in enumerate(sorted(raw_cliques), start=1)
-    ]
-
-
-def estimate_market_engine_memory_bytes(cliques: list[dict[str, Any]] | tuple[CliqueSummary, ...]) -> int:
-    """Estimate memory use for a compiled market from its clique summaries."""
-    total = 0
-    for clique in cliques:
-        if isinstance(clique, CliqueSummary):
-            states = int(clique.states)
-            size = int(clique.size)
-        else:
-            states = int(clique["states"])
-            size = int(clique["size"])
-        total += states * 32 + size * 64
-    return total
 
 
 def build_market_compile_result(market_id: str, *, compile_time_ms: float | None = None) -> CompileResult:
