@@ -1,25 +1,15 @@
-Error: config profile `[Task bayes-market-j9u-v3] PHASE 3a: PLAN
+Error: config profile `[Task bayes-market-j9u-v3] PHASE 3b: IMPLEMENT
 Title: Test
 
-Read .fleet/tasks/bayes-market-j9u-v3/questions.json and .fleet/tasks/bayes-market-j9u-v3/research.json
-for context on what was asked and answered.
+Read your plan at .fleet/tasks/bayes-market-j9u-v3/plan.json.
 
-Write your implementation plan to .fleet/tasks/bayes-market-j9u-v3/plan.json:
-{
-  "phase": "plan",
-  "decisions": [
-    { "id": "d1", "decision": "...", "based_on": ["q1"], "alternatives_rejected": ["..."], "reversibility": "easy|medium|hard" }
-  ],
-  "steps": [
-    { "step": 1, "task": "...", "depends_on": [] }
-  ],
-  "spawn_children": false,
-  "children": []
-}
+NOW IMPLEMENT the plan. Modify production source files. Run tests.
+Do NOT just write JSON artifacts. Modify .py/.ts/.js source files.
+Follow the steps in plan.json and write real, working code.
 
-DECOMPOSITION: Set spawn_children=true if implementation has independent sub-tasks
-that should run as separate epistemic workflows. Use your judgment — there is
-no fixed threshold. Each child gets question→research→execute→validate phases.
-Child format: { "id": "...", "title": "...", "description": "..." }
+DEPENDENCIES: If tests require packages (node_modules, venv), install them first:
+  - Node: if package.json exists, run 'pnpm install' or 'npm install'
+  - Python: if requirements.txt exists, run 'pip install -r requirements.txt'
+Worktrees are fresh checkouts without dependencies pre-installed.
 
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "plan: bayes-market-j9u-v3"` not found
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "execute: bayes-market-j9u-v3"` not found
