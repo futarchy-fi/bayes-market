@@ -21,7 +21,8 @@ Pick ONE at a time. These test the system with real work:
 - [x] T548 — BAYES-11: Implement bounded-treewidth exact inference module skeleton — **DONE** (T548-v2-fix: 32m, 3 child workflows with spawn_children=true, rebased to frontend-scaffold, auto-merged, 363 tests pass)
 
 ## Priority 3: Architecture gaps
-- [ ] **Progressive decomposition prompts** — Update phase prompts to use 4-step decomposition protocol
+- [x] **Progressive decomposition prompts** — Update phase prompts to use 4-step decomposition protocol
+  - DONE via task-progressive-decomp-001: validation_criteria and self-review added to analysisDecompose.ts buildPrompt
 - [x] **Inject child results after thaw** — Parent needs context about what children did when it wakes up
   - DONE: task-child-context-injection-001 completed in 18m33s, merged to temporal-fleet main
   - Added: childSummaries.ts activity (50 lines), 102 lines tests, updates to parentLifecycle/recursiveLifecycle
