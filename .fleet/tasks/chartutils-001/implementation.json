@@ -1,0 +1,20 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Create test file at frontend/src/__tests__/chartUtils.test.ts with describe blocks for all 6 exported functions: getOutcomeColor, scaleNumber, buildLinePath, formatTimestampLabel, formatBucketRangeLabel, formatSignedCurrency. Pin TZ=UTC in beforeAll. Use @/ imports. Structural assertions for locale-dependent functions, exact .toBe() for pure math/string functions. No mocks.",
+      "files_created": ["frontend/src/__tests__/chartUtils.test.ts"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Run vitest on the new test file. TZ=UTC did not fix locale in jsdom, so fell back to structural assertions for formatTimestampLabel and formatBucketRangeLabel as planned. All 26 tests pass.",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
