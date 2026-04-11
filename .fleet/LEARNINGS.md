@@ -366,3 +366,20 @@ if (!valParsed || valParsed.verdict !== "approve") {
 **Gap:** 4-step protocol (deps → descs → validations → review) would add: deps field for child-to-child dependencies, validation_criteria per child, review phase before committing to spawn.
 
 ---
+
+### [2026-04-11] Progressive decomposition schema shipped via epistemicExecutor
+
+**Success:** task-progressive-decomp-001 workflow completed in 13 minutes with auto-merge to temporal-fleet main.
+
+**What was delivered:**
+- validation_criteria field added to ParsedChildInput, RawChildInput, AnalysisDecomposeChild types
+- Parsing logic with default "No specific criteria" for backward compatibility
+- Self-review instruction in buildPrompt for decomposition quality
+- 105 lines of new tests (analysisDecompose.test.ts)
+- All 6 planned steps executed with 0.95 plan_adherence
+
+**Key insight:** The original task description targeted epistemicExecutor.ts, but the workflow correctly identified that analysisDecompose.ts was the actual target file. The research phase re-scoped based on actual codebase structure.
+
+**Validation quality:** Caught 3 missed questions (naming convention, backward compatibility, API exposure) but approved because implementation handled them correctly without explicit questions.
+
+---

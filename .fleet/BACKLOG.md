@@ -9,9 +9,10 @@
 - [x] **Subsequent phases work but skip JSON artifacts** — debug-test-001 ran all 4 phases, created counter.py+tests (13 pass), validation.json correct. research.json/plan.json not created (agent explores then moves on). Code deliverables work; calibration artifacts optional.
 - [~] **Test cgroup freeze end-to-end** — PARTIAL: cgroup-freeze-test-001 tested child spawn (4 children, 2 phases) but spawn happened at end-of-phase, not mid-phase. Actual freeze/thaw requires agent to output spawn_children while still executing.
 - [x] **Test child spawn and merge** — Verified via T548-v2-fix: 3 children spawned sequentially, each merged, parent completed. See LEARNINGS.md.
-- [-] **Test progressive decomposition** — Implement 4-step protocol (deps → descs → validations → review), verify it catches garbage
-  - Current: children = [{id, title, description}] — no deps, no validation criteria
-  - Needed: deps field, validation_criteria per child, review phase before spawn
+- [x] **Test progressive decomposition** — Implement 4-step protocol (deps → descs → validations → review), verify it catches garbage
+  - DONE: task-progressive-decomp-001 completed in 13min, merged to temporal-fleet main
+  - Added: validation_criteria to types, parsing with default, self-review instruction, 105 lines tests
+  - Note: deps already existed as "dependencies" field; validation_criteria is the new addition
 
 ## Priority 2: Real work (TaskCore BAYES tasks)
 Pick ONE at a time. These test the system with real work:
