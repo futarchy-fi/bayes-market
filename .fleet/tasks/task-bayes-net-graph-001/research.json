@@ -1,0 +1,118 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Mock `@/lib/query/hooks` at the module level. This is the dominant pattern in the codebase: 7 test files (VariableRow, ConditionalEditor, AssumptionPanel, EventTradePanel, ResolveMarketPanel, TradingPanel, DiscussionThread) all mock hooks directly with `vi.mock('@/lib/query/hooks', () => ({ hookName: vi.fn() }))`. Only API-level tests (MarketDetail, MarketList, Portfolio, Analytics) mock `@/lib/api/client`. Since BayesNetGraph uses 3 hooks (useMarkets, useMarket, useEngineStats) and NodeWithDetail calls useMarket per-node, mocking hooks directly avoids N async queries, eliminates the need for QueryClient wrapping and waitFor, and matches the established pattern for component tests that consume hooks.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/VariableRow.test.tsx:24-34",
+        "frontend/src/__tests__/ConditionalEditor.test.tsx:23-35",
+        "frontend/src/__tests__/AssumptionPanel.test.tsx:20-27",
+        "frontend/src/__tests__/EventTradePanel.test.tsx:23-31",
+        "frontend/src/__tests__/ResolveMarketPanel.test.tsx:23-31",
+        "frontend/src/__tests__/TradingPanel.test.tsx:23-31",
+        "frontend/src/__tests__/DiscussionThread.test.tsx:23-33",
+        "frontend/src/__tests__/MarketDetail.test.tsx:5-11"
+      ],
+      "uncertainty": "None — the pattern is clearly established and appropriate for this component."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Use `screen.getByText()` for SVG text content — it works with SVG <text> elements in jsdom and is already used throughout the codebase. PriceChart.test.tsx uses getByText for y-axis probability labels and legend names (lines 105-109, 167-168). VolumeChart.test.tsx uses getByText for trade count labels and y-axis currency labels (lines 67-68, 109-111). For structural SVG queries (counting rect/circle/line elements, checking attributes like stroke-width), use `container.querySelectorAll()` as PriceChart and VolumeChart tests do. Do NOT add data-testid attributes to the component — while PriceChart.tsx and VolumeChart.tsx have them, the task explicitly says not to modify the component source.",
+      "confidence": 0.92,
+      "evidence": [
+        "frontend/src/__tests__/PriceChart.test.tsx:105-109",
+        "frontend/src/__tests__/PriceChart.test.tsx:167-168",
+        "frontend/src/__tests__/VolumeChart.test.tsx:67-68",
+        "frontend/src/__tests__/VolumeChart.test.tsx:109-111",
+        "frontend/src/__tests__/ProbabilityBar.test.tsx:29",
+        "frontend/src/features/graph/BayesNetGraph.tsx:78-86",
+        "frontend/src/features/graph/BayesNetGraph.tsx:104-106"
+      ],
+      "uncertainty": "If the same text appears in multiple SVG text elements (e.g., identical outcome names across nodes), getAllByText + length assertion or container.querySelectorAll('text') may be needed."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Use a single generic mockReturnValue for most tests, and switch to mockImplementation with per-ID data only for the probability bars test. For most tests (loading, empty state, node rendering, edges, cliques, legend, stats bar), a single return value applied to all useMarket calls is sufficient — the tests care about structure, not per-node data differences. For the probability bars test (test case 11), use `mockImplementation((id) => ...)` to return specific outcomes and marginals per market ID so assertions can verify exact bar content. This matches ConditionalEditor.test.tsx which uses a single mockReturnValue for useMarket (line 160-164), and VariableRow.test.tsx which also uses a single return value (line 154-160).",
+      "confidence": 0.88,
+      "evidence": [
+        "frontend/src/__tests__/ConditionalEditor.test.tsx:160-164",
+        "frontend/src/__tests__/VariableRow.test.tsx:150-160",
+        "frontend/src/features/graph/BayesNetGraph.tsx:220-224",
+        "frontend/src/features/graph/BayesNetGraph.tsx:89-109"
+      ],
+      "uncertainty": "If tests assert on specific node titles alongside probability bars, the mock may need per-ID switching more broadly. But the component gets titles from useMarkets (via layoutNodes), not useMarket, so this shouldn't be an issue."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Use the real formatProbability implementation — do NOT mock it. It is a pure function with no side effects: `(p * 100).toFixed(1) + '%'` (format.ts:1-3). Mocking it would add complexity for zero benefit. Using the real function means test assertions match exact rendered output (e.g., `'75.0%'` for p=0.75), which is more faithful. PriceChart.test.tsx already uses the real formatProbability when asserting on y-axis labels (lines 105-109), confirming this is the established pattern.",
+      "confidence": 0.97,
+      "evidence": [
+        "frontend/src/lib/utils/format.ts:1-3",
+        "frontend/src/features/graph/BayesNetGraph.tsx:3",
+        "frontend/src/features/graph/BayesNetGraph.tsx:105",
+        "frontend/src/__tests__/PriceChart.test.tsx:105-109"
+      ],
+      "uncertainty": "None."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Test both: (1) the stats bar clique count text AND (2) the CliqueOverlay rendering/non-rendering edge case. The stats bar displays `cliques.length` from engineStats regardless of whether each clique has 2+ members (BayesNetGraph.tsx:275). But CliqueOverlay silently drops cliques with < 2 member nodes (line 179: `if (memberNodes.length < 2) return null`). This means the stats bar could say '2 cliques' while only 1 renders in SVG. Testing both behaviors is important for coverage: provide engineStats with 2 cliques where one has only 1 node, verify the stats bar says '2 cliques', but only 1 'Clique X' text label appears in the SVG. This is a meaningful behavioral distinction worth testing explicitly.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:171-210",
+        "frontend/src/features/graph/BayesNetGraph.tsx:178-179",
+        "frontend/src/features/graph/BayesNetGraph.tsx:275",
+        "frontend/src/features/graph/BayesNetGraph.tsx:285-287"
+      ],
+      "uncertainty": "Whether the task's test cases already cover this edge case or expect it as a separate test. The analysis should make this a dedicated test case rather than assuming it's covered elsewhere."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "This is the right approach. 7 test files follow this exact pattern. The vi.mock factory + vi.mocked + mockReturnValue pattern is well-established."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.92,
+      "impact": "Confirmed: PriceChart.test.tsx and VolumeChart.test.tsx both use screen.getByText() successfully for SVG <text> element content. No need for data-testid on the component."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "formatProbability is a 1-line pure function. Real implementation is already used in PriceChart tests. No mock needed."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "File location is explicitly specified in the task. No ambiguity."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.88,
+      "impact": "Single mockReturnValue works for most tests. Node titles come from useMarkets (via layoutNodes), not useMarket, so per-ID switching is only needed when asserting specific probability bar content. Use mockImplementation only in the probability bars test."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.92,
+      "impact": "No component modifications needed. container.querySelector/querySelectorAll on SVG attributes (strokeWidth, fill, etc.) is the established pattern in PriceChart.test.tsx and VolumeChart.test.tsx. Focus node stroke-width can be verified via container.querySelector('rect[stroke-width]') or similar."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Legend items are <span> elements inside a <div> (BayesNetGraph.tsx:305-326). getByText('Active'), getByText('Resolved'), etc. will work normally. The conditional legend items ('Conditional dependency', 'Junction tree clique') only render when edges/cliques exist, which is testable via queryByText."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
