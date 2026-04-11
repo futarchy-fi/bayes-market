@@ -1,0 +1,69 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "This leaf starts from `HEAD == ff/Tbayes-market-i6y-execute-step-5`, and the current checkout still serves the legacy four-field `/v1/accounts/{id}/positions` row with no replay-backed `unrealizedPnl` seam. Should `execute-step-5-execute-step-5` therefore backfill the missing backend/test implementation before it can stage a 'validated implementation', or is there another authoritative commit/ref whose validated diff this leaf is supposed to stage and commit?",
+      "category": "requirements",
+      "why_it_matters": "The answer decides whether this leaf is artifact-and-commit only or whether it must still perform the missing product and regression work before any final execution commit would be legitimate."
+    },
+    {
+      "id": "q2",
+      "question": "Does the final execution proof require a fresh rerun of `python3 -m pytest -v --tb=short tests/test_bayes_market_api.py::BayesMarketApiUnitTests::test_root_route_returns_service_index tests/test_bayes_market_api.py::BayesMarketExposureProjectionTests` in this checkout, or may this leaf reuse a prior validation run if `backend/server.py` and `tests/test_bayes_market_api.py` are unchanged?",
+      "category": "codebase",
+      "why_it_matters": "The task title makes the focused pytest gate a prerequisite for the final commit, so the leaf needs one precise rule for whether runtime evidence must be regenerated or can be inherited."
+    },
+    {
+      "id": "q3",
+      "question": "What exact git comparison should define the contract-consistency review for the final execution commit: `git diff ff/Tbayes-market-i6y-execute-step-4..HEAD`, `git diff ff/Tbayes-market-i6y-execute-step-5..HEAD`, or both, and which paths are allowed to remain in the final staged diff?",
+      "category": "codebase",
+      "why_it_matters": "The requested diff review is only meaningful if the leaf compares against the right baseline and knows whether the allowed staged scope is product files plus task artifacts or task artifacts alone."
+    },
+    {
+      "id": "q4",
+      "question": "Must this leaf create the still-missing parent artifact `.fleet/tasks/bayes-market-i6y-execute-step-5/execution.json` before the final commit, or is it acceptable to commit only this leaf's `.fleet/tasks/bayes-market-i6y-execute-step-5-execute-step-5/*` metadata and leave the parent execute record absent?",
+      "category": "requirements",
+      "why_it_matters": "That determines what 'stage the validated implementation and task artifacts' actually includes and whether the final commit would otherwise remain incomplete at the parent-step level."
+    },
+    {
+      "id": "q5",
+      "question": "What last-mile pre-commit proof should this leaf record once the pytest gate and diff review pass: only a clean working tree after `git add -A`, or explicit checks of both the worktree and index such as `git status --short`, `git diff --name-only`, and `git diff --cached --name-only` to prove it is staging only the validated implementation and task artifacts?",
+      "category": "design",
+      "why_it_matters": "The leaf's whole purpose is safe staging and commit creation, so it needs a concrete final verification sequence that catches accidental staging drift instead of assuming it away."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "This branch currently has no leaf-local implementation or artifact changes yet: `HEAD` is the merge commit `8e392fce`, which is also `ff/Tbayes-market-i6y-execute-step-5`.",
+      "confidence": 0.99,
+      "if_wrong": "The questions would understate the amount of existing leaf-local work and could misclassify this branch as starting from a clean parent baseline."
+    },
+    {
+      "id": "a2",
+      "assumption": "The requested 'validated implementation' is not actually present in this checkout yet, because `backend/server.py` still serializes `/positions` as `{marketId, outcomeId, netSize, lastTradePrice}` and `tests/test_bayes_market_api.py` still freeze that four-field contract.",
+      "confidence": 0.99,
+      "if_wrong": "This leaf could likely be reduced to rerunning the focused gate, writing execution artifacts, and committing them without additional backend or test edits."
+    },
+    {
+      "id": "a3",
+      "assumption": "The parent step directory `.fleet/tasks/bayes-market-i6y-execute-step-5/` still lacks `execution.json`, so a complete final execution step probably needs to create that artifact rather than only leaf-local metadata.",
+      "confidence": 0.99,
+      "if_wrong": "The final staged artifact boundary would be narrower, and q4 would overstate the deliverable required for completion."
+    },
+    {
+      "id": "a4",
+      "assumption": "The intended contract-audit baseline remains `ff/Tbayes-market-i6y-execute-step-4`, because the checked-in parent step-5 plan names that ref as the scope-review comparison for the completed implementation.",
+      "confidence": 0.96,
+      "if_wrong": "The final diff review could use the wrong comparison and either miss scope creep or wrongly reject valid inherited changes."
+    },
+    {
+      "id": "a5",
+      "assumption": "No child task is needed because the relevant ancestry, missing parent artifact, current backend/test state, and candidate audit baselines are all visible in this worktree.",
+      "confidence": 0.99,
+      "if_wrong": "A child exploration task would be needed before planning could safely choose the correct execution path or staging boundary."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
