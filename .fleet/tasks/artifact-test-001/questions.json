@@ -1,0 +1,63 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should src/config.py use python-dotenv for .env file loading, or a stdlib-only approach (manually parsing the file)? The project has no requirements.txt or pyproject.toml, and no existing dotenv dependency.",
+      "category": "design",
+      "why_it_matters": "Using python-dotenv is the standard approach but introduces an external dependency with no existing dependency management in place. A stdlib-only parser avoids that but is less robust."
+    },
+    {
+      "id": "q2",
+      "question": "The task says 'src/config.py' but the main backend already lives in backend/ and has its own backend/inference/config.py. Is src/ the correct location, or should this go in backend/?",
+      "category": "codebase",
+      "why_it_matters": "Placing a config loader in src/ when all existing Python backend code lives in backend/ could create a disjointed layout. However, src/ already has greeting.py from a prior task, suggesting it may be a separate module area."
+    },
+    {
+      "id": "q3",
+      "question": "The existing backend/server.py reads env vars directly via os.environ.get(). Should load_config() integrate with or remain independent of that pattern?",
+      "category": "codebase",
+      "why_it_matters": "If this config module is meant to eventually replace the scattered os.environ.get() calls in server.py, the interface matters. If it's standalone, the design is simpler."
+    },
+    {
+      "id": "q4",
+      "question": "Should DEBUG be parsed as a boolean from string env var values (e.g., 'true', '1', 'yes') and if so, which values should be truthy? The backend already has a _read_bool_env helper.",
+      "category": "requirements",
+      "why_it_matters": "Environment variables are always strings. The conversion semantics for DEBUG affect correctness — accepting only 'True' vs also '1'/'yes' changes user experience."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The module should be placed at src/config.py as stated in the task description, even though main backend code lives in backend/.",
+      "confidence": 0.9,
+      "if_wrong": "Would need to create backend/config.py instead and adjust imports."
+    },
+    {
+      "id": "a2",
+      "assumption": "python-dotenv can be used as a dependency for .env file loading, since it's the de facto standard for this pattern in Python.",
+      "confidence": 0.7,
+      "if_wrong": "Would need to implement a manual .env parser using only stdlib, handling comments, quotes, and export prefixes."
+    },
+    {
+      "id": "a3",
+      "assumption": "load_config() should return a plain dict like {'APP_NAME': 'MyApp', 'DEBUG': False} with env vars taking precedence over .env file values, and .env values taking precedence over defaults.",
+      "confidence": 0.95,
+      "if_wrong": "Might need a different data structure (dataclass, NamedTuple) or different precedence order."
+    },
+    {
+      "id": "a4",
+      "assumption": "DEBUG should accept common truthy string values ('true', '1', 'yes') case-insensitively, consistent with the existing _read_bool_env pattern in backend/server.py.",
+      "confidence": 0.85,
+      "if_wrong": "Would need to use a stricter or different boolean parsing strategy."
+    },
+    {
+      "id": "a5",
+      "assumption": "A corresponding test file (tests/test_config.py) should be created alongside the module.",
+      "confidence": 0.85,
+      "if_wrong": "Tests might not be needed or might go in a different location."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
