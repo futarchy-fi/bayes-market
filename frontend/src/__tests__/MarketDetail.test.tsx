@@ -92,6 +92,13 @@ describe("MarketDetail", () => {
     });
   });
 
+  it("shows empty discussion state when comments are unavailable", async () => {
+    renderWithProviders(<MarketDetail />);
+    await waitFor(() => {
+      expect(screen.getByText("No comments yet.")).toBeInTheDocument();
+    });
+  });
+
   it("renders junction tree panel", async () => {
     renderWithProviders(<MarketDetail />);
     await waitFor(() => {
