@@ -23,7 +23,8 @@ from typing import Any, NamedTuple
 from urllib.parse import parse_qs, quote, urlparse
 
 BACKEND_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = str(BACKEND_DIR.parent)
+PROJECT_ROOT_PATH = BACKEND_DIR.parent
+PROJECT_ROOT = str(PROJECT_ROOT_PATH)
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
@@ -4199,6 +4200,8 @@ def route_request(
 
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+HELLO_TEXT_ROUTE = "/hello.txt"
+HELLO_TEXT_PATH = PROJECT_ROOT_PATH / "hello.txt"
 
 MIME_TYPES: dict[str, str] = {
     ".html": "text/html",
@@ -4293,8 +4296,26 @@ class BayesHandler(BaseHTTPRequestHandler):
                 extra_headers.update(rate_limit_headers(str(exc.details.get("agentId", ""))))
         self.send_json(payload, status, extra_headers=extra_headers)
 
+    def _serve_public_text_asset(self, url_path: str) -> bool:
+        """Serve a small set of explicit text assets from the project root."""
+        path = normalize_path(urlparse(url_path).path)
+        if path != HELLO_TEXT_ROUTE or not HELLO_TEXT_PATH.is_file():
+            return False
+
+        content = HELLO_TEXT_PATH.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(content)
+        return True
+
     def _serve_static(self, url_path: str) -> bool:
         """Try to serve a static file from frontend/dist/. Return True if served."""
+        if self._serve_public_text_asset(url_path):
+            return True
+
         if not FRONTEND_DIST.is_dir():
             return False
 
