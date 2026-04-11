@@ -2,7 +2,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
 import { renderWithProviders } from "./helpers";
 import { BayesNetGraph } from "@/features/graph/BayesNetGraph";
+import { AssumptionProvider } from "@/features/assumptions/AssumptionContext";
 import type { MarketSummary, EngineStatsResponse, Market } from "@/lib/api/types";
+
+/** Wrap BayesNetGraph in AssumptionProvider (required by useAssumptions) */
+function WrappedBayesNetGraph(props: React.ComponentProps<typeof BayesNetGraph>) {
+  return (
+    <AssumptionProvider>
+      <BayesNetGraph {...props} />
+    </AssumptionProvider>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -149,7 +159,7 @@ describe("BayesNetGraph", () => {
       defaultMarketsReturn({ data: undefined, isLoading: true }),
     );
 
-    renderWithProviders(<BayesNetGraph />);
+    renderWithProviders(<WrappedBayesNetGraph />);
     expect(screen.getByText("Loading network...")).toBeInTheDocument();
   });
 
@@ -161,13 +171,13 @@ describe("BayesNetGraph", () => {
       }),
     );
 
-    renderWithProviders(<BayesNetGraph />);
+    renderWithProviders(<WrappedBayesNetGraph />);
     expect(screen.getByText("No markets to visualize.")).toBeInTheDocument();
   });
 
   // Test case 3: renders market nodes with titles (including truncation)
   it("renders market node titles with truncation for long names", () => {
-    renderWithProviders(<BayesNetGraph />);
+    renderWithProviders(<WrappedBayesNetGraph />);
 
     // Short titles render as-is
     expect(screen.getByText("Will ETH exceed $3000?")).toBeInTheDocument();
@@ -179,13 +189,13 @@ describe("BayesNetGraph", () => {
 
   // Test case 4: stats bar variable count
   it("displays the correct variable count in the stats bar", () => {
-    renderWithProviders(<BayesNetGraph />);
+    renderWithProviders(<WrappedBayesNetGraph />);
     expect(screen.getByText(/3 variables/)).toBeInTheDocument();
   });
 
   // Test case 5: edge count in stats bar
   it("displays edge count when conditionalEdges are provided", () => {
-    renderWithProviders(<BayesNetGraph conditionalEdges={defaultEdges} />);
+    renderWithProviders(<WrappedBayesNetGraph conditionalEdges={defaultEdges} />);
     expect(screen.getByText(/2 edges/)).toBeInTheDocument();
   });
 
@@ -196,7 +206,7 @@ describe("BayesNetGraph", () => {
     );
 
     const { container } = renderWithProviders(
-      <BayesNetGraph focusMarketId="mkt-1" />,
+      <WrappedBayesNetGraph focusMarketId="mkt-1" />,
     );
 
     // Stats bar shows 2 cliques (from data)
@@ -217,14 +227,14 @@ describe("BayesNetGraph", () => {
       defaultEngineStatsReturn(mockEngineStatsData),
     );
 
-    renderWithProviders(<BayesNetGraph focusMarketId="mkt-1" />);
+    renderWithProviders(<WrappedBayesNetGraph focusMarketId="mkt-1" />);
     expect(screen.getByText(/JT width 3/)).toBeInTheDocument();
   });
 
   // Test case 8: focus market highlight
   it("highlights the focused market node with thicker stroke", () => {
     const { container } = renderWithProviders(
-      <BayesNetGraph focusMarketId="mkt-1" />,
+      <WrappedBayesNetGraph focusMarketId="mkt-1" />,
     );
 
     // Find all rects — node rects have rx=8
@@ -240,7 +250,7 @@ describe("BayesNetGraph", () => {
 
   // Test case 9: status dots
   it("renders status dots with correct colors for active and resolved markets", () => {
-    const { container } = renderWithProviders(<BayesNetGraph />);
+    const { container } = renderWithProviders(<WrappedBayesNetGraph />);
 
     const circles = container.querySelectorAll("circle");
     const fills = Array.from(circles).map((c) => c.getAttribute("fill"));
@@ -252,28 +262,28 @@ describe("BayesNetGraph", () => {
   // Test case 10: legend items
   describe("legend", () => {
     it("always shows Active and Resolved labels", () => {
-      renderWithProviders(<BayesNetGraph />);
+      renderWithProviders(<WrappedBayesNetGraph />);
       expect(screen.getByText("Active")).toBeInTheDocument();
       expect(screen.getByText("Resolved")).toBeInTheDocument();
     });
 
     it("shows 'Conditional dependency' only when edges are provided", () => {
-      const { rerender } = renderWithProviders(<BayesNetGraph />);
+      const { rerender } = renderWithProviders(<WrappedBayesNetGraph />);
       expect(screen.queryByText("Conditional dependency")).not.toBeInTheDocument();
 
-      rerender(<BayesNetGraph conditionalEdges={defaultEdges} />);
+      rerender(<WrappedBayesNetGraph conditionalEdges={defaultEdges} />);
       expect(screen.getByText("Conditional dependency")).toBeInTheDocument();
     });
 
     it("shows 'Junction tree clique' only when cliques exist", () => {
-      renderWithProviders(<BayesNetGraph />);
+      renderWithProviders(<WrappedBayesNetGraph />);
       expect(screen.queryByText("Junction tree clique")).not.toBeInTheDocument();
 
       mockUseEngineStats.mockReturnValue(
         defaultEngineStatsReturn(mockEngineStatsData),
       );
       // Re-render with focusMarketId so engine stats are used
-      renderWithProviders(<BayesNetGraph focusMarketId="mkt-1" />);
+      renderWithProviders(<WrappedBayesNetGraph focusMarketId="mkt-1" />);
       expect(screen.getByText("Junction tree clique")).toBeInTheDocument();
     });
   });
@@ -314,7 +324,7 @@ describe("BayesNetGraph", () => {
       });
     });
 
-    const { container } = renderWithProviders(<BayesNetGraph />);
+    const { container } = renderWithProviders(<WrappedBayesNetGraph />);
 
     // Check formatted probability text from mkt-1: 75.0% and 25.0%
     expect(screen.getByText(/Yes: 75\.0%/)).toBeInTheDocument();

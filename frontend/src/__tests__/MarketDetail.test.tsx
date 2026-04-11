@@ -22,6 +22,54 @@ vi.mock("@/features/session/context", async () => {
   };
 });
 
+// Mock D3 modules used by ForceDirectedGraph
+vi.mock("d3-selection", () => ({
+  select: vi.fn(() => ({
+    call: vi.fn().mockReturnThis(),
+    on: vi.fn().mockReturnThis(),
+    selectAll: vi.fn(() => ({
+      call: vi.fn().mockReturnThis(),
+      on: vi.fn().mockReturnThis(),
+    })),
+  })),
+}));
+
+vi.mock("d3-zoom", () => ({
+  zoom: vi.fn(() => {
+    const z: Record<string, unknown> = {};
+    z.scaleExtent = vi.fn().mockReturnValue(z);
+    z.on = vi.fn().mockReturnValue(z);
+    z.transform = vi.fn();
+    return z;
+  }),
+  zoomIdentity: {},
+}));
+
+vi.mock("d3-drag", () => ({
+  drag: vi.fn(() => {
+    const d: Record<string, unknown> = {};
+    d.on = vi.fn().mockReturnValue(d);
+    return d;
+  }),
+}));
+
+vi.mock("@/features/graph/useForceGraph", () => ({
+  useForceGraph: vi.fn(
+    (inputNodes: Array<{ id: string }>) => ({
+      positions: {
+        nodes: inputNodes.map((n: { id: string }, i: number) => ({
+          id: n.id,
+          x: 100 + i * 200,
+          y: 200,
+        })),
+      },
+      getSimulation: () => null,
+      getNodes: () => [],
+      flushPositions: vi.fn(),
+    }),
+  ),
+}));
+
 vi.mock("@/lib/query/hooks", () => ({
   useMarket: vi.fn(),
   useMarketEvents: vi.fn(),
@@ -36,6 +84,15 @@ vi.mock("@/lib/query/hooks", () => ({
   useAnalytics: vi.fn(),
   useProbabilityEdit: vi.fn(),
   useCpt: vi.fn(),
+  queryKeys: {
+    marketLists: () => ["markets", "list"],
+    markets: () => ["markets", "list", ""],
+    market: (id: string) => ["markets", id],
+    marketEvents: (id: string) => ["markets", id, "events"],
+    marketComments: (id: string) => ["markets", id, "comments"],
+    engineStats: (id: string) => ["markets", id, "engine-stats"],
+    marketCpt: (id: string) => ["markets", id, "cpt"],
+  },
 }));
 
 import { useSession } from "@/features/session/context";

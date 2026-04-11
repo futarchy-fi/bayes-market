@@ -2,11 +2,13 @@ import { useMemo, useEffect, useRef } from "react";
 import { useMarkets, useMarket, useEngineStats } from "@/lib/query/hooks";
 import { formatProbability } from "@/lib/utils/format";
 import { useForceGraph } from "./useForceGraph";
+import { useAnimationPropagation } from "./useAnimationPropagation";
 import { deriveEdgesFromCliques, mergeEdges } from "./deriveEdges";
 import { select } from "d3-selection";
 import { zoom as d3Zoom, zoomIdentity } from "d3-zoom";
 import { drag as d3Drag } from "d3-drag";
 import type { MarketSummary, CliqueSummary } from "@/lib/api/types";
+import type { Assumption } from "@/features/assumptions/AssumptionContext";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -22,6 +24,8 @@ interface ForceDirectedGraphProps {
   focusMarketId?: string;
   conditionalEdges?: GraphEdge[];
   onNodeClick?: (marketId: string) => void;
+  /** Pass assumptions from AssumptionContext to trigger propagation animations on change */
+  assumptions?: Assumption[];
 }
 
 // ---------------------------------------------------------------------------
@@ -45,6 +49,7 @@ function MarketNode({
   isDimmed,
   detail,
   onClick,
+  animationClass,
 }: {
   x: number;
   y: number;
@@ -53,6 +58,7 @@ function MarketNode({
   isDimmed: boolean;
   detail?: { marginals: Record<string, number>; outcomes: Array<{ id: string; name: string }> };
   onClick?: () => void;
+  animationClass?: string;
 }) {
   const borderColor = isFocus ? "var(--color-primary)" : "var(--color-border)";
   const bg = isFocus ? "var(--color-bg-surface)" : "var(--color-bg)";
@@ -64,6 +70,7 @@ function MarketNode({
       style={{ cursor: onClick ? "pointer" : "default", opacity: isDimmed ? 0.3 : 1 }}
       onClick={onClick ? (e) => { e.stopPropagation(); onClick(); } : undefined}
       data-node-id={node.id}
+      className={animationClass}
     >
       <rect
         width={NODE_W}
@@ -95,8 +102,9 @@ function MarketNode({
                   width={Math.max(2, barW * p)}
                   height={10}
                   rx={3}
-                  fill={p > 0.5 ? "var(--color-success)" : "var(--color-info)"}
-                  opacity={0.7}
+                  fill={animationClass ? "var(--color-info)" : p > 0.5 ? "var(--color-success)" : "var(--color-info)"}
+                  opacity={animationClass ? 0.9 : 0.7}
+                  style={{ transition: "width 0.3s ease, opacity 0.3s ease, fill 0.3s ease" }}
                 />
                 <text x={4} y={8} fontSize="8" fill="var(--color-text)" fontWeight={500}>
                   {o.name}: {formatProbability(p)}
@@ -200,6 +208,7 @@ function NodeWithDetail({
   isFocus,
   isDimmed,
   onClick,
+  animationClass,
 }: {
   x: number;
   y: number;
@@ -207,6 +216,7 @@ function NodeWithDetail({
   isFocus: boolean;
   isDimmed: boolean;
   onClick?: () => void;
+  animationClass?: string;
 }) {
   const { data } = useMarket(node.id);
   const detail = data
@@ -221,6 +231,7 @@ function NodeWithDetail({
       isDimmed={isDimmed}
       detail={detail}
       onClick={onClick}
+      animationClass={animationClass}
     />
   );
 }
@@ -233,6 +244,7 @@ export function ForceDirectedGraph({
   focusMarketId,
   conditionalEdges = [],
   onNodeClick,
+  assumptions,
 }: ForceDirectedGraphProps) {
   const { data: marketsData, isLoading } = useMarkets();
   const { data: engineStats } = useEngineStats(focusMarketId ?? "", { enabled: !!focusMarketId });
@@ -240,17 +252,48 @@ export function ForceDirectedGraph({
   const markets = marketsData?.markets ?? [];
   const cliques = engineStats?.cliques.cliques ?? [];
 
+  // Animation propagation state
+  const { animatingNodes, animatingEdges, evidenceNodeId, triggerAnimation, cancelAnimation } =
+    useAnimationPropagation();
+
+  // Cancel animation on unmount
+  useEffect(() => cancelAnimation, [cancelAnimation]);
+
   // Derive force graph input nodes
   const forceInputNodes = useMemo(
     () => markets.map((m: MarketSummary) => ({ id: m.id, title: m.title, status: m.status })),
     [markets],
   );
 
-  // Derive edges from cliques + conditional edges
-  const forceInputLinks = useMemo(() => {
+  // Derive edges from cliques + conditional edges (also used for animation BFS)
+  const allEdges = useMemo(() => {
     const cliqueEdges = deriveEdgesFromCliques(cliques);
     return mergeEdges(cliqueEdges, conditionalEdges);
   }, [cliques, conditionalEdges]);
+  const forceInputLinks = allEdges;
+
+  // Detect assumption changes and trigger propagation animation
+  const prevAssumptionsRef = useRef(assumptions);
+  useEffect(() => {
+    const prev = prevAssumptionsRef.current;
+    prevAssumptionsRef.current = assumptions;
+    if (!assumptions || !prev || prev === assumptions) return;
+
+    const added = assumptions.find(
+      (a) => !prev.some((p) => p.variableId === a.variableId && p.outcomeId === a.outcomeId),
+    );
+    const removed = prev.find(
+      (p) => !assumptions.some((a) => a.variableId === p.variableId && a.outcomeId === p.outcomeId),
+    );
+
+    const changedVariableId = added?.variableId ?? removed?.variableId;
+    if (!changedVariableId) return;
+
+    const evidenceNode = markets.find((mk) => mk.id === changedVariableId);
+    if (evidenceNode && allEdges.length > 0) {
+      triggerAnimation(evidenceNode.id, allEdges);
+    }
+  }, [assumptions, markets, allEdges, triggerAnimation]);
 
   const graphOptions = useMemo(() => ({ width: SVG_WIDTH, height: SVG_HEIGHT }), []);
   const { positions, getSimulation, getNodes, flushPositions } = useForceGraph(
@@ -411,6 +454,41 @@ export function ForceDirectedGraph({
         viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
         style={{ width: "100%", height: "auto", minHeight: 200, maxHeight: 400 }}
       >
+        <defs>
+          {/* Glow filter for evidence node */}
+          <filter id="fdg-evidence-glow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="blur" />
+            <feFlood floodColor="var(--color-primary)" floodOpacity="0.6" result="color" />
+            <feComposite in="color" in2="blur" operator="in" result="glow" />
+            <feMerge>
+              <feMergeNode in="glow" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          {/* Highlight filter for nodes reached by propagation wave */}
+          <filter id="fdg-propagation-highlight" x="-15%" y="-15%" width="130%" height="130%">
+            <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="var(--color-info)" floodOpacity="0.5" />
+          </filter>
+        </defs>
+        <style>{`
+          @keyframes fdg-evidence-pulse {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+          }
+          @keyframes fdg-propagation-arrive {
+            0% { opacity: 0; transform: scale(0.95); }
+            50% { opacity: 1; transform: scale(1.02); }
+            100% { opacity: 1; transform: scale(1); }
+          }
+          @keyframes fdg-edge-flow {
+            0% { stroke-dashoffset: 16; }
+            100% { stroke-dashoffset: 0; }
+          }
+          .fdg-evidence-node { animation: fdg-evidence-pulse 0.8s ease-in-out infinite; filter: url(#fdg-evidence-glow); }
+          .fdg-propagation-node { animation: fdg-propagation-arrive 0.3s ease-out forwards; filter: url(#fdg-propagation-highlight); }
+          .fdg-propagation-edge { animation: fdg-edge-flow 0.4s linear infinite; }
+        `}</style>
         <g ref={gRef}>
           {/* Clique overlays (behind edges/nodes) */}
           {cliques.map((c) => (
@@ -429,12 +507,42 @@ export function ForceDirectedGraph({
             />
           ))}
 
+          {/* Animated propagation edges */}
+          {animatingEdges.size > 0 && allEdges.map((e) => {
+            const ek = e.source < e.target ? `${e.source}::${e.target}` : `${e.target}::${e.source}`;
+            if (!animatingEdges.has(ek)) return null;
+            const srcPos = nodePositionMap.get(e.source);
+            const tgtPos = nodePositionMap.get(e.target);
+            if (!srcPos || !tgtPos) return null;
+            return (
+              <line
+                key={`anim-${ek}`}
+                x1={srcPos.x}
+                y1={srcPos.y}
+                x2={tgtPos.x}
+                y2={tgtPos.y}
+                stroke="var(--color-info)"
+                strokeWidth={2.5}
+                strokeDasharray="8 8"
+                opacity={0.8}
+                className="fdg-propagation-edge"
+              />
+            );
+          })}
+
           {/* Market nodes */}
           {forceInputNodes.map((node) => {
             const pos = nodePositionMap.get(node.id);
             if (!pos) return null;
             const isFocus = node.id === focusMarketId;
             const isDimmed = connectedToFocus != null && !connectedToFocus.has(node.id);
+            const isEvidence = node.id === evidenceNodeId;
+            const isAnimating = animatingNodes.has(node.id);
+            const animClass = isEvidence
+              ? "fdg-evidence-node"
+              : isAnimating
+                ? "fdg-propagation-node"
+                : undefined;
             return (
               <NodeWithDetail
                 key={node.id}
@@ -444,6 +552,7 @@ export function ForceDirectedGraph({
                 isFocus={isFocus}
                 isDimmed={isDimmed}
                 onClick={onNodeClick ? () => onNodeClick(node.id) : undefined}
+                animationClass={animClass}
               />
             );
           })}
