@@ -1,0 +1,76 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Create Analytics.test.tsx with imports, vi.mock, mock data constants, and beforeEach setup",
+      "files_created": ["frontend/src/__tests__/Analytics.test.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Add test: shows loading state — assert spinner SVG renders when listMarkets returns pending promise",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Analytics.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Add test: shows error state — assert error message when listMarkets rejects",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Analytics.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Add test: shows empty state when no markets exist — assert message and link to /markets/new",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Analytics.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Add test: renders charts and analytics data — assert price-chart, volume-chart testids and market title",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Analytics.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Add test: changes market selection via dropdown — fireEvent.change on market-select",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Analytics.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Add test: toggles interval between Day and Hour — verify active button styling changes",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Analytics.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 8,
+      "task": "Add test: initializes from URL search params — verify market and interval from initialEntries",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Analytics.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 9,
+      "task": "Add test: shows AccountPnlSection prompt when no accountId — assert 'Set your Account ID' message",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/Analytics.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 10,
+      "task": "Run vitest on new test file — all 8 tests pass, full suite of 62 tests pass",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}

@@ -1,0 +1,124 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Test AccountPnlSection with limited scope: test the no-accountId state (default jsdom localStorage) and one data-populated state (set localStorage before render). Skip exhaustive AccountPnl states.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Skip AccountPnlSection entirely — misses important route behavior",
+        "Test all AccountPnlSection states (loading, error, data, empty) — too much scope for this task"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Test URL search param synchronization: verify initial params populate correct selections, and that changing market/interval updates URL params. Use MemoryRouter initialEntries.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Skip URL param tests — misses core user-facing behavior (shareable/bookmarkable URLs)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Use mock data with 2-3 points per price series and 2-3 volume buckets. Assert chart presence via data-testid ('price-chart', 'volume-chart') without inspecting individual SVG paths.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Use minimal empty mock data — charts conditionally render paths based on data length, so this would miss meaningful SVG rendering",
+        "Use large realistic datasets — unnecessary for presence/rendering assertions"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Interact with market dropdown using getByTestId('market-select') and fireEvent.change, matching existing test patterns. The element is a native <select> with data-testid='market-select'.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Use getByRole('combobox') — works but testid is more explicit and matches the code's intent"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Test interval toggle by verifying visual state changes (active button styling) after clicking Day/Hour buttons. Query buttons by role('button') and name.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Assert on getMarketAnalytics mock call args — couples test to implementation details and query key structure"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Mock the API client module (vi.mock('@/lib/api/client')) and mock individual functions (listMarkets, getMarketAnalytics, getAccountPnl), following the MarketList.test.tsx pattern.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Mock React Query hooks directly — diverges from existing test patterns and is more fragile"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d7",
+      "decision": "Follow describe/it/beforeEach structure from MarketList.test.tsx: one describe block, beforeEach for common mocks, individual it blocks for each state/interaction.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Nested describe blocks per section — adds indentation without benefit for a single-component test file"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create frontend/src/__tests__/Analytics.test.tsx with imports, vi.mock('@/lib/api/client'), mock data constants (markets array, MarketAnalyticsResponse with 3 price points per series and 3 volume buckets), and beforeEach that sets up default mock return values for listMarkets and getMarketAnalytics.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add test: 'shows loading state' — mock listMarkets to return a pending promise, assert loading indicator is rendered.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add test: 'shows error state' — mock listMarkets to reject, assert error message is rendered.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Add test: 'shows empty state when no markets exist' — mock listMarkets to return empty array, assert 'No markets exist yet' message and link to /markets/new.",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Add test: 'renders charts and analytics data when data loads' — mock successful listMarkets and getMarketAnalytics, wait for data, assert presence of price-chart and volume-chart testids, and verify market title is displayed in filters.",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Add test: 'changes market selection via dropdown' — render with data, use fireEvent.change on market-select dropdown, verify the new market is selected.",
+      "depends_on": [5]
+    },
+    {
+      "step": 7,
+      "task": "Add test: 'toggles interval between Day and Hour' — render with data, click Hour button, verify it becomes active; click Day button, verify it becomes active.",
+      "depends_on": [5]
+    },
+    {
+      "step": 8,
+      "task": "Add test: 'initializes from URL search params' — render with initialEntries=['/analytics?market=<id>&interval=hour'], verify correct market is selected and Hour interval is active.",
+      "depends_on": [5]
+    },
+    {
+      "step": 9,
+      "task": "Add test: 'shows AccountPnlSection prompt when no accountId is set' — render with default (empty) localStorage, assert 'Set your Account ID' message is present.",
+      "depends_on": [5]
+    },
+    {
+      "step": 10,
+      "task": "Run vitest on the new test file to verify all tests pass. Fix any failures.",
+      "depends_on": [2, 3, 4, 5, 6, 7, 8, 9]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
