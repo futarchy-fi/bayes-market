@@ -1,4 +1,15 @@
-error: invalid value 'full-auto' for '--sandbox <SANDBOX_MODE>'
-  [possible values: read-only, workspace-write, danger-full-access]
+Error: config profile `[Task cgroup-test-002] PHASE 3b: IMPLEMENT
+Title: Test cgroup freeze with working codex
 
-For more information, try '--help'.
+Read your plan at .fleet/tasks/cgroup-test-002/plan.json.
+
+NOW IMPLEMENT the plan. Modify production source files. Run tests.
+Do NOT just write JSON artifacts. Modify .py/.ts/.js source files.
+Follow the steps in plan.json and write real, working code.
+
+DEPENDENCIES: If tests require packages (node_modules, venv), install them first:
+  - Node: if package.json exists, run 'pnpm install' or 'npm install'
+  - Python: if requirements.txt exists, run 'pip install -r requirements.txt'
+Worktrees are fresh checkouts without dependencies pre-installed.
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "execute: cgroup-test-002"` not found
