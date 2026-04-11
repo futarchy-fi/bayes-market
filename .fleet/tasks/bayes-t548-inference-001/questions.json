@@ -1,0 +1,99 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What graph structure input does the bounded-treewidth compiler receive? The current model only handles single-variable markets with optional conditional slices. A multi-variable junction tree needs an explicit DAG/graph structure (parent sets, CPTs, or at minimum edge lists). Is there an existing graph contract, or should the skeleton define a minimal one (e.g., list of variable nodes + list of directed edges)?",
+      "category": "requirements",
+      "why_it_matters": "The compile_market method on InferenceCompiler takes a market_id and source_state_hash. A multi-variable junction tree compiler needs a fundamentally different input: a graph structure spanning multiple markets/variables. This determines whether we extend the existing protocol or create a new one."
+    },
+    {
+      "id": "q2",
+      "question": "Should the new module implement InferenceCompiler and InferenceQueryBackend protocols directly, or should it define new protocol extensions that add multi-variable methods (e.g., compile_network instead of compile_market, query_joint instead of just query_marginals)?",
+      "category": "design",
+      "why_it_matters": "The existing protocols are market-scoped (compile_market takes a single market_id). Junction tree inference is network-scoped (compiles a graph of multiple variables). Forcing the network into per-market protocols would be awkward. The skeleton's interface shape determines how all downstream tasks (T549-T555) integrate."
+    },
+    {
+      "id": "q3",
+      "question": "What is the treewidth bound? Is there a configured maximum treewidth beyond which the module should refuse compilation or signal fallback to approximate inference (T555)?",
+      "category": "requirements",
+      "why_it_matters": "The module is named 'bounded-treewidth' which implies a hard limit. The EngineConfig has inference_sample_limit=100 but no treewidth bound. The compile artifact already has junction_tree_width and exact_eligible fields, suggesting the skeleton should include eligibility checking logic."
+    },
+    {
+      "id": "q4",
+      "question": "What data structures should the junction tree compile artifact contain? At minimum: clique potentials (factor tables), separator sets, and a message-passing schedule. Should the skeleton include typed placeholders for all of these, or just the clique/separator topology with actual potential tables deferred?",
+      "category": "design",
+      "why_it_matters": "The CurrentModelCompileArtifact stores marginals directly. A junction tree artifact needs clique potentials (exponential in clique size), separator sets, and elimination orderings. Getting the data model right in the skeleton prevents expensive refactors when implementing actual message passing."
+    },
+    {
+      "id": "q5",
+      "question": "Should the skeleton support evidence (observations) in the query interface beyond the existing context parameter? The current query_marginals accepts context as Mapping[str,str] (variable->outcome assignments). Is this sufficient for hard evidence in junction tree inference, or do we need soft evidence support (partial observations with probability weights)?",
+      "category": "requirements",
+      "why_it_matters": "Hard evidence (context) maps cleanly to clamping variables in the junction tree. Soft evidence requires virtual evidence nodes or likelihood weighting. The task description says T549/T550 handle soft-evidence paths, so the skeleton probably only needs hard evidence support, but the interface must not preclude soft evidence."
+    },
+    {
+      "id": "q6",
+      "question": "How should the new module coexist with CurrentModel* in the server? Should compile_market_for_inference in server.py dispatch between the two based on some criteria (e.g., market count, graph presence), or does this skeleton exist purely as a parallel module that the server doesn't wire up yet?",
+      "category": "codebase",
+      "why_it_matters": "The analysis.md for t548 says to 'rewire the server to consume the engine boundary', but the extraction is already done. The current server hardcodes CURRENT_MODEL_COMPILER. The skeleton needs to be independently testable without breaking the server integration. Wiring it in is likely a separate step."
+    },
+    {
+      "id": "q7",
+      "question": "Should the skeleton include a triangulation/elimination ordering algorithm (even as a placeholder), or should it accept a pre-computed elimination ordering as input to compilation?",
+      "category": "design",
+      "why_it_matters": "Finding optimal elimination orderings is NP-hard. The skeleton needs to decide whether triangulation is part of compile_market/compile_network or whether it's an external preprocessing step. This affects the module boundary and the compile artifact's input contract."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The new module should be a new file (e.g., backend/inference/junction_tree.py) alongside current_model.py, not a modification of it. Both implement the same protocol contracts.",
+      "confidence": 0.95,
+      "if_wrong": "If the intent is to replace current_model.py rather than add alongside it, the module structure and server wiring strategy changes significantly."
+    },
+    {
+      "id": "a2",
+      "assumption": "The skeleton should implement InferenceCompiler and InferenceQueryBackend protocols as-is, even if the per-market scoping is awkward for multi-variable inference. The protocols can be extended later.",
+      "confidence": 0.8,
+      "if_wrong": "If new protocols are needed, we should define them in contracts.py first, which changes the scope from 'one new file' to 'contracts extension + new file'."
+    },
+    {
+      "id": "a3",
+      "assumption": "Placeholder implementations should raise InferenceUnsupportedQueryError for operations not yet implemented, following the existing pattern for negated queries in CurrentModelQueryBackend.",
+      "confidence": 0.9,
+      "if_wrong": "If placeholders should return dummy values instead of raising, test expectations change. The error approach is safer and more explicit."
+    },
+    {
+      "id": "a4",
+      "assumption": "The skeleton does NOT need to wire into server.py. Server integration is a separate step. The module should be independently importable and testable.",
+      "confidence": 0.85,
+      "if_wrong": "If server wiring is in-scope, we need to modify compile_market_for_inference to support dispatch, which increases blast radius and risk of breaking existing tests."
+    },
+    {
+      "id": "a5",
+      "assumption": "The compile artifact should include typed fields for junction tree topology (cliques, separators, elimination ordering, treewidth) with actual potential tables as Optional fields that start as None in the skeleton.",
+      "confidence": 0.75,
+      "if_wrong": "If potential tables should be eagerly typed even in the skeleton, we need to decide on the tensor/array representation (nested dicts, numpy arrays, flat lists) upfront."
+    },
+    {
+      "id": "a6",
+      "assumption": "No external dependencies (numpy, scipy, pgmpy) should be introduced. The skeleton should be pure Python, consistent with the rest of the inference package.",
+      "confidence": 0.9,
+      "if_wrong": "If numpy is acceptable, potential tables could use ndarray which is more efficient but adds a dependency. The current codebase has zero external deps in backend/."
+    },
+    {
+      "id": "a7",
+      "assumption": "The graph input for compilation will be a dict-based structure (adjacency list or edge list of variable IDs), not a formal graph class. This matches the JSON-serializable patterns used throughout the codebase.",
+      "confidence": 0.7,
+      "if_wrong": "If a typed Graph dataclass is needed, it should go in contracts.py and becomes a shared dependency for the network representation."
+    },
+    {
+      "id": "a8",
+      "assumption": "The skeleton should export module-level singletons (like CURRENT_MODEL_COMPILER/QUERY_BACKEND) and be added to backend/inference/__init__.py exports.",
+      "confidence": 0.85,
+      "if_wrong": "If the module should use factory functions or dependency injection instead of singletons, the instantiation pattern differs from the established one."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

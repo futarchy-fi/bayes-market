@@ -1,0 +1,27 @@
+[Task bayes-t548-inference-001] PHASE 1: QUESTION GENERATION
+Title: Implement bounded-treewidth exact inference module skeleton
+Description: BAYES-11: Create skeleton for bounded-treewidth exact inference module. Check backend/inference/current_model.py for the existing independent-market baseline and contracts.py for InferenceQueryBackend interface. The new module should follow the same contract pattern but support multi-variable junction tree inference. Start with the skeleton structure - compilation, query interface, and placeholder implementations.
+Repo: /home/kelvin/bayes-market
+
+Explore the codebase. Identify what you need to know before building.
+
+Write your output to .fleet/tasks/bayes-t548-inference-001/questions.json:
+{
+  "phase": "question",
+  "questions": [
+    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  ],
+  "assumptions": [
+    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  ],
+  "spawn_children": false,
+  "children": []
+}
+
+DECOMPOSITION: Set spawn_children=true if you need to investigate sub-questions
+that are too deep or tangential for this task. Each child runs a FULL 4-phase
+epistemic workflow (question→research→execute→validate). Only decompose when
+a sub-question truly warrants its own investigation cycle.
+Child format: { "id": "...", "title": "...", "description": "..." }
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: bayes-t548-inference-001"
