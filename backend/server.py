@@ -128,6 +128,8 @@ ACCOUNT_RISK_LIMIT = 100.0
 LEGACY_HEALTH_ROUTES = ("/health", "/healthz")
 VERSIONED_HEALTH_ROUTE = "/v1/health"
 PUBLIC_HEALTH_ROUTES = (*LEGACY_HEALTH_ROUTES, VERSIONED_HEALTH_ROUTE)
+STATS_ROUTE = "/v1/stats"
+STATS_SERVICE_INDEX_ROUTES = (STATS_ROUTE,)
 max_position_size = 100.0
 ACCOUNT_SERVICE_INDEX_ROUTES = (
     "/v1/accounts/{id}/risk",
@@ -854,6 +856,7 @@ def service_index_payload() -> dict[str, Any]:
             "markets": list(MARKET_SERVICE_INDEX_ROUTES),
             "orders": list(ORDER_SERVICE_INDEX_ROUTES),
             "accounts": list(ACCOUNT_SERVICE_INDEX_ROUTES),
+            "stats": list(STATS_SERVICE_INDEX_ROUTES),
         },
         "meta": make_meta(),
     }
@@ -2387,6 +2390,32 @@ def compute_account_pnl(account_id: str) -> dict[str, Any]:
 def get_account_pnl(account_id: str) -> tuple[dict[str, Any], int]:
     """Return the replayed P&L projection for one account."""
     return compute_account_pnl(account_id), 200
+
+
+def aggregate_platform_stats() -> dict[str, int | float]:
+    """Aggregate platform-wide totals for the stats read model."""
+    market_snapshot = list(MARKETS.values())
+    order_snapshot = list(ORDERS.values())
+    trade_orders = [
+        order
+        for order in order_snapshot
+        if order["status"] == "filled" and order["type"] in {"ProbabilityEdit", "EventTrade"}
+    ]
+    total_volume = sum(float(market["volume"]) for market in market_snapshot)
+
+    return {
+        "total_markets": len(market_snapshot),
+        "active_markets": sum(1 for market in market_snapshot if market["status"] == "active"),
+        "resolved_markets": sum(1 for market in market_snapshot if market["status"] == "resolved"),
+        "total_volume": round_risk_value(total_volume),
+        "total_trades": len(trade_orders),
+        "total_accounts": len({order["accountId"] for order in trade_orders}),
+    }
+
+
+def platform_stats_payload() -> dict[str, Any]:
+    """Build the versioned platform stats response."""
+    return {**aggregate_platform_stats(), "meta": make_meta()}
 
 
 def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
@@ -4798,6 +4827,16 @@ def route_request(
     if path == VERSIONED_HEALTH_ROUTE:
         if method == "GET":
             return v1_health_payload(), 200
+        raise ApiError(
+            405,
+            "method_not_allowed",
+            f"{method} is not allowed for this resource",
+            {"method": method, "path": path},
+        )
+
+    if path == STATS_ROUTE:
+        if method == "GET":
+            return platform_stats_payload(), 200
         raise ApiError(
             405,
             "method_not_allowed",

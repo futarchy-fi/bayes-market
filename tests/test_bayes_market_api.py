@@ -439,6 +439,78 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         self.assertEqual(server.ACCOUNT_EXPOSURE, {})
 
+    def test_aggregate_platform_stats_returns_initial_totals_without_orders(self):
+        markets = list(server.INITIAL_MARKETS.values())
+
+        self.assertEqual(
+            server.aggregate_platform_stats(),
+            {
+                "total_markets": len(markets),
+                "active_markets": sum(1 for market in markets if market["status"] == "active"),
+                "resolved_markets": sum(1 for market in markets if market["status"] == "resolved"),
+                "total_volume": server.round_risk_value(sum(float(market["volume"]) for market in markets)),
+                "total_trades": 0,
+                "total_accounts": 0,
+            },
+        )
+
+    def test_aggregate_platform_stats_filters_trade_orders_and_rounds_total_volume_once(self):
+        custom_markets = deepcopy(server.INITIAL_MARKETS)
+        custom_markets["m1"]["volume"] = 0.1234564
+        custom_markets["m2"]["status"] = "draft"
+        custom_markets["m2"]["volume"] = 0.0000004
+        custom_markets["m3"]["volume"] = 2.0
+
+        server.MARKETS.clear()
+        server.MARKETS.update(custom_markets)
+        server.ORDERS.clear()
+        server.ORDERS.update(
+            {
+                "o1": {
+                    "id": "o1",
+                    "type": "ProbabilityEdit",
+                    "status": "filled",
+                    "accountId": "acct_a",
+                },
+                "o2": {
+                    "id": "o2",
+                    "type": "EventTrade",
+                    "status": "filled",
+                    "accountId": "acct_b",
+                },
+                "o3": {
+                    "id": "o3",
+                    "type": "ProbabilityEdit",
+                    "status": "rejected",
+                    "accountId": "acct_c",
+                },
+                "o4": {
+                    "id": "o4",
+                    "type": "EventTrade",
+                    "status": "filled",
+                    "accountId": "acct_b",
+                },
+                "o5": {
+                    "id": "o5",
+                    "type": "AdminOp",
+                    "status": "filled",
+                    "accountId": "acct_d",
+                },
+            }
+        )
+
+        self.assertEqual(
+            server.aggregate_platform_stats(),
+            {
+                "total_markets": 3,
+                "active_markets": 1,
+                "resolved_markets": 1,
+                "total_volume": 2.123457,
+                "total_trades": 3,
+                "total_accounts": 2,
+            },
+        )
+
     def test_aggregate_component_status_returns_ok_when_all_components_are_ok(self):
         components = {
             "db": {"status": "ok"},
@@ -648,6 +720,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             ["/v1/accounts/{id}/risk", "/v1/accounts/{id}/pnl", "/v1/accounts/{id}/exposure"],
         )
         self.assertEqual(payload["routes"]["health"], ["/health", "/healthz", "/v1/health"])
+        self.assertEqual(payload["routes"]["stats"], ["/v1/stats"])
         self.assertIn("GET /v1/markets/{id}/analytics", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/meta", payload["routes"]["markets"])
         self.assertIn("/v1/markets/{id}/events", payload["routes"]["markets"])
@@ -655,6 +728,89 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertIn("POST /v1/markets/{id}/close", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/resolve", payload["routes"]["markets"])
         self.assertIn("POST /v1/markets/{id}/orders/event-trade", payload["routes"]["orders"])
+
+    def test_root_route_service_index_exposes_stats_route(self):
+        payload, status = server.route_request("GET", "/")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["routes"]["stats"], ["/v1/stats"])
+
+    def test_v1_stats_route_returns_aggregated_totals_plus_meta(self):
+        aggregate_stats = {
+            "total_markets": 7,
+            "active_markets": 4,
+            "resolved_markets": 2,
+            "total_volume": 123.456789,
+            "total_trades": 11,
+            "total_accounts": 5,
+        }
+        meta = {"timestamp": "2026-04-10T00:00:00Z", "requestId": "req_stats"}
+
+        with (
+            patch.object(server, "aggregate_platform_stats", return_value=aggregate_stats) as aggregate_platform_stats,
+            patch.object(server, "make_meta", return_value=meta) as make_meta,
+        ):
+            payload, status = server.route_request("GET", "/v1/stats")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, {**aggregate_stats, "meta": meta})
+        aggregate_platform_stats.assert_called_once_with()
+        make_meta.assert_called_once_with()
+
+    def test_v1_stats_route_returns_seeded_snapshot_without_mocks(self):
+        payload, status = server.route_request("GET", "/v1/stats")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            {key: value for key, value in payload.items() if key != "meta"},
+            {
+                "total_markets": 3,
+                "active_markets": 2,
+                "resolved_markets": 1,
+                "total_volume": 188000.0,
+                "total_trades": 0,
+                "total_accounts": 0,
+            },
+        )
+        self.assertEqual(set(payload["meta"]), {"timestamp"})
+        self.assertRegex(
+            payload["meta"]["timestamp"],
+            r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$",
+        )
+
+    def test_v1_stats_route_normalizes_trailing_slash_for_get(self):
+        aggregate_stats = {
+            "total_markets": 7,
+            "active_markets": 4,
+            "resolved_markets": 2,
+            "total_volume": 123.456789,
+            "total_trades": 11,
+            "total_accounts": 5,
+        }
+        meta = {"timestamp": "2026-04-10T00:00:00Z", "requestId": "req_stats"}
+
+        with (
+            patch.object(server, "aggregate_platform_stats", return_value=aggregate_stats) as aggregate_platform_stats,
+            patch.object(server, "make_meta", return_value=meta) as make_meta,
+        ):
+            payload, status = server.route_request("GET", "/v1/stats/")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, {**aggregate_stats, "meta": meta})
+        aggregate_platform_stats.assert_called_once_with()
+        make_meta.assert_called_once_with()
+
+    def test_v1_stats_route_is_method_not_allowed_for_non_get(self):
+        for method in ("POST", "PUT", "DELETE"):
+            with self.subTest(method=method):
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(method, "/v1/stats/", {})
+
+                error = ctx.exception
+                self.assertEqual(error.status, 405)
+                self.assertEqual(error.code, "method_not_allowed")
+                self.assertEqual(error.details["method"], method)
+                self.assertEqual(error.details["path"], "/v1/stats")
 
     def test_legacy_health_routes_return_legacy_health_payload(self):
         legacy_payload = {
