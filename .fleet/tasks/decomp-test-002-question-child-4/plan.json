@@ -1,0 +1,91 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Export captures the full network state: all markets, all edges (clique-derived + conditional), clique data, and computed layout positions.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Single-market export — rejected because BayesNetGraph fetches and renders the entire network, not a single market's perspective",
+        "Omit layout positions — rejected because task description explicitly requests them, even though they're currently deterministic"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Import is visual/read-only — loads a snapshot for viewing in the graph, does not create server-side markets.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Server-side market creation on import — rejected because no bulk creation API exists, createMarket() can't set marginals/cliques, and it would require backend changes far beyond this task's scope"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Add export/import buttons to the existing BayesNetGraph flex header row (between title and stats), not a new toolbar component.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "New toolbar component — rejected because the existing header flex row can accommodate buttons with minimal changes, and a separate toolbar adds unnecessary component complexity"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Use hand-rolled TypeScript type guards for import validation, no new validation library.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Add zod/ajv dependency — rejected because the project has zero schema validation libraries, the schema is simple (markets array, edges array, metadata), and ~30-50 lines of type guards suffice"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Edges in export are derived from clique data (via deriveEdgesFromCliques) plus any conditionalEdges if present. On import, edges are loaded directly from the JSON without re-deriving.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Only export clique data and re-derive edges on import — rejected because the export should be a complete snapshot; re-deriving would lose any conditional edges and add unnecessary coupling"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Define TypeScript types for the network export JSON schema: NetworkExportSchema with version, exportedAt, metadata, nodes (with positions and market data), edges (with source, target, weight, type), and cliques.",
+      "depends_on": [],
+      "estimated_lines": 45,
+      "risk": "low"
+    },
+    {
+      "step": 2,
+      "task": "Implement export function: serialize current network state (markets, computed positions, derived edges, cliques) into the schema format and trigger a JSON file download via browser API (Blob + URL.createObjectURL + anchor click).",
+      "depends_on": [1],
+      "estimated_lines": 70,
+      "risk": "low"
+    },
+    {
+      "step": 3,
+      "task": "Implement import function: hand-rolled TypeScript validator (type guards for version, nodes array shape, edges array shape), file reading via FileReader, and a callback to surface the parsed NetworkExportSchema to the parent component.",
+      "depends_on": [1],
+      "estimated_lines": 90,
+      "risk": "medium"
+    },
+    {
+      "step": 4,
+      "task": "Add export/import UI to BayesNetGraph: insert button group in the header flex row, wire export button to serialize current state, wire import button to a hidden file input that triggers the import flow, add state to toggle between live data and imported snapshot view.",
+      "depends_on": [2, 3],
+      "estimated_lines": 75,
+      "risk": "medium"
+    }
+  ],
+  "decomposition_assessment": {
+    "total_steps": 4,
+    "estimated_total_lines": 280,
+    "high_risk_steps": 0,
+    "parallelizable_groups": [["step1"], ["step2", "step3"], ["step4"]],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Total estimated lines (280) is well under the 500-line threshold. Zero high-risk steps (below the 2 threshold). While steps 2 and 3 are parallelizable, the groups have sequential dependencies (step1 → [step2, step3] → step4), so there are not 2+ fully independent parallelizable groups. All changes are in a single frontend feature module (graph/) with tightly coupled types. Splitting into children would add coordination overhead without meaningful benefit."
+  },
+  "spawn_children": false,
+  "children": []
+}
