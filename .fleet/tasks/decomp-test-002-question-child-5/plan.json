@@ -1,0 +1,136 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use the command pattern with execute/undo method pairs, not full state snapshots. Each command stores only the previous value needed for undo.",
+      "based_on": ["q2", "q5", "q10"],
+      "alternatives_rejected": [
+        "Full state snapshots (immer patches) — wasteful since most commands affect a small portion of state",
+        "Event sourcing — overkill for client-side undo in a React app"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Scope HistoryContext per-market inside MarketDetail, ephemeral (cleared on unmount). No localStorage persistence.",
+      "based_on": ["q4", "q6"],
+      "alternatives_rejected": [
+        "Global history stack — adds complexity for no benefit in a single-market-at-a-time view",
+        "Persistent history via localStorage — requires command serialization, no existing pattern in codebase"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Defer node position undo. BayesNetGraph is static (no drag), ForceDirectedGraph resets positions on drag-end. Create stub command interface only.",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": [
+        "Implement drag-to-reposition in BayesNetGraph alongside undo — out of scope",
+        "Persist ForceDirectedGraph drag positions (fx/fy) to enable undo — changes force simulation behavior"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Probability edits use a local draft buffer intercepting before server submission. Edits are staged locally and only committed to server on explicit user action.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Compensating API calls to reverse submitted edits — contradicts 'server mutations are not reversible' scope",
+        "No draft buffer, only undo the intent before clicking submit — current submit is a single button press with no staging area"
+      ],
+      "reversibility": "hard"
+    },
+    {
+      "id": "d5",
+      "decision": "Keyboard shortcuts (Ctrl+Z / Ctrl+Shift+Z) fire only when activeElement is NOT input/textarea/select/contenteditable.",
+      "based_on": ["q9"],
+      "alternatives_rejected": [
+        "Global shortcuts always active — would break native browser undo in text inputs throughout the app"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Evidence toggle undo restores the exact previous assumption state for that variable, not just clears the current one.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Simply clear the assumption on undo — loses the previous value when addAssumption replaces an existing one"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d7",
+      "decision": "Compound actions (multi-condition probability edits) are undone as a single atomic unit matching one user submit action.",
+      "based_on": ["q10"],
+      "alternatives_rejected": [
+        "Granular undo of individual conditions within a single edit — could leave CPT in inconsistent state"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d8",
+      "decision": "Cap history at 50 actions. Implemented as a configurable constant. Use React Context + useReducer, no new dependencies.",
+      "based_on": ["q7"],
+      "alternatives_rejected": [
+        "Unbounded history — potential memory issues",
+        "Adding immer/zustand — unnecessary dependency for this feature"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d9",
+      "decision": "Place undo/redo buttons at the MarketDetail level (near market header) since undo covers assumptions, probability edits, and future graph actions — not just graph-specific operations.",
+      "based_on": ["q8"],
+      "alternatives_rejected": [
+        "Inside BayesNetGraph toolbar — too narrow, undo covers more than graph",
+        "Floating overlay — more complex, no existing pattern in the app"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create Command interface and types: define Command<T> with execute(), undo(), and description fields. Create concrete command types: AssumptionAddCommand, AssumptionRemoveCommand, AssumptionClearAllCommand, ProbabilityEditCommand. Place in frontend/src/features/history/commands.ts",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Create HistoryContext with useReducer: implement undo stack, redo stack, push/undo/redo/clear actions, 50-action cap. Expose useHistory() hook returning { undo, redo, canUndo, canRedo, history }. Place in frontend/src/features/history/HistoryContext.tsx",
+      "depends_on": []
+    },
+    {
+      "step": 3,
+      "task": "Implement assumption commands: wire AssumptionAddCommand and AssumptionRemoveCommand to capture previous assumption state at execute time. AssumptionClearAllCommand captures the full assumptions array for restore. Integrate with AssumptionContext by creating wrapper functions that both perform the action and push to history.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Implement probability edit draft buffer: create useDraftEdits() hook that intercepts probability edits, stages them locally with undo/redo support via ProbabilityEditCommand, and provides an explicit commit action that calls useProbabilityEdit() mutation. Update ConditionalEditor and CptPanel to use the draft flow.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 5,
+      "task": "Wire HistoryProvider into MarketDetail component tree: wrap relevant children (AssumptionPanel, CptPanel, EventTradePanel, graph components) with HistoryProvider inside MarketDetail. May require restructuring provider scope if AssumptionProvider currently only wraps AssumptionPanel.",
+      "depends_on": [2]
+    },
+    {
+      "step": 6,
+      "task": "Add undo/redo toolbar UI: create UndoRedoToolbar component with undo/redo buttons showing disabled state based on canUndo/canRedo. Place in MarketDetail header area alongside market title. Buttons call useHistory().undo/redo.",
+      "depends_on": [2, 5]
+    },
+    {
+      "step": 7,
+      "task": "Add keyboard shortcuts: create useUndoRedoKeyboard() hook that listens for Ctrl+Z (undo) and Ctrl+Shift+Z / Ctrl+Y (redo) on document. Filter out events when activeElement is input/textarea/select/[contenteditable]. Hook used in MarketDetail or UndoRedoToolbar.",
+      "depends_on": [2, 5]
+    },
+    {
+      "step": 8,
+      "task": "Add tests: unit tests for HistoryContext reducer (push, undo, redo, cap at 50, clear), command execute/undo pairs for assumption commands, keyboard shortcut filtering logic. Integration test for draft edit flow.",
+      "depends_on": [1, 2, 3, 4, 7]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
