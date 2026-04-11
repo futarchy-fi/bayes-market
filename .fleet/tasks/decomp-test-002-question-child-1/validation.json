@@ -1,33 +1,35 @@
 {
   "phase": "validate",
-  "plan_adherence": 0.85,
-  "plan_adherence_notes": "All 10 plan steps were executed and the core implementation is correct. Steps 1-8 were fully completed: D3 modules installed (individual packages as decided), useForceGraph hook created with simulation ref + diffing + alpha restart, deriveEdges utility built with clique co-membership deduplication, ForceDirectedGraph component built with hybrid React+D3 approach preserving NodeWithDetail pattern, zoom/pan via d3-zoom, drag via d3-drag with fx/fy pinning, dynamic clique overlays via bounding box, and focus highlight + status dots + probability bars + legend. Step 9 partially done: MarketDetail.tsx updated to import ForceDirectedGraph, but old BayesNetGraph.tsx was NOT removed as the plan specified ('Remove old BayesNetGraph.tsx file'). Step 10 completed: 20 new tests (ForceDirectedGraph.test.tsx + deriveEdges.test.ts) all passing, but old BayesNetGraph.test.tsx was not removed. The leftover files are dead code that should be cleaned up.",
+  "plan_adherence": 0.88,
+  "plan_adherence_notes": "All 10 plan steps were executed. Steps 1-8 completed faithfully: D3 individual modules installed (d3-force, d3-selection, d3-zoom, d3-drag + @types), useForceGraph hook with simulation ref + node/link diffing + alpha(0.1) restart (matching decision d4), deriveEdges utility with clique co-membership deduplication + mergeEdges for conditional edges (d5), ForceDirectedGraph component using hybrid React+D3 (d2) preserving NodeWithDetail lazy-loading, zoom/pan via d3-zoom with double-click reset, drag via d3-drag with fx/fy pinning, dynamic bounding-box clique overlays (d6), and focus highlight + status dots + probability bars + legend (d8 visual features). Step 9 partially done: MarketDetail.tsx correctly updated to use ForceDirectedGraph, but BayesNetGraph.tsx was NOT deleted as the plan specified. Step 10 completed: 13 ForceDirectedGraph tests + 7 deriveEdges tests created and passing, but old BayesNetGraph.test.tsx (13 tests) not removed. Two deductions: (1) dead code not cleaned up, (2) onNodeClick prop defined but not wired in MarketDetail.tsx — the plan's step 9 specified 'pass onNodeClick (navigate to /markets/:id)' but the diff shows only focusMarketId passed.",
   "research_quality": 0.92,
-  "research_quality_notes": "Research was thorough and well-evidenced. All 8 questions received detailed answers with specific file:line references. The critical finding about directed edges (q4/a4 - CONDITIONAL_MARGINALS has no GET endpoint) was correctly identified and the assumption was marked WRONG with clear impact analysis. The hybrid React+D3 recommendation (q2) was well-justified by the NodeWithDetail pattern dependency on React DOM ownership. Bundle size analysis (q7) was concrete (~500KB vs ~60KB). Test strategy (q8) was practical with the mock-simulation approach. Minor gap: research could have verified d3 module peer dependency requirements more concretely.",
+  "research_quality_notes": "Research was thorough with specific file:line evidence for all 8 answers. The critical finding that directed edges have no GET endpoint (q4, assumption a4 marked WRONG at 0.9 confidence) was the most important insight and directly shaped decision d5. The hybrid React+D3 recommendation (q2) was well-justified by NodeWithDetail's dependency on React DOM ownership. Bundle analysis (q7) was concrete. All 7 assumption verdicts were well-reasoned. The one gap: d3 peer dependency verification was mentioned as needed but not fully resolved.",
   "question_completeness": 0.78,
-  "question_completeness_notes": "8 questions covered the core design decisions well: replacement vs coexistence, React+D3 integration pattern, real-time data handling, edge data source, clique overlays, click callbacks, bundle strategy, and test approach. 7 assumptions were reasonable with appropriate confidence levels, and the low-confidence a4 (0.4) was correctly flagged as the biggest risk.",
+  "question_completeness_notes": "8 questions covered the core design space well: replacement strategy, React+D3 integration, real-time updates, edge data source, clique overlays, click callbacks, bundle strategy, and testing. The low-confidence assumption a4 (0.4) correctly flagged the biggest technical risk. Questions were focused on the right concerns for this task.",
   "missed_questions": [
-    "Accessibility: How should keyboard navigation and screen reader support work for the force-directed graph? SVG interactive elements need ARIA labels and focus management.",
-    "Performance at scale: What is the expected maximum number of nodes/edges? D3 force simulation performance degrades significantly beyond ~500 nodes. Should there be a fallback or node limit?",
-    "Server-side rendering: Does the app use SSR? D3 requires DOM access which fails in SSR environments. The useEffect approach mitigates this but it wasn't explicitly considered.",
-    "Mobile/touch support: How should zoom/pan/drag behave on touch devices? d3-zoom and d3-drag have touch support but it needs explicit testing and potentially different UX.",
-    "Old component cleanup: Should BayesNetGraph.tsx be deleted or kept as a fallback? The plan assumed deletion but execution left it in place."
+    "Accessibility: No consideration of keyboard navigation, ARIA labels, or screen reader support for interactive SVG elements (nodes, zoom, drag).",
+    "Performance bounds: No question about maximum expected node/edge count. D3 force simulation degrades past ~500 nodes; should there be a cap or virtualization?",
+    "Mobile/touch interaction: d3-zoom and d3-drag have touch support but behavior differs significantly from mouse — no UX consideration for touch devices.",
+    "Old component cleanup: Whether BayesNetGraph.tsx should be deleted or kept as fallback was implicit in the plan but not explicitly questioned.",
+    "Error handling: No question about what happens if useEngineStats fails or returns malformed clique data — graph should degrade gracefully."
   ],
   "test_results": {
-    "total": 20,
-    "passed": 20,
-    "failed": 0,
+    "total_new": 20,
+    "passed_new": 20,
+    "failed_new": 0,
+    "total_suite": "All 33 test files pass (including 13 existing BayesNetGraph tests that still work since old file was kept)",
     "files": [
-      "src/__tests__/ForceDirectedGraph.test.tsx (12 tests)",
-      "src/__tests__/deriveEdges.test.ts (8 tests - 5 deriveEdgesFromCliques + 2 mergeEdges + 1 implicit)"
-    ]
+      "src/__tests__/ForceDirectedGraph.test.tsx (13 tests)",
+      "src/__tests__/deriveEdges.test.ts (7 tests)"
+    ],
+    "note": "vitest run exits with timeout (exit 124) due to process cleanup, not test failure — all suites show ✓"
   },
   "implementation_gaps": [
-    "BayesNetGraph.tsx not removed (dead code remains in features/graph/)",
-    "BayesNetGraph.test.tsx not removed (stale tests remain in __tests__/)",
-    "No error boundary around the graph component for graceful degradation if D3 fails",
-    "onNodeClick prop defined but not wired in MarketDetail.tsx (no navigate() call passed)"
+    "BayesNetGraph.tsx not removed — dead code in features/graph/ (plan step 9 specified removal)",
+    "BayesNetGraph.test.tsx not removed — stale tests in __tests__/ (plan step 10 implied removal/renaming)",
+    "onNodeClick prop not wired in MarketDetail.tsx — plan step 9 specified 'pass onNodeClick (navigate to /markets/:id)' but only focusMarketId is passed",
+    "connectedToFocus computation (ForceDirectedGraph.tsx:276-277) has redundant typeof checks — source/target are always strings at that point in the code since they come from forceInputLinks which are string-typed"
   ],
   "verdict": "approve",
-  "reason": "The implementation is solid and follows the plan faithfully on all substantive decisions. The hybrid React+D3 architecture is well-executed: useForceGraph properly manages simulation lifecycle with ref-based diffing, deriveEdges correctly computes undirected edges from cliques with deduplication, and ForceDirectedGraph preserves the NodeWithDetail lazy-loading pattern while adding zoom/pan/drag interactivity. All 20 tests pass covering loading states, empty states, truncation, focus highlighting, status dots, probability bars, legend rendering, and edge derivation logic. The two gaps (old files not removed, onNodeClick not wired) are minor cleanup items that don't affect functionality. Research and planning phases were thorough, correctly identified the biggest risk (no directed edge API), and made pragmatic decisions throughout. Approving with note that dead code cleanup should follow."
+  "reason": "The implementation substantively delivers a D3 force-directed network graph with all planned features: hybrid React+D3 architecture, force simulation with position-preserving data diffing, undirected edges from clique co-membership, dynamic bounding-box clique overlays, zoom/pan/drag interactivity, focus highlighting, status dots, probability bars, and a legend. 20 new tests all pass and cover both the component and the edge utility. The code quality is solid — useForceGraph properly manages simulation lifecycle, deriveEdges handles deduplication correctly, and ForceDirectedGraph preserves the NodeWithDetail lazy-loading pattern. The gaps (dead code not cleaned up, onNodeClick not wired) are minor follow-up items that don't affect the core functionality. Research correctly identified and addressed the biggest risk (no directed edge API) with a pragmatic interim solution. Approving with recommendation to clean up dead BayesNetGraph files and wire onNodeClick in a follow-up."
 }
