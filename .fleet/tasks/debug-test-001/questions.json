@@ -1,0 +1,57 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the Counter start at 0 by default, or should the initial value be configurable via __init__?",
+      "category": "requirements",
+      "why_it_matters": "Determines the constructor signature and whether we need to validate the initial value."
+    },
+    {
+      "id": "q2",
+      "question": "Should increment/decrement accept a step argument (e.g., increment(5)) or always change by 1?",
+      "category": "requirements",
+      "why_it_matters": "Affects the method signatures and test coverage needed."
+    },
+    {
+      "id": "q3",
+      "question": "Should there be any bounds or constraints on the counter value (e.g., no negatives)?",
+      "category": "requirements",
+      "why_it_matters": "Determines whether decrement needs boundary checks and error handling."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The Counter class goes in src/counter.py and tests go in tests/test_counter.py, following the existing naming convention (src/math_utils.py -> tests/test_math_utils.py).",
+      "confidence": 0.95,
+      "if_wrong": "Files would be placed in the wrong location or use the wrong naming scheme."
+    },
+    {
+      "id": "a2",
+      "assumption": "Tests use pytest with sys.path.insert for imports, matching the pattern in test_math_utils.py and test_greeting.py.",
+      "confidence": 0.95,
+      "if_wrong": "Test imports would fail or be inconsistent with the rest of the test suite."
+    },
+    {
+      "id": "a3",
+      "assumption": "The counter starts at 0 by default, increment/decrement change by 1, and the value is unbounded (can go negative).",
+      "confidence": 0.8,
+      "if_wrong": "Would need to add constructor params, step arguments, or boundary validation."
+    },
+    {
+      "id": "a4",
+      "assumption": "No type hints are needed, consistent with the existing src/ modules which don't use type hints.",
+      "confidence": 0.9,
+      "if_wrong": "Would need to add type annotations to the Counter class."
+    },
+    {
+      "id": "a5",
+      "assumption": "get_value() returns the current integer value directly (not a string or formatted output).",
+      "confidence": 0.95,
+      "if_wrong": "Return type and test assertions would need adjustment."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
