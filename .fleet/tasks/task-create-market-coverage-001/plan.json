@@ -1,0 +1,100 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Mock @/lib/query/hooks (useCreateMarket) at the hook level instead of @/lib/api/client, following the TradingPanel pattern. Return a controlled mutation state object with isPending/isError/isSuccess/mutate.",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": [
+        "Keep existing @/lib/api/client mock — doesn't give control over mutation state rendering",
+        "Use MSW to intercept HTTP requests — too heavy for unit tests and harder to control state transitions"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Mock useNavigate from react-router-dom using vi.importActual pattern. Capture the onSuccess callback from mockMutate.mock.calls and invoke it manually with fake response data to test navigation.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "MemoryRouter location tracking — more complex and less direct than asserting on mock",
+        "Skip navigation testing — leaves a critical user flow untested"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Mock useSession from @/features/session/context using vi.importActual pattern, returning controlled session with accountId for mutation payload tests.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Rely on SessionProvider defaults — empty accountId means session is always undefined in mutate payload, can't test the truthy path"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Test validation via submit button disabled state only. No need to test form submission prevention separately since the disabled button blocks clicks.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Test both button state and submission prevention — redundant since disabled button already blocks clicks"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Replace existing @/lib/api/client mock with @/lib/query/hooks mock. Add a beforeEach that sets up defaultMutationState() so existing 6 render tests continue to work.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Keep both mocks — confusing and the client mock is redundant when hook is mocked"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Use fireEvent (not userEvent) for all interactions, consistent with TradingPanel test pattern.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "userEvent — not used in the project, would add a new dependency pattern"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Refactor mock setup: Replace vi.mock('@/lib/api/client') with vi.mock('@/lib/query/hooks') returning { useCreateMarket: vi.fn() }. Add vi.mock('react-router-dom') with vi.importActual preserving all exports but mocking useNavigate. Add vi.mock('@/features/session/context') with vi.importActual preserving all exports but mocking useSession. Create defaultMutationState() helper returning { mutate: vi.fn(), isPending: false, isError: false, isSuccess: false, error: null, data: undefined, reset: vi.fn() }. Add beforeEach that sets default return values for all three mocks.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Verify existing 6 render tests still pass with the new mock setup. Run vitest on CreateMarketForm.test.tsx and fix any breakage.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add validation tests: (a) submit button disabled when title is empty, (b) submit button disabled when expiresAt is empty, (c) submit button disabled when an outcome has empty id, (d) submit button disabled when an outcome has empty name, (e) submit button enabled when all fields are valid (title, expiresAt, and outcomes all populated).",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Add form interaction tests: (a) typing in title updates preview text from 'Untitled market' to the typed value, (b) clicking '+ Add outcome' adds a third outcome row, (c) remove outcome button (×) is disabled when exactly 2 outcomes, (d) remove outcome button removes an outcome when 3+ outcomes exist, (e) outcome ID input sanitizes to lowercase alphanumeric + underscore (typing 'Hello World!' results in 'helloworld').",
+      "depends_on": [2]
+    },
+    {
+      "step": 5,
+      "task": "Add mutation state rendering tests: (a) submit button shows 'Creating…' and is disabled when mutation.isPending is true, (b) error message div appears with mutation.error.message when mutation.isError is true, (c) error message shows 'Failed to create market' when error is not an Error instance.",
+      "depends_on": [2]
+    },
+    {
+      "step": 6,
+      "task": "Add submission and navigation tests: (a) clicking submit calls mockMutate with correct payload structure { payload: { title, description, outcomes, expires_at, liquidity }, session }, (b) when onSuccess callback is invoked with { market: { id: 'test-123' } }, navigate is called with '/markets/test-123', (c) when session.accountId is empty, session is passed as undefined in the mutate payload.",
+      "depends_on": [2]
+    },
+    {
+      "step": 7,
+      "task": "Run full test suite (vitest run) to ensure no regressions. Fix any failures.",
+      "depends_on": [3, 4, 5, 6]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
