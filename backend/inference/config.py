@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Final
 
 
 @dataclass(frozen=True)
@@ -34,7 +35,7 @@ class EngineConfig:
             raise ValueError("Engine max_treewidth must be non-negative")
 
 
-DEFAULT_ENGINE_CONFIG = EngineConfig(
+DEFAULT_ENGINE_CONFIG: Final[EngineConfig] = EngineConfig(
     mode="EXACT",
     backend="junction_tree",
     version="0.1.0",
@@ -43,4 +44,4 @@ DEFAULT_ENGINE_CONFIG = EngineConfig(
     inference_sample_limit=100,
 )
 
-__all__ = ["DEFAULT_ENGINE_CONFIG", "EngineConfig"]
+__all__: list[str] = ["DEFAULT_ENGINE_CONFIG", "EngineConfig"]
