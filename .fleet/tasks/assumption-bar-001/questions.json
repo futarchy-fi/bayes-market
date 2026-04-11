@@ -1,0 +1,57 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the AssumptionBar test file mock `useAssumptions` from AssumptionContext, or should it render AssumptionBar inside a real AssumptionProvider and seed assumptions (like AssumptionPanel.test.tsx does)?",
+      "category": "design",
+      "why_it_matters": "The existing AssumptionPanel test uses a real AssumptionProvider with a Seeder helper to populate state. Following that pattern keeps tests consistent and tests real integration. Mocking the hook would be simpler but diverges from established patterns."
+    },
+    {
+      "id": "q2",
+      "question": "AssumptionPanel.test.tsx already tests some AssumptionBar behaviors (lines 216-275: GIVEN label rendering, hidden when empty, clear all, individual remove). Should the new AssumptionBar.test.tsx duplicate these or focus on behaviors not yet covered?",
+      "category": "requirements",
+      "why_it_matters": "Duplicating tests that already exist in AssumptionPanel.test.tsx adds maintenance burden. But the task explicitly asks for rendering assumption text, remove button click, and styling — some of which overlap with existing tests. Need to decide: comprehensive standalone tests vs. only incremental coverage."
+    },
+    {
+      "id": "q3",
+      "question": "Should styling tests assert on specific inline style values (e.g., checking barStyle properties like background, border, padding) or just verify structural CSS properties (display: flex, etc.)?",
+      "category": "design",
+      "why_it_matters": "The component uses inline React.CSSProperties objects (barStyle, tagStyle, tagCloseStyle, clearBtnStyle). Testing exact color values makes tests brittle to design changes. Testing structural properties (flex layout) is more meaningful but still couples to implementation."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Use the same Seeder + AssumptionProvider pattern from AssumptionPanel.test.tsx rather than mocking useAssumptions, since this is the established test pattern in the repo.",
+      "confidence": 0.9,
+      "if_wrong": "Would need to refactor to mock useAssumptions directly, which is simpler but inconsistent with other tests."
+    },
+    {
+      "id": "a2",
+      "assumption": "Write comprehensive standalone tests for AssumptionBar even where they overlap with AssumptionPanel.test.tsx, since the task explicitly requests it and unit tests should be self-contained.",
+      "confidence": 0.85,
+      "if_wrong": "Would reduce test scope to only untested behaviors, resulting in a thinner test file."
+    },
+    {
+      "id": "a3",
+      "assumption": "For 'styling' tests, verify structural DOM output and key visual properties (e.g., the tag displays 'label = outcomeId' format, the bar container exists, tag close button has correct aria-label) rather than asserting exact CSS color values.",
+      "confidence": 0.85,
+      "if_wrong": "Would need to add more granular style assertions using element.style checks for specific CSS property values."
+    },
+    {
+      "id": "a4",
+      "assumption": "Use renderWithProviders from __tests__/helpers.tsx as the base render helper, wrapping with a local AssumptionProvider, following the exact pattern in AssumptionPanel.test.tsx.",
+      "confidence": 0.95,
+      "if_wrong": "Would need a different render approach, but this is what every other test in the repo uses."
+    },
+    {
+      "id": "a5",
+      "assumption": "The test file should be placed at frontend/src/__tests__/AssumptionBar.test.tsx, matching the flat __tests__ directory structure used by all other test files.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to use a different test file location, but all existing tests follow this pattern."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

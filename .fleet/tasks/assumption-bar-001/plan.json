@@ -1,0 +1,75 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use real AssumptionProvider with Seeder pattern (matching AssumptionPanel.test.tsx) rather than mocking useAssumptions",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Mock useAssumptions hook directly"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Write comprehensive standalone tests even where they overlap with AssumptionPanel.test.tsx, since this tests AssumptionBar in isolation",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Only test behaviors not covered by AssumptionPanel.test.tsx"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Test structural DOM output (element presence, text content, aria-labels, flex layout) rather than exact CSS color values",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Assert exact inline style color/spacing values"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create frontend/src/__tests__/AssumptionBar.test.tsx with test setup: imports, Seeder helper component, local AssumptionProvider wrapper using renderWithProviders from helpers.tsx",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Write test: renders assumption text in 'label = outcomeId' format for each assumption",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Write test: renders GIVEN: label when assumptions are present",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Write test: bar is hidden (not rendered) when there are no assumptions",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Write test: remove button click removes individual assumption (verify aria-label 'Remove assumption {label}')",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Write test: Clear all button removes all assumptions",
+      "depends_on": [1]
+    },
+    {
+      "step": 7,
+      "task": "Write test: multiple assumptions render as separate tags",
+      "depends_on": [1]
+    },
+    {
+      "step": 8,
+      "task": "Write test: structural styling - bar container uses flex layout, tags have expected structure",
+      "depends_on": [1]
+    },
+    {
+      "step": 9,
+      "task": "Run vitest on AssumptionBar.test.tsx to verify all tests pass",
+      "depends_on": [2, 3, 4, 5, 6, 7, 8]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
