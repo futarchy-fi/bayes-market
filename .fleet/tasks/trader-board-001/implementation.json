@@ -1,0 +1,55 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Create TraderLeaderboard.test.tsx with imports and makeRow() factory function",
+      "files_created": ["frontend/src/__tests__/TraderLeaderboard.test.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Add test: renders empty state when rows is empty",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/TraderLeaderboard.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Add test: renders table headers",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/TraderLeaderboard.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Add test: renders rows with correct rank numbers",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/TraderLeaderboard.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Add test: renders trader accountId, tradeCount, and formatted volume",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/TraderLeaderboard.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Add test: renders formatted volume for large values (M suffix)",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/TraderLeaderboard.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Run vitest and verify all tests pass",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
