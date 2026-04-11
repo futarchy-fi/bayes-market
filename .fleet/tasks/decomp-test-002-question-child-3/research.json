@@ -1,0 +1,133 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "BayesNetGraph.tsx is pure React SVG with no D3 dependency, BUT the project already has d3-drag, d3-force, d3-selection, and d3-zoom as dependencies (used in ForceDirectedGraph.tsx). We should NOT add d3-transition since the existing BayesNetGraph component is intentionally a simpler, static-layout alternative to ForceDirectedGraph. The animation should use CSS transitions + requestAnimationFrame on raw SVG elements, consistent with BayesNetGraph's design philosophy. We can use SVG <animate>/<animateTransform> for declarative effects (glow pulses) and rAF for coordinating the wave timing. This keeps BayesNetGraph lightweight and avoids coupling it to D3 selections.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:280-302 (pure SVG, no D3 imports)",
+        "frontend/package.json:16-19 (d3-drag, d3-force, d3-selection, d3-zoom already deps)",
+        "frontend/src/features/graph/ForceDirectedGraph.tsx (uses D3 for force layout)",
+        "frontend/src/components/ui/ProbabilityBar.tsx:34 (existing CSS transition pattern)"
+      ],
+      "uncertainty": "None significant. The decision is clear: no new D3 dependency for BayesNetGraph."
+    },
+    {
+      "question_id": "q2",
+      "answer": "The animation should be triggered at the AssumptionContext level (addAssumption/removeAssumption) for immediate visual feedback. AssumptionContext is a simple useState-based React context (AssumptionContext.tsx:24) with no event/callback system, so we need to either: (a) add an onAssumptionChange callback to the context, or (b) create a separate animation hook that watches the assumptions array via useEffect. Option (b) is cleaner - a useEffect in BayesNetGraph that watches assumptions from useAssumptions() and triggers animation when changes are detected. The useProbabilityEdit mutation (hooks.ts:154-164) fires onSuccess AFTER the API call returns, which would add noticeable delay. The task says 'when evidence is set', confirming the trigger should be immediate on assumption toggle, not on API response.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/assumptions/AssumptionContext.tsx:23-31 (useState, addAssumption)",
+        "frontend/src/features/assumptions/VariableRow.tsx:30-40 (handleAssume calls addAssumption)",
+        "frontend/src/lib/query/hooks.ts:154-164 (useProbabilityEdit with onSuccess cache invalidation)",
+        "frontend/src/features/assumptions/AssumptionContext.tsx:49-52 (contextPayload derivation)"
+      ],
+      "uncertainty": "Minor: the exact hook design (useEffect watching assumptions vs callback in context) is an implementation detail."
+    },
+    {
+      "question_id": "q3",
+      "answer": "BFS from evidence node along available edges is the right approach. The graph has two edge sources: (a) conditionalEdges (directional, from props) and (b) clique-derived edges (undirected, from deriveEdgesFromCliques). Both are available in BayesNetGraph. The clique data from engineStats contains CliqueSummary objects with node arrays (types.ts:115-120), and deriveEdgesFromCliques (deriveEdges.ts:13-33) already converts these to pairwise edges. BFS along these merged edges provides a visually intuitive propagation path. Using junction-tree message-passing order would be more faithful to actual belief propagation, but the clique data only includes membership lists (not elimination ordering or message schedule), making BFS the practical choice.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/graph/deriveEdges.ts:13-33 (deriveEdgesFromCliques, pairwise edges)",
+        "frontend/src/features/graph/deriveEdges.ts:39-62 (mergeEdges combines clique + conditional)",
+        "frontend/src/lib/api/types.ts:115-120 (CliqueSummary: id, nodes, size, states)",
+        "frontend/src/lib/api/types.ts:122-150 (EngineStatsResponse: num_cliques, junction_tree_width, cliques array)"
+      ],
+      "uncertainty": "None significant. BFS is clearly the right choice given available data."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Each NodeWithDetail (BayesNetGraph.tsx:212-225) independently fetches via useMarket(node.id), and there is no shared state tracking which nodes changed. For the initial implementation, we should animate ALL reachable nodes from the evidence node (BFS-discovered), not just those with actual marginal changes. Detecting actual changes would require: (1) capturing pre-update marginals from React Query cache via queryClient.getQueryData, (2) comparing with post-invalidation data. This is possible but complex and introduces timing issues (cache may not have updated yet when animation starts). Since the animation triggers on assumption toggle (before API call), we don't have new marginals at animation start time anyway. Animating all BFS-reachable nodes is the right approach for v1.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:212-225 (NodeWithDetail with useMarket)",
+        "frontend/src/lib/query/hooks.ts:32-39 (useMarket returns cached data)",
+        "frontend/src/lib/query/hooks.ts:159-162 (onSuccess invalidates market query)"
+      ],
+      "uncertainty": "A future enhancement could add marginal-change detection to make animation more selective, but this isn't needed for v1."
+    },
+    {
+      "question_id": "q5",
+      "answer": "The wave animation should travel along BOTH conditionalEdges AND clique-derived edges. conditionalEdges may be empty (they're optional, BayesNetGraph.tsx:229), but clique-derived edges will exist whenever engineStats has cliques. The deriveEdgesFromCliques function (deriveEdges.ts:13-33) already extracts pairwise edges from cliques. We should use mergeEdges (deriveEdges.ts:39-62) to combine both edge sources, giving us a complete edge set for BFS traversal. If BOTH are empty (no cliques and no conditional edges), the fallback should be to just highlight the evidence node with a glow effect and skip the wave animation entirely.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:229 (conditionalEdges defaults to [])",
+        "frontend/src/features/graph/BayesNetGraph.tsx:236 (cliques from engineStats)",
+        "frontend/src/features/graph/deriveEdges.ts:13-33 (deriveEdgesFromCliques)",
+        "frontend/src/features/graph/deriveEdges.ts:39-62 (mergeEdges combines both edge sources)"
+      ],
+      "uncertainty": "Edge case: if engineStats is not loaded yet (only fetched when focusMarketId is set), we may have no clique edges. Need to handle loading state gracefully."
+    },
+    {
+      "question_id": "q6",
+      "answer": "Based on existing transition timings in the codebase: probability bars use 0.2-0.3s ease (ProbabilityBar.tsx:34, VariableRow.tsx:98), and border transitions use 0.15s (MarketList.tsx:210). A propagation wave should use: (1) evidence node highlight: 0.2s fade-in to match existing timing, (2) edge wave stagger: ~150ms per hop, giving a 2-3 node graph ~0.5s total, (3) node glow on arrival: 0.3s ease matching probability bar timing, (4) total animation: cap at ~1.5s for deep graphs. The animation SHOULD be interruptible - if a new assumption is set mid-animation, cancel the current animation (via AbortController or clearing a ref-stored timeout chain) and start a new one from the new evidence node. This prevents visual confusion from overlapping animations.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/components/ui/ProbabilityBar.tsx:34 (transition: width 0.3s ease)",
+        "frontend/src/features/assumptions/VariableRow.tsx:98 (transition: width 0.2s ease)",
+        "frontend/src/routes/MarketList.tsx:210 (transition: border-color 0.15s)"
+      ],
+      "uncertainty": "Exact timing values will need UX testing/tuning. The proposed values are reasonable starting points based on existing patterns."
+    },
+    {
+      "question_id": "q7",
+      "answer": "The SVG in BayesNetGraph has no overflow setting (BayesNetGraph.tsx:280-282), which means SVG's default overflow behavior applies (visible for outermost SVG elements in most browsers). However, the viewBox is computed tightly from node positions with only 40px padding (PADDING constant at line 31). Glow effects using SVG filters (feGaussianBlur, feDropShadow) CAN extend beyond element bounds and may be clipped by the viewBox boundary. Two solutions: (1) increase PADDING from 40 to 60 to accommodate glow effects (simplest), or (2) add overflow='visible' to the SVG element. Option (1) is safer since it ensures the viewBox contains all visual elements. For edge wave animations, as long as effects travel along existing edges (which are within the viewBox), clipping is not an issue.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:280-282 (SVG element with viewBox, no overflow attr)",
+        "frontend/src/features/graph/BayesNetGraph.tsx:31 (PADDING = 40)",
+        "frontend/src/features/graph/BayesNetGraph.tsx:258-264 (viewBox computation from node positions)"
+      ],
+      "uncertainty": "Browser SVG overflow behavior varies slightly. Testing across browsers may reveal edge cases. Increasing padding is the safest approach."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The project already has D3 modules (d3-force, d3-selection, d3-zoom, d3-drag) for ForceDirectedGraph, but BayesNetGraph is intentionally D3-free. Adding d3-transition would be inconsistent. CSS transitions + rAF + SVG animate elements are the right approach."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "AssumptionContext.addAssumption triggers immediately via setState. The animation should watch the assumptions array in a useEffect within BayesNetGraph. This gives instant visual feedback before the API call."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "BFS along merged edges (clique-derived + conditional) is the right approach. The clique data only contains membership lists, not elimination ordering, so junction-tree-faithful propagation isn't feasible without additional backend data."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Animation state (highlighted nodes, active edges) can be managed via useState/useRef within BayesNetGraph or a custom useAnimationPropagation hook used inside BayesNetGraph. No need for a separate AnimationContext since the animation is purely visual and scoped to the graph component."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Animating all BFS-reachable nodes is the right v1 approach. Since animation triggers on assumption toggle (before API response), we don't have new marginals to compare against. Selective animation could be a future enhancement."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Existing probability bar transitions (width 0.3s ease in ProbabilityBar.tsx:34) already provide smooth updates. The main new work is: (1) evidence node glow/highlight, (2) edge wave animation along BFS path, (3) coordinating node highlight arrival timing with the wave. May want to add a brief color flash on bars to make updates more noticeable during propagation."
+    }
+  ],
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.85,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All 7 questions answered with confidence >= 0.85. All 6 assumptions verified as CORRECT with confidence >= 0.85. No research gaps remain. The implementation path is clear: pure SVG/CSS animation in BayesNetGraph, triggered by watching AssumptionContext, BFS along merged edges, with interruptible timing. No blocking uncertainties require further investigation."
+  },
+  "spawn_children": false,
+  "children": []
+}
