@@ -1,0 +1,91 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Create a shared UseQueryResult mock helper in helpers.tsx AND consolidate across all files. There are 4 test files (not 3) with duplicated UseQueryResult mocks: Portfolio.test.tsx (23 props, missing isFetched/isFetchedAfterMount/isInitialLoading/isPaused), MarketDetail.test.tsx (25 props, most complete), DiscussionThread.test.tsx (23 props, missing isPaused/promise), and ConditionalEditor.test.tsx (21 props, missing isPaused/promise). All 4 are under src/__tests__/ which is included in type-checking via tsconfig.json's \"include\": [\"src\"]. There are also 3 nearly-identical defaultMutationState() helpers in MarketDetail, DiscussionThread, and ConditionalEditor. A shared createMockQueryResult<T> function based on MarketDetail's complete implementation would fix all inconsistencies and prevent future drift. This is the right approach even though the task only mentions Portfolio.test.tsx, because the other files will also fail the build.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/Portfolio.test.tsx:50-72",
+        "frontend/src/__tests__/MarketDetail.test.tsx:70-98",
+        "frontend/src/__tests__/DiscussionThread.test.tsx:98-130",
+        "frontend/src/__tests__/ConditionalEditor.test.tsx:119-146",
+        "frontend/tsconfig.json:24"
+      ],
+      "uncertainty": "Whether there are even more test files with the same pattern not yet discovered. Also whether the task scope allows fixing files beyond the 4 originally mentioned."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Use a targeted type declaration, NOT @types/node. Only chartUtils.test.ts (line 12) uses process.env in the entire frontend. No other test file references process.env. @types/node is NOT in devDependencies. The tsconfig has no 'types' array, so adding @types/node would expose ALL Node.js globals to browser-targeted code. The best approach is adding a minimal declaration like `declare var process: { env: Record<string, string | undefined> }` either in vite-env.d.ts or a new test-globals.d.ts file under src/. This is lightweight, avoids dependency bloat, and won't conflict with DOM types.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/__tests__/chartUtils.test.ts:12",
+        "frontend/package.json:20-30",
+        "frontend/tsconfig.json:1-25",
+        "frontend/src/vite-env.d.ts:1"
+      ],
+      "uncertainty": "Whether vitest already provides process types via its jsdom environment. If node_modules were installed, vitest's types might already cover this. But since the tsconfig doesn't include vitest types in a 'types' array and vitest is only in devDeps, a declaration is the safer path."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Use non-null assertions (!) - this is the established codebase convention. The codebase already has 40+ instances of non-null assertions on array access across 13+ test files including AssumptionContext.test.tsx, VariableRow.test.tsx (10+ instances), TradingPanel.test.tsx, TraderLeaderboard.test.tsx, VolumeChart.test.tsx, CreateMarketForm.test.tsx, ConditionalEditor.test.tsx, and others. Source code also uses ! for array access (e.g., CreateMarketForm.tsx:37, ConditionalEditor.tsx:52). No type guard patterns for array access were found anywhere in the codebase. Using type guards would be inconsistent with existing code and unnecessarily verbose.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/VariableRow.test.tsx:227,238,286,296,307,315,338,342,349,368",
+        "frontend/src/__tests__/AssumptionContext.test.tsx:47-48",
+        "frontend/src/__tests__/TradingPanel.test.tsx:155",
+        "frontend/src/__tests__/TraderLeaderboard.test.tsx:40-42",
+        "frontend/src/__tests__/ConditionalEditor.test.tsx:258,293,294,305,313,314,320",
+        "frontend/src/__tests__/CreateMarketForm.test.tsx:231,313,330,342",
+        "frontend/src/features/market/CreateMarketForm.tsx:37",
+        "frontend/tsconfig.json:18"
+      ],
+      "uncertainty": "None - the pattern is clear and consistent across the codebase."
+    },
+    {
+      "question_id": "q4",
+      "answer": "YES, MarketDetail.test.tsx and DiscussionThread.test.tsx ARE included in type-checking and will fail the build. The tsconfig.json has \"include\": [\"src\"], and all test files are at src/__tests__/*.test.tsx - they fall within the include scope. The build script is \"tsc -b && vite build\" (package.json), so tsc checks ALL files under src/ including tests. There is NO separate tsconfig.build.json or tsconfig.app.json that excludes tests. However, based on the research, MarketDetail.test.tsx has the MOST complete mock (25 props) and may not have missing-prop errors. DiscussionThread.test.tsx and ConditionalEditor.test.tsx are missing isPaused and promise properties and will likely error.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/tsconfig.json:24",
+        "frontend/package.json:build-script",
+        ".github/workflows/ci.yml:46"
+      ],
+      "uncertainty": "Cannot verify the actual error list from tsc because node_modules is missing in this worktree. The 1,417 errors from running tsc are dominated by missing module declarations. The real error set can only be determined after pnpm install."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "WRONG",
+      "confidence": 0.85,
+      "impact": "The list is 4 properties (isFetched, isFetchedAfterMount, isInitialLoading, isPaused), not 5. 'isEnabled' was NOT found in any of the 4 mock implementations, including the most complete one (MarketDetail). The 'promise' property is also needed in some implementations. The exact required set can only be confirmed by checking the installed @tanstack/react-query v5.60 type definitions, which requires node_modules to exist."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Non-null assertions are used 40+ times across 13+ test files. This is the codebase standard. No type guards for array access exist."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.6,
+      "impact": "Cannot verify without node_modules. However, the targeted declaration approach is recommended instead, which avoids this risk entirely. Only one test file uses process.env, so @types/node is overkill."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Build runs 'tsc -b' which uses tsconfig.json with \"include\": [\"src\"]. Tests at src/__tests__/ are included. All test type errors WILL block the build."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.4,
+      "impact": "Cannot determine the full error set without node_modules installed. The tsc run showed 1,417 errors but ~83% are from missing dependencies. After pnpm install, there may be ~239 real errors, but many of these (TS2503 React namespace, TS7006 implicit any params) appear to be pre-existing issues not related to this task. The actual PR5-specific errors need to be identified by comparing against the main branch baseline."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

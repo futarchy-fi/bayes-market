@@ -1,33 +1,32 @@
-[Task fix-pr5-ts-errors-001] PHASE 1: QUESTION GENERATION
+[Task fix-pr5-ts-errors-001] PHASE 2: RESEARCH & DECISION
 Title: undefined
-Description: Fix TypeScript errors in frontend tests blocking PR #5 CI:
-1. Portfolio.test.tsx (lines 123-301): UseQueryResult mocks missing props (isFetched, isFetchedAfterMount, isInitialLoading, isPaused, isEnabled) - add these to mock objects
-2. ProbabilityBar.test.tsx (lines 152-161): Element|undefined not assignable to Element - add non-null assertions or type guards
-3. api-client.test.ts (lines 185-259): Object possibly undefined - add proper null checks
-4. chartUtils.test.ts (line 12): Missing @types/node - add to devDependencies or use import.meta.env instead of process.env
 
-Goal: All TypeScript errors resolved, pnpm build passes in frontend/
-Repo: /home/kelvin/bayes-market
+Read .fleet/tasks/fix-pr5-ts-errors-001/questions.json for the questions to answer.
+Research each question in the codebase. Provide answers with confidence scores.
 
-Explore the codebase. Identify what you need to know before building.
-
-YOU MUST create .fleet/tasks/fix-pr5-ts-errors-001/questions.json with this structure:
+YOU MUST create .fleet/tasks/fix-pr5-ts-errors-001/research.json with this structure:
 {
-  "phase": "question",
-  "questions": [
-    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "...",
+      "confidence": 0.0-1.0,
+      "evidence": ["file:line", ...],
+      "uncertainty": "what you're not sure about"
+    }
   ],
-  "assumptions": [
-    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  "assumption_checks": [
+    { "assumption_id": "a1", "verdict": "CORRECT|WRONG|UNCERTAIN", "confidence": 0.0-1.0, "impact": "..." }
   ],
   "spawn_children": false,
   "children": []
 }
 
-DO NOT STOP until questions.json exists and contains at least one question.
+DO NOT STOP until research.json exists and contains answers to all questions.
 Verify: ls -la .fleet/tasks/fix-pr5-ts-errors-001/ to confirm the file was written.
 
-DECOMPOSITION: Set spawn_children=true only if sub-questions warrant their own
-full 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
+DECOMPOSITION: Set spawn_children=true for low-confidence answers (< 0.5) or
+complex questions needing their own research cycle.
 
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: fix-pr5-ts-errors-001"
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "research: fix-pr5-ts-errors-001"
