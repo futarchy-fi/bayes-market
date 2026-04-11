@@ -1,0 +1,67 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Test formatResolutionProbabilities indirectly through the resolved-market rendering path, not by exporting and testing it directly",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Export the private function and unit-test it directly"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Test the full two-step confirmation flow end-to-end (select outcome -> click Resolve -> assert confirmation UI -> click Yes, Resolve -> assert mutation called), plus Cancel and outcome-change-resets-confirming interactions",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Test each state in isolation via mock overrides without simulating user flow"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Test only the three guard conditions that exist in the component: resolved status (shows summary), non-active/closed status (returns null), no accountId (returns null). No role-based or ownership guards exist.",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Add tests for authorization/ownership checks that don't exist in the component"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Follow TradingPanel.test.tsx patterns exactly: vi.mock for hooks, vi.mocked for typed access, defaultMutationState helper, mockMutate spy, configuredSession/unconfiguredSession fixtures, renderWithProviders from helpers",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": ["Use a different mocking approach or test runner"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create frontend/src/__tests__/ResolveMarketPanel.test.tsx with mock setup: vi.mock useSession and useResolveMarket, create mockMutate spy, configuredSession/unconfiguredSession fixtures, defaultMutationState helper (typed to useResolveMarket return), mockMarket fixture with outcomes array, beforeEach to clearAllMocks and set defaults",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add guard clause tests: (1) resolved market with resolution string shows 'Resolved' and 'Outcome: <value>', (2) resolved market with resolutionProbabilities shows formatted distribution, (3) resolved market with neither shows 'Resolution finalized', (4) draft status market returns null (container not in document), (5) no accountId returns null",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add resolve form rendering test: active market with session shows 'Resolve Market' heading, select with 'Select winning outcome...' placeholder and outcome options, disabled Resolve button when no outcome selected",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Add two-step confirmation flow tests: (1) select outcome + click Resolve shows confirmation text with outcome name and Yes/Resolve + Cancel buttons, (2) click Yes, Resolve calls mutation.mutate with { payload: { accountId, outcomeId }, session }, (3) click Cancel returns to initial resolve button state, (4) changing select while confirming resets back to resolve button",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Add mutation state tests: (1) isPending disables Yes, Resolve button and shows 'Resolving...', (2) isError shows error message, (3) isSuccess shows 'Market resolved successfully.'",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Run the test suite with 'cd frontend && npx vitest run src/__tests__/ResolveMarketPanel.test.tsx' and fix any failures",
+      "depends_on": [2, 3, 4, 5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
