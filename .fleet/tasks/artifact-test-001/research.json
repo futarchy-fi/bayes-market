@@ -1,0 +1,85 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use stdlib-only approach. The project has no requirements.txt, pyproject.toml, or any dependency management. The existing backend/server.py uses only stdlib imports (os, sys, json, etc.) with zero third-party packages for env handling. Adding python-dotenv would require either creating a dependency file or a bare pip install with no reproducibility. A simple manual .env parser (split on '=', strip whitespace, skip comments/blanks) is sufficient for the three keys (APP_NAME, DEBUG, DATABASE_URL) specified in the task. The .env format for these cases is trivial and doesn't require dotenv's full feature set.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:4-22 (all imports are stdlib)",
+        "No requirements.txt or pyproject.toml exists anywhere in repo",
+        "No existing dotenv usage found in any file"
+      ],
+      "uncertainty": "If the task intends this module to be used in production with complex .env files (multiline values, variable interpolation), a manual parser would be fragile. But the task scope is simple.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q2",
+      "answer": "src/config.py is the correct location. The src/ directory already exists with greeting.py from a prior task (implement-test-001), and tests/test_greeting.py imports from src/ via sys.path manipulation. This establishes src/ as the module area for these fleet tasks, separate from the main backend/ application. backend/inference/config.py is a domain-specific config dataclass (EngineConfig) for the inference engine, not a general-purpose config loader. Placing the new module in src/ is consistent with the established pattern and avoids polluting the backend namespace.",
+      "confidence": 0.95,
+      "evidence": [
+        "src/greeting.py exists (prior fleet task output)",
+        "tests/test_greeting.py:4 (sys.path.insert to src/)",
+        "backend/inference/config.py (domain-specific EngineConfig dataclass, different purpose)"
+      ],
+      "uncertainty": "None significant. The task explicitly says src/config.py and the existing pattern supports it.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q3",
+      "answer": "load_config() should remain independent of backend/server.py's pattern. The server.py module is a 4400-line monolith that reads env vars at module level (e.g., read_bool_env at line 339). The src/config.py module is in a separate directory hierarchy with no import relationship to backend/. The task description asks for a standalone config loader for APP_NAME/DEBUG/DATABASE_URL — not a refactor of server.py's config handling. Keeping them independent is the right call.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:314-339 (read_bool_env defined and used at module level)",
+        "backend/server.py:4390-4391 (os.environ.get for host/port)",
+        "src/ and backend/ are separate directory trees with no cross-imports"
+      ],
+      "uncertainty": "Future work might want to unify config handling, but that's out of scope for this task.",
+      "decision_needed": false
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes, DEBUG should be parsed as a boolean from string values. Use the same truthy set as backend/server.py's read_bool_env: case-insensitive '1', 'true', 'yes', 'on' → True; '0', 'false', 'no', 'off' → False; empty/missing → use default. This is a well-established pattern already in the codebase (server.py:314-324). While the config loader is independent, using consistent boolean parsing semantics across the project avoids confusion.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:314-324 (read_bool_env implementation with {'1','true','yes','on'} truthy set)"
+      ],
+      "uncertainty": "The exact behavior for unrecognized values (e.g., 'maybe') — should it fall back to default or raise? Following server.py's pattern, fall back to default (False for DEBUG).",
+      "decision_needed": false
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "src/config.py is the right location. src/ already has greeting.py from a prior task and tests/ has test_greeting.py that imports from it. This is the established pattern for fleet task modules."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "WRONG",
+      "confidence": 0.9,
+      "impact": "Should NOT use python-dotenv. No dependency management exists in the project (no requirements.txt, no pyproject.toml). The entire backend uses only stdlib. A simple manual .env parser is the better fit. Implementation: read file line-by-line, skip comments (#) and blank lines, split on first '=' to get key/value, strip whitespace and optional quotes."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Plain dict return with precedence: env vars > .env file > defaults. This is the standard and expected behavior. The task description aligns with this."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Use {'1','true','yes','on'} case-insensitively, matching the existing read_bool_env in backend/server.py:314-324. Consistency within the project."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "tests/test_config.py should be created. The existing pattern (tests/test_greeting.py for src/greeting.py) confirms this. Use the same sys.path manipulation pattern for imports."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
