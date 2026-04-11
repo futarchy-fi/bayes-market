@@ -1,0 +1,48 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Switch from HTTPServer to ThreadingHTTPServer in run_server()",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Implement WebSocket protocol helpers (ws_accept_key, ws_read_frame, ws_send_text, ws_send_close)",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Add global WebSocket connection registry (WS_CONNECTIONS, _WS_LOCK, ws_register, ws_unregister)",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Add WebSocket upgrade detection in do_GET() with RFC 6455 handshake and read loop",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Implement ws_broadcast(market_id) function that sends MarketPriceMessage to all subscribers",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Hook ws_broadcast() at probability edit acceptance and market resolution mutation points",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
