@@ -1,27 +1,32 @@
-[Task task-format-coverage-001] PHASE 1: QUESTION GENERATION
+[Task task-format-coverage-001] PHASE 2: RESEARCH & DECISION
 Title: Expand format.ts test coverage
-Description: Expand test coverage for frontend/src/lib/utils/format.ts. Currently tests 4 of 6 functions. Add tests for: (1) formatRelativeTime with "just now" for <1 min, (2) formatRelativeTime with minutes (e.g. "5m ago"), (3) formatRelativeTime with hours (e.g. "3h ago"), (4) formatRelativeTime with days (e.g. "2d ago"), (5) timeUntil with "expired" for past dates, (6) timeUntil with days and hours format, (7) timeUntil with hours and minutes format. Also add edge cases: (8) formatCurrency with negative numbers, (9) truncateHash with custom length parameter, (10) statusColor for closed and draft statuses. Use vi.useFakeTimers for time-dependent tests. Update frontend/src/__tests__/format.test.ts.
-Repo: /home/kelvin/bayes-market
 
-Explore the codebase. Identify what you need to know before building.
+Read .fleet/tasks/task-format-coverage-001/questions.json for the questions to answer.
+Research each question in the codebase. Provide answers with confidence scores.
 
-YOU MUST create .fleet/tasks/task-format-coverage-001/questions.json with this structure:
+YOU MUST create .fleet/tasks/task-format-coverage-001/research.json with this structure:
 {
-  "phase": "question",
-  "questions": [
-    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "...",
+      "confidence": 0.0-1.0,
+      "evidence": ["file:line", ...],
+      "uncertainty": "what you're not sure about"
+    }
   ],
-  "assumptions": [
-    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  "assumption_checks": [
+    { "assumption_id": "a1", "verdict": "CORRECT|WRONG|UNCERTAIN", "confidence": 0.0-1.0, "impact": "..." }
   ],
   "spawn_children": false,
   "children": []
 }
 
-DO NOT STOP until questions.json exists and contains at least one question.
+DO NOT STOP until research.json exists and contains answers to all questions.
 Verify: ls -la .fleet/tasks/task-format-coverage-001/ to confirm the file was written.
 
-DECOMPOSITION: Set spawn_children=true only if sub-questions warrant their own
-full 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
+DECOMPOSITION: Set spawn_children=true for low-confidence answers (< 0.5) or
+complex questions needing their own research cycle.
 
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: task-format-coverage-001"
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "research: task-format-coverage-001"
