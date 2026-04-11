@@ -1,0 +1,132 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use vi.useFakeTimers() with vi.setSystemTime() to make formatRelativeTime deterministic, rather than mocking the format module.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Mocking @/lib/utils/format module — heavier, hides real formatting logic",
+        "Using timestamps far in the past — still fragile across day boundaries"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Mock hooks at module level following TradingPanel/EventTradePanel pattern: vi.mock @/features/session/context with vi.importActual + useSession: vi.fn(), and vi.mock @/lib/query/hooks with useMarketComments: vi.fn() + usePostMarketComment: vi.fn().",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Mocking the API client layer like Analytics.test.tsx — DiscussionThread uses hooks directly, not the client"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "No stub needed for crypto.randomUUID() — Node.js provides it globally and TradingPanel tests already exercise it without mocking.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "vi.stubGlobal('crypto', ...) — unnecessary given Node runtime support"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "For the submit+clear test, use mockMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.()) to synchronously invoke the onSuccess callback. Apply this only in the specific test, not globally.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Global mockImplementation on mockMutate — would affect other tests that only need to verify mutate was called",
+        "Async/await with act() — unnecessary complexity since synchronous invocation works"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create test file frontend/src/__tests__/DiscussionThread.test.tsx with imports, vi.mock blocks for @/features/session/context (vi.importActual + useSession: vi.fn()) and @/lib/query/hooks (useMarketComments: vi.fn(), usePostMarketComment: vi.fn()), then import and vi.mocked() the hooks.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Create fixtures: mockMarket (active status), mockMarketResolved (status: 'resolved'), configuredSession, unconfiguredSession, mockComments array (2 comments with fixed timestamps relative to fake system time), and helper functions defaultQueryState() and defaultMutationState() matching TradingPanel patterns.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add beforeEach: vi.useFakeTimers(), vi.setSystemTime('2025-01-15T12:00:00Z'), vi.clearAllMocks(), set default mock return values (configured session, loaded comments, idle mutation). Add afterEach: vi.useRealTimers().",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Write test: 'shows loading state when comments are loading' — mock useMarketComments with isLoading: true, assert 'Loading discussion...' text is present.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Write test: 'shows error state when comments fail to load' — mock useMarketComments with isError: true, error: new Error('Network error'), assert error message is displayed.",
+      "depends_on": [3]
+    },
+    {
+      "step": 6,
+      "task": "Write test: 'shows empty state when no comments exist' — mock useMarketComments with data: { comments: [], pagination: { returned: 0 } }, assert 'No comments yet.' text.",
+      "depends_on": [3]
+    },
+    {
+      "step": 7,
+      "task": "Write test: 'renders comments with author, sequence number, relative time, and body' — use default mock with 2 comments, assert comment content, accountId, #seq, and relative time (e.g., '1d ago') are rendered.",
+      "depends_on": [3]
+    },
+    {
+      "step": 8,
+      "task": "Write test: 'displays comment count badge with correct singular/plural' — test with 1 comment (shows '1 comment') and with 2 comments (shows '2 comments').",
+      "depends_on": [3]
+    },
+    {
+      "step": 9,
+      "task": "Write test: 'shows setup message when session is not configured' — mock useSession as unconfigured, assert 'Set your Account ID' text, assert no form/textarea present.",
+      "depends_on": [3]
+    },
+    {
+      "step": 10,
+      "task": "Write test: 'renders composer form when session is configured and market is active' — assert textarea with placeholder, 'Post Comment' button, character count are present.",
+      "depends_on": [3]
+    },
+    {
+      "step": 11,
+      "task": "Write test: 'shows read-only message when market is not active' — render with mockMarketResolved, assert 'Discussion is read-only because this market is resolved.' text, assert no form/textarea.",
+      "depends_on": [3]
+    },
+    {
+      "step": 12,
+      "task": "Write test: 'disables submit button when textarea is empty or whitespace-only' — assert button is disabled initially, type whitespace, assert still disabled.",
+      "depends_on": [3]
+    },
+    {
+      "step": 13,
+      "task": "Write test: 'submits comment with correct payload and clears form on success' — type comment text, use mockMutate.mockImplementation to invoke onSuccess, submit form, assert mutate called with { payload: { accountId, body (trimmed), idempotencyKey }, session }, assert textarea value is cleared.",
+      "depends_on": [3]
+    },
+    {
+      "step": 14,
+      "task": "Write test: 'shows Posting... and disables button when mutation is pending' — mock mutation with isPending: true, assert button text is 'Posting...', assert button is disabled.",
+      "depends_on": [3]
+    },
+    {
+      "step": 15,
+      "task": "Write test: 'shows error message when comment post fails' — mock mutation with isError: true, error: new Error('Server error'), assert error message is displayed.",
+      "depends_on": [3]
+    },
+    {
+      "step": 16,
+      "task": "Write test: 'updates character count as user types' — type text of known length, assert remaining characters display is correct (2000 - length).",
+      "depends_on": [3]
+    },
+    {
+      "step": 17,
+      "task": "Run vitest on the new test file to confirm all tests pass. Fix any failures.",
+      "depends_on": [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

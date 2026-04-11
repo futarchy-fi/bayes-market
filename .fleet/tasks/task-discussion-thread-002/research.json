@@ -1,0 +1,103 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use vi.useFakeTimers() with a fixed system time (e.g., vi.setSystemTime('2025-01-15T12:00:00Z')). Then create comment timestamps relative to that fixed time (e.g., '2025-01-14T12:00:00Z' → '1d ago'). formatRelativeTime uses Date.now() internally (format.ts:17), so faking timers makes its output fully deterministic without mocking the module. This is cleaner than module-level mocking and more composable. The TradingPanel/EventTradePanel tests don't face this because they don't render relative timestamps.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/lib/utils/format.ts:17 — const diff = Date.now() - new Date(iso).getTime();",
+        "frontend/src/lib/utils/format.ts:18-22 — time bucket logic (mins, hours, days)",
+        "frontend/src/features/market/DiscussionThread.tsx:77 — formatRelativeTime(comment.createdAt)"
+      ],
+      "uncertainty": "Minor: need to call vi.useRealTimers() in afterEach to avoid leaking fake timers into other tests. Also vi.useFakeTimers may affect setTimeout/setInterval if react-query uses them internally, but this is standard practice."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Follow the TradingPanel/EventTradePanel hook-mocking pattern exactly. Mock @/features/session/context with async vi.importActual spread + useSession: vi.fn(), and mock @/lib/query/hooks with useMarketComments: vi.fn() and usePostMarketComment: vi.fn(). This matches the task description and the established codebase pattern. The Analytics.test.tsx API-client mocking pattern is not appropriate here because DiscussionThread consumes hooks directly (not the API client), and all other component tests that use hooks follow the hook-mock pattern.",
+      "confidence": 0.98,
+      "evidence": [
+        "frontend/src/__tests__/TradingPanel.test.tsx:13-21 — vi.mock('@/features/session/context', async () => { const actual = await vi.importActual(...); return { ...actual, useSession: vi.fn() }; })",
+        "frontend/src/__tests__/TradingPanel.test.tsx:23-25 — vi.mock('@/lib/query/hooks', () => ({ useProbabilityEdit: vi.fn() }))",
+        "frontend/src/__tests__/EventTradePanel.test.tsx:13-25 — identical pattern",
+        "frontend/src/features/market/DiscussionThread.tsx:2-3 — imports useSession, useMarketComments, usePostMarketComment"
+      ],
+      "uncertainty": "None — two established precedents in the codebase confirm this pattern."
+    },
+    {
+      "question_id": "q3",
+      "answer": "crypto.randomUUID() IS available in the vitest/jsdom environment. Vitest runs on Node.js, which provides crypto.randomUUID globally (available since Node 19+, and widely available in modern Node). Confirmed by running `node -e \"console.log(typeof crypto.randomUUID === 'function')\"` → true. The existing TradingPanel.test.tsx exercises the submit path (fireEvent.click at line 152) which calls crypto.randomUUID() in the component handler (TradingPanel.tsx) without any stub or polyfill, and the test passes. No stubbing needed.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/TradingPanel.test.tsx:152 — fireEvent.click(button) triggers handler that calls crypto.randomUUID()",
+        "frontend/src/__tests__/TradingPanel.test.tsx:163 — expect(call.payload.idempotencyKey).toBeDefined() confirms it works",
+        "frontend/src/features/market/DiscussionThread.tsx:34 — crypto.randomUUID() usage",
+        "Node.js runtime check: crypto.randomUUID is a function → true"
+      ],
+      "uncertainty": "Very minor: if CI uses an extremely old Node version (<15.x), crypto.randomUUID might not be available, but this is unlikely given the project's modern dependencies."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes, use mockMutate.mockImplementation to synchronously invoke the onSuccess callback. The DiscussionThread component passes onSuccess as the second argument to mutation.mutate (line 38-42): mutation.mutate({ payload, session }, { onSuccess: () => setBody('') }). The mock should capture and invoke this: mockMutate.mockImplementation((_variables, options) => { options?.onSuccess?.(); }). This is NOT the same pattern as TradingPanel (which doesn't test onSuccess at all — it only verifies the payload). This is a custom extension of the mockMutate pattern specifically for DiscussionThread's form-clear behavior. The implementation should be set in the specific test (test 10), not globally, so other tests keep the default vi.fn() behavior.",
+      "confidence": 0.92,
+      "evidence": [
+        "frontend/src/features/market/DiscussionThread.tsx:29-43 — mutation.mutate call with { onSuccess: () => setBody('') } as second arg",
+        "frontend/src/__tests__/TradingPanel.test.tsx:139-165 — submit test only checks payload, no onSuccess testing",
+        "frontend/src/__tests__/TradingPanel.test.tsx:11 — const mockMutate = vi.fn() pattern"
+      ],
+      "uncertainty": "The TanStack Query mutate() signature is mutate(variables, options?) where options includes onSuccess. The mock needs to match this signature. We should verify that the onSuccess callback in the options argument (second arg to mutate) is the one the component provides, not the hook-level onSuccess."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Proceed with TradingPanel/EventTradePanel mock pattern. Mock @/features/session/context with vi.importActual + useSession: vi.fn(), and @/lib/query/hooks with useMarketComments: vi.fn() + usePostMarketComment: vi.fn()."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Mock useMarketComments to return UseQueryResult-shaped object. Component accesses .data.comments, .data.pagination.returned, .isLoading, .isError, .error. A defaultQueryState helper (similar to defaultMutationState) would be useful."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Mock usePostMarketComment to return UseMutationResult-shaped object with mockMutate. Component accesses .mutate, .isPending, .isError, .error. Reuse the defaultMutationState pattern from TradingPanel."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "renderWithProviders wraps with SessionProvider (helpers.tsx:22-29), but since useSession is mocked at the module level with vi.mock(), the real SessionProvider context is never read by the component. Safe to use renderWithProviders as-is."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No crypto.randomUUID stub needed. Node.js provides it globally and TradingPanel tests already exercise it successfully."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "Use market.status = 'resolved' (or any non-'active' value) to trigger read-only mode. Component checks market.status !== 'active' at line 21."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "vi.useFakeTimers() + vi.setSystemTime() is the preferred approach. This controls Date.now() which formatRelativeTime depends on, producing deterministic output without module-level mocking. Remember to restore with vi.useRealTimers() in afterEach."
+    },
+    {
+      "assumption_id": "a8",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "Mock data must have consistent pagination.returned values. Component renders '{pagination.returned} comment(s)' at line 55. Also handles singular/plural: 'comment' vs 'comments' based on === 1 check."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
