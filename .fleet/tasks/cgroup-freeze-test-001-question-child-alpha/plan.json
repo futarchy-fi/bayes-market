@@ -1,0 +1,12 @@
+{
+  "phase": "plan",
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create backend/test_alpha.py with greet_alpha() function",
+      "files_to_create": ["backend/test_alpha.py"],
+      "files_to_modify": [],
+      "details": "Create a Python module at backend/test_alpha.py containing a greet_alpha() function that returns the string 'Hello Alpha'. Follow existing backend code style with docstrings, type hints, and from __future__ import annotations."
+    }
+  ]
+}
