@@ -1,0 +1,27 @@
+[Task task-portfolio-coverage-001] PHASE 1: QUESTION GENERATION
+Title: Expand Portfolio route test coverage
+Description: Expand test coverage for frontend/src/routes/Portfolio.tsx. Currently only has 1 test (unconfigured session). Add tests for: (1) Loading state shows LoadingPage spinner, (2) Error state shows "Account not found or no positions yet.", (3) Renders metric cards with correct values (Limit, Available, Consumed, Utilization, Health with status colors, Min Asset), (4) Health status colors: healthy=success, warning=warning, critical=danger, (5) Last updated timestamp displays when present, (6) Per-market positions table renders with market links, (7) Empty positions shows "No positions." text, (8) Market links use correct href format. Mock useSession, useAccountRisk, useMarkets. Follow patterns from existing tests. Update frontend/src/__tests__/Portfolio.test.tsx.
+Repo: /home/kelvin/bayes-market
+
+Explore the codebase. Identify what you need to know before building.
+
+YOU MUST create .fleet/tasks/task-portfolio-coverage-001/questions.json with this structure:
+{
+  "phase": "question",
+  "questions": [
+    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  ],
+  "assumptions": [
+    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  ],
+  "spawn_children": false,
+  "children": []
+}
+
+DO NOT STOP until questions.json exists and contains at least one question.
+Verify: ls -la .fleet/tasks/task-portfolio-coverage-001/ to confirm the file was written.
+
+DECOMPOSITION: Set spawn_children=true only if sub-questions warrant their own
+full 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
+
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: task-portfolio-coverage-001"

@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the new tests mock at the hook level (vi.mock('@/lib/query/hooks') + vi.mock('@/features/session/context')) like BayesNetGraph/ConditionalEditor tests, or at the API client level (vi.mock('@/lib/api/client')) like the existing Portfolio test?",
+      "category": "design",
+      "why_it_matters": "The existing Portfolio test mocks the API client, but the component uses useAccountRisk/useMarkets/useSession hooks. Mocking at the hook level gives direct control over isLoading/error/data states without needing to simulate React Query behavior. The newer test files (BayesNetGraph, ConditionalEditor, VariableRow) all mock at the hook level. Choosing the wrong approach could make loading/error state tests fragile or impossible."
+    },
+    {
+      "id": "q2",
+      "question": "Should the existing unconfigured-session test be refactored to use hook-level mocking for consistency with the new tests, or left as-is?",
+      "category": "design",
+      "why_it_matters": "Currently the single existing test mocks api.listMarkets and relies on SessionProvider defaulting to unconfigured. If we switch to hook-level mocking for new tests, the file would have two different mocking strategies, which is confusing. But refactoring the existing test changes scope."
+    },
+    {
+      "id": "q3",
+      "question": "For health status color assertions, should we test the inline CSS style values (e.g., style.color === 'var(--color-success)') or just verify the text content renders?",
+      "category": "design",
+      "why_it_matters": "The task description says to test 'Health status colors: healthy=success, warning=warning, critical=danger'. The component applies color via inline styles using CSS variables. Testing inline styles is possible via element.style but relies on implementation details. Testing only text content would miss the color requirement."
+    },
+    {
+      "id": "q4",
+      "question": "How should the timestamp test handle locale-dependent toLocaleString() output?",
+      "category": "design",
+      "why_it_matters": "Portfolio renders `new Date(risk.updatedAt).toLocaleString()` which produces locale-dependent output. Tests could check for 'Last updated' text presence, mock Date.toLocaleString, or set a fixed locale. The approach affects test reliability across environments."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "We should mock at the hook level (useSession, useAccountRisk, useMarkets) following the newer codebase pattern seen in BayesNetGraph, ConditionalEditor, VariableRow, etc.",
+      "confidence": 0.92,
+      "if_wrong": "Would need to mock at the API client level and deal with React Query's internal state management for loading/error simulation, making tests more complex and fragile."
+    },
+    {
+      "id": "a2",
+      "assumption": "The existing unconfigured-session test should be refactored to use hook-level mocking for consistency within the file.",
+      "confidence": 0.85,
+      "if_wrong": "Would leave two mocking strategies in one file. Minor issue but adds cognitive overhead for future maintainers."
+    },
+    {
+      "id": "a3",
+      "assumption": "We can test health status colors by inspecting inline style properties on the rendered DOM elements, since that's the actual mechanism the component uses and other tests in the codebase verify rendered output details.",
+      "confidence": 0.88,
+      "if_wrong": "Would need to add data-testid or aria attributes to MetricCard, which changes the component code beyond test scope."
+    },
+    {
+      "id": "a4",
+      "assumption": "For the timestamp test, we should check for the presence of 'Last updated' text rather than matching the exact formatted date, avoiding locale sensitivity.",
+      "confidence": 0.9,
+      "if_wrong": "If exact format testing is needed, we'd need to mock toLocaleString or set a test locale, adding complexity."
+    },
+    {
+      "id": "a5",
+      "assumption": "useAccountRisk hook returns { data, isLoading, error } matching the React Query pattern, where data has shape { account: { id, risk: { minAssets, capacityIndicators, updatedAt } } }.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to adjust mock data shapes, but the component code explicitly destructures these fields so the shape is clear from source."
+    },
+    {
+      "id": "a6",
+      "assumption": "useMarkets hook returns { data: { markets: MarketSummary[] }, isLoading, error } and we only need to mock the data property for market title resolution in the positions table.",
+      "confidence": 0.95,
+      "if_wrong": "Minimal impact - just need to adjust mock return shape."
+    },
+    {
+      "id": "a7",
+      "assumption": "Market links should render as <a> tags with href='/markets/{marketId}' since the component uses React Router's <Link to={`/markets/${mr.marketId}`}>.",
+      "confidence": 0.93,
+      "if_wrong": "MemoryRouter in test helpers should handle Link rendering correctly. If not, may need to verify via role-based queries instead of href checks."
+    },
+    {
+      "id": "a8",
+      "assumption": "No test IDs need to be added to the Portfolio component - all assertions can be made via text content, roles, and DOM structure queries.",
+      "confidence": 0.85,
+      "if_wrong": "May need to add minimal data-testid attributes to MetricCard components to distinguish between cards with similar structure."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
