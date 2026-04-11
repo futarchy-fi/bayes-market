@@ -1,0 +1,23 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.95,
+  "plan_adherence_notes": "All 6 planned steps were executed exactly as specified: (1) HTTPServer switched to ThreadingHTTPServer, (2) WebSocket protocol helpers implemented as stdlib-only module-level functions (ws_accept_key, ws_read_frame, ws_send_text, ws_send_close), (3) global connection registry with WS_CONNECTIONS, _WS_LOCK, ws_register, ws_unregister added near other global state, (4) WebSocket upgrade handler in do_GET via _handle_websocket() with RFC 6455 handshake and read loop for ping/pong/close, (5) ws_broadcast() constructs MarketPriceMessage matching the frontend's expected format, (6) ws_broadcast() hooked at both mutation points — probability edit acceptance and market resolution. Implementation also added a beneficial unplanned feature: sending an initial price snapshot upon WebSocket connection.",
+  "research_quality": 0.90,
+  "research_quality_notes": "Research correctly identified the true codebase state: SSE endpoints do NOT exist (correcting assumption a1), the frontend WebSocket client already exists in useMarketPriceSubscription (correcting a2), EventSource is not used — browser WebSocket API with custom exponential backoff is (correcting a4). Confirmed dual-path polling+WebSocket architecture (a5) and MarketDetail-only scope (a3). All 5 questions answered with confidence >= 0.90. The research directly enabled the correct plan: backend-only WebSocket implementation using stdlib, no frontend changes needed, MarketPriceMessage contract well-defined.",
+  "question_completeness": 0.75,
+  "question_completeness_notes": "The 5 questions covered requirements (SSE vs WebSocket, event types, which views), design (polling strategy), and UX (visual feedback). All were well-targeted and led to actionable research. However, several important concerns were not raised.",
+  "missed_questions": [
+    "Should WebSocket connections require authentication (e.g., agent-id header or token)? The implementation performs no auth on WebSocket upgrade, meaning any client can subscribe to any market's price feed.",
+    "Should there be limits on concurrent WebSocket connections per market or per client to prevent resource exhaustion?",
+    "Should the WebSocket handler validate that the market_id exists before completing the upgrade handshake? Currently it upgrades even for non-existent markets.",
+    "Should there be WebSocket-specific tests to verify the handshake, broadcast, and connection lifecycle?"
+  ],
+  "test_results": {
+    "total": 388,
+    "passed": 388,
+    "failed": 0,
+    "note": "All existing tests pass. No WebSocket-specific tests exist — the test suite covers the HTTP API surface only."
+  },
+  "verdict": "approve",
+  "reason": "The implementation faithfully executes all 6 planned steps with clean, correct code. The research phase was strong — it corrected 3 wrong initial assumptions and accurately mapped the frontend contract. The WebSocket protocol helpers are properly implemented per RFC 6455 (handshake, frame read/unmask, text send, close send). The connection registry is thread-safe. The broadcast function constructs the exact MarketPriceMessage shape the frontend's parseMarketPriceMessage validator expects. The two mutation-point hooks are correctly placed. ThreadingHTTPServer enables concurrent handling. All 388 existing tests pass. The missed questions (auth, connection limits, market validation) are real gaps but are appropriate follow-up work rather than blockers for the initial implementation, especially given that the frontend already has the WebSocket client wired in and waiting."
+}
