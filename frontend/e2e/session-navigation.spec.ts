@@ -2,8 +2,10 @@ import { test, expect } from "./fixtures/test-fixtures";
 
 test.describe("Session & Navigation", () => {
   test("entering Account ID in header input persists to localStorage", async ({ page }) => {
-    // Start without a session
-    test.use({ setupSession: false });
+    // Start without a session - clear any existing session first
+    await page.addInitScript(() => {
+      localStorage.removeItem("bayes-session");
+    });
 
     await page.goto("/markets");
 
