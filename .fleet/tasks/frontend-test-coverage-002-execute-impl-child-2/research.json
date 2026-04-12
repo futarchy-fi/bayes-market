@@ -1,0 +1,88 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The test files ResolveMarketPanel.test.tsx, ConditionalEditor.test.tsx, and VariableRow.test.tsx do NOT exist yet. Child-1 created AssumptionContext.test.tsx and SessionContext.test.tsx (context hook tests), not component tests. The questions.json incorrectly assumed these files existed. They need to be written from scratch.",
+      "confidence": 1.0,
+      "evidence": [
+        "frontend/src/__tests__/ directory listing shows no ResolveMarketPanel.test.tsx, ConditionalEditor.test.tsx, or VariableRow.test.tsx",
+        "git log shows child-1 commit 0f96491b created AssumptionContext.test.tsx and SessionContext.test.tsx only"
+      ],
+      "uncertainty": "None - verified by listing the __tests__ directory and checking git history"
+    },
+    {
+      "question_id": "q2",
+      "answer": "Moot - the test files don't exist. The line count targets from the task description (~150 lines each) are reasonable guidelines for writing them from scratch. The component implementations are: ResolveMarketPanel.tsx (218 lines), ConditionalEditor.tsx (288 lines with ContextRow), VariableRow.tsx (230 lines). Tests should cover the key behaviors without over-testing style constants.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/market/ResolveMarketPanel.tsx:218 lines",
+        "frontend/src/features/trading/ConditionalEditor.tsx:288 lines",
+        "frontend/src/features/assumptions/VariableRow.tsx:230 lines"
+      ],
+      "uncertainty": "Line count targets are guidelines; actual coverage needs may vary slightly"
+    },
+    {
+      "question_id": "q3",
+      "answer": "Tests need to be written from scratch. Based on component analysis, the key scenarios to cover are: ResolveMarketPanel - (1) resolved market shows summary, (2) non-active/closed status returns null, (3) no accountId returns null, (4) outcome selection, (5) two-step confirmation flow, (6) mutation success/error states. ConditionalEditor - (1) unconfigured session shows placeholder, (2) outcome selection and probability slider, (3) add/remove context rows, (4) context row market→outcome cascade, (5) form submission with valid context, (6) mutation success/error states. VariableRow - (1) returns null when data not loaded, (2) displays market title and outcomes with probabilities, (3) assume/unassume toggling, (4) inline edit flow (click Edit → slider → Set), (5) target market styling differences (no assume button, '(current)' label), (6) mutation success/error states.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/market/ResolveMarketPanel.tsx:10-136 - component logic",
+        "frontend/src/features/trading/ConditionalEditor.tsx:16-182 - component logic",
+        "frontend/src/features/assumptions/VariableRow.tsx:14-173 - component logic"
+      ],
+      "uncertainty": "Minor edge cases may be discovered during implementation"
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes, the ContextRow disabled state should be tested. The ContextRow component at ConditionalEditor.tsx:215 explicitly has `disabled={!assignment.variableId}` on the outcome select. This is a key UX guard - the outcome select is disabled until a market (variableId) is selected. Testing this is straightforward: render a ContextRow with empty variableId and assert the outcome select is disabled, then select a market and assert it becomes enabled.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/features/trading/ConditionalEditor.tsx:215 - disabled={!assignment.variableId}",
+        "frontend/src/features/trading/ConditionalEditor.tsx:196 - useMarket hook with enabled: !!assignment.variableId"
+      ],
+      "uncertainty": "ContextRow is an internal component tested through ConditionalEditor; testing via adding a context row and checking select state"
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "WRONG",
+      "confidence": 1.0,
+      "impact": "Tests must be written from scratch, not verified. Child-1 created context hook tests (AssumptionContext, SessionContext), not component tests. This changes the task from verification to implementation."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The established patterns in existing tests (EventTradePanel.test.tsx, MarketDetail.test.tsx) use vi.mock for API client, localStorage seeding for session, renderWithProviders helper. New tests should follow these same patterns."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "WRONG",
+      "confidence": 1.0,
+      "impact": "Tests don't exist at all, so there's nothing to 'pass'. All three test files need to be created from scratch."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.7,
+      "impact": "The AssumptionProvider pattern is valid - it's a real context provider. For VariableRow tests, we can either (a) wrap in AssumptionProvider directly and use button clicks to trigger assumption state changes, or (b) mock useAssumptions. Option (a) is more realistic but requires careful setup. The helpers.tsx does NOT include AssumptionProvider in TestProviders, so it needs to be added as a wrapper for VariableRow tests."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "The existing helpers.tsx provides renderWithProviders with QueryClient, SessionProvider, and MemoryRouter. For VariableRow, we'll need to add AssumptionProvider as an additional wrapper, but this can be done inline in the test file rather than modifying the shared helper."
+    }
+  ],
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.95,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All questions answered with high confidence (>=0.95). The key finding is that test files need to be written from scratch rather than verified, but the implementation path is clear: follow established patterns from EventTradePanel.test.tsx and MarketDetail.test.tsx, mock api client functions, use renderWithProviders, and test component behaviors. No research gaps remain. Component APIs are fully understood from reading the source files."
+  },
+  "spawn_children": false,
+  "children": []
+}
