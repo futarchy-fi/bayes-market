@@ -1,0 +1,70 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should WebSocket endpoint tests be included in scope, or should we focus only on HTTP REST endpoints? The WebSocket handlers (_handle_risk_websocket, _handle_market_websocket) have zero test coverage but may require a different test harness.",
+      "category": "requirements",
+      "why_it_matters": "WebSocket testing requires a different client library and test patterns than the existing unittest-based HTTP tests. Including them significantly increases complexity and may warrant a separate task."
+    },
+    {
+      "id": "q2",
+      "question": "Should new tests be added to the existing test_bayes_market_api.py (9,900 lines) or should we create a new test file for the new coverage?",
+      "category": "design",
+      "why_it_matters": "The existing file is already very large. Adding more tests there follows existing patterns but hurts maintainability. A new file needs to replicate setup/helper patterns."
+    },
+    {
+      "id": "q3",
+      "question": "Are there specific error codes or failure modes that have been observed in production that should be prioritized for test coverage?",
+      "category": "requirements",
+      "why_it_matters": "The task says 'focus on error paths and edge cases' - knowing which errors have actually occurred in production would help prioritize the most impactful tests to write."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "WebSocket endpoints are out of scope - we should focus on HTTP REST endpoint gaps like 500 error handling, market state transition validation, and large payload edge cases.",
+      "confidence": 0.7,
+      "if_wrong": "Would need to add websocket-client dependency and write a different test harness for WebSocket upgrade/messaging tests."
+    },
+    {
+      "id": "a2",
+      "assumption": "New tests should be added to the existing test_bayes_market_api.py file to follow established patterns and use existing helper functions.",
+      "confidence": 0.8,
+      "if_wrong": "Would need to extract shared helpers into a conftest.py or test utilities module and create a separate test file."
+    },
+    {
+      "id": "a3",
+      "assumption": "The three best candidates for new test coverage are: (1) 500 error handling when handlers raise unexpected exceptions, (2) market detail endpoint edge cases (non-existent market, resolved market state), (3) event trade endpoint edge cases (position limit boundaries, concurrent position updates).",
+      "confidence": 0.75,
+      "if_wrong": "May need to adjust which endpoints to target based on actual gaps vs what the task owner considers important."
+    },
+    {
+      "id": "a4",
+      "assumption": "Tests should use the same unittest.TestCase pattern with server.route_request() calls, not spinning up an HTTP server.",
+      "confidence": 0.9,
+      "if_wrong": "Would need to use the BayesMarketApiConcurrencyTests pattern with ThreadingHTTPServer instead."
+    },
+    {
+      "id": "a5",
+      "assumption": "The target endpoints for new error/edge-case tests are: GET /v1/markets/{id}/analytics (edge cases like empty markets, invalid time ranges), POST /v1/markets/{id}/resolve (concurrent resolution, partial settlement), and GET /v1/accounts/{id}/pnl (account with no trades, account with only resolved markets).",
+      "confidence": 0.65,
+      "if_wrong": "Different endpoints may have more critical untested paths that would be more valuable to cover."
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 2,
+    "complexity_reason": "Adding tests to an existing well-structured test suite with clear patterns. Changes are limited to 1 file, test helpers already exist, and the patterns are well-established. Need to write ~3-5 test functions per endpoint for 3 endpoints.",
+    "uncertainty_score": 2,
+    "uncertainty_reason": "The codebase is well-explored, test patterns are clear, and the gaps are identified. Main uncertainty is which specific edge cases will be most valuable, but the server code is readable and error paths are identifiable from the source.",
+    "independent_subproblems": [
+      "Write error path tests for endpoint group 1 (e.g., analytics edge cases)",
+      "Write error path tests for endpoint group 2 (e.g., resolution edge cases)",
+      "Write error path tests for endpoint group 3 (e.g., account PnL edge cases)"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity is low (score 2) and uncertainty is low (score 2). While there are 3 independent sub-problems, they all follow the same patterns, share the same file, and benefit from consistent style. Parallelizing would add coordination overhead without meaningful speed gain for ~15-20 test functions."
+  },
+  "spawn_children": false,
+  "children": []
+}
