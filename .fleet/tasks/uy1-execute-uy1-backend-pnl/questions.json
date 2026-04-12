@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "How should ProbabilityEdit orders contribute to cost basis? The impactScore is a KL divergence (information-theoretic measure), not a monetary amount like EventTrade.notional. Should we treat impactScore as a sunk cost in currency units, or only count EventTrade orders for cost basis?",
+      "category": "requirements",
+      "why_it_matters": "ProbabilityEdit orders don't have a price/size/notional field. If impactScore is treated as cost basis, it mixes units (KL divergence vs. currency). The plan says to use impactScore but this may produce semantically incorrect P&L values."
+    },
+    {
+      "id": "q2",
+      "question": "For resolved markets (like m3), positions are removed from ACCOUNT_EXPOSURE during settlement (settle_market_account_exposure). Should realized P&L be reconstructed purely from ORDERS history, and how do we determine what the settlement value was for each position?",
+      "category": "design",
+      "why_it_matters": "After resolution, positions are pruned from exposure state. We need to reconstruct position history from ORDERS to compute realized P&L. Settlement value depends on whether the account held the winning outcome (value=1.0 per unit) or losing outcome (value=0.0)."
+    },
+    {
+      "id": "q3",
+      "question": "What is the expected response schema for the P&L endpoints? Should it return per-outcome breakdown (e.g., separate P&L for 'yes' and 'no' positions) or aggregate per-market? Should it include fields like cost_basis, current_value, unrealized_pnl, realized_pnl, total_pnl?",
+      "category": "requirements",
+      "why_it_matters": "The plan mentions 'per-market P&L breakdown (unrealized, realized, total, cost_basis, current_value) per outcome' but the exact JSON shape and field naming convention needs to match the existing API style (camelCase vs snake_case)."
+    },
+    {
+      "id": "q4",
+      "question": "Should the per-market endpoint (GET /v1/markets/{marketId}/accounts/{accountId}/pnl) return 404 if the account has no orders in that market, or return zero values?",
+      "category": "design",
+      "why_it_matters": "Existing account endpoints (risk, exposure, positions) return 404 for unknown accounts. Consistency matters, but a 404 vs empty-result choice affects frontend error handling."
+    },
+    {
+      "id": "q5",
+      "question": "For the account-level endpoint, should it aggregate across ALL markets (including resolved ones where orders exist in history) or only active markets with live positions?",
+      "category": "requirements",
+      "why_it_matters": "If we include resolved markets, we show lifetime realized P&L. If only active, we show current unrealized exposure. The plan says 'aggregated across all markets' which suggests both."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "P&L is computed at query time by scanning ORDERS dict (no materialized/cached P&L state). Cost basis for EventTrade = sum of (notional) for buys, minus sum of (notional) for sells.",
+      "confidence": 0.9,
+      "if_wrong": "Would need to add a new in-memory projection dict (like ACCOUNT_PNL) and sync it on each trade, similar to ACCOUNT_RISK."
+    },
+    {
+      "id": "a2",
+      "assumption": "ProbabilityEdit impactScore IS treated as cost basis (per plan decision d2), despite being a KL divergence value. The system treats it as a 'price paid' for moving the market.",
+      "confidence": 0.6,
+      "if_wrong": "If impactScore should NOT be cost basis, then only EventTrade orders contribute to P&L, and ProbabilityEdit orders have no P&L impact. This simplifies the implementation significantly."
+    },
+    {
+      "id": "a3",
+      "assumption": "Unrealized P&L = (netSize * currentMarginal) - costBasis for active markets. Realized P&L = (netSize * settlementPrice) - costBasis for resolved markets, where settlementPrice is 1.0 for winning outcome and 0.0 for losing outcome.",
+      "confidence": 0.85,
+      "if_wrong": "Alternative P&L formulas (e.g., FIFO-based, mark-to-market with partial closes) would require more complex order history traversal."
+    },
+    {
+      "id": "a4",
+      "assumption": "The route for per-market P&L will be matched as len(parts)==6 with parts pattern ['v1','markets',marketId,'accounts',accountId,'pnl'] in the existing route_request function.",
+      "confidence": 0.95,
+      "if_wrong": "Minor routing adjustment needed but the path-segment matching pattern is well-established."
+    },
+    {
+      "id": "a5",
+      "assumption": "Response fields use camelCase (matching existing API: accountId, marketId, netSize, lastTradePrice, etc.) and include a 'meta' wrapper consistent with other endpoints.",
+      "confidence": 0.95,
+      "if_wrong": "Just a naming convention change, low risk."
+    },
+    {
+      "id": "a6",
+      "assumption": "For resolved markets, we reconstruct the position from ORDERS history (filtering by accountId + marketId, computing net size from buy/sell EventTrade orders) since positions are pruned from ACCOUNT_EXPOSURE on settlement.",
+      "confidence": 0.85,
+      "if_wrong": "If there's another way to get historical position data for resolved markets, the implementation would be simpler."
+    },
+    {
+      "id": "a7",
+      "assumption": "Integration tests (step 9) will use the test helper pattern: call route_request directly, set up trades via event-trade endpoint on market m3 (already resolved) or create new trades on m1/m2 (active), then assert P&L values.",
+      "confidence": 0.8,
+      "if_wrong": "May need to seed ORDERS manually for resolved market test cases since m3 starts resolved with no order history in the initial state."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
