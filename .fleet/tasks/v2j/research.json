@@ -1,0 +1,129 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Conditional edit range bounds are the computed minimum and maximum admissible probability values for a target outcome within a specific conditional slice (context assignment), such that the resulting rescaled distribution remains structurally valid. Currently, the structure-preserving validator (T551) rejects invalid edits after-the-fact by previewing the rescaled distribution and checking for negative marginals (server.py:2762-2773), but does NOT compute bounds upfront. T558 should compute these bounds proactively so the system can (1) reject with informative error details including the admissible range, and (2) potentially expose bounds to the frontend. The bounds are derived from the conditional slice's base marginals (resolved via inference engine or stored state), the target outcome, the number of outcomes, and the proportional rescaling algorithm in lmsr.rescale_probability_edit. They are NOT joint-distribution-level constraints — they are local to the already-resolved conditional slice.",
+      "confidence": 0.85,
+      "evidence": [
+        "docs/t537-epic-execution-baseline.md:38 — 'T558 [pending] (coder): Implement conditional edit allowable range bounds'",
+        "docs/t556-scope-and-compatibility-boundary-freeze.md:41 — 'T558 owns conditional admissible-range logic'",
+        "docs/t557-unconditional-solvency-contract-freeze.md:19 — 'non-empty context requests are explicitly out of scope for this task and stay deferred to T558'",
+        "backend/server.py:2762-2773 — validate_structure_preserving_edit checks for negative marginals after preview",
+        "backend/server.py:2748-2753 — _preview_probability_target_distribution called to compute updated marginals",
+        "backend/lmsr.py:94-131 — rescale_probability_edit performs proportional redistribution"
+      ],
+      "uncertainty": "Whether 'range bounds' also encompasses solvency-derived constraints (asset model limits) or is purely structural (distribution validity). The grouping under Risk/solvency in T538 creates ambiguity."
+    },
+    {
+      "question_id": "q2",
+      "answer": "T558 should primarily be server-side validation with informative error responses. The admissible range should be included in the error details when a conditional edit is rejected for being out of range, so the frontend CAN adopt the bounds. A dedicated query endpoint for admissible range is NOT required by T558 but could be added later. Evidence: (1) T558's title is 'Implement conditional edit allowable range bounds' — focused on enforcement, not API design. (2) The T557 pattern returns preview data (impactScore, beforeMinAsset, afterMinAsset) in rejection details but doesn't have a separate preview endpoint. (3) ConditionalEditor.tsx uses hardcoded 0.01-0.99 slider bounds and can adopt server-returned bounds from error responses or a future endpoint. (4) T575 (UI baseline) may own the frontend adoption of bounds, not T558.",
+      "confidence": 0.75,
+      "evidence": [
+        "frontend/src/features/trading/ConditionalEditor.tsx:103-111 — slider with hardcoded min={0.01} max={0.99}",
+        "docs/t538-scope-matrix.md:31 — 'Simple forecast + advanced conditional panel + risk preview' is MVP",
+        "docs/t557-unconditional-solvency-contract-freeze.md:134-158 — T557 includes preview details in rejection error.details",
+        "backend/server.py:4286-4292 — conditional edits currently bypass solvency preview entirely"
+      ],
+      "uncertainty": "Whether T558 should also return admissible bounds in successful (acceptance) responses as metadata, not just in rejections. The UI risk preview MVP requirement (T538/T575) may push for this."
+    },
+    {
+      "question_id": "q3",
+      "answer": "A new error code is the correct approach. The T551 boundary freeze document explicitly defines a frozen error partition (docs/t551-...:157-167) with three layers: (1) invalid_body/invalid_probability_edit for payload normalization, (2) invalid_structure_preserving_edit for T551 slice preservation, (3) market_not_active/min_asset_violation for post-command domain gates. Conditional range bounds validation is a NEW validation concept that doesn't fit any existing code: it's not generic payload validation (layer 1), it's not base-slice preservation (layer 2), and it's not a post-command gate (layer 3). A code like 'conditional_range_violation' or 'probability_range_exceeded' creates a clean fourth entry in the partition. It should be HTTP 400 (pre-acceptance validation failure, like T551), not 409 (business rule like solvency). The error details should include the computed admissible range {min, max} so the caller can adjust.",
+      "confidence": 0.8,
+      "evidence": [
+        "docs/t551-structure-preserving-validator-boundary-freeze.md:157-167 — Frozen Error Partition table",
+        "backend/server.py:2710 — invalid_structure_preserving_edit for T551 checks",
+        "backend/server.py:3076 — invalid_probability_edit for generic 0 < p < 1 checks",
+        "backend/server.py:1785 — min_asset_violation for solvency at 422",
+        "docs/t557-unconditional-solvency-contract-freeze.md:114 — min_asset_violation at 409"
+      ],
+      "uncertainty": "The exact error code name. 'conditional_range_violation' is descriptive but long. 'probability_range_exceeded' is shorter but less specific about the conditional context. Need to decide whether the code should indicate it's conditional-specific or generic range validation."
+    },
+    {
+      "question_id": "q4",
+      "answer": "The conditional range bounds check should sit AFTER resolve_probability_edit_base_marginals (step 3) and BEFORE validate_structure_preserving_edit (step 4) in the frozen pipeline. Specifically, inside normalize_probability_edit_payload() between line 3468 (base_marginals resolution with fallback) and line 3469 (validate_structure_preserving_edit call). This placement: (1) has access to the resolved base marginals needed for range computation, (2) runs before T551's check so it provides a tighter, more informative error, (3) does NOT violate the T551 boundary freeze because T551's boundary explicitly starts at validate_structure_preserving_edit — adding a pre-check before it doesn't modify T551's contract, (4) follows the pattern where earlier checks give more specific error messages than later ones.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/server.py:3463-3469 — normalize_probability_edit_payload: base_marginals resolved at 3464, validate_structure_preserving_edit called at 3469",
+        "docs/t551-structure-preserving-validator-boundary-freeze.md:25-53 — Frozen pipeline steps 1-6",
+        "docs/t551-structure-preserving-validator-boundary-freeze.md:54 — 'This freezes T551 as a seam inside the normalization path but after canonicalization has already happened'",
+        "docs/t551-structure-preserving-validator-boundary-freeze.md:96-103 — 'T551 validates the chosen base marginals; it does not decide which slice to use'"
+      ],
+      "uncertainty": "Whether the check should only run for conditional edits (non-empty context) or also for unconditional edits. If it's T558-specific, it should only run for conditional context, and unconditional range validation remains with existing checks."
+    },
+    {
+      "question_id": "q5",
+      "answer": "The admissible range CAN be computed locally from the already-resolved base marginals without additional inference engine queries. The inference engine is already queried ONCE by resolve_probability_edit_base_marginals() (server.py:3011-3016 via query_market_marginals_for_inference at 1192-1208) to get the conditional slice. From that slice, the structural range is a pure function of: (1) the base marginals for the target outcome and non-target outcomes, (2) the number of outcomes, and (3) the rescaling algorithm (proportional redistribution in lmsr.py:94-131). For proportional rescaling: if non-target outcomes have positive total mass, any p in (0,1) produces non-negative updated marginals. The only structural constraint is when non-target total mass is 0 (then target must be 1.0). So the computation is local arithmetic, not an inference query. No new inference endpoints are needed.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:3011-3016 — resolve_probability_edit_base_marginals delegates to query_market_marginals_for_inference",
+        "backend/server.py:1192-1208 — query_market_marginals_for_inference queries inference engine once",
+        "backend/lmsr.py:115-125 — proportional rescaling preserves non-negativity for any target in (0,1)",
+        "backend/lmsr.py:117-120 — equal distribution fallback when non-target total is 0",
+        "backend/server.py:2738-2760 — validate_structure_preserving_edit checks base marginals validity"
+      ],
+      "uncertainty": "Whether solvency-based range bounds (if in scope) would require additional inference queries for asset delta computation. The current asset model uses KL-divergence (impactScore) which is also computable locally from the marginals."
+    },
+    {
+      "question_id": "q6",
+      "answer": "Solvency checks for conditional edits are likely OUT OF SCOPE for T558. T558 should focus on structural admissible-range bounds (distribution validity), while solvency belongs to T559 (GS minimum-assets path). Evidence: (1) T558's title is 'conditional edit allowable RANGE BOUNDS' — focused on mathematical range, not solvency. (2) T559 is a separate task for 'Global Separator (GS) minimum-assets path' which is the solvency computation for conditional/multi-market edits. (3) T557 defers 'admissible-range and bound computation' to T558, not 'solvency enforcement'. (4) The current placeholder solvency model (impactScore = KL divergence) is explicitly temporary and awaiting T556's proper asset model. Adding conditional solvency using the placeholder model would create a false contract that T556/T559 would need to replace. However, T558 SHOULD provide the structural range so that T559 can later narrow it with solvency constraints.",
+      "confidence": 0.65,
+      "evidence": [
+        "docs/t537-epic-execution-baseline.md:38-39 — T558 'allowable range bounds' vs T559 'GS minimum-assets path'",
+        "docs/t557-unconditional-solvency-contract-freeze.md:190-202 — 'leave admissible-range and bound computation for contextual edits to T558'",
+        "docs/t538-scope-matrix.md:28 — T558 grouped under Risk/solvency alongside T556, T557, T559, T561",
+        "docs/t556-scope-and-compatibility-boundary-freeze.md:39-43 — task ownership breakdown",
+        "backend/server.py:4286-4292 — conditional edits currently skip solvency entirely"
+      ],
+      "uncertainty": "T558 is grouped under Risk/solvency in T538, and T557 explicitly defers conditional edits to T558. This could mean T558 must add at least basic solvency for conditional edits using the placeholder model (like T557 does for unconditional). The distinction between 'range bounds' (structural) and 'solvency' (asset) may not be as clean as I'm assuming."
+    },
+    {
+      "question_id": "q7",
+      "answer": "For markets with N>2 outcomes, the admissible range is structurally the same as binary markets — effectively (0, 1) — because the proportional rescaling algorithm preserves non-negativity. Specifically: lmsr.rescale_probability_edit (lmsr.py:115-125) computes each non-target outcome as (base_value / sum_of_non_target_base_values) * (1 - target_p). Since base values are non-negative and the ratio is non-negative, all rescaled values are non-negative for any target p in (0,1). The only edge case is when ALL non-target outcomes have zero base probability (sum=0), where the function falls back to equal distribution (lmsr.py:117-120), which also produces non-negative values. The T551 validator's check at server.py:2745 (non-target mass > 0) is about the base slice quality, not the target probability. So renormalization strategy does NOT tighten the range for N>2 outcomes. The validate_structure_preserving_edit negative-marginal check (server.py:2762) is a safety net that should never trigger with the proportional rescaling algorithm for any p in (0,1) given valid base marginals.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/lmsr.py:115-125 — proportional rescaling: scaled = base_value / total * (1-target_p)",
+        "backend/lmsr.py:117-120 — equal distribution fallback for zero non-target total",
+        "backend/server.py:2745-2746 — T551 check: non-target mass must be positive if target < 1.0",
+        "backend/server.py:2762-2773 — safety check: updated marginals must not be negative",
+        "backend/server.py:2660 — rounding to 12 decimal places in preview"
+      ],
+      "uncertainty": "Rounding at 12 decimal precision (server.py:2660) could theoretically produce tiny negative values for extreme target probabilities very close to 1.0 with many outcomes. This would be caught by T551's check (server.py:2762) and could effectively limit the upper bound to slightly below 1.0. In practice, this is negligible (the frontend already caps at 0.99)."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "T558 is specifically about conditional edits with non-empty context. T557 explicitly handles unconditional edits and defers conditional to T558 (docs/t557-unconditional-solvency-contract-freeze.md:19). T537 confirms the task title as 'conditional edit allowable range bounds'. Unconditional edits already have 0<p<1 validation and T557 solvency."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "The admissible range is computable from the already-resolved conditional slice. resolve_probability_edit_base_marginals() already queries the inference engine for base marginals. From that slice, the range computation is pure arithmetic over the base marginals and the rescaling algorithm. No additional inference queries needed. This keeps T558 simple — it's a local computation, not an inference extension."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.75,
+      "impact": "T558 should be server-side validation. The frontend (ConditionalEditor.tsx) has hardcoded slider bounds and can adopt server-returned bounds later. T558 should include computed range in error details (like T557 includes preview details in rejection). A dedicated query endpoint is not required but the error payload enables future frontend adoption without a new endpoint."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.8,
+      "impact": "A new error code is the right approach. The T551 boundary freeze (docs/t551-...:157-167) explicitly defines a frozen error partition. Conditional range violation is a new validation concept that doesn't fit existing codes. Using 'invalid_structure_preserving_edit' would violate T551's documented boundary (it's about base-slice preservation, not range computation). Using 'invalid_probability_edit' would conflate payload normalization with semantic range validation. A new code like 'conditional_range_violation' (HTTP 400) is clean."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.6,
+      "impact": "T558 is grouped under Risk/solvency in T538, and T557 defers conditional edits to T558. This could mean T558 must add basic solvency for conditional edits. However, T559 (GS minimum-assets path) is specifically about the solvency computation for multi-market/conditional scenarios. The safest interpretation: T558 owns structural range bounds, T559 narrows those bounds with solvency constraints. But this interpretation may be wrong — T558 might need placeholder conditional solvency analogous to T557's placeholder unconditional solvency."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
