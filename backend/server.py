@@ -40,6 +40,7 @@ from backend.inference import (
     InferenceCompileError,
     InferenceQueryError,
     InferenceUnsupportedQueryError,
+    JUNCTION_TREE_COMPILER,
     canonical_json_hash,
 )
 
@@ -1164,8 +1165,9 @@ def compile_market_for_inference(
         return cached
 
     state["cache_misses"] += 1
+    compiler = JUNCTION_TREE_COMPILER if ENGINE_COMPILE_TYPE == "junction_tree" else CURRENT_MODEL_COMPILER
     try:
-        result = CURRENT_MODEL_COMPILER.compile_result(
+        result = compiler.compile_result(
             market_snapshot=deepcopy(market),
             conditional_marginals=deepcopy(CONDITIONAL_MARGINALS.get(market_id, {})),
             compile_time_ms=round(float(compile_time_ms), 3),
