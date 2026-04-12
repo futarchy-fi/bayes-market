@@ -1,0 +1,88 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should WebSocket endpoints (/ws/markets/{id}/prices, /ws/markets/{id}/events, /ws/accounts/{id}/risk) be included in the OpenAPI spec, or only REST endpoints? OpenAPI 3.0 has limited WebSocket support — AsyncAPI is the standard for event-driven APIs.",
+      "category": "requirements",
+      "why_it_matters": "WebSocket endpoints can't be fully described in OpenAPI 3.0. Including them as stubs may be misleading; omitting them leaves the spec incomplete. This decision affects scope significantly."
+    },
+    {
+      "id": "q2",
+      "question": "The backend uses mixed casing conventions: some response fields are snake_case (created_at, expires_at) while others are camelCase (variableId, marketId). The TypeScript types reflect this mix. Should the OpenAPI schema document the actual wire format as-is, or should we normalize naming?",
+      "category": "codebase",
+      "why_it_matters": "Schema property names must match the actual JSON wire format for the spec to be useful for code generation and validation. Documenting the mixed convention accurately is critical."
+    },
+    {
+      "id": "q3",
+      "question": "Several endpoints return different response shapes depending on context (e.g., GET / returns HTML or JSON based on Accept header, POST endpoints return different structures on idempotent replay vs fresh creation). Should we document all response variants or just the primary JSON responses?",
+      "category": "design",
+      "why_it_matters": "Documenting every content-negotiation variant and idempotency replay shape increases spec size substantially. The primary use case for the spec determines which variants matter."
+    },
+    {
+      "id": "q4",
+      "question": "The rate-limiting behavior (X-RateLimit-* headers, 429 responses) is conditionally enabled via BAYES_RATE_LIMIT_PER_MIN env var. Should rate-limiting headers and 429 responses be documented as standard response components even though they're optional?",
+      "category": "design",
+      "why_it_matters": "Consumers need to know about rate limiting to build resilient clients. Documenting it as always-present when it's optional could confuse integrators."
+    },
+    {
+      "id": "q5",
+      "question": "The TypeScript types include several types not directly tied to REST endpoints (e.g., MarketPriceMessage, MarketEventMessage, AccountRiskMessage for WebSocket, Session for client state). Should OpenAPI schemas cover only REST request/response types, or all types from types.ts?",
+      "category": "requirements",
+      "why_it_matters": "Including WebSocket message types and client-only types in the schema components bloats the spec with types that don't map to any REST operation, but omitting them means the spec doesn't fully mirror types.ts."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The OpenAPI spec should document the actual wire format of the API as currently implemented, not an idealized or future version.",
+      "confidence": 0.95,
+      "if_wrong": "We'd need design input on what the target API shape should be, turning this from a documentation task into an API design task."
+    },
+    {
+      "id": "a2",
+      "assumption": "OpenAPI 3.0.x (not 3.1) is the target version, as specified in the task description.",
+      "confidence": 0.9,
+      "if_wrong": "OpenAPI 3.1 supports JSON Schema draft 2020-12 natively, which would change how we define nullable types and other schema constructs."
+    },
+    {
+      "id": "a3",
+      "assumption": "The spec should be a single docs/openapi.yaml file rather than split across multiple files with $ref to external schemas.",
+      "confidence": 0.85,
+      "if_wrong": "A multi-file approach would be more maintainable for 17+ endpoints but adds complexity for consumers and tooling."
+    },
+    {
+      "id": "a4",
+      "assumption": "Authentication should be modeled as an optional API key in X-Bayes-Agent-Id header, since it's only required when BAYES_REQUIRE_AGENT_ID is true.",
+      "confidence": 0.85,
+      "if_wrong": "If auth is always required in production, the security scheme should be marked as required on all write endpoints unconditionally."
+    },
+    {
+      "id": "a5",
+      "assumption": "The legacy health endpoints (GET /health, GET /healthz) should be documented alongside versioned endpoints (GET /v1/health) for completeness.",
+      "confidence": 0.7,
+      "if_wrong": "If legacy endpoints are deprecated and not meant for new consumers, documenting them adds noise and implies they're supported."
+    },
+    {
+      "id": "a6",
+      "assumption": "WebSocket endpoints will be documented as minimal stubs (noting they exist and their upgrade mechanism) since OpenAPI 3.0 cannot fully describe bidirectional messaging.",
+      "confidence": 0.75,
+      "if_wrong": "If WebSocket docs are out of scope entirely, we save significant spec complexity. If full docs are needed, AsyncAPI would be the right tool."
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 3,
+    "complexity_reason": "Single output file (docs/openapi.yaml) documenting ~17 REST endpoints + 3 WebSocket stubs. The endpoint inventory is large but the work is repetitive schema transcription, not architectural. All source material (server.py + types.ts) is already well-understood. Estimated output ~1500-2000 lines of YAML.",
+    "uncertainty_score": 2,
+    "uncertainty_reason": "The backend endpoints and TypeScript types are thoroughly documented and consistent. The main unknowns are minor scope decisions (WebSocket inclusion, legacy endpoints) that can be resolved with reasonable defaults. No unfamiliar APIs or risky changes.",
+    "independent_subproblems": [
+      "Define reusable schema components from TypeScript types",
+      "Document each REST endpoint path with parameters, request bodies, and responses",
+      "Define security scheme and error response components"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity is moderate (3) and uncertainty is low (2). While there are logically separable subproblems, they all write to the same output file and share schema references, making parallel work impractical. The task is well-scoped documentation generation from known sources — a single agent can handle this efficiently."
+  },
+  "spawn_children": false,
+  "children": []
+}

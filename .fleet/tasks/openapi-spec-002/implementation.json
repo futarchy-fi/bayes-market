@@ -1,0 +1,43 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Audit existing docs/openapi.yaml paths against backend router to identify missing endpoints, incorrect methods, or stale path definitions",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true,
+      "findings": "All 21 backend router endpoints matched spec paths. No missing or stale endpoints. Found status query param on /v1/markets missing closed and draft values."
+    },
+    {
+      "step": 2,
+      "task": "Compare existing schema components against types.ts and backend response handlers to identify missing or outdated fields",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true,
+      "findings": "Found 8 discrepancies: MarketSummary missing expires_at and incomplete status enum; Market incomplete status enum; ExposurePosition lastOrderId/lastCommandId not nullable; ProbabilityEditResponse/EventTradeResponse missing result field; CommandAcceptedResponse had wrong shape for resolve endpoint; EngineStatsResponse clique items unstructured; command responses missing CommandResponseMeta with idempotencyKeyEcho/replayed."
+    },
+    {
+      "step": 3,
+      "task": "Update path definitions: fix status query param enum on /v1/markets, fix resolve endpoint 201 response schema",
+      "files_created": [],
+      "files_modified": ["docs/openapi.yaml"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Update component schemas: add expires_at to MarketSummary, fix status enums, make ExposurePosition fields nullable, add result+CommandResponseMeta to order responses, replace CommandAcceptedResponse with TerminalResult+CommandResponseMeta, add structured CliqueSummary items",
+      "files_created": [],
+      "files_modified": ["docs/openapi.yaml"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Validate final spec: all 127 $ref targets resolve, required fields match properties, new schemas present, old CommandAcceptedResponse removed",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}

@@ -1,0 +1,96 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Exclude WebSocket endpoints entirely from the spec; mention them only in the info.description section",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Document WebSocket endpoints as stubs with GET+Upgrade operations", "Create a separate AsyncAPI spec for WebSocket endpoints"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Preserve the actual wire format with mixed casing (snake_case for temporal fields, camelCase for identifiers) exactly as the backend emits",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Normalize all fields to camelCase", "Normalize all fields to snake_case"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Document only primary JSON responses; omit HTML content-negotiation variants and treat idempotency replay as an optional 'replayed' field in meta",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Document all content-negotiation variants with multiple media types", "Create separate response schemas for replay vs fresh"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Document rate-limiting as conditional behavior in the description; include 429 as a possible response on write endpoints but do not make X-RateLimit-* headers required on all responses",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Add X-RateLimit-* headers to every endpoint response", "Omit rate limiting entirely"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Include only REST request/response schemas in components; exclude WebSocket message types and client-only types",
+      "based_on": ["q5"],
+      "alternatives_rejected": ["Include all types from types.ts including WebSocket message schemas", "Create a separate schemas file for non-REST types"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Use OpenAPI 3.0.3 in a single docs/openapi.yaml file with internal $ref paths only",
+      "based_on": ["q1", "q5"],
+      "alternatives_rejected": ["Upgrade to OpenAPI 3.1 for native JSON Schema support", "Split into multiple files with external $ref"],
+      "reversibility": "medium"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Audit existing docs/openapi.yaml paths against backend router (server.py:4910-5115) to identify any missing endpoints, incorrect methods, or stale path definitions",
+      "depends_on": [],
+      "estimated_lines": 0,
+      "risk": "low"
+    },
+    {
+      "step": 2,
+      "task": "Compare existing schema components against frontend/src/lib/api/types.ts and backend response handler functions to identify missing or outdated fields in request/response schemas",
+      "depends_on": [],
+      "estimated_lines": 0,
+      "risk": "low"
+    },
+    {
+      "step": 3,
+      "task": "Update path definitions: fix any missing query parameters (e.g., pagination params on list endpoints, filter params on analytics), correct response status codes, and add any undocumented endpoints",
+      "depends_on": [1],
+      "estimated_lines": 80,
+      "risk": "low"
+    },
+    {
+      "step": 4,
+      "task": "Update component schemas: add missing properties to existing schemas, fix type mismatches (nullable fields, enum values), and add any missing schema definitions referenced by updated paths",
+      "depends_on": [2],
+      "estimated_lines": 120,
+      "risk": "medium"
+    },
+    {
+      "step": 5,
+      "task": "Validate the final spec by running it through a linter (if available) or manual structural verification — ensure all $ref targets resolve, required fields are consistent, and examples are valid",
+      "depends_on": [3, 4],
+      "estimated_lines": 20,
+      "risk": "low"
+    }
+  ],
+
+  "decomposition_assessment": {
+    "total_steps": 5,
+    "estimated_total_lines": 220,
+    "high_risk_steps": 0,
+    "parallelizable_groups": [["step1", "step2"], ["step3", "step4"], ["step5"]],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Estimated total lines (220) is well under 500. Zero high-risk steps. While steps 1-2 and 3-4 are logically parallel, they all modify the same output file (docs/openapi.yaml), making true parallel execution impractical. The existing spec is already substantially complete at 1814 lines — this is an audit-and-update task, not a from-scratch generation. A single agent can handle this efficiently."
+  },
+
+  "spawn_children": false,
+  "children": []
+}
