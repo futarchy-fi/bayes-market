@@ -284,6 +284,8 @@ _RATE_LIMIT_LOCK = threading.Lock()
 
 # WebSocket connection registry: market_id → set of socket objects
 WS_CONNECTIONS: dict[str, set[Any]] = {}
+WS_EVENT_CONNECTIONS: dict[str, set[Any]] = {}
+WS_RISK_CONNECTIONS: dict[str, set[Any]] = {}
 _WS_LOCK = threading.Lock()
 _WS_SEQ = 0
 
@@ -320,6 +322,38 @@ def ws_unregister(market_id: str, sock: Any) -> None:
                 del WS_CONNECTIONS[market_id]
 
 
+def ws_register_events(market_id: str, sock: Any) -> None:
+    """Register a WebSocket connection for market event streaming."""
+    with _WS_LOCK:
+        WS_EVENT_CONNECTIONS.setdefault(market_id, set()).add(sock)
+
+
+def ws_unregister_events(market_id: str, sock: Any) -> None:
+    """Unregister a WebSocket connection for market event streaming."""
+    with _WS_LOCK:
+        sockets = WS_EVENT_CONNECTIONS.get(market_id)
+        if sockets is not None:
+            sockets.discard(sock)
+            if not sockets:
+                del WS_EVENT_CONNECTIONS[market_id]
+
+
+def ws_register_risk(account_id: str, sock: Any) -> None:
+    """Register a WebSocket connection for account risk streaming."""
+    with _WS_LOCK:
+        WS_RISK_CONNECTIONS.setdefault(account_id, set()).add(sock)
+
+
+def ws_unregister_risk(account_id: str, sock: Any) -> None:
+    """Unregister a WebSocket connection for account risk streaming."""
+    with _WS_LOCK:
+        sockets = WS_RISK_CONNECTIONS.get(account_id)
+        if sockets is not None:
+            sockets.discard(sock)
+            if not sockets:
+                del WS_RISK_CONNECTIONS[account_id]
+
+
 def ws_broadcast(market_id: str) -> None:
     """Broadcast current market prices to all WebSocket subscribers."""
     market = MARKETS.get(market_id)
@@ -353,6 +387,69 @@ def ws_broadcast(market_id: str) -> None:
             dead.append(sock)
     for sock in dead:
         ws_unregister(market_id, sock)
+
+
+def ws_broadcast_events(market_id: str) -> None:
+    """Broadcast the latest event from the journal to all event stream subscribers."""
+    with _WS_LOCK:
+        sockets = WS_EVENT_CONNECTIONS.get(market_id)
+        if not sockets:
+            return
+        targets = list(sockets)
+    with _EVENTS_LOCK:
+        event_records = list(EVENTS.values())
+    head_seq = MARKET_EVENT_SEQUENCES.get(market_id, 0)
+    latest = None
+    for event in event_records:
+        if str(event["marketId"]) == market_id and int(event["seq"]) == head_seq:
+            latest = deepcopy(event)
+            break
+    if latest is None:
+        return
+    msg: dict[str, Any] = {
+        "type": "event",
+        "marketId": market_id,
+        "event": latest,
+        "seq": _next_ws_seq(),
+        "emittedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    payload = json.dumps(msg)
+    dead: list[Any] = []
+    for sock in targets:
+        try:
+            ws_send_text(sock, payload)
+        except OSError:
+            dead.append(sock)
+    for sock in dead:
+        ws_unregister_events(market_id, sock)
+
+
+def ws_broadcast_risk(account_id: str) -> None:
+    """Broadcast current account risk and exposure state to all risk stream subscribers."""
+    with _WS_LOCK:
+        sockets = WS_RISK_CONNECTIONS.get(account_id)
+        if not sockets:
+            return
+        targets = list(sockets)
+    risk = ACCOUNT_RISK.get(account_id)
+    exposure = ACCOUNT_EXPOSURE.get(account_id)
+    msg: dict[str, Any] = {
+        "type": "risk",
+        "accountId": account_id,
+        "risk": deepcopy(risk) if risk is not None else None,
+        "exposure": deepcopy(exposure) if exposure is not None else None,
+        "seq": _next_ws_seq(),
+        "emittedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    payload = json.dumps(msg)
+    dead: list[Any] = []
+    for sock in targets:
+        try:
+            ws_send_text(sock, payload)
+        except OSError:
+            dead.append(sock)
+    for sock in dead:
+        ws_unregister_risk(account_id, sock)
 
 
 ORDER_COUNTER = 0
@@ -3643,6 +3740,7 @@ def emit_terminal_event(command: dict[str, Any], event_type: str, payload: dict[
         LAST_EVENT_HASHES[market_id] = str(event["eventHash"])
         with _EVENTS_LOCK:
             EVENTS[str(event["eventId"])] = deepcopy(event)
+        ws_broadcast_events(market_id)
         return event
 
 
@@ -3980,6 +4078,13 @@ def resolve_market_command(command: dict[str, Any]) -> dict[str, Any]:
     )
     resolution["assetDelta"] = settle_market_account_risk(market_id, resolved_at)
     resolution["exposureCleanup"] = settle_market_account_exposure(market_id, resolved_at)
+    affected_accounts: set[str] = set()
+    for delta in resolution["assetDelta"]:
+        affected_accounts.add(str(delta["accountId"]))
+    for cleanup in resolution["exposureCleanup"]:
+        affected_accounts.add(str(cleanup["accountId"]))
+    for acct_id in affected_accounts:
+        ws_broadcast_risk(acct_id)
     return resolution
 
 
@@ -4353,6 +4458,7 @@ def handle_probability_edit(market_id: str, payload: dict[str, Any] | None) -> t
 
         order = create_probability_edit_order(command, preview=preview)
         asset_delta = sync_account_risk_state(order)
+        ws_broadcast_risk(str(order["accountId"]))
         return build_terminal_acceptance_response(command, order, asset_delta, scope_key)
 
 
@@ -4452,6 +4558,7 @@ def handle_event_trade(market_id: str, payload: dict[str, Any] | None) -> tuple[
         )
         order = create_event_trade_order(command)
         sync_account_exposure_state(order)
+        ws_broadcast_risk(str(order["accountId"]))
         return build_event_trade_acceptance_response(command, order, scope_key)
 
 
@@ -4900,6 +5007,138 @@ class BayesHandler(BaseHTTPRequestHandler):
         self.wfile.write(content)
         return True
 
+    def _handle_risk_websocket(self, path: str) -> bool:
+        """Attempt WebSocket upgrade for /ws/accounts/{id}/risk. Returns True if handled."""
+        ws_match = re.match(r"^/ws/accounts/([^/]+)/risk$", path)
+        if ws_match is None:
+            return False
+        if (self.headers.get("Upgrade") or "").lower() != "websocket":
+            return False
+        client_key = self.headers.get("Sec-WebSocket-Key")
+        if not client_key:
+            self.send_error(400, "Missing Sec-WebSocket-Key")
+            return True
+
+        account_id = ws_match.group(1)
+
+        # Send 101 Switching Protocols
+        accept = ws_accept_key(client_key)
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", accept)
+        self.end_headers()
+
+        sock = self.request
+        ws_register_risk(account_id, sock)
+        try:
+            # Send initial risk+exposure snapshot
+            risk = ACCOUNT_RISK.get(account_id)
+            exposure = ACCOUNT_EXPOSURE.get(account_id)
+            snapshot_msg: dict[str, Any] = {
+                "type": "snapshot",
+                "accountId": account_id,
+                "risk": deepcopy(risk) if risk is not None else None,
+                "exposure": deepcopy(exposure) if exposure is not None else None,
+                "seq": _next_ws_seq(),
+                "emittedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            }
+            ws_send_text(sock, json.dumps(snapshot_msg))
+
+            # Read loop: handle ping/pong/close, ignore data frames
+            while True:
+                frame = ws_read_frame(sock)
+                if frame is None:
+                    break
+                opcode, data = frame
+                if opcode == 0x8:  # close
+                    try:
+                        ws_send_close(sock)
+                    except OSError:
+                        pass
+                    break
+                if opcode == 0x9:  # ping → pong
+                    try:
+                        pong = bytearray([0x8A, len(data)]) + data
+                        sock.sendall(bytes(pong))
+                    except OSError:
+                        break
+        except OSError:
+            pass
+        finally:
+            ws_unregister_risk(account_id, sock)
+        return True
+
+    def _handle_events_websocket(self, path: str) -> bool:
+        """Attempt WebSocket upgrade for /ws/markets/{id}/events. Returns True if handled."""
+        ws_match = re.match(r"^/ws/markets/([^/]+)/events$", path)
+        if ws_match is None:
+            return False
+        if (self.headers.get("Upgrade") or "").lower() != "websocket":
+            return False
+        client_key = self.headers.get("Sec-WebSocket-Key")
+        if not client_key:
+            self.send_error(400, "Missing Sec-WebSocket-Key")
+            return True
+
+        market_id = ws_match.group(1)
+
+        # Send 101 Switching Protocols
+        accept = ws_accept_key(client_key)
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", accept)
+        self.end_headers()
+
+        sock = self.request
+        ws_register_events(market_id, sock)
+        try:
+            # Send initial snapshot of recent events
+            with _EVENTS_LOCK:
+                event_records = list(EVENTS.values())
+            market_events = sorted(
+                (
+                    deepcopy(event)
+                    for event in event_records
+                    if str(event["marketId"]) == market_id
+                ),
+                key=lambda event: int(event["seq"]),
+            )
+            snapshot_events = market_events[-20:] if market_events else []
+            snapshot_msg: dict[str, Any] = {
+                "type": "snapshot",
+                "marketId": market_id,
+                "events": snapshot_events,
+                "seq": _next_ws_seq(),
+                "emittedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            }
+            ws_send_text(sock, json.dumps(snapshot_msg))
+
+            # Read loop: handle ping/pong/close, ignore data frames
+            while True:
+                frame = ws_read_frame(sock)
+                if frame is None:
+                    break
+                opcode, data = frame
+                if opcode == 0x8:  # close
+                    try:
+                        ws_send_close(sock)
+                    except OSError:
+                        pass
+                    break
+                if opcode == 0x9:  # ping → pong
+                    try:
+                        pong = bytearray([0x8A, len(data)]) + data
+                        sock.sendall(bytes(pong))
+                    except OSError:
+                        break
+        except OSError:
+            pass
+        finally:
+            ws_unregister_events(market_id, sock)
+        return True
+
     def _handle_websocket(self, path: str) -> bool:
         """Attempt WebSocket upgrade for /ws/markets/{id}/prices. Returns True if handled."""
         ws_match = re.match(r"^/ws/markets/([^/]+)/prices$", path)
@@ -4971,6 +5210,10 @@ class BayesHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         """Serve API routes first, fall back to static frontend files."""
         path = normalize_path(urlparse(self.path).path)
+        if self._handle_events_websocket(path):
+            return
+        if self._handle_risk_websocket(path):
+            return
         if self._handle_websocket(path):
             return
         if path.startswith("/v1/") or path in PUBLIC_HEALTH_ROUTES:
