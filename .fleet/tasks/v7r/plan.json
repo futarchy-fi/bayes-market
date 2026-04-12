@@ -1,0 +1,102 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Add compile_result() method to JunctionTreeCompiler matching CurrentModelCompiler's interface (market_snapshot, conditional_marginals, compile_time_ms, last_updated). It builds a minimal BayesianNetworkGraph from the market snapshot and delegates to compile_network(). This keeps the server compile_market_for_inference flow unchanged — just swap the compiler object.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Modify server-side compile_market_for_inference to call compile_network directly with a different interface — would add compile_type branching to the server hot path",
+        "Implement compile_market() instead of compile_result() — compile_market has a different signature (market_id, source_state_hash) that doesn't receive market data, so the server would still need changes"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep per-market cache keying (market_id). No network-scoped keys, no variable-to-artifact reverse index. Junction tree artifacts are cached under the market_id that triggered compilation, same as current_model artifacts.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Network-scoped key (set of variable_ids or network_id) — no network_id concept exists, would require new data model",
+        "Composite key (market_id + compile_type) — T553 stores one CompileResult per market, no need for dual-type caching"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Per-market invalidation only. Editing market M1 invalidates only M1's cache entry. No cross-market cascade even if M1 participates in a shared junction tree. T554 will address cascade invalidation.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Cascade invalidation to all markets sharing a junction tree artifact — explicitly deferred to T554 per boundary freeze doc"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Add compiler selection logic in compile_market_for_inference: use JUNCTION_TREE_COMPILER when ENGINE_CONFIG.compile_type == 'junction_tree', otherwise CURRENT_MODEL_COMPILER. This respects the existing config which already sets compile_type='junction_tree'.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Always use CURRENT_MODEL_COMPILER — ignores the config that already declares junction_tree as the compile_type",
+        "Add a compiler registry/factory — over-engineering for two compilers"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Source state hash for junction tree artifacts includes graph structure only (variables + edges), not CPT data. Matches existing compile_network() implementation. CPT-aware hashing deferred until CPTs are populated.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Include CPT data in hash — CPTs are not populated yet (potential_tables=None), would hash empty data"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "No junction-tree-specific cache diagnostics. Existing per-market cache counters and engine-stats are sufficient. compile_type already exposed in engine-stats response.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Separate junction_tree_cache_hits vs current_model_cache_hits — premature, one entry per market means no meaningful distinction"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Implement JunctionTreeCompiler.compile_result() method in backend/inference/junction_tree.py. Build a minimal BayesianNetworkGraph from the market_snapshot (single variable with its outcomes, zero edges, empty CPTs) and delegate to self.compile_network(). Signature: compile_result(self, *, market_snapshot, conditional_marginals, compile_time_ms, last_updated) -> CompileResult. This makes JunctionTreeCompiler a drop-in replacement for CurrentModelCompiler in the server flow.",
+      "depends_on": [],
+      "estimated_lines": 25,
+      "risk": "medium"
+    },
+    {
+      "step": 2,
+      "task": "Add compiler selection in server.py compile_market_for_inference(). Import JUNCTION_TREE_COMPILER. Select compiler based on ENGINE_CONFIG.compile_type: if 'junction_tree' use JUNCTION_TREE_COMPILER, else CURRENT_MODEL_COMPILER. Replace the hardcoded CURRENT_MODEL_COMPILER.compile_result() call at line 1168 with the selected compiler.",
+      "depends_on": [1],
+      "estimated_lines": 12,
+      "risk": "medium"
+    },
+    {
+      "step": 3,
+      "task": "Add junction tree cache invalidation tests in tests/test_bayes_market_cache_invalidation.py. New test class JunctionTreeCacheTests with tests: (a) compile with junction_tree compiler populates cache, (b) second call returns cached result, (c) probability edit invalidates and produces new compile_id/source_state_hash, (d) cache isolation between markets still holds, (e) junction tree CompileResult has compile_type='junction_tree'. Follow existing test patterns (setUp calls reset_state, use build_probability_edit helper).",
+      "depends_on": [1, 2],
+      "estimated_lines": 80,
+      "risk": "low"
+    },
+    {
+      "step": 4,
+      "task": "Run existing test suite to verify no regressions. The existing CacheIntegrationTests use CURRENT_MODEL_COMPILER implicitly — after adding compiler selection, these tests may use junction_tree compiler depending on ENGINE_CONFIG. If so, either: (a) pin those tests to current_model via a test fixture, or (b) verify they pass with junction_tree compiler (preferred since config already says junction_tree). Fix any failures.",
+      "depends_on": [2, 3],
+      "estimated_lines": 15,
+      "risk": "low"
+    }
+  ],
+  "decomposition_assessment": {
+    "total_steps": 4,
+    "estimated_total_lines": 132,
+    "high_risk_steps": 0,
+    "parallelizable_groups": [["step1"], ["step2"], ["step3", "step4"]],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Estimated 132 lines is well under 500 threshold. Zero high-risk steps (both medium-risk steps are straightforward interface implementations). Steps are sequential — step 2 depends on step 1, step 3 depends on both. No parallelization opportunity justifies spawning children. Tightly coupled through shared interfaces (CompileResult, cache API, server compile flow)."
+  },
+  "spawn_children": false,
+  "children": []
+}

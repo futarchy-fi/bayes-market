@@ -23,6 +23,10 @@ server = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(server)
 
+# Pin to current_model compiler: JT query backend is not yet implemented,
+# so API flows that compile then query (e.g. probability edits) require
+# the current_model path. T554+ will enable JT queries.
+server.ENGINE_COMPILE_TYPE = "current_model"
 
 PROPERTY_PROBABILITIES = (0.05, 0.1, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95)
 REFERENCE_NET_MARKET_IDS = tuple(server.INITIAL_MARKETS)

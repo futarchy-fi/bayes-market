@@ -1,0 +1,88 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Junction tree artifacts span multiple variables (via BayesianNetworkGraph), but the current cache is keyed by market_id (one variable per market). Should junction tree cache invalidation use a network-scoped key (e.g., a set of variable_ids or a network_id), or should it invalidate all junction tree artifacts that contain the mutated market's variable?",
+      "category": "design",
+      "why_it_matters": "The cache key strategy determines whether we need a new lookup structure (variable-to-artifact mapping) or can extend the existing per-market cache. Wrong choice means either stale artifacts or excessive invalidation."
+    },
+    {
+      "id": "q2",
+      "question": "JunctionTreeCompiler.compile_market() raises InferenceUnsupportedQueryError and requires compile_network() instead. Should the cache integration flow in server.py (compile_market_for_inference -> cache) be extended to support compile_network, or should JunctionTreeCompiler.compile_market be implemented to wrap compile_network?",
+      "category": "design",
+      "why_it_matters": "The current server cache flow only calls compile_market(). If junction tree compilation needs compile_network(), the integration path and cache put/get logic must change to accommodate the different compilation interface."
+    },
+    {
+      "id": "q3",
+      "question": "When a probability edit on market M1 is accepted and M1's variable is part of a junction tree artifact that also includes M2's variable, should the cache invalidation cascade to invalidate the shared junction tree artifact? Or does T553 scope limit this to per-market invalidation only?",
+      "category": "requirements",
+      "why_it_matters": "Cross-market invalidation requires tracking which junction tree artifacts contain which variables. Without it, stale junction tree artifacts could return incorrect joint probabilities after a mutation."
+    },
+    {
+      "id": "q4",
+      "question": "The existing CompileResultCache stores at most one CompileResult per market_id. For junction trees, could there be multiple artifacts per market (e.g., the market's independent model plus a junction tree it participates in)?",
+      "category": "design",
+      "why_it_matters": "If a market can have both a CurrentModel artifact and a JunctionTree artifact cached simultaneously, the cache needs to support multiple entries per market_id or use a composite key (market_id + compile_type)."
+    },
+    {
+      "id": "q5",
+      "question": "Should the source_state_hash for junction tree artifacts incorporate CPT data (currently not populated in potential_tables) or only the graph structure (variables + edges) as it does now?",
+      "category": "requirements",
+      "why_it_matters": "If CPTs are eventually populated and a probability edit changes CPT values without changing graph structure, the source_state_hash must include CPT data to detect the change and trigger invalidation. Otherwise the cache would serve stale artifacts."
+    },
+    {
+      "id": "q6",
+      "question": "Does the engine-stats API endpoint need to expose junction-tree-specific cache diagnostics (e.g., junction_tree_cache_hits vs current_model_cache_hits), or are the existing per-market cache counters sufficient?",
+      "category": "requirements",
+      "why_it_matters": "If the task requires distinguishing cache behavior by compile_type in observability, the CacheStats tracking and engine-stats response shape need to change."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The task scope is limited to T553 boundaries: per-market cache invalidation on mutation, no public cache-control endpoints, no cross-market cascade invalidation.",
+      "confidence": 0.7,
+      "if_wrong": "Would need to implement a variable-to-artifact reverse index and cascade invalidation logic, significantly increasing scope."
+    },
+    {
+      "id": "a2",
+      "assumption": "The cache will continue to be keyed by market_id, and junction tree artifacts will be cached under the market_id that triggered compilation.",
+      "confidence": 0.6,
+      "if_wrong": "Would need to redesign the cache key scheme (e.g., composite keys or a separate junction tree cache) and update all call sites in server.py."
+    },
+    {
+      "id": "a3",
+      "assumption": "JunctionTreeCompiler.compile_market() should be implemented (not left as unsupported) to work with the existing cache integration flow in server.py.",
+      "confidence": 0.65,
+      "if_wrong": "Would need to modify the server-side compilation path to call compile_network() and provide BayesianNetworkGraph, requiring a graph-building layer."
+    },
+    {
+      "id": "a4",
+      "assumption": "The existing test patterns in test_bayes_market_cache_invalidation.py are the right model for new junction-tree-specific tests.",
+      "confidence": 0.9,
+      "if_wrong": "Minor impact - would just need different test helpers or setup patterns."
+    },
+    {
+      "id": "a5",
+      "assumption": "The source_state_hash computation for junction trees should include graph structure only (not CPTs), matching the current implementation in JunctionTreeCompiler.compile_network().",
+      "confidence": 0.75,
+      "if_wrong": "Would need to extend the hash computation to include CPT data once potential_tables are populated."
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 3,
+    "complexity_reason": "Core cache.py is small (103 lines), junction_tree.py compilation is already complete, and server.py changes are localized to the invalidation path (~5 lines). Main work: extending cache semantics for junction tree artifacts, updating invalidation triggers, and adding tests. Estimated 3-4 files changed, ~150-200 lines of new/modified code.",
+    "uncertainty_score": 3,
+    "uncertainty_reason": "The task title ('junction tree cache invalidation') is clear directionally but ambiguous on scope - unclear whether it means adding junction-tree-awareness to the existing per-market cache, building cross-variable invalidation, or simply ensuring the existing cache flow works when the compiler is junction_tree type. The T553 boundary freeze doc was referenced but not found in docs/.",
+    "independent_subproblems": [
+      "Extend CompileResultCache to handle junction tree artifacts (cache key design, multi-type support)",
+      "Integrate junction tree compilation into the server cache flow (compile_market_for_inference path)",
+      "Add junction-tree-specific cache invalidation tests"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity (3) and uncertainty (3) are both below threshold. While there are 3 independent subproblems, they are tightly coupled through shared interfaces (CompileResult, cache API) and would need sequential coordination. The total scope is moderate (~150-200 lines across 3-4 files), well within single-agent capacity."
+  },
+  "spawn_children": false,
+  "children": []
+}
