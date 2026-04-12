@@ -1,0 +1,88 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should `impactScore` in orders and preview responses switch from the raw KL-divergence value to `lmsr_expected_edit_cost(previous, updated, market.liquidity)`? The T556 scope doc says internal math changes behind stable public surfaces, and `impactScore` appears in both acceptance responses and rejection `error.details`. If the numeric value changes, downstream consumers (T557 solvency guard, tests) will see different magnitudes.",
+      "category": "requirements",
+      "why_it_matters": "This is the central cost-model swap. KL divergence is unitless relative entropy; LMSR cost is `b * KL` which scales with liquidity. Every solvency check, rejection preview, and test assertion that references `impactScore` will need recalibration."
+    },
+    {
+      "id": "q2",
+      "question": "For the per-user min-asset derivation from LMSR scores: should it be `riskLimit + sum_over_slices(min_over_outcomes(scoreByOutcome))` treating each market/context slice as independent? The existing `ACCOUNT_LMSR_RISK_READ_MODEL = 'scalar-min-asset-v1'` naming suggests exactly this scalar worst-case model.",
+      "category": "design",
+      "why_it_matters": "This determines the solvency boundary. The current placeholder uses simple subtraction (`minAsset -= impactScore`). The LMSR model must compute worst-case payout across all possible outcome realizations. Independence assumption (sum of per-slice minimums) is the simplest correct formulation for non-correlated markets."
+    },
+    {
+      "id": "q3",
+      "question": "Should `sync_account_risk_state` be refactored to derive `minAsset` from the cumulative LMSR ledger slices rather than doing incremental subtraction? Currently it does `account['minAsset'] = before - impact`, but the LMSR model requires recomputing min-asset from the full `scoreByOutcome` state across all slices after each edit.",
+      "category": "design",
+      "why_it_matters": "Incremental subtraction is a placeholder approximation. LMSR min-asset must be derived from cumulative score positions: `riskLimit + sum(min(scores_per_slice))`. This changes whether min-asset is a running counter or a computed projection, which affects both correctness and performance."
+    },
+    {
+      "id": "q4",
+      "question": "The existing `kl_divergence()` function in server.py rounds to 6 decimal places and is used directly as `impactScore`. Should the LMSR cost use the same `round_risk_value()` normalization (also 6dp) that all other risk values use, replacing the standalone `kl_divergence` call?",
+      "category": "design",
+      "why_it_matters": "Numerical precision in financial math affects deterministic replay and test assertions. The existing `round()` call in `kl_divergence` differs from the `round_risk_value()` used elsewhere in the risk pipeline. Unifying ensures consistency in the LMSR cost path."
+    },
+    {
+      "id": "q5",
+      "question": "Should `preview_unconditional_probability_edit` and `create_probability_edit_order` both be updated to pass `market['liquidity']` into the LMSR cost computation? Currently neither function reads `market['liquidity']` for cost - they only use `kl_divergence(prev, updated)`. The LMSR functions in `lmsr.py` all require a `liquidity` parameter.",
+      "category": "codebase",
+      "why_it_matters": "This is the concrete wiring change. The T556 scope doc freezes `market.liquidity == LMSR b`. The preview path, order creation path, and the existing `sync_probability_edit_lmsr_state` (which already reads `market['liquidity']`) must all use the same `b` value."
+    },
+    {
+      "id": "q6",
+      "question": "How should conditional edits (non-empty context) compute LMSR cost? Currently both conditional and unconditional paths use the same `kl_divergence`. The conditional path stores scores in separate LMSR slices keyed by `account_lmsr_slice_key(market_id, context)`. Should each slice independently contribute to the min-asset sum?",
+      "category": "design",
+      "why_it_matters": "Conditional edits affect the user's risk profile. Each context-specific slice represents a separate exposure in a different conditional world. The min-asset derivation must account for all slices. T558 defers conditional solvency bounds, but T556 must still compute correct costs for conditional edits that get accepted."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The LMSR cost for an edit is `lmsr_expected_edit_cost(previous, updated, market.liquidity)` from `backend/lmsr.py`, which equals `b * KL(updated || previous)`. This replaces the raw `kl_divergence()` as the `impactScore`.",
+      "confidence": 0.9,
+      "if_wrong": "Would need a different cost function, possibly the LMSR market-maker cost `C(q_new) - C(q_old)` using the log-sum-exp formulation instead of the expected cost."
+    },
+    {
+      "id": "a2",
+      "assumption": "Min-asset derivation follows the `scalar-min-asset-v1` model: `riskLimit + sum_over_slices(min(scoreByOutcome[slice]))`. Each LMSR slice contributes its worst-case outcome to the total.",
+      "confidence": 0.85,
+      "if_wrong": "Would need a joint-distribution min-asset computation across correlated market slices, which is significantly more complex (GS path, deferred to T559)."
+    },
+    {
+      "id": "a3",
+      "assumption": "The existing `lmsr.py` module provides all needed math primitives. No new LMSR functions need to be added to that module.",
+      "confidence": 0.8,
+      "if_wrong": "May need a helper like `lmsr_min_score(score_by_outcome)` or `lmsr_worst_case_payout(slices)` for the min-asset derivation from accumulated scores."
+    },
+    {
+      "id": "a4",
+      "assumption": "Public API response shapes stay identical - only the numeric values of `impactScore`, `beforeMinAsset`, `afterMinAsset` change due to the LMSR math replacing the KL placeholder.",
+      "confidence": 0.95,
+      "if_wrong": "Would need new response fields or envelope changes, violating the T556 compatibility boundary freeze."
+    },
+    {
+      "id": "a5",
+      "assumption": "Existing tests in `test_bayes_market_api.py` that assert specific `impactScore` or `minAsset` values will need their expected values updated to reflect LMSR costs (which are `liquidity * KL` instead of raw KL).",
+      "confidence": 0.95,
+      "if_wrong": "Tests might not assert exact values, only structural shapes, in which case fewer test changes needed."
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 3,
+    "complexity_reason": "Focused internal math replacement across 2-3 files (server.py, possibly lmsr.py, tests). The LMSR primitives already exist. Main work is wiring `lmsr_expected_edit_cost` into the cost path, changing min-asset derivation from running subtraction to LMSR-score-based projection, and updating test assertions. No public API changes, no new endpoints, no schema migrations.",
+    "uncertainty_score": 2,
+    "uncertainty_reason": "T556 scope doc is very precise about what to change and what to preserve. LMSR math is well-defined and already implemented in lmsr.py. The existing LMSR ledger slices already accumulate score deltas. Main uncertainty is the exact min-asset derivation formula from accumulated scores (scalar sum of per-slice minimums vs. joint computation), but the `scalar-min-asset-v1` naming strongly suggests the independent-slice approach.",
+    "independent_subproblems": [
+      "Replace kl_divergence cost with lmsr_expected_edit_cost in preview and order creation paths",
+      "Derive min-asset from cumulative LMSR ledger scores instead of running subtraction",
+      "Update test assertions to reflect new LMSR cost values"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity 3 and uncertainty 2 are both below the SPAWN_CHILDREN threshold. The 3 sub-problems are sequential dependencies (cost change affects min-asset derivation, both affect test values). Changes are confined to backend/server.py with minor test updates. Single coherent change best handled in one pass."
+  },
+  "spawn_children": false,
+  "children": []
+}
