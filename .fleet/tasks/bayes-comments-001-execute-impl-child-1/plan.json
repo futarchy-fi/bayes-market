@@ -1,0 +1,100 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Add all new comment tests to BayesMarketApiAuthRateLimitTests class, which already has comment_post/comment_post_with_headers helpers, an HTTP server, and the existing comment contract test.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "BayesMarketApiUnitTests (uses server.route_request directly, no HTTP layer, cannot test agent_id auth)",
+        "New dedicated comment test class (unnecessary fragmentation, helpers already exist)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Test GET /v1/markets/{id}/comments via HTTP request() method in BayesMarketApiAuthRateLimitTests for co-location with POST tests. Populate data using comment_post() first.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Testing GET via server.route_request in BayesMarketApiUnitTests (splits comment tests across classes)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "For idempotency conflict test, send same idempotencyKey+accountId+marketId but different 'body' text. Normalization only keeps {'body': normalized_body}, so different body triggers 409.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Using different accountId (would create different scope_key, not test the conflict path)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Directly manipulate server.MARKETS['m1']['status'] for market-not-active tests, matching existing test patterns at lines 3164 and 3415.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Using resolve/close API endpoints (adds dependencies, not needed for isolated test)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Extend comment_post and comment_post_with_headers helpers to accept optional idempotency_key parameter, passing it as 'idempotencyKey' in the request body when provided.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Using raw request() calls for idempotency tests (duplicates helper logic, inconsistent with other helpers like event_trade which already support idempotency_key)"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Extend comment_post and comment_post_with_headers helpers to accept optional idempotency_key parameter. When provided, include 'idempotencyKey' in the request body dict. Pattern: match event_trade_with_headers which already passes idempotency_key.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add POST validation error tests: (a) missing accountId → 400 invalid_comment, (b) missing body → 400 invalid_comment, (c) empty body (whitespace only) → 400 invalid_comment, (d) body exceeding MAX_COMMENT_BODY_LENGTH (2000 chars) → 400 invalid_comment, (e) empty idempotencyKey string → 400 invalid_comment with field='idempotencyKey'. Each test uses comment_post() or comment_post_with_headers() with agent_id set.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add POST market-not-active rejection test: set server.MARKETS['m1']['status'] = 'closed', post a comment, assert 409 with error code 'market_not_active' and details containing marketId, status, allowedStatus='active', commandId. Reset status to 'active' in finally block.",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Add POST idempotency replay test: post a comment with idempotencyKey='idem-replay-1', then post again with same key and same body. Assert second response is 201 with meta.replayed=True and same comment data as first response.",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Add POST idempotency conflict test: post a comment with idempotencyKey='idem-conflict-1' and body='first body', then post with same key but body='different body'. Assert second response is 409 with error code 'idempotency_conflict'.",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Add GET /v1/markets/{id}/comments basic test: post 2-3 comments to m1 via comment_post(), then GET /v1/markets/m1/comments. Assert 200, correct marketId, comments array with correct length, comments sorted by seq ascending, and pagination fields (fromSeq=1, limit=100, returned=N, nextFromSeq=null when all returned).",
+      "depends_on": []
+    },
+    {
+      "step": 7,
+      "task": "Add GET comments pagination tests: (a) post 3 comments, GET with limit=2, assert returned=2 and nextFromSeq=3; (b) GET with fromSeq=2, assert only comments with seq>=2 returned; (c) GET with fromSeq=2&limit=1, assert returned=1 and correct nextFromSeq.",
+      "depends_on": [6]
+    },
+    {
+      "step": 8,
+      "task": "Add GET comments edge case tests: (a) GET comments for non-existent market → 404 market_not_found; (b) GET comments for market with no comments → 200 with empty comments array and pagination.returned=0.",
+      "depends_on": [6]
+    },
+    {
+      "step": 9,
+      "task": "Run the full test suite (python -m pytest tests/test_bayes_market_api.py -x -q) to verify all new tests pass and no existing tests are broken.",
+      "depends_on": [2, 3, 4, 5, 7, 8]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
