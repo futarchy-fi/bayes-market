@@ -1,0 +1,85 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Write all three test files from scratch following established patterns in EventTradePanel.test.tsx and MarketDetail.test.tsx (vi.mock at module level, renderWithProviders, defaultMutationState helper, waitFor for async)",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Verifying/patching existing test files (they don't exist - confirmed by research)",
+        "Creating a shared test factory for all 3 components (unnecessary abstraction for 3 independent files)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Mock API client functions (useResolveMarket, useProbabilityEdit, useMarket, useMarkets, useSession) at module level with vi.mock, not per-test. Use vi.mocked() to set return values in beforeEach.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Mocking hooks inline per test (inconsistent with project patterns)",
+        "Using MSW for API interception (overkill for unit tests, project doesn't use it)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "For VariableRow tests, wrap in AssumptionProvider inline rather than modifying shared helpers.tsx. Use a custom render wrapper that adds AssumptionProvider inside TestProviders.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Modifying helpers.tsx to include AssumptionProvider globally (would affect all tests, AssumptionProvider is only needed for assumption-related components)",
+        "Mocking useAssumptions directly (loses integration testing of context flow)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Test ContextRow disabled state through ConditionalEditor integration: add a context row, verify outcome select is disabled before market selection, then select a market and verify it enables.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Testing ContextRow as a standalone export (it's not exported, it's internal to ConditionalEditor)",
+        "Skipping disabled state test (it's a key UX guard that prevents invalid submissions)"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create ResolveMarketPanel.test.tsx: mock useResolveMarket and useSession. Test guard clauses (resolved shows summary, non-active/closed returns null, no accountId returns null), outcome selection, two-step confirmation flow (Resolve → Yes/Resolve + Cancel), mutation success/error states, and confirming reset on outcome change.",
+      "depends_on": [],
+      "estimated_lines": 150,
+      "risk": "low"
+    },
+    {
+      "step": 2,
+      "task": "Create ConditionalEditor.test.tsx: mock useSession, useProbabilityEdit, useMarkets. Test unconfigured session placeholder, outcome selection and probability slider, add/remove context rows, ContextRow market→outcome cascade with disabled state, form submission with correct payload structure (marginal target, context array, idempotencyKey), conditional vs unconditional button text/styling, mutation success/error states.",
+      "depends_on": [],
+      "estimated_lines": 220,
+      "risk": "medium"
+    },
+    {
+      "step": 3,
+      "task": "Create VariableRow.test.tsx: mock useMarket, useSession, useProbabilityEdit. Wrap in AssumptionProvider. Test null return when data not loaded, market title and outcome probability bars, assume/unassume toggling, inline edit flow (Edit button → slider → Set/Cancel), target market styling differences (no assume button, '(current)' label, primary border), mutation payload includes contextPayload from AssumptionContext, success/error states.",
+      "depends_on": [],
+      "estimated_lines": 210,
+      "risk": "medium"
+    },
+    {
+      "step": 4,
+      "task": "Run all three test files with vitest to verify they pass. Fix any failures due to mock mismatches or component API differences.",
+      "depends_on": [1, 2, 3],
+      "estimated_lines": 0,
+      "risk": "medium"
+    }
+  ],
+  "decomposition_assessment": {
+    "total_steps": 4,
+    "estimated_total_lines": 580,
+    "high_risk_steps": 0,
+    "parallelizable_groups": [["step1", "step2", "step3"], ["step4"]],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Although estimated_total_lines (580) exceeds 500, there are 0 high-risk steps and only 1 truly independent parallelizable group (steps 1-3 are all test files in the same directory following identical patterns; step 4 depends on all of them). The 3 test files share the same mock patterns, helper utilities, and directory. Spawning children for 3 files of ~150-220 lines each that follow the same template would add coordination overhead without meaningful benefit. The line count barely exceeds the threshold and each file is straightforward boilerplate-heavy test code."
+  },
+  "spawn_children": false,
+  "children": []
+}
