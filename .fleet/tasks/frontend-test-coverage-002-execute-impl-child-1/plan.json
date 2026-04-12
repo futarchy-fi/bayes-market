@@ -1,0 +1,52 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Write both test files from scratch since neither AssumptionContext.test.tsx nor SessionContext.test.tsx exist in the codebase",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": ["Patching existing tests (none exist)", "Only adding setAllAssumptions test (function doesn't exist)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use renderHook from @testing-library/react with inline wrapper components for both test files, matching vitest import patterns from existing tests",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Using render() with dummy consumer components (more verbose, less direct)", "Using enzyme (not in project deps)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Place test files in frontend/src/__tests__/ directory following existing convention (all 13 existing tests live there)",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Co-locating tests next to source files (breaks existing project convention)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Mock localStorage for SessionContext tests using vi.stubGlobal or Object.defineProperty to control getItem/setItem behavior",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Using jsdom's built-in localStorage (less control over corrupt data scenarios)", "Using a localStorage polyfill library (unnecessary dep)"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Write frontend/src/__tests__/AssumptionContext.test.tsx (~90 lines) with renderHook tests covering: (1) initial empty state, (2) addAssumption adds to list, (3) addAssumption deduplicates by variableId (replaces existing), (4) removeAssumption removes by variableId, (5) clearAll empties list, (6) hasAssumption returns true/false, (7) getAssumption returns matching assumption or undefined, (8) contextPayload maps to {variableId, outcomeId} array stripping label, (9) useAssumptions throws when used outside AssumptionProvider",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Write frontend/src/__tests__/SessionContext.test.tsx (~70 lines) with renderHook tests covering: (1) default session values {accountId:'', agentId:''}, (2) loadSession reads from localStorage on mount, (3) setAccountId updates state and persists to localStorage, (4) setAgentId updates state and persists to localStorage, (5) corrupt localStorage returns defaults gracefully, (6) partial localStorage data fills missing fields with empty string, (7) isConfigured is true when accountId is non-empty, (8) useSession throws when used outside SessionProvider",
+      "depends_on": []
+    },
+    {
+      "step": 3,
+      "task": "Run vitest for both new test files to confirm all tests pass: npx vitest run --reporter=verbose src/__tests__/AssumptionContext.test.tsx src/__tests__/SessionContext.test.tsx",
+      "depends_on": [1, 2]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

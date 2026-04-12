@@ -1,0 +1,112 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Prioritize by: (1) business-critical mutations/state, (2) complexity/line count, (3) number of hooks and state interactions. The top 5 untested components are: ResolveMarketPanel (218 lines, useResolveMarket mutation + two-step confirmation flow, handles resolved/active/closed states), ConditionalEditor (288 lines, form with dynamic context conditions, useProbabilityEdit mutation, nested ContextRow subcomponent with useMarket), VariableRow (230 lines, inline probability editing + assumption toggling, 5 hooks including useMarket/useProbabilityEdit/useAssumptions/useSession), AssumptionContext (67 lines, shared state provider with add/remove/clear/has/get operations), and session/context.tsx (64 lines, localStorage-backed session with accountId/agentId). Simple UI components (Spinner 42 lines, StatusBadge 22 lines, ProbabilityBar 51 lines) and chart wrappers (VolumeChart 83 lines, PriceHistoryChart 144 lines) should be deprioritized as they are mostly presentational with minimal logic.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/market/ResolveMarketPanel.tsx:1-218 (mutation + confirmation flow + 3 render states)",
+        "frontend/src/features/trading/ConditionalEditor.tsx:1-288 (form + dynamic context + nested ContextRow)",
+        "frontend/src/features/assumptions/VariableRow.tsx:1-230 (5 hooks, inline editing, assumption toggling)",
+        "frontend/src/features/assumptions/AssumptionContext.tsx:1-67 (shared state with 6 operations)",
+        "frontend/src/features/session/context.tsx:1-64 (localStorage persistence)",
+        "frontend/src/components/ui/Spinner.tsx (42 lines, pure SVG)",
+        "frontend/src/components/ui/StatusBadge.tsx (22 lines, formatting wrapper)"
+      ],
+      "uncertainty": "Priority could shift if specific components are blocking other work or have known bugs."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Mock at the API client level using vi.mock('@/lib/api/client'), letting React Query hooks run naturally. This is the established pattern: MarketDetail.test.tsx mocks the entire client module and uses vi.mocked(api.getMarket).mockResolvedValue(...) for each endpoint. EventTradePanel.test.tsx uses a partial mock with vi.importActual to keep the BayesApiError class real while mocking submitEventTrade. For components using context (useSession, useAssumptions), the renderWithProviders helper already wraps with SessionProvider and MemoryRouter. For AssumptionContext, we'll need to either wrap with AssumptionProvider in tests or add it to the TestProviders helper. The test QueryClient is configured with retry: false and gcTime: 0, which is correct for deterministic tests.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/__tests__/MarketDetail.test.tsx:8 (vi.mock('@/lib/api/client') - full module mock)",
+        "frontend/src/__tests__/EventTradePanel.test.tsx:8-14 (partial mock with vi.importActual for BayesApiError)",
+        "frontend/src/__tests__/helpers.tsx:7-14 (createTestQueryClient with retry:false, gcTime:0)",
+        "frontend/src/__tests__/helpers.tsx:16-25 (TestProviders wraps QueryClientProvider + SessionProvider + MemoryRouter)",
+        "frontend/src/__tests__/EventTradePanel.test.tsx:36-39 (localStorage.setItem for session setup)"
+      ],
+      "uncertainty": "None significant. Both mocking patterns are well-established and tested."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Test AssumptionContext in isolation using renderHook. It is a pure state management unit with well-defined operations (addAssumption, removeAssumption, clearAll, hasAssumption, getAssumption, contextPayload). Testing with renderHook is straightforward: create a wrapper with AssumptionProvider, call operations via result.current, and assert state changes. This covers: (1) adding assumptions replaces existing ones for the same variableId, (2) removing by variableId, (3) clearAll resets to empty, (4) hasAssumption/getAssumption lookups, (5) contextPayload strips the label field. Integration testing through VariableRow is also valuable but is a separate concern — VariableRow tests should focus on UI interactions (clicking Assume button, inline editing), not re-testing context logic.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/assumptions/AssumptionContext.tsx:26-29 (addAssumption filters then appends — dedup logic)",
+        "frontend/src/features/assumptions/AssumptionContext.tsx:33 (removeAssumption filters by variableId)",
+        "frontend/src/features/assumptions/AssumptionContext.tsx:37 (clearAll resets to [])",
+        "frontend/src/features/assumptions/AssumptionContext.tsx:49-52 (contextPayload maps to {variableId, outcomeId})",
+        "frontend/src/features/assumptions/AssumptionContext.tsx:63-66 (useAssumptions throws if no provider)"
+      ],
+      "uncertainty": "The renderHook approach is well-supported by @testing-library/react. No significant uncertainty."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Graph visualization components should be deprioritized for this task. BayesNetGraph (336 lines) renders SVG with coordinate calculations (layoutNodes function arranges markets in a circle), and JunctionTreePanel (225 lines) renders clique/separator data from useEngineStats. Testing SVG rendering in jsdom is limited — you can verify DOM structure (SVG elements, text content) but not visual layout. The layoutNodes function could be unit-tested for coordinate calculations, but that's low value. The MarketDetail.test.tsx already verifies that the Junction Tree section renders ('Junction Tree & Inference' text). For this task, focus on the stateful mutation/form components (ResolveMarketPanel, ConditionalEditor, VariableRow) which have much higher test value per effort.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/features/graph/BayesNetGraph.tsx:33-50 (layoutNodes: circle layout with trigonometry)",
+        "frontend/src/features/graph/BayesNetGraph.tsx:1-4 (depends on useMarkets, useMarket, useEngineStats)",
+        "frontend/src/features/graph/JunctionTreePanel.tsx:1-2 (depends on useEngineStats)",
+        "frontend/src/__tests__/MarketDetail.test.tsx:113-118 (already tests JunctionTree section renders)"
+      ],
+      "uncertainty": "If graph components have data transformation bugs, they'd remain untested. Could extract and unit-test layoutNodes separately if needed."
+    },
+    {
+      "question_id": "q5",
+      "answer": "The query hooks file should NOT be tested directly for this task. The 25 hooks are thin wrappers around React Query's useQuery/useMutation that call API client functions and set up cache invalidation. Testing them with renderHook would largely duplicate what component integration tests already cover (mock API → render component → verify behavior). The complex parts — WebSocket reconnection (useMarketPrices hook with exponential backoff), cache invalidation helpers (invalidateMarketDependentQueries), and message parsing (parseMarketPriceMessage) — could benefit from direct testing, but that's a separate concern. For this task, component-level tests that mock the API client and verify mutation/query behavior through user interactions are the right approach. The queryKeys factory and invalidation helpers are internal implementation details.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:15-28 (queryKeys factory — simple key construction)",
+        "frontend/src/lib/query/hooks.ts:33-68 (invalidation helpers — internal cache management)",
+        "frontend/src/lib/query/hooks.ts:70-91 (parseMarginals — could be unit tested but low priority)",
+        "frontend/src/lib/query/hooks.ts:93-100+ (parseMarketPriceMessage — WebSocket parsing)",
+        "frontend/src/__tests__/MarketDetail.test.tsx:58-74 (component test exercises hooks via mocked API)"
+      ],
+      "uncertainty": "WebSocket reconnection logic (useMarketPrices) has complex retry/backoff behavior that component tests won't easily cover. Could be a separate task."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "The 5 prioritized components are confirmed as the highest-value targets. ResolveMarketPanel has mutation + 3 distinct render states (resolved, active/closed with form, other statuses return null). ConditionalEditor has the most complex form logic with dynamic context rows. VariableRow combines assumption state, probability editing, and session checks. AssumptionContext and session/context are foundational state providers used by multiple components."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Mocking at the API client level is the correct approach. All 13 existing test files use this pattern. The test QueryClient (retry: false, gcTime: 0) ensures deterministic behavior. React Query hooks run naturally, testing the actual hook logic and cache behavior without mocking the hook layer."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Graph components are correctly deprioritized. BayesNetGraph uses SVG with circle-layout trigonometry that jsdom can't meaningfully validate visually. JunctionTreePanel's rendering is already partially covered by MarketDetail.test.tsx. The 5 prioritized stateful components offer much higher test value per effort."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "All 13 existing test files are in src/__tests__/ with the pattern {ComponentName}.test.tsx. The vitest config excludes e2e/ and node_modules/, and the setup file imports jest-dom matchers. New tests must follow this convention exactly."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Testing AssumptionContext in isolation via renderHook is the right approach for its state management logic (dedup on add, filter on remove, contextPayload mapping). VariableRow tests should separately test UI interactions. The AssumptionProvider will also need to be added to the TestProviders wrapper or provided inline in tests that need it."
+    }
+  ],
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.85,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All 5 questions answered with confidence >= 0.85. The codebase is well-understood: test infrastructure is clear (Vitest + @testing-library/react + renderWithProviders helper), mocking patterns are established (vi.mock at API client level), all 76 existing tests pass, and the 5 priority components are identified with clear testing strategies. No assumptions were wrong. The task scope is manageable: write tests for 5 components (ResolveMarketPanel, ConditionalEditor, VariableRow, AssumptionContext, session/context) following established patterns. No blocking research gaps remain."
+  },
+  "spawn_children": false,
+  "children": []
+}

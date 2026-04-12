@@ -1,0 +1,67 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Which untested components should be prioritized for new test coverage? The frontend has 20 untested files ranging from simple UI wrappers (Spinner, StatusBadge) to complex stateful components (VariableRow 230 lines, ConditionalEditor 288 lines, BayesNetGraph 336 lines). What criteria should drive prioritization?",
+      "category": "requirements",
+      "why_it_matters": "Writing tests for all 20 untested files is too large for one task. Prioritizing high-value targets (complex state, mutations, business logic) over simple presentational components maximizes impact."
+    },
+    {
+      "id": "q2",
+      "question": "What mocking patterns should be used for components that depend on React Query hooks (useMarket, useMarkets, useProbabilityEdit, useResolveMarket) and context providers (useSession, useAssumptions)? Should we mock at the API client level or the hook level?",
+      "category": "design",
+      "why_it_matters": "Existing tests use two patterns: (1) mock the entire api/client module (MarketDetail.test.tsx), (2) mock specific functions from api/client (EventTradePanel.test.tsx). Choosing the right mocking strategy affects test reliability and maintenance cost."
+    },
+    {
+      "id": "q3",
+      "question": "Should the AssumptionContext/AssumptionProvider be tested in isolation as a state management unit, or only through integration with components that consume it (AssumptionPanel, VariableRow)?",
+      "category": "design",
+      "why_it_matters": "AssumptionContext has 67 lines with 4 hooks and manages shared state (add/remove/clear assumptions, contextPayload). Testing it in isolation is simpler but may miss integration issues. Testing only through consumers is more realistic but may produce redundant test code."
+    },
+    {
+      "id": "q4",
+      "question": "How should graph visualization components (BayesNetGraph 336 lines, JunctionTreePanel 225 lines) be tested? They render SVG elements and depend on layout algorithms.",
+      "category": "design",
+      "why_it_matters": "Graph components use SVG rendering and coordinate calculations. Testing visual output with jsdom has limitations. We need to decide whether to test data transformation logic, DOM structure, or skip these in favor of higher-value targets."
+    },
+    {
+      "id": "q5",
+      "question": "Should the query hooks file (hooks.ts, 695 lines, 25 hooks) be tested directly, or is it sufficient to test through component integration tests?",
+      "category": "design",
+      "why_it_matters": "hooks.ts contains complex logic: WebSocket reconnection with exponential backoff, cache invalidation patterns, query key factories, and message parsing. Direct hook testing with renderHook would be thorough but complex. Component-level tests only exercise the happy paths."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The highest-priority untested components for this task are: (1) ResolveMarketPanel (218 lines, mutation + confirmation flow), (2) ConditionalEditor (288 lines, form with dynamic context conditions), (3) AssumptionContext (67 lines, shared state management), (4) VariableRow (230 lines, inline editing + assumption toggling), and (5) session/context.tsx (64 lines, localStorage-backed session).",
+      "confidence": 0.85,
+      "if_wrong": "Different components might have higher business value or be blocking other work. Would need to re-prioritize."
+    },
+    {
+      "id": "a2",
+      "assumption": "Tests should mock at the API client level (vi.mock('@/lib/api/client')) following the existing MarketDetail.test.tsx pattern, letting React Query hooks run naturally with the test QueryClient.",
+      "confidence": 0.9,
+      "if_wrong": "Would need to mock hooks directly which is more brittle and doesn't test the hook logic."
+    },
+    {
+      "id": "a3",
+      "assumption": "Graph visualization components (BayesNetGraph, JunctionTreePanel) should be deprioritized for this task since they are primarily presentational SVG rendering and harder to test meaningfully in jsdom.",
+      "confidence": 0.8,
+      "if_wrong": "If graph components have logic bugs, they'd remain untested. Could test data transformation functions extracted from the components."
+    },
+    {
+      "id": "a4",
+      "assumption": "New test files should go in src/__tests__/ following the existing naming convention ({ComponentName}.test.tsx) and use the renderWithProviders helper.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to create a different test structure which would break consistency."
+    },
+    {
+      "id": "a5",
+      "assumption": "The AssumptionContext should be tested both in isolation (via renderHook) and through VariableRow integration tests, since it manages shared state that multiple components depend on.",
+      "confidence": 0.75,
+      "if_wrong": "May be over-testing — integration-only tests through VariableRow/AssumptionPanel could be sufficient."
+    }
+  ]
+}

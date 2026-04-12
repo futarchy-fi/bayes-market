@@ -1,0 +1,114 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Prioritize 5 high-value untested components: ResolveMarketPanel (218 lines, mutation+confirmation), ConditionalEditor (288 lines, dynamic form), VariableRow (230 lines, inline editing+assumptions), AssumptionContext (67 lines, shared state), session/context (64 lines, localStorage session). Deprioritize simple UI wrappers and graph visualization components.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "Test all 20 untested files (too large for one task)",
+        "Prioritize graph components (hard to test meaningfully in jsdom)",
+        "Prioritize simple UI components (low test value per effort)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Mock at the API client level using vi.mock('@/lib/api/client'), letting React Query hooks run naturally with the test QueryClient. Use vi.importActual for classes like BayesApiError when needed.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Mock at the hook level (more brittle, doesn't test hook logic)",
+        "Use MSW/network-level mocking (heavier setup, not established in codebase)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Test AssumptionContext in isolation via renderHook for its state management operations (add/remove/clear/has/get/contextPayload). VariableRow tests cover integration separately.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Test only through consumer components (misses dedup and contextPayload logic)",
+        "Skip isolation tests entirely (too much risk for shared state provider)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Skip direct testing of hooks.ts (695 lines, 25 hooks). Component-level tests exercise hooks through user interactions. WebSocket/backoff logic is a separate task.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Test all 25 hooks with renderHook (largely duplicates component tests)",
+        "Extract and unit-test WebSocket logic (valuable but out of scope)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Place all new test files in src/__tests__/ following {ComponentName}.test.tsx convention. Use existing renderWithProviders helper. Wrap with AssumptionProvider inline where needed rather than modifying TestProviders.",
+      "based_on": ["q2", "q3"],
+      "alternatives_rejected": [
+        "Modify TestProviders to include AssumptionProvider globally (not all tests need it)",
+        "Co-locate tests next to source files (breaks existing convention)"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Write AssumptionContext.test.tsx: renderHook tests for addAssumption (with dedup), removeAssumption, clearAll, hasAssumption, getAssumption, and contextPayload mapping. Test that useAssumptions throws without provider.",
+      "depends_on": [],
+      "estimated_lines": 90,
+      "risk": "low"
+    },
+    {
+      "step": 2,
+      "task": "Write SessionContext.test.tsx: renderHook tests for useSession providing accountId/agentId, localStorage persistence across re-renders, and SessionProvider default values.",
+      "depends_on": [],
+      "estimated_lines": 70,
+      "risk": "low"
+    },
+    {
+      "step": 3,
+      "task": "Write ResolveMarketPanel.test.tsx: test 3 render states (resolved shows resolution, active/closed shows form, other statuses return null), two-step confirmation flow (Resolve button → confirm dialog → mutation fires), and useResolveMarket mutation with API client mock.",
+      "depends_on": [],
+      "estimated_lines": 150,
+      "risk": "medium"
+    },
+    {
+      "step": 4,
+      "task": "Write ConditionalEditor.test.tsx: test form rendering with market data, adding/removing dynamic context condition rows (ContextRow subcomponent with useMarket), useProbabilityEdit mutation on submit, and validation of probability inputs.",
+      "depends_on": [],
+      "estimated_lines": 180,
+      "risk": "medium"
+    },
+    {
+      "step": 5,
+      "task": "Write VariableRow.test.tsx: test inline probability display, assumption toggle (add/remove via AssumptionProvider wrapper), inline editing mode with useProbabilityEdit mutation, and session-dependent UI (logged-in vs anonymous).",
+      "depends_on": [],
+      "estimated_lines": 150,
+      "risk": "medium"
+    }
+  ],
+  "decomposition_assessment": {
+    "total_steps": 5,
+    "estimated_total_lines": 640,
+    "high_risk_steps": 0,
+    "parallelizable_groups": [["step1", "step2"], ["step3", "step4", "step5"]],
+    "decision": "SPAWN_CHILDREN",
+    "decision_reason": "estimated_total_lines (640) exceeds 500-line threshold. All 5 steps are independent (each tests a different component with its own file). Two natural parallelizable groups exist: context/state provider tests (steps 1-2, ~160 lines) and component tests (steps 3-5, ~480 lines). Splitting into children allows parallel implementation."
+  },
+  "spawn_children": true,
+  "children": [
+    {
+      "id": "impl-child-1",
+      "title": "Test context/state providers (AssumptionContext + SessionContext)",
+      "description": "Implement steps 1-2: Write AssumptionContext.test.tsx (~90 lines) with renderHook tests for all state operations (add/remove/clear/has/get/contextPayload, dedup, throw without provider). Write SessionContext.test.tsx (~70 lines) with renderHook tests for localStorage persistence and default values. Both use existing test infrastructure, no shared helper changes needed."
+    },
+    {
+      "id": "impl-child-2",
+      "title": "Test stateful components (ResolveMarketPanel, ConditionalEditor, VariableRow)",
+      "description": "Implement steps 3-5: Write ResolveMarketPanel.test.tsx (~150 lines) testing 3 render states and two-step confirmation mutation flow. Write ConditionalEditor.test.tsx (~180 lines) testing dynamic context form with ContextRow subcomponent and probability mutation. Write VariableRow.test.tsx (~150 lines) testing inline editing, assumption toggling with AssumptionProvider wrapper, and session-dependent UI. All mock API client at module level following established patterns."
+    }
+  ]
+}
