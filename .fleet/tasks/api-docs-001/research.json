@@ -1,0 +1,125 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Exclude WebSocket endpoints from the OpenAPI spec. There are 3 WebSocket endpoints (ws/markets/{id}/prices, ws/markets/{id}/events, ws/accounts/{id}/risk) implemented via raw RFC 6455 in server.py (lines 5278-5476). OpenAPI 3.0.3 has no native WebSocket support — including them would require AsyncAPI or x-extensions, adding significant complexity for marginal value. Document them in a separate section or future AsyncAPI spec if needed.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:5410-5476 (_handle_websocket for prices)",
+        "backend/server.py:5340-5408 (_handle_events_websocket for events)",
+        "backend/server.py:5278-5338 (_handle_risk_websocket for risk)",
+        "backend/server.py:287-289 (WS_CONNECTIONS, WS_EVENT_CONNECTIONS, WS_RISK_CONNECTIONS)"
+      ],
+      "uncertainty": "None significant — the 3 WS endpoints are well-defined and OpenAPI 3.0's lack of WS support is established."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Include all three health endpoints: /health, /healthz (legacy), and /v1/health (versioned). All are active and routed in do_GET() (line 5487). Legacy endpoints return a simple payload ({service, status, timestamp}) via health_payload() (line 1118). The versioned /v1/health returns a richer payload with version, uptime_seconds, and component health (db, inference, auth) via v1_health_payload() (line 1127). A monitoring probe script references /healthz (t586 docs). Group under a 'Health' tag in the spec.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/server.py:221-223 (LEGACY_HEALTH_ROUTES, VERSIONED_HEALTH_ROUTE, PUBLIC_HEALTH_ROUTES)",
+        "backend/server.py:1084-1135 (health component builders)",
+        "backend/server.py:1118-1124 (health_payload response shape)",
+        "backend/server.py:1127-1135 (v1_health_payload response shape)",
+        "backend/server.py:4918-4929 (health route handlers)",
+        "backend/server.py:5487 (routing for PUBLIC_HEALTH_ROUTES)",
+        "docs/t586-full-chain-http-contract-freeze.md (probe script references /healthz)"
+      ],
+      "uncertainty": "Minor — whether legacy endpoints warrant their own paths in the spec or just a note. Including them is harmless and aids operational users."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Target OpenAPI 3.0.3. There is no existing spec to constrain the choice. 3.0.3 has the widest tooling support (Swagger UI, code generators, linters). The project's response schemas use simple JSON structures (not JSON Schema-heavy patterns that would benefit from 3.1.0's alignment). This is a preference decision with low risk either way.",
+      "confidence": 0.8,
+      "evidence": [
+        "No existing openapi.yaml or swagger files found anywhere in the codebase",
+        "Response shapes are plain JSON dicts, not complex JSON Schema constructs"
+      ],
+      "uncertainty": "If the team later wants JSON Schema $ref alignment or nullable improvements, 3.1.0 would be preferable. Migration from 3.0.3→3.1.0 is straightforward."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Document auth as required on protected routes (production-expected behavior), with a note about the BAYES_REQUIRE_AGENT_ID toggle. Auth is controlled by BAYES_REQUIRE_AGENT_ID env var (default: false, line 604). When enabled, protected write routes require X-Bayes-Agent-Id header (line 229). Protected routes are: POST /v1/markets, POST /v1/markets/{id}/resolve (MARKET_ADMIN), and POST /v1/markets/{id}/orders/*, POST /v1/markets/{id}/comments (TRADE). Rate limiting (BAYES_RATE_LIMIT_PER_MIN, default: 0/disabled) applies per agent_id on protected routes. Use an 'apiKey' security scheme in header for the OpenAPI spec, applied only to protected endpoints.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:229 (AGENT_ID_HEADER = 'X-Bayes-Agent-Id')",
+        "backend/server.py:230 (AUTH_REQUIRE_AGENT_ID_ENV)",
+        "backend/server.py:604 (AUTH_REQUIRE_AGENT_ID default false)",
+        "backend/server.py:461-464 (WRITE_ROUTE_POLICIES: market_admin + trade)",
+        "backend/server.py:655-675 (resolve_write_route_category)",
+        "backend/server.py:636-644 (enforce_agent_id → 401)",
+        "backend/server.py:698-732 (_normalize_write_request_agent_id with validation)",
+        "backend/server.py:751-783 (enforce_rate_limit → 429)",
+        "backend/server.py:786-806 (rate_limit_headers: X-Bayes-Ratelimit-*)",
+        "backend/server.py:1101-1106 (auth_health_component reports requires_agent_id)"
+      ],
+      "uncertainty": "None — the auth mechanism is clearly defined. The spec should document the 'required' state and note the env var toggle in the description."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Use both sources, cross-referenced. Contract freeze docs (t586, t1737, t544) define the intended/frozen response schemas with exact JSON examples and are authoritative for schema shape. Server.py implements those contracts via dictionary builders (lines 4027-4551). When they align (which they do for the frozen endpoints), use the contract docs for schema definitions as they are more precise. For endpoints without contract docs, derive schemas from server.py code. There are 18 docs/ files; key ones for API schemas are t586, t1737, t544, t571 (engine-stats), t563 (journal read surface).",
+      "confidence": 0.85,
+      "evidence": [
+        "docs/t586-full-chain-http-contract-freeze.md (HTTP contract for probability-edit status codes)",
+        "docs/t1737-probability-edit-http-contract-freeze.md (request/response shape for probability-edit)",
+        "docs/t544-event-sourcing-contract.md (CommandAccepted/CommandRejected event envelopes)",
+        "docs/t571-per-market-engine-stats-contract-freeze.md (engine stats response)",
+        "docs/t563-journal-read-surface-freeze.md (journal read surface)",
+        "backend/server.py:4133-4220 (build_terminal_response, build_terminal_rejection_response, build_terminal_acceptance_response)",
+        "backend/server.py:4642 (handle_probability_edit)",
+        "backend/server.py:4721 (handle_event_trade)",
+        "backend/server.py:4821 (handle_market_resolution)",
+        "backend/server.py:490-506 (ApiError class)"
+      ],
+      "uncertainty": "If any contract doc is stale relative to current server.py implementation, the spec could document a shape that doesn't match runtime. Cross-referencing both sources mitigates this."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.8,
+      "impact": "3.0.3 is the right default. No existing spec or tooling constraints push toward 3.1.0. Response schemas are simple enough that 3.0.3 handles them well."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "WebSocket endpoints use raw RFC 6455 sockets (server.py:74-142). OpenAPI 3.0 cannot represent them. Excluding them avoids unnecessary complexity. Can add AsyncAPI later if needed."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Document auth as required on protected routes. The toggle (BAYES_REQUIRE_AGENT_ID) defaults to false but production is expected to enable it. The spec should describe the production behavior with a note about the env var."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.7,
+      "impact": "Both sources are valuable. Contract freeze docs are authoritative for frozen schemas (they represent agreed contracts). Server.py is the runtime implementation. Use contract docs as primary for documented endpoints, server.py for undocumented ones. Cross-reference to catch drift."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "All endpoints (legacy health + versioned) are active in the same server process. A single spec is appropriate. Use tags to group them (Health, Markets, Orders, Accounts)."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Trivial — output path docs/openapi.yaml as specified."
+    }
+  ],
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.8,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All 5 questions answered with confidence >= 0.8. No critical unknowns remain. The main decisions (OpenAPI version, WS exclusion, auth documentation, source of truth) are clear preference calls with low risk. The task is a single-file documentation generation from well-understood sources (server.py + contract docs). No need to spawn children."
+  },
+  "spawn_children": false,
+  "children": []
+}
