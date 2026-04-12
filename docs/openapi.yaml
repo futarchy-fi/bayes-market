@@ -1,0 +1,1814 @@
+openapi: 3.0.3
+info:
+  title: Bayes Market API
+  description: |
+    Prediction market engine with LMSR-based pricing, event-sourced command
+    processing, and real-time marginal probability updates.
+
+    ## Authentication
+
+    Write endpoints require an `X-Bayes-Agent-Id` header when the server is
+    running with `BAYES_REQUIRE_AGENT_ID=true` (the production default).
+    The header value must match the token pattern `[!#$%&'*+\-.^_\`|~0-9A-Za-z]+`.
+
+    ## Rate Limiting
+
+    When `BAYES_RATE_LIMIT_PER_MIN` is set, responses include standard rate
+    limit headers (`X-RateLimit-Limit`, `X-RateLimit-Remaining`,
+    `X-RateLimit-Reset`, `X-RateLimit-Policy`). Exceeding the limit returns
+    `429` with a `Retry-After` header.
+
+    ## WebSocket Endpoints (not covered here)
+
+    Real-time streaming is available at `/ws/markets/{id}/prices`,
+    `/ws/markets/{id}/events`, and `/ws/accounts/{id}/risk`. These are not
+    representable in OpenAPI 3.0 and are excluded from this specification.
+  version: 1.0.0
+  contact:
+    name: Bayes Market Engineering
+
+servers:
+  - url: http://localhost:3205
+    description: Local development server
+
+tags:
+  - name: Health
+    description: Service health and discovery endpoints
+  - name: Markets
+    description: Market CRUD, metadata, analytics, events, and comments
+  - name: Orders
+    description: Trading endpoints (ProbabilityEdit, EventTrade)
+  - name: Accounts
+    description: Account risk, exposure, positions, and P&L
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+paths:
+
+  # ---- Health ----
+
+  /:
+    get:
+      tags: [Health]
+      summary: Service index
+      description: Returns the public HTTP surface listing all available route groups.
+      operationId: getServiceIndex
+      responses:
+        "200":
+          description: Service index payload
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [service, status, routes, meta]
+                properties:
+                  service:
+                    type: string
+                    example: bayes-market
+                  status:
+                    type: string
+                    enum: [ok]
+                  routes:
+                    type: object
+                    properties:
+                      health:
+                        type: array
+                        items:
+                          type: string
+                      markets:
+                        type: array
+                        items:
+                          type: string
+                      orders:
+                        type: array
+                        items:
+                          type: string
+                      accounts:
+                        type: array
+                        items:
+                          type: string
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Legacy health check
+      description: Returns basic service health. Identical to `/healthz`.
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Legacy health check (alias)
+      description: |
+        Kubernetes-style health probe endpoint. Returns the same payload as
+        `/health`. Kept for backward compatibility with existing monitoring
+        tools.
+      operationId: getHealthz
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /v1/health:
+    get:
+      tags: [Health]
+      summary: Versioned health check with component breakdown
+      description: |
+        Returns detailed health with per-component status for database,
+        inference engine, and authentication subsystems. The top-level
+        `status` is an aggregate: `ok` when all components are healthy,
+        `degraded` when any component is degraded, or `unhealthy` when
+        any component is down.
+      operationId: getV1Health
+      responses:
+        "200":
+          description: Detailed health payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V1HealthResponse"
+
+  # ---- Markets (read) ----
+
+  /v1/markets:
+    get:
+      tags: [Markets]
+      summary: List markets
+      description: |
+        Returns the market collection with optional filtering by status,
+        sorting, and title search. Resolved markets are excluded by default
+        unless `include_resolved=true` or `status=resolved` or `status=all`.
+      operationId: listMarkets
+      parameters:
+        - name: status
+          in: query
+          description: Filter by market status.
+          schema:
+            type: string
+            enum: [active, resolved, all]
+        - name: sort
+          in: query
+          description: Sort order for the results.
+          schema:
+            type: string
+            enum: [volume, liquidity, created]
+        - name: q
+          in: query
+          description: Case-insensitive title substring search.
+          schema:
+            type: string
+        - name: include_resolved
+          in: query
+          description: Include resolved markets in results.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Market list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [markets, count, meta]
+                properties:
+                  markets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MarketSummary"
+                  count:
+                    type: integer
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+    post:
+      tags: [Markets]
+      summary: Create a market
+      operationId: createMarket
+      security:
+        - AgentId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMarketRequest"
+      responses:
+        "201":
+          description: Market created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [market, event, meta]
+                properties:
+                  market:
+                    $ref: "#/components/schemas/Market"
+                  event:
+                    $ref: "#/components/schemas/Event"
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Market with this title already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/markets/{marketId}:
+    get:
+      tags: [Markets]
+      summary: Get market detail
+      operationId: getMarket
+      parameters:
+        - $ref: "#/components/parameters/MarketId"
+        - name: context
+          in: query
+          description: |
+            Condition assignments for conditional probability queries.
+            Each value has the format `variableId:outcomeId`.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+      responses:
+        "200":
+          description: Full market payload
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [market, meta]
+                properties:
+                  market:
+                    $ref: "#/components/schemas/Market"
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/markets/{marketId}/meta:
+    get:
+      tags: [Markets]
+      summary: Get market preview metadata
+      description: Returns Open Graph and share-preview metadata for the market.
+      operationId: getMarketPreview
+      parameters:
+        - $ref: "#/components/parameters/MarketId"
+      responses:
+        "200":
+          description: Market preview payload
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [preview, meta]
+                properties:
+                  preview:
+                    $ref: "#/components/schemas/MarketPreview"
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/markets/{marketId}/engine-stats:
+    get:
+      tags: [Markets]
+      summary: Get engine diagnostics
+      description: |
+        Returns inference engine diagnostics for the market including timing
+        statistics, cache hit rates, and junction tree compilation details.
+      operationId: getMarketEngineStats
+      parameters:
+        - $ref: "#/components/parameters/MarketId"
+      responses:
+        "200":
+          description: Engine stats payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EngineStatsResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/markets/{marketId}/analytics:
+    get:
+      tags: [Markets]
+      summary: Get market analytics
+      description: |
+        Returns aggregated analytics for a market: total volume, trade count,
+        time-bucketed price history, and top traders.
+      operationId: getMarketAnalytics
+      parameters:
+        - $ref: "#/components/parameters/MarketId"
+        - name: interval
+          in: query
+          description: Time bucket interval for price history.
+          schema:
+            type: string
+            enum: ["1h", "6h", "1d", "7d"]
+            default: "1h"
+      responses:
+        "200":
+          description: Analytics payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/markets/{marketId}/events:
+    get:
+      tags: [Markets]
+      summary: Get market event journal
+      description: Returns the paginated event-sourced journal for a market.
+      operationId: getMarketEvents
+      parameters:
+        - $ref: "#/components/parameters/MarketId"
+        - $ref: "#/components/parameters/FromSeq"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Paginated event list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [marketId, events, chain, pagination, meta]
+                properties:
+                  marketId:
+                    type: string
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Event"
+                  chain:
+                    $ref: "#/components/schemas/ChainState"
+                  pagination:
+                    $ref: "#/components/schemas/SeqPagination"
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/markets/{marketId}/comments:
+    get:
+      tags: [Markets]
+      summary: Get market comments
+      description: Returns the paginated discussion thread for a market.
+      operationId: getMarketComments
+      parameters:
+        - $ref: "#/components/parameters/MarketId"
+        - $ref: "#/components/parameters/FromSeq"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Paginated comment list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [marketId, comments, pagination, meta]
+                properties:
+                  marketId:
+                    type: string
+                  comments:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Comment"
+                  pagination:
+                    $ref: "#/components/schemas/SeqPagination"
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      tags: [Markets]
+      summary: Post a comment
+      operationId: postComment
+      security:
+        - AgentId: []
+      parameters:
+        - $ref: "#/components/parameters/MarketId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PostCommentRequest"
+      responses:
+        "201":
+          description: Comment accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [comment, meta]
+                properties:
+                  comment:
+                    $ref: "#/components/schemas/Comment"
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Market not active or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  # ---- Markets (write) ----
+
+  /v1/markets/{marketId}/resolve:
+    post:
+      tags: [Markets]
+      summary: Resolve a market
+      description: |
+        Resolves a market by setting a winning outcome or explicit final
+        probability distribution. Only active or closed markets can be
+        resolved. Provide either `outcomeId` for a binary resolution or
+        `finalProbabilities` for a custom distribution.
+      operationId: resolveMarket
+      security:
+        - AgentId: []
+      parameters:
+        - $ref: "#/components/parameters/MarketId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveMarketRequest"
+      responses:
+        "201":
+          description: Market resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommandAcceptedResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Market already resolved, not resolvable, or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  # ---- Orders ----
+
+  /v1/markets/{marketId}/orders/probability-edit:
+    post:
+      tags: [Orders]
+      summary: Submit a probability edit
+      description: |
+        Moves a market's marginal probability for one outcome to a target
+        value using the LMSR pricing engine. The server materializes a
+        canonical `bayes-command/v1` envelope from the thin REST body.
+
+        Accepted edits return `201`. Solvency failures (the edit would
+        drive state-contingent assets negative) return `409` with code
+        `min_asset_violation` per the t586 contract freeze.
+      operationId: probabilityEdit
+      security:
+        - AgentId: []
+      parameters:
+        - $ref: "#/components/parameters/MarketId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProbabilityEditRequest"
+      responses:
+        "201":
+          description: Edit accepted and filled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbabilityEditResponse"
+        "400":
+          description: Validation failure (missing fields, bad probability, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: |
+            Solvency violation (`min_asset_violation`), market not active,
+            or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommandRejectedResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/markets/{marketId}/orders/event-trade:
+    post:
+      tags: [Orders]
+      summary: Submit an event trade
+      description: |
+        Places an event-formula trade on a market using CNF formula syntax.
+        Buys or sells shares of an event defined by a conjunction of
+        outcome assignments.
+      operationId: eventTrade
+      security:
+        - AgentId: []
+      parameters:
+        - $ref: "#/components/parameters/MarketId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventTradeRequest"
+      responses:
+        "201":
+          description: Trade accepted and filled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventTradeResponse"
+        "400":
+          description: Validation failure (bad formula, invalid size, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: |
+            Solvency violation, market not active, position limit exceeded,
+            or idempotency conflict.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommandRejectedResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "501":
+          description: Complex formula inference not yet supported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ---- Accounts ----
+
+  /v1/accounts/{accountId}/risk:
+    get:
+      tags: [Accounts]
+      summary: Get account risk
+      description: |
+        Returns the risk state for one account including per-market minimum
+        asset values, capacity indicators, and utilization metrics.
+      operationId: getAccountRisk
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: Account risk payload
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account, meta]
+                properties:
+                  account:
+                    type: object
+                    required: [id, risk]
+                    properties:
+                      id:
+                        type: string
+                      risk:
+                        $ref: "#/components/schemas/AccountRisk"
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/accounts/{accountId}/exposure:
+    get:
+      tags: [Accounts]
+      summary: Get account exposure
+      description: |
+        Returns the current live EventTrade exposure for one account. An
+        account that has no open positions returns `404`.
+      operationId: getAccountExposure
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: Account exposure payload
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account, meta]
+                properties:
+                  account:
+                    type: object
+                    required: [id, exposure]
+                    properties:
+                      id:
+                        type: string
+                      exposure:
+                        $ref: "#/components/schemas/AccountExposure"
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/accounts/{accountId}/positions:
+    get:
+      tags: [Accounts]
+      summary: Get account positions
+      description: |
+        Returns the current open positions for one account. Returns `404`
+        if the account has no live positions.
+      operationId: getAccountPositions
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: Account positions payload
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account, meta]
+                properties:
+                  account:
+                    type: object
+                    required: [id, positions]
+                    properties:
+                      id:
+                        type: string
+                      positions:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Position"
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/accounts/{accountId}/pnl:
+    get:
+      tags: [Accounts]
+      summary: Get account P&L
+      description: |
+        Returns aggregate P&L for one account across all markets with
+        per-market and per-outcome breakdowns.
+      operationId: getAccountPnl
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: Account P&L payload
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pnl, meta]
+                properties:
+                  pnl:
+                    $ref: "#/components/schemas/AccountPnl"
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/markets/{marketId}/accounts/{accountId}/pnl:
+    get:
+      tags: [Accounts]
+      summary: Get market-scoped account P&L
+      description: |
+        Returns P&L for one account in one specific market with per-outcome
+        breakdown.
+      operationId: getMarketAccountPnl
+      parameters:
+        - $ref: "#/components/parameters/MarketId"
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: Market-scoped P&L payload
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pnl, meta]
+                properties:
+                  pnl:
+                    $ref: "#/components/schemas/MarketPnl"
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+# ---------------------------------------------------------------------------
+# Components
+# ---------------------------------------------------------------------------
+components:
+
+  securitySchemes:
+    AgentId:
+      type: apiKey
+      in: header
+      name: X-Bayes-Agent-Id
+      description: |
+        Agent identity token. Required on write endpoints when
+        `BAYES_REQUIRE_AGENT_ID=true` (production default). Must match
+        `[!#$%&'*+\-.^_\`|~0-9A-Za-z]+`.
+
+  parameters:
+    MarketId:
+      name: marketId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Market identifier (e.g. `m1`).
+
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Account identifier (e.g. `acct_abc`).
+
+    FromSeq:
+      name: fromSeq
+      in: query
+      description: Start reading from this sequence number (inclusive).
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    Limit:
+      name: limit
+      in: query
+      description: Maximum number of records to return.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 100
+
+  responses:
+    BadRequest:
+      description: Invalid request (malformed JSON, missing fields, bad parameters)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    Unauthorized:
+      description: Missing or invalid `X-Bayes-Agent-Id` header
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: missing_agent_id
+              message: Missing Bayes agent id header
+              details:
+                header: X-Bayes-Agent-Id
+                category: trade_write
+            meta:
+              timestamp: "2026-01-15T12:00:00Z"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until the rate limit window resets.
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+          description: Unix timestamp when the window resets.
+        X-RateLimit-Policy:
+          schema:
+            type: string
+            example: bayes-rate-limit/v1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: rate_limit_exceeded
+              message: Rate limit exceeded for Bayes agent id
+              details:
+                limit: 60
+                windowSeconds: 60
+                retryAfterSeconds: 45
+                policyVersion: bayes-rate-limit/v1
+            meta:
+              timestamp: "2026-01-15T12:00:00Z"
+
+  schemas:
+
+    # ---- Core envelopes ----
+
+    Meta:
+      type: object
+      required: [timestamp]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC timestamp of the response.
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code.
+              example: invalid_payload
+            message:
+              type: string
+              description: Human-readable error description.
+            details:
+              type: object
+              additionalProperties: true
+              description: Additional context about the error.
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    # ---- Health ----
+
+    HealthResponse:
+      type: object
+      required: [service, status, timestamp]
+      properties:
+        service:
+          type: string
+          example: bayes-market
+        status:
+          type: string
+          enum: [ok]
+        timestamp:
+          type: string
+          format: date-time
+
+    V1HealthResponse:
+      type: object
+      required: [service, status, timestamp, version, uptime_seconds, components]
+      properties:
+        service:
+          type: string
+          example: bayes-market
+        status:
+          type: string
+          enum: [ok, degraded, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+          description: Engine version string.
+        uptime_seconds:
+          type: number
+          format: double
+        components:
+          type: object
+          required: [db, inference, auth]
+          properties:
+            db:
+              type: object
+              required: [status, kind]
+              properties:
+                status:
+                  type: string
+                  enum: [ok, degraded, unhealthy]
+                kind:
+                  type: string
+                  example: in_memory
+            inference:
+              type: object
+              required: [status, backend, version]
+              properties:
+                status:
+                  type: string
+                  enum: [ok, degraded, unhealthy]
+                backend:
+                  type: string
+                version:
+                  type: string
+            auth:
+              type: object
+              required: [status, requires_agent_id]
+              properties:
+                status:
+                  type: string
+                  enum: [ok, degraded, unhealthy]
+                requires_agent_id:
+                  type: boolean
+
+    # ---- Market schemas ----
+
+    Outcome:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          example: "yes"
+        name:
+          type: string
+          example: "Yes"
+
+    MarketSummary:
+      type: object
+      required: [id, title, status, liquidity, volume]
+      properties:
+        id:
+          type: string
+          example: m1
+        title:
+          type: string
+        status:
+          type: string
+          enum: [active, resolved]
+        liquidity:
+          type: number
+          format: double
+        volume:
+          type: number
+          format: double
+
+    Market:
+      type: object
+      required: [id, title, description, variableId, status, outcomes, marginals, liquidity, volume, created_at, expires_at]
+      properties:
+        id:
+          type: string
+          example: m1
+        title:
+          type: string
+        description:
+          type: string
+        variableId:
+          type: string
+          description: Canonical variable identifier derived from the title.
+        status:
+          type: string
+          enum: [active, resolved]
+        outcomes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Outcome"
+          minItems: 2
+        marginals:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+          description: Current marginal probability per outcome ID.
+        liquidity:
+          type: number
+          format: double
+        volume:
+          type: number
+          format: double
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        maxPositionSize:
+          type: number
+          format: double
+          description: Maximum position size per account per outcome (optional).
+        resolution:
+          type: string
+          description: Winning outcome ID (present only when status is resolved).
+        resolutionProbabilities:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+          description: Final probability distribution (present only when resolved).
+
+    MarketPreview:
+      type: object
+      required: [marketId, title, description, og_description, url, image, siteName, type, outcomes]
+      properties:
+        marketId:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        og_description:
+          type: string
+          description: Open Graph description with probability summary.
+        url:
+          type: string
+          format: uri
+        image:
+          type: string
+          format: uri
+        siteName:
+          type: string
+        type:
+          type: string
+        outcomes:
+          type: array
+          items:
+            type: object
+            required: [id, name, probability]
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              probability:
+                type: number
+                format: double
+
+    CreateMarketRequest:
+      type: object
+      required: [title, outcomes, expires_at]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          default: ""
+        outcomes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Outcome"
+          minItems: 2
+          description: At least two outcomes with unique IDs.
+        expires_at:
+          type: string
+          format: date-time
+          description: Must be in the future (ISO 8601).
+        liquidity:
+          type: number
+          format: double
+          default: 10000.0
+          description: Initial liquidity pool size. Must be positive.
+        maxPositionSize:
+          type: number
+          format: double
+          description: Optional maximum position size per account per outcome.
+
+    # ---- Comment schemas ----
+
+    Comment:
+      type: object
+      required: [commentId, marketId, seq, accountId, body, createdAt]
+      properties:
+        commentId:
+          type: string
+        marketId:
+          type: string
+        seq:
+          type: integer
+          description: Sequence number within the market's comment thread.
+        accountId:
+          type: string
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    PostCommentRequest:
+      type: object
+      required: [accountId, body]
+      properties:
+        accountId:
+          type: string
+        body:
+          type: string
+          description: Comment text (max 10000 characters).
+        idempotencyKey:
+          type: string
+          description: Optional idempotency key. Must be non-empty when provided.
+
+    # ---- Resolution schemas ----
+
+    ResolveMarketRequest:
+      type: object
+      required: [accountId]
+      properties:
+        accountId:
+          type: string
+        outcomeId:
+          type: string
+          description: Winning outcome ID for binary resolution.
+        finalProbabilities:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+          description: |
+            Custom final probability distribution. Provide either
+            `outcomeId` or `finalProbabilities`, not both.
+        idempotencyKey:
+          type: string
+
+    # ---- Event schemas ----
+
+    Event:
+      type: object
+      required: [schemaVersion, eventId, marketId, seq, commandId, eventType, emittedAt, payload, prevEventHash, eventHash]
+      properties:
+        schemaVersion:
+          type: string
+          example: bayes-event/v1
+        eventId:
+          type: string
+        marketId:
+          type: string
+        seq:
+          type: integer
+          description: Monotonic sequence number within the market.
+        commandId:
+          type: string
+        eventType:
+          type: string
+          enum: [MarketCreated, CommandAccepted, CommandRejected]
+        emittedAt:
+          type: string
+          format: date-time
+        approxFlag:
+          type: boolean
+        payload:
+          type: object
+          additionalProperties: true
+        prevEventHash:
+          type: string
+        eventHash:
+          type: string
+
+    ChainState:
+      type: object
+      required: [genesisHash, headSeq, headHash]
+      properties:
+        genesisHash:
+          type: string
+        headSeq:
+          type: integer
+        headHash:
+          type: string
+
+    SeqPagination:
+      type: object
+      required: [fromSeq, limit, returned]
+      properties:
+        fromSeq:
+          type: integer
+        limit:
+          type: integer
+        returned:
+          type: integer
+        nextFromSeq:
+          type: integer
+          nullable: true
+          description: Next sequence number for pagination. Null when at the end.
+
+    # ---- Engine stats ----
+
+    EngineStatsResponse:
+      type: object
+      required: [marketId, engine, cliques, diagnostics, meta]
+      properties:
+        marketId:
+          type: string
+        engine:
+          type: object
+          required: [mode, backend, version, precision, compile_id, compile_type, source_state_hash]
+          properties:
+            mode:
+              type: string
+            backend:
+              type: string
+            version:
+              type: string
+            precision:
+              type: string
+            compile_id:
+              type: string
+              nullable: true
+            compile_type:
+              type: string
+              nullable: true
+            source_state_hash:
+              type: string
+              nullable: true
+        cliques:
+          type: object
+          required: [num_cliques, max_clique_size, junction_tree_width, cliques]
+          properties:
+            num_cliques:
+              type: integer
+            max_clique_size:
+              type: integer
+            junction_tree_width:
+              type: integer
+            cliques:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+        diagnostics:
+          type: object
+          required: [request_count, error_count, inference, cache]
+          properties:
+            request_count:
+              type: integer
+            error_count:
+              type: integer
+            inference:
+              type: object
+              required: [count, mean_ms, p50_ms, p95_ms, p99_ms]
+              properties:
+                count:
+                  type: integer
+                mean_ms:
+                  type: number
+                  format: double
+                p50_ms:
+                  type: number
+                  format: double
+                p95_ms:
+                  type: number
+                  format: double
+                p99_ms:
+                  type: number
+                  format: double
+            cache:
+              type: object
+              required: [hits, misses, hit_rate]
+              properties:
+                hits:
+                  type: integer
+                misses:
+                  type: integer
+                hit_rate:
+                  type: number
+                  format: double
+            compile_time_ms:
+              type: number
+              format: double
+            memory_bytes:
+              type: integer
+            last_updated:
+              type: string
+              format: date-time
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    # ---- Analytics ----
+
+    AnalyticsResponse:
+      type: object
+      required: [market_id, total_volume, trade_count, price_history, top_traders, interval, meta]
+      properties:
+        market_id:
+          type: string
+        total_volume:
+          type: number
+          format: double
+        trade_count:
+          type: integer
+        price_history:
+          type: array
+          items:
+            type: object
+            required: [timestamp, marginals]
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              marginals:
+                type: object
+                additionalProperties:
+                  type: number
+                  format: double
+        top_traders:
+          type: array
+          items:
+            type: object
+            required: [account_id, volume, trade_count]
+            properties:
+              account_id:
+                type: string
+              volume:
+                type: number
+                format: double
+              trade_count:
+                type: integer
+        interval:
+          type: string
+          enum: ["1h", "6h", "1d", "7d"]
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    # ---- Order schemas ----
+
+    ProbabilityTarget:
+      type: object
+      required: [kind, outcomeId, probability]
+      properties:
+        kind:
+          type: string
+          enum: [marginal]
+        outcomeId:
+          type: string
+        probability:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+
+    ContextCondition:
+      type: object
+      required: [variableId, outcomeId]
+      properties:
+        variableId:
+          type: string
+        outcomeId:
+          type: string
+
+    ProbabilityEditRequest:
+      type: object
+      required: [accountId, variableId, target]
+      properties:
+        accountId:
+          type: string
+        idempotencyKey:
+          type: string
+          description: Optional client-supplied deduplication key.
+        variableId:
+          type: string
+          description: Must match the market's canonical variable ID.
+        target:
+          $ref: "#/components/schemas/ProbabilityTarget"
+        context:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContextCondition"
+          default: []
+          description: Conditioning context for conditional probability edits.
+
+    ProbabilityEditResponse:
+      type: object
+      required: [order, meta]
+      properties:
+        order:
+          type: object
+          required: [id, type, marketId, accountId, status, payload, previousMarginals, newMarginals, impactScore, commandId, submittedAt, createdAt, filledAt]
+          properties:
+            id:
+              type: string
+              example: ord_01J...
+            type:
+              type: string
+              enum: [ProbabilityEdit]
+            marketId:
+              type: string
+            accountId:
+              type: string
+            status:
+              type: string
+              enum: [filled]
+            payload:
+              type: object
+              additionalProperties: true
+            previousMarginals:
+              type: object
+              additionalProperties:
+                type: number
+                format: double
+              description: Marginal probabilities before the edit.
+            newMarginals:
+              type: object
+              additionalProperties:
+                type: number
+                format: double
+              description: Marginal probabilities after the edit.
+            impactScore:
+              type: number
+              format: double
+              description: Cost of the edit in the liquidity pool.
+            commandId:
+              type: string
+            submittedAt:
+              type: string
+              format: date-time
+            createdAt:
+              type: string
+              format: date-time
+            filledAt:
+              type: string
+              format: date-time
+            idempotencyKey:
+              type: string
+              nullable: true
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    FormulaLiteral:
+      type: object
+      required: [variableId, outcomeId, negated]
+      properties:
+        variableId:
+          type: string
+        outcomeId:
+          type: string
+        negated:
+          type: boolean
+
+    EventTradeRequest:
+      type: object
+      required: [accountId, formula, size, side]
+      properties:
+        accountId:
+          type: string
+        idempotencyKey:
+          type: string
+        formula:
+          type: array
+          items:
+            type: array
+            items:
+              $ref: "#/components/schemas/FormulaLiteral"
+          description: |
+            CNF (conjunctive normal form) formula. Each inner array is a
+            clause (disjunction of literals). Max 16 clauses, max 8 literals
+            per clause.
+          maxItems: 16
+        size:
+          type: number
+          format: double
+          description: Number of shares to trade. Must be positive.
+        side:
+          type: string
+          enum: [buy, sell]
+
+    EventTradeResponse:
+      type: object
+      required: [order, meta]
+      properties:
+        order:
+          type: object
+          required: [id, type, marketId, accountId, status, payload, notional, price, side, size, commandId, submittedAt, createdAt, filledAt]
+          properties:
+            id:
+              type: string
+              example: ord_01J...
+            type:
+              type: string
+              enum: [EventTrade]
+            marketId:
+              type: string
+            accountId:
+              type: string
+            status:
+              type: string
+              enum: [filled]
+            payload:
+              type: object
+              additionalProperties: true
+            notional:
+              type: number
+              format: double
+              description: Total notional value of the trade.
+            price:
+              type: number
+              format: double
+              description: Effective price per share.
+            side:
+              type: string
+              enum: [buy, sell]
+            size:
+              type: number
+              format: double
+            commandId:
+              type: string
+            submittedAt:
+              type: string
+              format: date-time
+            createdAt:
+              type: string
+              format: date-time
+            filledAt:
+              type: string
+              format: date-time
+            idempotencyKey:
+              type: string
+              nullable: true
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    CommandAcceptedResponse:
+      type: object
+      required: [event, meta]
+      properties:
+        event:
+          $ref: "#/components/schemas/Event"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    CommandRejectedResponse:
+      type: object
+      required: [error, meta]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: min_asset_violation
+            message:
+              type: string
+              example: Edit would produce negative state-contingent assets
+            details:
+              type: object
+              properties:
+                reasonCode:
+                  type: string
+                reason:
+                  type: string
+                retryHint:
+                  type: string
+              additionalProperties: true
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    # ---- Account schemas ----
+
+    AccountRisk:
+      type: object
+      required: [minAssets, capacityIndicators, updatedAt]
+      properties:
+        minAssets:
+          type: object
+          required: [overall, markets]
+          properties:
+            overall:
+              type: number
+              format: double
+              description: Aggregate minimum asset value across all markets.
+            markets:
+              type: array
+              items:
+                $ref: "#/components/schemas/MarketRisk"
+        capacityIndicators:
+          $ref: "#/components/schemas/CapacityIndicators"
+        updatedAt:
+          type: string
+          format: date-time
+
+    MarketRisk:
+      type: object
+      required: [marketId, minAsset, capacityConsumed, utilization, commandCount, lastOrderId, lastCommandId, updatedAt]
+      properties:
+        marketId:
+          type: string
+        minAsset:
+          type: number
+          format: double
+        capacityConsumed:
+          type: number
+          format: double
+        utilization:
+          type: number
+          format: double
+        commandCount:
+          type: integer
+        lastOrderId:
+          type: string
+        lastCommandId:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+
+    CapacityIndicators:
+      type: object
+      required: [limit, available, consumed, utilization, status]
+      properties:
+        limit:
+          type: number
+          format: double
+        available:
+          type: number
+          format: double
+        consumed:
+          type: number
+          format: double
+        utilization:
+          type: number
+          format: double
+          description: Fraction of capacity consumed (0.0 to 1.0).
+        status:
+          type: string
+          enum: [healthy, constrained, critical, breached]
+
+    AccountExposure:
+      type: object
+      required: [updatedAt, positions]
+      properties:
+        updatedAt:
+          type: string
+          format: date-time
+        positions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExposurePosition"
+
+    ExposurePosition:
+      type: object
+      required: [marketId, outcomeId, netSize, absSize, lastTradePrice, maxPositionSize, updatedAt]
+      properties:
+        marketId:
+          type: string
+        outcomeId:
+          type: string
+        netSize:
+          type: number
+          format: double
+        absSize:
+          type: number
+          format: double
+        lastTradePrice:
+          type: number
+          format: double
+        maxPositionSize:
+          type: number
+          format: double
+        updatedAt:
+          type: string
+          format: date-time
+        lastOrderId:
+          type: string
+        lastCommandId:
+          type: string
+
+    Position:
+      type: object
+      required: [marketId, outcomeId, netSize, lastTradePrice]
+      properties:
+        marketId:
+          type: string
+        outcomeId:
+          type: string
+        netSize:
+          type: number
+          format: double
+        lastTradePrice:
+          type: number
+          format: double
+
+    AccountPnl:
+      type: object
+      required: [accountId, markets, summary]
+      properties:
+        accountId:
+          type: string
+        markets:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketPnl"
+        summary:
+          $ref: "#/components/schemas/PnlSummary"
+
+    MarketPnl:
+      type: object
+      required: [marketId, outcomes, summary]
+      properties:
+        marketId:
+          type: string
+        outcomes:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/OutcomePnl"
+        summary:
+          $ref: "#/components/schemas/PnlSummary"
+
+    OutcomePnl:
+      type: object
+      required: [outcomeId, netSize, costBasis, currentValue, unrealizedPnl, realizedPnl, totalPnl]
+      properties:
+        outcomeId:
+          type: string
+        netSize:
+          type: number
+          format: double
+        costBasis:
+          type: number
+          format: double
+        currentValue:
+          type: number
+          format: double
+        unrealizedPnl:
+          type: number
+          format: double
+        realizedPnl:
+          type: number
+          format: double
+        totalPnl:
+          type: number
+          format: double
+
+    PnlSummary:
+      type: object
+      required: [totalCostBasis, totalCurrentValue, totalUnrealizedPnl, totalRealizedPnl, totalPnl]
+      properties:
+        totalCostBasis:
+          type: number
+          format: double
+        totalCurrentValue:
+          type: number
+          format: double
+        totalUnrealizedPnl:
+          type: number
+          format: double
+        totalRealizedPnl:
+          type: number
+          format: double
+        totalPnl:
+          type: number
+          format: double

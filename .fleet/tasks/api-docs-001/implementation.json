@@ -1,0 +1,62 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Create OpenAPI spec skeleton: info block, servers array, tags (Health, Markets, Orders, Accounts), and securitySchemes (X-Bayes-Agent-Id apiKey header)",
+      "files_created": ["docs/openapi.yaml"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Define shared component schemas: ErrorResponse envelope, MetaObject, standard error responses (400/401/404/429), and pagination parameters",
+      "files_created": [],
+      "files_modified": ["docs/openapi.yaml"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Document Health endpoints: GET / (service index), GET /health + /healthz (legacy), GET /v1/health (component health with db/inference/auth). Defined HealthResponse and V1HealthResponse schemas",
+      "files_created": [],
+      "files_modified": ["docs/openapi.yaml"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Document Market read endpoints: GET /v1/markets (list with status/sort/q/include_resolved), GET /v1/markets/{id} (detail with context query), GET /v1/markets/{id}/meta (preview), GET /v1/markets/{id}/engine-stats, GET /v1/markets/{id}/analytics (with interval param), GET /v1/markets/{id}/events (paginated), GET /v1/markets/{id}/comments (paginated). Defined Market, MarketSummary, MarketPreview, EngineStatsResponse, AnalyticsResponse, Comment schemas",
+      "files_created": [],
+      "files_modified": ["docs/openapi.yaml"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Document Market write endpoints: POST /v1/markets (create), POST /v1/markets/{id}/comments (post comment), POST /v1/markets/{id}/resolve (resolve market). Defined CreateMarketRequest, PostCommentRequest, ResolveMarketRequest, CommandAcceptedResponse schemas",
+      "files_created": [],
+      "files_modified": ["docs/openapi.yaml"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Document Market order endpoints: POST /v1/markets/{id}/orders/probability-edit (per t1737 contract), POST /v1/markets/{id}/orders/event-trade. Defined ProbabilityEditRequest/Response, EventTradeRequest/Response, FormulaLiteral, ProbabilityTarget, ContextCondition, CommandRejectedResponse schemas",
+      "files_created": [],
+      "files_modified": ["docs/openapi.yaml"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Document Account endpoints: GET /v1/accounts/{id}/risk, GET /v1/accounts/{id}/exposure, GET /v1/accounts/{id}/positions, GET /v1/accounts/{id}/pnl, GET /v1/markets/{id}/accounts/{id}/pnl. Defined AccountRisk, MarketRisk, CapacityIndicators, AccountExposure, ExposurePosition, Position, AccountPnl, MarketPnl, OutcomePnl, PnlSummary schemas",
+      "files_created": [],
+      "files_modified": ["docs/openapi.yaml"],
+      "verified": true
+    },
+    {
+      "step": 8,
+      "task": "Validate complete spec: YAML syntax valid, all $ref pointers resolve, all 21 operations have responses and operationIds, 36 schemas defined, consistent with server.py and contract freeze docs",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}

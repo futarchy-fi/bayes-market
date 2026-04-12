@@ -1,0 +1,89 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should WebSocket endpoints (ws/markets/{id}/prices, ws/markets/{id}/events, ws/accounts/{id}/risk) be included in the OpenAPI spec, or only REST endpoints?",
+      "category": "requirements",
+      "why_it_matters": "OpenAPI 3.0 doesn't natively support WebSocket documentation. Including them requires AsyncAPI or custom x-extensions, which adds complexity."
+    },
+    {
+      "id": "q2",
+      "question": "Should the spec include the legacy health endpoints (/health, /healthz) or only the versioned /v1/ routes?",
+      "category": "requirements",
+      "why_it_matters": "Including legacy endpoints clutters the spec; excluding them may hide important operational endpoints that monitoring tools depend on."
+    },
+    {
+      "id": "q3",
+      "question": "What OpenAPI version to target - 3.0.3 (widest tooling support) or 3.1.0 (JSON Schema alignment)?",
+      "category": "design",
+      "why_it_matters": "3.1.0 offers better JSON Schema compatibility but some Swagger UI versions and code generators don't fully support it yet."
+    },
+    {
+      "id": "q4",
+      "question": "Should the spec document the conditional auth behavior (BAYES_REQUIRE_AGENT_ID=true/false) or assume auth is always required for protected routes?",
+      "category": "design",
+      "why_it_matters": "The auth requirement is configurable via env var. Documenting both states adds complexity; documenting only 'required' is simpler but may mislead development deployments."
+    },
+    {
+      "id": "q5",
+      "question": "Are the existing contract-freeze docs in docs/ (t586, t1737, etc.) the canonical source of truth for response schemas, or should I derive schemas purely from server.py code?",
+      "category": "codebase",
+      "why_it_matters": "If contract docs and code diverge, I need to know which to trust for accurate schema definitions in the OpenAPI spec."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Target OpenAPI 3.0.3 for maximum tooling compatibility",
+      "confidence": 0.7,
+      "if_wrong": "Would need to restructure some schema definitions for 3.1.0 JSON Schema alignment"
+    },
+    {
+      "id": "a2",
+      "assumption": "WebSocket endpoints should be excluded from the OpenAPI spec (REST-only focus)",
+      "confidence": 0.6,
+      "if_wrong": "Would need to add AsyncAPI spec or use x-extensions for WS documentation"
+    },
+    {
+      "id": "a3",
+      "assumption": "Document auth as required on protected routes (the production-expected behavior)",
+      "confidence": 0.8,
+      "if_wrong": "Would need to add conditional security schemes or document both modes"
+    },
+    {
+      "id": "a4",
+      "assumption": "The server.py code is the source of truth for schemas (contract docs may be stale)",
+      "confidence": 0.75,
+      "if_wrong": "May produce schemas that don't match intended contract guarantees"
+    },
+    {
+      "id": "a5",
+      "assumption": "Include all endpoints (legacy health + versioned) in a single spec file",
+      "confidence": 0.6,
+      "if_wrong": "Would split into separate specs or omit legacy endpoints"
+    },
+    {
+      "id": "a6",
+      "assumption": "Output file is docs/openapi.yaml as specified in the task description",
+      "confidence": 0.95,
+      "if_wrong": "Trivial path change"
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 3,
+    "complexity_reason": "Single output file (openapi.yaml) documenting ~25 endpoints from one source file (server.py). No architectural changes, no code modifications - purely documentation generation. However, server.py is 5500+ lines with complex request/response shapes.",
+    "uncertainty_score": 2,
+    "uncertainty_reason": "Endpoints and schemas are well-defined in code and existing contract docs. The main unknowns are preference decisions (OpenAPI version, scope of what to include) rather than technical unknowns.",
+    "independent_subproblems": [
+      "Document market CRUD endpoints",
+      "Document order/trading endpoints",
+      "Document account/risk endpoints",
+      "Document auth scheme and rate limiting"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity 3 and uncertainty 2 are below spawn thresholds. While there are logically separable endpoint groups, they all share common schemas (error responses, meta envelope, auth) and must be coherent in a single YAML file. Parallelizing would create merge conflicts in the shared spec."
+  },
+  "spawn_children": false,
+  "children": []
+}
