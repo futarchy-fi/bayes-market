@@ -23,6 +23,10 @@ server = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(server)
 
+# Pin to current_model compiler: JT query backend is not yet implemented,
+# so API flows that compile then query (e.g. probability edits) require
+# the current_model path. T554+ will enable JT queries.
+server.ENGINE_COMPILE_TYPE = "current_model"
 
 PROPERTY_PROBABILITIES = (0.05, 0.1, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95)
 REFERENCE_NET_MARKET_IDS = tuple(server.INITIAL_MARKETS)
@@ -879,6 +883,61 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_query")
         self.assertEqual(error.details["parameter"], "status")
+
+    def test_list_markets_sort_by_volume_orders_descending(self):
+        payload, status = server.route_request("GET", "/v1/markets?sort=volume&include_resolved=true")
+
+        self.assertEqual(status, 200)
+        volumes = [market["volume"] for market in payload["markets"]]
+        self.assertEqual(volumes, sorted(volumes, reverse=True))
+        self.assertEqual(payload["meta"]["filters"]["sort"], "volume")
+
+    def test_list_markets_sort_by_liquidity_orders_descending(self):
+        payload, status = server.route_request("GET", "/v1/markets?sort=liquidity&include_resolved=true")
+
+        self.assertEqual(status, 200)
+        liquidities = [market["liquidity"] for market in payload["markets"]]
+        self.assertEqual(liquidities, sorted(liquidities, reverse=True))
+        self.assertEqual(payload["meta"]["filters"]["sort"], "liquidity")
+
+    def test_list_markets_sort_by_created_orders_descending(self):
+        payload, status = server.route_request("GET", "/v1/markets?sort=created&include_resolved=true")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["meta"]["filters"]["sort"], "created")
+
+    def test_list_markets_invalid_sort_returns_contract_error(self):
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", "/v1/markets?sort=invalid")
+
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "invalid_query")
+        self.assertEqual(error.details["parameter"], "sort")
+        self.assertEqual(error.details["received"], "invalid")
+        self.assertIn("volume", error.details["allowed"])
+
+    def test_list_markets_search_by_title_filters_case_insensitive(self):
+        payload, status = server.route_request("GET", "/v1/markets?q=ETH&include_resolved=true")
+
+        self.assertEqual(status, 200)
+        for market in payload["markets"]:
+            self.assertIn("eth", market["title"].lower())
+        self.assertEqual(payload["meta"]["filters"]["q"], "ETH")
+
+    def test_list_markets_search_empty_string_returns_all(self):
+        payload, status = server.route_request("GET", "/v1/markets?q=&include_resolved=true")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["count"], 3)
+        self.assertNotIn("q", payload["meta"]["filters"])
+
+    def test_list_markets_status_all_includes_all_statuses(self):
+        payload, status = server.route_request("GET", "/v1/markets?status=all")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["count"], 3)
+        self.assertEqual(payload["meta"]["filters"]["status"], None)
 
     def test_market_detail_returns_variable_and_marginals(self):
         payload, status = server.route_request("GET", "/v1/markets/m1")

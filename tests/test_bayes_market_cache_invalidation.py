@@ -116,7 +116,12 @@ class CacheIntegrationTests(unittest.TestCase):
     """Integration tests for cache behavior through the server layer."""
 
     def setUp(self) -> None:
+        self._saved_compile_type = server.ENGINE_COMPILE_TYPE
+        server.ENGINE_COMPILE_TYPE = "current_model"
         server.reset_state()
+
+    def tearDown(self) -> None:
+        server.ENGINE_COMPILE_TYPE = self._saved_compile_type
 
     def test_compile_market_for_inference_populates_cache(self):
         result = server.compile_market_for_inference("m1")
@@ -238,6 +243,62 @@ class CacheIntegrationTests(unittest.TestCase):
         self.assertTrue(COMPILE_RESULT_CACHE.has_entry("m1"))
         server.reset_state()
         self.assertFalse(COMPILE_RESULT_CACHE.has_entry("m1"))
+
+
+class JunctionTreeCacheTests(unittest.TestCase):
+    """Tests for junction tree compiler cache invalidation."""
+
+    def setUp(self) -> None:
+        self._saved_compile_type = server.ENGINE_COMPILE_TYPE
+        server.ENGINE_COMPILE_TYPE = "junction_tree"
+        server.reset_state()
+
+    def tearDown(self) -> None:
+        server.ENGINE_COMPILE_TYPE = self._saved_compile_type
+
+    def test_junction_tree_compile_populates_cache(self):
+        result = server.compile_market_for_inference("m1")
+        self.assertTrue(COMPILE_RESULT_CACHE.has_entry("m1"))
+        self.assertIsNotNone(result.artifact)
+
+    def test_second_call_returns_cached_result(self):
+        r1 = server.compile_market_for_inference("m1")
+        r2 = server.compile_market_for_inference("m1")
+        self.assertIs(r1, r2)
+
+    def test_probability_edit_invalidates_and_produces_new_ids(self):
+        r1 = server.compile_market_for_inference("m1")
+        old_hash = r1.source_state_hash
+        old_compile_id = r1.compile_id
+
+        # Directly modify market state (JT queries not yet implemented,
+        # so route_request probability-edit path is not available)
+        server.MARKETS["m1"]["marginals"]["yes"] = 0.80
+        server.MARKETS["m1"]["marginals"]["no"] = 0.20
+        COMPILE_RESULT_CACHE.invalidate("m1")
+
+        r2 = server.compile_market_for_inference("m1")
+        self.assertNotEqual(old_hash, r2.source_state_hash)
+        self.assertNotEqual(old_compile_id, r2.compile_id)
+
+    def test_cache_isolation_between_markets(self):
+        r1 = server.compile_market_for_inference("m1")
+        r2 = server.compile_market_for_inference("m2")
+
+        # Edit m1 only
+        server.MARKETS["m1"]["marginals"]["yes"] = 0.80
+        server.MARKETS["m1"]["marginals"]["no"] = 0.20
+        COMPILE_RESULT_CACHE.invalidate("m1")
+
+        # m2 cache should still be valid
+        r2_after = server.compile_market_for_inference("m2")
+        self.assertIs(r2, r2_after)
+
+    def test_compile_result_has_junction_tree_type(self):
+        result = server.compile_market_for_inference("m1")
+        self.assertEqual(result.compile_type, "junction_tree")
+        from backend.inference.junction_tree import JunctionTreeCompileArtifact
+        self.assertIsInstance(result.artifact, JunctionTreeCompileArtifact)
 
 
 class CacheStatsUnitTests(unittest.TestCase):

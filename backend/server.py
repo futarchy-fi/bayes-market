@@ -40,6 +40,7 @@ from backend.inference import (
     InferenceCompileError,
     InferenceQueryError,
     InferenceUnsupportedQueryError,
+    JUNCTION_TREE_COMPILER,
     canonical_json_hash,
 )
 
@@ -200,6 +201,7 @@ INITIAL_MARKETS: dict[str, dict[str, Any]] = {
 }
 
 ALLOWED_MARKET_STATUSES = frozenset({"active", "resolved", "closed", "draft"})
+ALLOWED_MARKET_SORTS = frozenset({"volume", "liquidity", "created"})
 MARKET_SUMMARY_FIELDS = (
     "id",
     "title",
@@ -1164,8 +1166,9 @@ def compile_market_for_inference(
         return cached
 
     state["cache_misses"] += 1
+    compiler = JUNCTION_TREE_COMPILER if ENGINE_COMPILE_TYPE == "junction_tree" else CURRENT_MODEL_COMPILER
     try:
-        result = CURRENT_MODEL_COMPILER.compile_result(
+        result = compiler.compile_result(
             market_snapshot=deepcopy(market),
             conditional_marginals=deepcopy(CONDITIONAL_MARGINALS.get(market_id, {})),
             compile_time_ms=round(float(compile_time_ms), 3),
@@ -2316,7 +2319,8 @@ def get_account_risk(account_id: str) -> tuple[dict[str, Any], int]:
 
 
 def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
-    """Return the market collection, optionally filtered by status."""
+    """Return the market collection with optional status, sort, and search filters."""
+    # Parse status param
     statuses = query.get("status", [])
     if len(statuses) > 1:
         raise ApiError(
@@ -2325,30 +2329,80 @@ def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
             "status must be provided at most once",
             {"parameter": "status", "received": statuses},
         )
-
     status = statuses[0] if statuses else None
-    markets = list(MARKETS.values())
-    if status is not None:
-        if status not in ALLOWED_MARKET_STATUSES:
-            raise ApiError(
-                400,
-                "invalid_query",
-                "status must be one of the supported market states",
-                {"parameter": "status", "received": status, "allowed": sorted(ALLOWED_MARKET_STATUSES)},
-            )
+    status_all = status == "all"
+    if status_all:
+        status = None
+    elif status is not None and status not in ALLOWED_MARKET_STATUSES:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "status must be one of the supported market states",
+            {"parameter": "status", "received": status, "allowed": sorted(ALLOWED_MARKET_STATUSES | {"all"})},
+        )
+
+    # Parse sort param
+    sorts = query.get("sort", [])
+    if len(sorts) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "sort must be provided at most once",
+            {"parameter": "sort", "received": sorts},
+        )
+    sort = sorts[0] if sorts else None
+    if sort is not None and sort not in ALLOWED_MARKET_SORTS:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "sort must be one of the supported sort orders",
+            {"parameter": "sort", "received": sort, "allowed": sorted(ALLOWED_MARKET_SORTS)},
+        )
+
+    # Parse q (title search) param
+    queries = query.get("q", [])
+    if len(queries) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "q must be provided at most once",
+            {"parameter": "q", "received": queries},
+        )
+    title_query = queries[0].strip() if queries else None
+    if title_query == "":
+        title_query = None
+
     include_resolved = parse_boolean_query_param(query, "include_resolved", default=False)
 
-    effective_include_resolved = include_resolved or status == "resolved"
+    # Build result set
+    markets = list(MARKETS.values())
+    effective_include_resolved = include_resolved or status == "resolved" or status_all
     if not effective_include_resolved:
         markets = [market for market in markets if market["status"] != "resolved"]
     if status is not None:
         markets = [market for market in markets if market["status"] == status]
+    if title_query is not None:
+        needle = title_query.casefold()
+        markets = [market for market in markets if needle in str(market["title"]).casefold()]
+
+    # Apply sorting
+    if sort == "volume":
+        markets = sorted(markets, key=lambda m: float(m.get("volume", 0)), reverse=True)
+    elif sort == "liquidity":
+        markets = sorted(markets, key=lambda m: float(m.get("liquidity", 0)), reverse=True)
+    elif sort == "created":
+        markets = sorted(markets, key=lambda m: str(m.get("created_at", "")), reverse=True)
 
     summaries = [market_summary(market) for market in markets]
+    filters = {"status": status, "include_resolved": effective_include_resolved}
+    if sort:
+        filters["sort"] = sort
+    if title_query:
+        filters["q"] = title_query
     return {
         "markets": summaries,
         "count": len(summaries),
-        "meta": make_meta(filters={"status": status, "include_resolved": effective_include_resolved}),
+        "meta": make_meta(filters=filters),
     }, 200
 
 

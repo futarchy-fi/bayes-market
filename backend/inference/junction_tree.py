@@ -246,6 +246,64 @@ class JunctionTreeCompiler:
             details={"market_id": market_id},
         )
 
+    def compile_result(
+        self,
+        *,
+        market_snapshot: Mapping[str, Any],
+        conditional_marginals: Mapping[str, Mapping[str, float]] | None = None,
+        compile_time_ms: float = 0.0,
+        last_updated: str,
+    ) -> CompileResult:
+        """Compile a market snapshot via junction tree with market-level source hashing."""
+        market_id = str(market_snapshot["id"])
+        variable_id = str(market_snapshot["variableId"])
+        outcomes = [str(o["id"]) for o in market_snapshot["outcomes"]]
+
+        graph: BayesianNetworkGraph = {
+            "variables": [{"id": variable_id, "outcomes": outcomes}],
+            "edges": [],
+            "cpts": {},
+        }
+
+        network_result = self.compile_network(
+            graph=graph,
+            market_id=market_id,
+            elimination_ordering=(variable_id,),
+            last_updated=last_updated,
+        )
+
+        # Recompute source_state_hash from full market state to match server cache lookup
+        source_state_inputs = {
+            "market": dict(market_snapshot),
+            "conditionalMarginals": dict(conditional_marginals or {}),
+        }
+        source_state_hash = _canonical_json_hash(source_state_inputs)
+        compile_id = _compile_id_from_hash(source_state_hash)
+
+        assert isinstance(network_result.artifact, JunctionTreeCompileArtifact)
+        old_artifact = network_result.artifact
+        artifact = JunctionTreeCompileArtifact(
+            market_id=old_artifact.market_id,
+            variable_ids=old_artifact.variable_ids,
+            cliques=old_artifact.cliques,
+            separator_sets=old_artifact.separator_sets,
+            elimination_ordering=old_artifact.elimination_ordering,
+            message_schedule=old_artifact.message_schedule,
+            potential_tables=old_artifact.potential_tables,
+            junction_tree_width=old_artifact.junction_tree_width,
+            exact_eligible=old_artifact.exact_eligible,
+            eligibility_reason=old_artifact.eligibility_reason,
+            source_state_hash=source_state_hash,
+            compile_id=compile_id,
+            compile_type=old_artifact.compile_type,
+            memory_bytes=old_artifact.memory_bytes,
+        )
+
+        return artifact.to_compile_result(
+            compile_time_ms=network_result.compile_time_ms,
+            last_updated=last_updated,
+        )
+
     def compile_network(
         self,
         *,

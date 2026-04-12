@@ -30,9 +30,13 @@ export interface Market {
 
 export type MarketStatus = Market["status"];
 
+export type MarketSortField = "volume" | "liquidity" | "created";
+
 export interface MarketListFilters {
-  status?: MarketStatus;
+  status?: MarketStatus | "all";
   includeResolved?: boolean;
+  sort?: MarketSortField;
+  q?: string;
 }
 
 export type MarketListFilterInput = MarketListFilters | string;
@@ -57,6 +61,8 @@ export interface MarketListResponseMeta extends Meta {
   filters: {
     status: MarketStatus | null;
     include_resolved: boolean;
+    sort?: MarketSortField;
+    q?: string;
   };
 }
 
