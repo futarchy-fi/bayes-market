@@ -1,0 +1,128 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "MarketAnalyticsResponse type is correct as-is (flat, snake_case). P&L types need new interfaces matching camelCase { pnl: {...}, meta: {...} } wrapper pattern.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": ["Converting all types to a single casing convention — would break existing analytics hook"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Place MarketAnalytics section between ProbabilityBar and PositionCard in MarketDetail. Place PnLSummary immediately after PositionCard.",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["After trading panels — too late in user flow", "Before ProbabilityBar — probability overview should come first"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "PnLSummary handles three states: (1) no accountId → don't render, (2) 404/no_orders_found → 'No trades yet' placeholder, (3) 200 with zeros → show full P&L with zero values.",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Hiding entirely on 404 — user wouldn't know why section is missing"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Price history uses multi-line chart (one Line per outcome) with dynamic color assignment from a fixed palette of CSS variable hex values.",
+      "based_on": ["q5", "q7"],
+      "alternatives_rejected": ["Single aggregated line — doesn't represent the marginals data structure", "Runtime getComputedStyle — adds complexity for no benefit given inline-style pattern"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "30s refetchInterval for all P&L hooks and useMarketAnalytics. P&L data changes only on trades; 30s balances freshness with bandwidth.",
+      "based_on": ["q6"],
+      "alternatives_rejected": ["5s like useMarkets — too aggressive for analytics data", "No polling — stale data after trades"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "New components go in features/analytics/ directory. Use inline React.CSSProperties with CSS variables, matching existing codebase pattern.",
+      "based_on": ["q7", "q8"],
+      "alternatives_rejected": ["Putting components in features/market/ — analytics is a distinct domain", "CSS modules or Tailwind — not used in codebase"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d7",
+      "decision": "Write basic component tests alongside implementation following existing Vitest + RTL pattern. Defer comprehensive integration tests.",
+      "based_on": ["q8"],
+      "alternatives_rejected": ["No tests — doesn't match established 10-file test suite pattern", "Full integration tests — out of scope for this task"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Install recharts: `npm install recharts` in frontend/. Verify it appears in package.json dependencies.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add P&L TypeScript types to frontend/src/lib/api/types.ts: OutcomePnl (outcomeId, netSize, costBasis, currentValue, unrealizedPnl, realizedPnl, totalPnl), MarketPnlSummary (totalCostBasis, totalCurrentValue, totalUnrealizedPnl, totalRealizedPnl, totalPnl), MarketPnlResponse ({ pnl: { marketId, outcomes: Record<string, OutcomePnl>, summary: MarketPnlSummary }, meta: { timestamp } }), AccountPnlMarket ({ marketId, outcomes, summary }), AccountPnlResponse ({ pnl: { accountId, markets: AccountPnlMarket[], summary: MarketPnlSummary }, meta: { timestamp } }). All camelCase.",
+      "depends_on": []
+    },
+    {
+      "step": 3,
+      "task": "Add P&L API client functions to frontend/src/lib/api/client.ts: getMarketPnl(marketId, accountId) → GET /v1/markets/{marketId}/accounts/{accountId}/pnl, getAccountPnl(accountId) → GET /v1/accounts/{accountId}/pnl. Both return typed responses. Follow existing getMarketAnalytics pattern.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Add P&L React Query hooks to frontend/src/lib/query/hooks.ts: useMarketPnl(marketId, accountId) and useAccountPnl(accountId). Both with 30s refetchInterval, enabled guard on accountId. Also update existing useMarketAnalytics to add refetchInterval: 30000.",
+      "depends_on": [3]
+    },
+    {
+      "step": 5,
+      "task": "Create frontend/src/features/analytics/PriceHistoryChart.tsx: Multi-line recharts LineChart showing outcome probabilities over time. Props: priceHistory (PriceHistoryEntry[]), outcomes (string[]). Features: interval selector button group (1h, 6h, 1d, 7d), responsive container, legend, tooltip. Fixed color palette from CSS variable hex values. Inline styles matching codebase pattern.",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Create frontend/src/features/analytics/VolumeChart.tsx: Simple recharts BarChart showing total_volume and trade_count. Props: totalVolume (number), tradeCount (number). Styled with inline CSS matching codebase pattern.",
+      "depends_on": [1]
+    },
+    {
+      "step": 7,
+      "task": "Create frontend/src/features/analytics/MarketAnalytics.tsx: Collapsible section component that wraps PriceHistoryChart and VolumeChart. Props: marketId. Uses useMarketAnalytics hook internally. Shows loading/error states. Collapsible toggle with ▶/▼ pattern from EventJournal.",
+      "depends_on": [4, 5, 6]
+    },
+    {
+      "step": 8,
+      "task": "Create frontend/src/features/analytics/PnLSummary.tsx: Displays market-level P&L data. Props: marketId, accountId. Uses useMarketPnl hook. Shows per-outcome breakdown (outcomeId, netSize, costBasis, currentValue, unrealizedPnl, totalPnl) in a table. Summary row with totals. Three states: no accountId → null, 404 → 'No trades yet' placeholder, 200 → full table. Green/red coloring for positive/negative P&L values.",
+      "depends_on": [4]
+    },
+    {
+      "step": 9,
+      "task": "Create frontend/src/features/analytics/AccountPnL.tsx: Displays account-level P&L for Portfolio page. Props: accountId. Uses useAccountPnl hook. Shows per-market P&L summaries with expandable market details. Overall account summary at top. Same three-state handling and green/red coloring as PnLSummary.",
+      "depends_on": [4]
+    },
+    {
+      "step": 10,
+      "task": "Create frontend/src/features/analytics/index.ts: Barrel export for MarketAnalytics, PnLSummary, AccountPnL.",
+      "depends_on": [7, 8, 9]
+    },
+    {
+      "step": 11,
+      "task": "Integrate into MarketDetail (frontend/src/routes/MarketDetail.tsx): Import MarketAnalytics and PnLSummary. Add <MarketAnalytics marketId={marketId} /> between ProbabilityBar and PositionCard. Add <PnLSummary marketId={marketId} accountId={accountId} /> after PositionCard. Get accountId from session context.",
+      "depends_on": [10]
+    },
+    {
+      "step": 12,
+      "task": "Integrate into Portfolio (frontend/src/routes/Portfolio.tsx): Import AccountPnL. Add <AccountPnL accountId={accountId} /> section to the portfolio page. Get accountId from session context.",
+      "depends_on": [10]
+    },
+    {
+      "step": 13,
+      "task": "Write basic component tests: frontend/src/__tests__/MarketAnalytics.test.tsx (renders loading, renders chart data, handles error), frontend/src/__tests__/PnLSummary.test.tsx (renders P&L data, shows 'No trades yet' on 404, hides when no accountId), frontend/src/__tests__/AccountPnL.test.tsx (renders account P&L, handles loading/error). Follow existing renderWithProviders + vi.mock pattern.",
+      "depends_on": [10]
+    },
+    {
+      "step": 14,
+      "task": "End-to-end verification: Run `npm run build` and `npm run test` in frontend/ to confirm no TypeScript errors, no test failures, and clean build.",
+      "depends_on": [11, 12, 13]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
