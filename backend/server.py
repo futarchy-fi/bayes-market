@@ -2156,6 +2156,18 @@ def create_market(body: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
             raise ApiError(400, "invalid_payload", "each outcome must have id and name")
     if not expires_at or not isinstance(expires_at, str):
         raise ApiError(400, "invalid_payload", "expires_at is required (ISO 8601 string)")
+    try:
+        parsed_expires = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        raise ApiError(400, "invalid_payload", "expires_at must be a valid ISO 8601 datetime")
+    if parsed_expires <= datetime.now(timezone.utc):
+        raise ApiError(400, "invalid_payload", "expires_at must be in the future")
+    if not isinstance(liquidity, (int, float)) or liquidity <= 0:
+        raise ApiError(400, "invalid_payload", "liquidity must be a positive number")
+    for o in outcomes:
+        name = o.get("name", "")
+        if not isinstance(name, str) or not name.strip():
+            raise ApiError(400, "invalid_payload", "each outcome name must be a non-empty string")
     if max_pos_size is not None:
         if not isinstance(max_pos_size, (int, float)) or max_pos_size <= 0:
             raise ApiError(400, "invalid_payload", "maxPositionSize must be a positive number")
@@ -2219,8 +2231,11 @@ def create_market(body: dict[str, Any] | None) -> tuple[dict[str, Any], int]:
     MARKETS[market_id] = market
     ensure_market_engine_state(market_id)
 
+    genesis_event = emit_market_created_event(market_id, market)
+
     return {
         "market": deepcopy(market),
+        "event": deepcopy(genesis_event),
         "meta": make_meta(),
     }, 201
 
@@ -2419,6 +2434,7 @@ def get_market_analytics(market_id: str, query: dict[str, list[str]]) -> tuple[d
         market_events = [
             event for event in EVENTS.values()
             if str(event.get("marketId")) == market_id
+            and str(event.get("eventType")) not in ("MarketCreated",)
         ]
     market_events.sort(key=lambda e: str(e.get("emittedAt", "")))
 
@@ -3538,6 +3554,30 @@ def emit_terminal_event(command: dict[str, Any], event_type: str, payload: dict[
             "emittedAt": utc_timestamp(),
             "approxFlag": False,
             "payload": deepcopy(payload),
+            "prevEventHash": prev_event_hash,
+        }
+        event["eventHash"] = canonical_json_hash(event)
+        MARKET_EVENT_SEQUENCES[market_id] = seq
+        LAST_EVENT_HASHES[market_id] = str(event["eventHash"])
+        with _EVENTS_LOCK:
+            EVENTS[str(event["eventId"])] = deepcopy(event)
+        return event
+
+
+def emit_market_created_event(market_id: str, market_snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Emit a MarketCreated genesis event for a newly created market."""
+    with get_market_write_lock(market_id):
+        seq = 1
+        prev_event_hash = GENESIS_EVENT_HASH
+        event = {
+            "schemaVersion": "bayes-event/v1",
+            "eventId": generate_event_id(),
+            "marketId": market_id,
+            "seq": seq,
+            "eventType": "MarketCreated",
+            "emittedAt": utc_timestamp(),
+            "approxFlag": False,
+            "payload": deepcopy(market_snapshot),
             "prevEventHash": prev_event_hash,
         }
         event["eventHash"] = canonical_json_hash(event)

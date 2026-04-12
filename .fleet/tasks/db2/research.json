@@ -1,0 +1,131 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The POST /v1/markets endpoint already exists at backend/server.py:2086-2173 with functional market creation: title/description/outcomes/expires_at/liquidity/maxPositionSize fields, variableId dedup, uniform priors, and engine state setup. The task is about enhancing the existing endpoint with: (1) stricter input validation (expires_at ISO-8601 parsing + future date check, liquidity type/range validation, outcome name non-empty check), (2) genesis event emission to the event journal for audit trail consistency, and (3) potentially idempotency key support. The endpoint does NOT need to be replaced—it needs hardening and feature parity with the order/resolution endpoints.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:2086-2173 (full create_market function)",
+        "backend/server.py:2095 (liquidity default 10000.0, no validation)",
+        "backend/server.py:2105-2106 (expires_at string-only check)",
+        "backend/server.py:2167 (MARKETS dict insertion, no event emission)",
+        "backend/server.py:3473-3496 (emit_terminal_event pattern used by orders)"
+      ],
+      "uncertainty": "The exact scope of 'dynamic' is inferred from code gaps—no explicit spec was found beyond the task title"
+    },
+    {
+      "question_id": "q2",
+      "answer": "'Dynamic market creation' most likely means the ability for API consumers to create markets at runtime via the endpoint (which already exists), NOT support for non-uniform priors or conditional/linked markets. The codebase has a conditional marginals system (CONDITIONAL_MARGINALS dict) that operates post-creation via trading, but there is no infrastructure for specifying initial probability distributions at creation time. No linked or conditional market creation patterns exist. The current uniform prior (1/N) initialization is the only path.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/server.py:2141-2148 (uniform prior calculation, hardcoded 1/N)",
+        "backend/server.py:263 (CONDITIONAL_MARGINALS dict, post-creation only)",
+        "backend/server.py:3076 (conditional marginals set during trades, not creation)",
+        "frontend/src/lib/api/client.ts:115-121 (CreateMarketPayload has no probabilities field)"
+      ],
+      "uncertainty": "If 'dynamic' specifically means non-uniform priors, that would require a new 'initialProbabilities' field with sum-to-1 validation and changes to the LMSR initialization path"
+    },
+    {
+      "question_id": "q3",
+      "answer": "Persistence means the current in-memory dict pattern (MARKETS global). The entire backend uses in-memory dicts: MARKETS, ORDERS, COMMANDS, EVENTS, COMMENTS, TERMINAL_OUTCOMES, IDEMPOTENCY_KEYS, etc.—all declared at module level (server.py:262-282) with no disk I/O. The reset_state() function (server.py:~415) simply calls .clear() on all dicts. There is no database, no SQLite, no file-based storage anywhere. Adding a database would be a project-wide architectural change affecting every endpoint.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:262-282 (all global state dicts, pure in-memory)",
+        "backend/server.py:417 (reset_state clears EVENTS dict)",
+        "backend/server.py:423 (reset_state clears IDEMPOTENCY_KEYS)",
+        "tests/test_bayes_market_api.py:118-131 (snapshot_domain_state copies all dicts)"
+      ],
+      "uncertainty": "None—there is definitively no database layer in this project"
+    },
+    {
+      "question_id": "q4",
+      "answer": "Market creation should emit a genesis event for audit trail consistency. Currently, create_market (server.py:2086-2173) inserts into MARKETS and calls ensure_market_engine_state but does NOT record any event. In contrast, orders emit events via emit_terminal_event (server.py:3473-3496) with hash-chained integrity (prevEventHash linking, seq numbering). Resolutions also emit events (server.py:3787 calls ws_broadcast after resolution). The event schema includes schemaVersion, eventId, marketId, seq, commandId, eventType, emittedAt, payload, prevEventHash, and eventHash. A 'MarketCreated' genesis event would need to initialize the market's event sequence and hash chain.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/server.py:2167-2168 (market creation: only dict insert + engine state, no event)",
+        "backend/server.py:3473-3496 (emit_terminal_event: full event with hash chain)",
+        "backend/server.py:3479-3495 (event structure: seq, prevEventHash, eventHash)",
+        "backend/server.py:361 (GENESIS_EVENT_HASH = sha256 of empty bytes)",
+        "backend/server.py:271-273 (MARKET_EVENT_SEQUENCES, LAST_EVENT_HASHES dicts)"
+      ],
+      "uncertainty": "emit_terminal_event requires a 'command' dict with marketId and commandId—market creation doesn't go through the command pipeline, so a new emit function or adapter may be needed"
+    },
+    {
+      "question_id": "q5",
+      "answer": "Market creation currently deduplicates via variableId (title-derived, server.py:2117-2131), which prevents markets with similar titles but does NOT protect against network retries of the same request. The order idempotency system uses IDEMPOTENCY_KEYS with (market_id, account_id, key) tuples (server.py:2950-2952) and is deeply integrated with the command pipeline (server.py:3115-3117, 3536-3570). Adding idempotency keys to market creation would be a nice-to-have but requires adapting the pattern since market creation doesn't use the command/account model—there's no accountId on market creation.",
+      "confidence": 0.8,
+      "evidence": [
+        "backend/server.py:2117-2131 (variableId dedup logic)",
+        "backend/server.py:270 (IDEMPOTENCY_KEYS dict type: tuple[str,str,str] -> str)",
+        "backend/server.py:2950-2952 (idempotency_scope_key: market_id, account_id, key)",
+        "backend/server.py:3536-3570 (record_terminal_outcome binds idempotency keys)"
+      ],
+      "uncertainty": "Whether idempotency keys are in scope for this task—the existing variableId dedup may be considered sufficient for market creation"
+    },
+    {
+      "question_id": "q6",
+      "answer": "The frontend CreateMarketPayload (client.ts:115-121) has: title (string), description (string), outcomes (Array<{id, name}>), expires_at (string), liquidity (optional number). The backend additionally supports maxPositionSize (server.py:2096, 2107-2109). Neither frontend nor backend has tags, categories, resolution criteria, or creator attribution. The frontend type is missing maxPositionSize compared to the backend. No evidence of planned additional fields in either codebase.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/lib/api/client.ts:115-121 (CreateMarketPayload interface)",
+        "backend/server.py:2091-2096 (body field extraction)",
+        "backend/server.py:2107-2109 (maxPositionSize validation)",
+        "backend/server.py:2151-2165 (market dict fields)"
+      ],
+      "uncertainty": "The frontend is missing maxPositionSize in its type—this may be intentional or an oversight that should be synced"
+    },
+    {
+      "question_id": "q7",
+      "answer": "The endpoint should validate expires_at as a valid future ISO-8601 date. Currently (server.py:2105-2106) it only checks `not expires_at or not isinstance(expires_at, str)`, accepting any string including past dates, malformed timestamps, or random text. The codebase uses ISO-8601 'Z' suffix format consistently (e.g. server.py:2150 uses `.isoformat().replace('+00:00', 'Z')`; initial markets use '2026-03-01T00:00:00Z' format). Stricter validation should parse with datetime.fromisoformat, reject past dates, and ensure UTC timezone.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:2105-2106 (current validation: isinstance(str) only)",
+        "backend/server.py:2150 (timestamp generation uses ISO-8601 Z format)",
+        "backend/server.py:160 (INITIAL_MARKETS expires_at: '2026-12-31T00:00:00Z')",
+        "tests/test_bayes_market_api.py:104 (test helper uses '2026-12-31T23:59:59Z')"
+      ],
+      "uncertainty": "Whether to be lenient on 'past' dates during testing (tests use fixed future dates) or if there's a use case for backdated markets"
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Enhancement approach confirmed. The endpoint exists and is functional at server.py:2086-2173. Work should focus on validation hardening, event emission, and alignment with order endpoint patterns."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No database needed. All 11+ global state dicts (server.py:262-282) are in-memory. The event journal (EVENTS dict) provides audit persistence within a process lifetime. This is consistent across all endpoints."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Validation gaps confirmed: (1) expires_at accepts any string (line 2105), (2) liquidity has no type/range check (line 2095, silently uses float()), (3) outcome name can be empty string (line 2103 checks existence of 'name' key but not non-emptiness). maxPositionSize already has proper validation (lines 2107-2109)."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.8,
+      "impact": "Event journal gap confirmed. Orders use emit_terminal_event (line 3473) with hash-chained events. Market creation has no event. Adding a genesis event requires either reusing emit_terminal_event (needs a synthetic command dict) or a new emit_market_created_event function that initializes MARKET_EVENT_SEQUENCES and LAST_EVENT_HASHES for the new market."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Existing tests are solid and extensible. Tests cover: happy path 201, missing title 400, duplicate outcome IDs 400, missing expires_at 400, maxPositionSize valid/invalid/default, HTTP integration (agent-id auth, collection entry, duplicate variableId). Test helpers (build_create_market_body, snapshot_domain_state, assert_domain_state_unchanged) are reusable."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.4,
+      "impact": "WebSocket is exclusively per-market price updates (/ws/markets/{id}/prices at line 4731). ws_broadcast(market_id) sends current marginals to subscribers of a specific market. There is no list-level WebSocket channel. Adding market-created notifications would require a new WS endpoint pattern (e.g. /ws/markets/feed) or a separate notification mechanism. This is likely out of scope for this task."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

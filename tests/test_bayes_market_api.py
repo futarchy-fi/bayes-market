@@ -3649,6 +3649,115 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             })
         self.assertEqual(ctx.exception.status, 400)
 
+    def test_create_market_rejects_invalid_expires_at_format(self):
+        """expires_at with an unparseable ISO string returns 400."""
+        server.reset_state()
+        before = snapshot_domain_state()
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", "/v1/markets", {
+                "title": "Bad Expiry Format",
+                "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+                "expires_at": "not-a-date",
+            })
+        self.assertEqual(ctx.exception.status, 400)
+        self.assertIn("valid ISO 8601", ctx.exception.message)
+        assert_domain_state_unchanged(self, before)
+
+    def test_create_market_rejects_past_expires_at(self):
+        """expires_at with a past date returns 400."""
+        server.reset_state()
+        before = snapshot_domain_state()
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", "/v1/markets", {
+                "title": "Past Expiry",
+                "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+                "expires_at": "2020-01-01T00:00:00Z",
+            })
+        self.assertEqual(ctx.exception.status, 400)
+        self.assertIn("future", ctx.exception.message)
+        assert_domain_state_unchanged(self, before)
+
+    def test_create_market_rejects_invalid_liquidity(self):
+        """liquidity with zero, negative, or non-numeric value returns 400."""
+        server.reset_state()
+        for invalid_value in (0, -100, "abc"):
+            with self.subTest(value=invalid_value):
+                before = snapshot_domain_state()
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets", {
+                        "title": f"Bad Liquidity {invalid_value}",
+                        "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+                        "expires_at": "2026-12-31T23:59:59Z",
+                        "liquidity": invalid_value,
+                    })
+                self.assertEqual(ctx.exception.status, 400)
+                self.assertIn("liquidity", ctx.exception.message)
+                assert_domain_state_unchanged(self, before)
+
+    def test_create_market_rejects_empty_outcome_name(self):
+        """Outcome with empty or whitespace-only name returns 400."""
+        server.reset_state()
+        for bad_name in ("", "   ", "  \t "):
+            with self.subTest(name=repr(bad_name)):
+                before = snapshot_domain_state()
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request("POST", "/v1/markets", {
+                        "title": f"Empty Outcome Name {repr(bad_name)}",
+                        "outcomes": [{"id": "a", "name": "Good"}, {"id": "b", "name": bad_name}],
+                        "expires_at": "2026-12-31T23:59:59Z",
+                    })
+                self.assertEqual(ctx.exception.status, 400)
+                self.assertIn("outcome name", ctx.exception.message)
+                assert_domain_state_unchanged(self, before)
+
+    def test_create_market_emits_genesis_event(self):
+        """Successful market creation emits a MarketCreated event with correct schema."""
+        server.reset_state()
+        payload, status = server.route_request("POST", "/v1/markets", {
+            "title": "Genesis Event Market",
+            "outcomes": [{"id": "yes", "name": "Yes"}, {"id": "no", "name": "No"}],
+            "expires_at": "2026-12-31T23:59:59Z",
+        })
+        self.assertEqual(status, 201)
+        market_id = payload["market"]["id"]
+
+        # Response includes the event
+        self.assertIn("event", payload)
+        event = payload["event"]
+        self.assertEqual(event["schemaVersion"], "bayes-event/v1")
+        self.assertIn("eventId", event)
+        self.assertEqual(event["marketId"], market_id)
+        self.assertEqual(event["seq"], 1)
+        self.assertEqual(event["eventType"], "MarketCreated")
+        self.assertIn("eventHash", event)
+        self.assertEqual(event["prevEventHash"], server.GENESIS_EVENT_HASH)
+        self.assertIn("emittedAt", event)
+        self.assertFalse(event["approxFlag"])
+
+        # Payload contains the market snapshot
+        self.assertEqual(event["payload"]["id"], market_id)
+        self.assertEqual(event["payload"]["title"], "Genesis Event Market")
+
+        # Event is stored in EVENTS
+        self.assertIn(str(event["eventId"]), server.EVENTS)
+        stored = server.EVENTS[str(event["eventId"])]
+        self.assertEqual(stored["eventType"], "MarketCreated")
+
+    def test_create_market_initializes_event_hash_chain(self):
+        """After market creation, MARKET_EVENT_SEQUENCES and LAST_EVENT_HASHES are initialized."""
+        server.reset_state()
+        payload, status = server.route_request("POST", "/v1/markets", {
+            "title": "Hash Chain Market",
+            "outcomes": [{"id": "a", "name": "A"}, {"id": "b", "name": "B"}],
+            "expires_at": "2026-12-31T23:59:59Z",
+        })
+        self.assertEqual(status, 201)
+        market_id = payload["market"]["id"]
+
+        self.assertEqual(server.MARKET_EVENT_SEQUENCES[market_id], 1)
+        self.assertIn(market_id, server.LAST_EVENT_HASHES)
+        self.assertNotEqual(server.LAST_EVENT_HASHES[market_id], server.GENESIS_EVENT_HASH)
+
     def test_event_formula_normalizes_literals_and_preserves_clause_order(self):
         normalized = server.normalize_event_formula(
             [

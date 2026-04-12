@@ -1,0 +1,48 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Add input validation hardening to create_market: parse expires_at as ISO-8601 and reject past dates, validate liquidity is positive, validate outcome names are non-empty strings",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Add emit_market_created_event function near emit_terminal_event to emit MarketCreated genesis events",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Wire emit_market_created_event into create_market and include genesis event in response body",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Add tests for validation rules: invalid ISO expires_at, past expires_at, invalid liquidity, empty outcome names",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Add tests for genesis event: MarketCreated event schema, event stored in EVENTS, hash chain initialized",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Run full test suite and fix regressions: filtered MarketCreated events from analytics price_history builder",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
