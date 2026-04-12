@@ -1,0 +1,13 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.95,
+  "plan_adherence_notes": "All 12 plan steps completed and verified in the diff. Backend: WS_EVENT_CONNECTIONS/WS_RISK_CONNECTIONS registries with register/unregister helpers (step 1), ws_broadcast_events (step 2), ws_broadcast_risk (step 3), broadcast hook in emit_terminal_event (step 4), broadcast hooks after sync_account_risk_state/sync_account_exposure_state/settle_market_account_* (step 5), _handle_events_websocket handler with /ws/markets/{id}/events route and 20-event snapshot (step 6), _handle_risk_websocket handler with /ws/accounts/{id}/risk route and risk+exposure snapshot (step 7), both wired into do_GET before existing _handle_websocket (step 8), MarketEventMessage and AccountRiskMessage TS interfaces (step 9), getMarketEventsWebSocketUrl and getAccountRiskWebSocketUrl helpers (step 10), useMarketEventSubscription with reconnect backoff and cache invalidation (step 11), useAccountRiskSubscription with reconnect backoff invalidating both accountRisk and accountExposure queries (step 12). Minor delta: useMarketPriceSubscription was also refactored for consistency but was not in the plan.",
+  "research_quality": 0.90,
+  "question_completeness": 0.85,
+  "missed_questions": [
+    "Should WS event/risk endpoints require authentication or account validation before upgrade? (Consistent with existing unauthenticated price stream, but worth asking for account-scoped risk data)",
+    "Should there be per-IP or per-account connection limits on WS endpoints to prevent resource exhaustion? (Not critical for MVP but relevant for production)"
+  ],
+  "verdict": "approve",
+  "reason": "All 12 plan steps faithfully executed and verified against the diff. Research answers directly informed all plan decisions with clear question-ID references. 307 backend tests pass, server.py imports cleanly. Implementation follows existing WS patterns (RFC 6455 helpers, connection registry, broadcast fan-out, initial snapshot + live updates). Both new stream types (market events at /ws/markets/{id}/events and account risk at /ws/accounts/{id}/risk) are fully functional with proper registration lifecycle, snapshot-on-connect, and broadcast-on-mutation. Frontend hooks include reconnection with exponential backoff and TanStack Query cache integration. Minor gaps in question phase (auth, rate limiting) are consistent with existing infrastructure patterns and do not block approval."
+}
