@@ -9485,5 +9485,226 @@ class BayesMarketAnalyticsTests(unittest.TestCase):
         self.assertEqual(payload["top_traders"], [])
 
 
+class BayesMarketPnlTests(unittest.TestCase):
+    """Integration tests for P&L endpoints."""
+
+    def setUp(self) -> None:
+        server.reset_state()
+
+    # -- helpers ----------------------------------------------------------
+
+    def _buy(self, market_id: str, account_id: str, outcome_id: str, *, size: float = 12.5) -> dict:
+        body = build_event_trade_body(account_id, market_id, outcome_id, size=size, side="buy")
+        payload, status = server.route_request("POST", f"/v1/markets/{market_id}/orders/event-trade", body)
+        self.assertEqual(status, 201, f"buy failed: {payload}")
+        return payload
+
+    def _sell(self, market_id: str, account_id: str, outcome_id: str, *, size: float = 12.5) -> dict:
+        body = build_event_trade_body(account_id, market_id, outcome_id, size=size, side="sell")
+        payload, status = server.route_request("POST", f"/v1/markets/{market_id}/orders/event-trade", body)
+        self.assertEqual(status, 201, f"sell failed: {payload}")
+        return payload
+
+    def _prob_edit(self, market_id: str, account_id: str, outcome_id: str, probability: float) -> dict:
+        body = build_unconditional_probability_edit_body(account_id, market_id, outcome_id, probability)
+        payload, status = server.route_request("POST", f"/v1/markets/{market_id}/orders/probability-edit", body)
+        self.assertEqual(status, 201, f"prob_edit failed: {payload}")
+        return payload
+
+    def _resolve(self, market_id: str, outcome_id: str) -> dict:
+        body = build_market_resolution_body("admin", outcome_id)
+        payload, status = server.route_request("POST", f"/v1/markets/{market_id}/resolve", body)
+        self.assertEqual(status, 201, f"resolve failed: {payload}")
+        return payload
+
+    def _get_market_pnl(self, market_id: str, account_id: str) -> tuple[dict, int]:
+        return server.route_request("GET", f"/v1/markets/{market_id}/accounts/{account_id}/pnl")
+
+    def _get_account_pnl(self, account_id: str) -> tuple[dict, int]:
+        return server.route_request("GET", f"/v1/accounts/{account_id}/pnl")
+
+    # -- (a) unrealized P&L from EventTrade buys on active market ---------
+
+    def test_unrealized_pnl_buy_on_active_market(self):
+        """Buy on active market → costBasis = notional, currentValue = netSize × marginal."""
+        market_id = "m1"
+        account_id = "acct_pnl_1"
+
+        trade_resp = self._buy(market_id, account_id, "yes", size=10.0)
+        order = trade_resp["order"]
+        notional = float(order["notional"])
+        size = float(order["size"])
+
+        payload, status = self._get_market_pnl(market_id, account_id)
+        self.assertEqual(status, 200)
+        pnl = payload["pnl"]
+        self.assertEqual(pnl["marketId"], market_id)
+        self.assertIn("meta", payload)
+
+        yes_outcome = pnl["outcomes"]["yes"]
+        self.assertAlmostEqual(yes_outcome["netSize"], size, places=4)
+        self.assertAlmostEqual(yes_outcome["costBasis"], notional, places=4)
+
+        current_marginal = float(server.MARKETS[market_id]["marginals"]["yes"])
+        expected_value = size * current_marginal
+        self.assertAlmostEqual(yes_outcome["currentValue"], expected_value, places=4)
+        self.assertAlmostEqual(yes_outcome["unrealizedPnl"], expected_value - notional, places=4)
+        self.assertAlmostEqual(yes_outcome["realizedPnl"], 0.0, places=6)
+
+        summary = pnl["summary"]
+        self.assertAlmostEqual(summary["totalCostBasis"], notional, places=4)
+        self.assertAlmostEqual(summary["totalRealizedPnl"], 0.0, places=6)
+
+    # -- (b) realized P&L after market resolution -------------------------
+
+    def test_realized_pnl_after_resolution(self):
+        """Buy, then resolve → realized P&L uses resolutionProbabilities."""
+        market_id = "m1"
+        account_id = "acct_pnl_2"
+
+        trade_resp = self._buy(market_id, account_id, "yes", size=10.0)
+        order = trade_resp["order"]
+        notional = float(order["notional"])
+        size = float(order["size"])
+
+        self._resolve(market_id, "yes")
+
+        payload, status = self._get_market_pnl(market_id, account_id)
+        self.assertEqual(status, 200)
+        pnl = payload["pnl"]
+
+        yes_outcome = pnl["outcomes"]["yes"]
+        # resolution prob for "yes" = 1.0
+        expected_value = size * 1.0
+        self.assertAlmostEqual(yes_outcome["currentValue"], expected_value, places=4)
+        self.assertAlmostEqual(yes_outcome["realizedPnl"], expected_value - notional, places=4)
+        self.assertAlmostEqual(yes_outcome["unrealizedPnl"], 0.0, places=6)
+
+        summary = pnl["summary"]
+        self.assertAlmostEqual(summary["totalRealizedPnl"], expected_value - notional, places=4)
+        self.assertAlmostEqual(summary["totalUnrealizedPnl"], 0.0, places=6)
+
+    # -- (c) ProbabilityEdit cost basis -----------------------------------
+
+    def test_probability_edit_adds_to_cost_basis(self):
+        """ProbabilityEdit.impactScore is included in cost basis, proportionally attributed."""
+        market_id = "m1"
+        account_id = "acct_pnl_3"
+
+        edit_resp = self._prob_edit(market_id, account_id, "yes", 0.8)
+        order = edit_resp["order"]
+        impact_score = float(order["impactScore"])
+        self.assertGreater(impact_score, 0.0)
+
+        payload, status = self._get_market_pnl(market_id, account_id)
+        self.assertEqual(status, 200)
+        pnl = payload["pnl"]
+
+        # The total cost basis across all outcomes should equal the impactScore
+        total_cost = sum(float(o["costBasis"]) for o in pnl["outcomes"].values())
+        self.assertAlmostEqual(total_cost, impact_score, places=4)
+
+    # -- (d) 404 for no orders --------------------------------------------
+
+    def test_market_pnl_404_for_no_orders(self):
+        """Account with no orders in market → 404."""
+        with self.assertRaises(server.ApiError) as ctx:
+            self._get_market_pnl("m1", "nonexistent_acct")
+        self.assertEqual(ctx.exception.status, 404)
+
+    def test_account_pnl_404_for_no_orders(self):
+        """Account with no orders anywhere → 404."""
+        with self.assertRaises(server.ApiError) as ctx:
+            self._get_account_pnl("nonexistent_acct")
+        self.assertEqual(ctx.exception.status, 404)
+
+    def test_market_pnl_404_for_nonexistent_market(self):
+        """Nonexistent market → 404."""
+        with self.assertRaises(server.ApiError) as ctx:
+            self._get_market_pnl("nonexistent_market", "acct_1")
+        self.assertEqual(ctx.exception.status, 404)
+
+    # -- (e) account-level aggregation across markets ---------------------
+
+    def test_account_level_aggregation_across_markets(self):
+        """Account P&L aggregates across multiple markets."""
+        account_id = "acct_pnl_5"
+
+        self._buy("m1", account_id, "yes", size=10.0)
+        self._buy("m2", account_id, "yes", size=5.0)
+
+        payload, status = self._get_account_pnl(account_id)
+        self.assertEqual(status, 200)
+        pnl = payload["pnl"]
+        self.assertEqual(pnl["accountId"], account_id)
+        self.assertIn("meta", payload)
+
+        market_ids = [m["marketId"] for m in pnl["markets"]]
+        self.assertIn("m1", market_ids)
+        self.assertIn("m2", market_ids)
+
+        # Summary should include totals from both markets
+        summary = pnl["summary"]
+        self.assertIsInstance(summary["totalPnl"], (int, float))
+        self.assertIsInstance(summary["totalCostBasis"], (int, float))
+        self.assertGreater(summary["totalCostBasis"], 0.0)
+
+    # -- (f) sell orders reduce position and cost basis -------------------
+
+    def test_sell_reduces_position_and_cost_basis(self):
+        """Buy then sell → net size and cost basis are reduced."""
+        market_id = "m1"
+        account_id = "acct_pnl_6"
+
+        buy_resp = self._buy(market_id, account_id, "yes", size=10.0)
+        buy_notional = float(buy_resp["order"]["notional"])
+
+        sell_resp = self._sell(market_id, account_id, "yes", size=5.0)
+        sell_notional = float(sell_resp["order"]["notional"])
+
+        payload, status = self._get_market_pnl(market_id, account_id)
+        self.assertEqual(status, 200)
+        pnl = payload["pnl"]
+
+        yes_outcome = pnl["outcomes"]["yes"]
+        # Net size should be 10 - 5 = 5
+        self.assertAlmostEqual(yes_outcome["netSize"], 5.0, places=4)
+        # Cost basis = buy_notional - sell_notional
+        self.assertAlmostEqual(yes_outcome["costBasis"], buy_notional - sell_notional, places=4)
+
+    # -- method not allowed -----------------------------------------------
+
+    def test_market_pnl_405_for_post(self):
+        """POST to P&L endpoint → 405."""
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", "/v1/markets/m1/accounts/acct_1/pnl")
+        self.assertEqual(ctx.exception.status, 405)
+
+    def test_account_pnl_405_for_post(self):
+        """POST to account P&L endpoint → 405."""
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", "/v1/accounts/acct_1/pnl")
+        self.assertEqual(ctx.exception.status, 405)
+
+    # -- resolved market with mixed outcomes ------------------------------
+
+    def test_realized_pnl_losing_side(self):
+        """Buy the losing side of a resolved market → negative realized P&L."""
+        market_id = "m1"
+        account_id = "acct_pnl_lose"
+
+        trade_resp = self._buy(market_id, account_id, "no", size=10.0)
+        notional = float(trade_resp["order"]["notional"])
+
+        self._resolve(market_id, "yes")
+
+        payload, status = self._get_market_pnl(market_id, account_id)
+        self.assertEqual(status, 200)
+        no_outcome = payload["pnl"]["outcomes"]["no"]
+        # resolution prob for "no" = 0.0
+        self.assertAlmostEqual(no_outcome["currentValue"], 0.0, places=6)
+        self.assertAlmostEqual(no_outcome["realizedPnl"], -notional, places=4)
+
+
 if __name__ == "__main__":
     unittest.main()

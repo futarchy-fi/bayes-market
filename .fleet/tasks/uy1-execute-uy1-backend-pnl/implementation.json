@@ -1,0 +1,48 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Add P&L computation core: compute_orders_pnl and compute_market_pnl in server.py",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Add per-market P&L endpoint handler: get_market_account_pnl",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Add routing for per-market P&L: /v1/markets/{id}/accounts/{accountId}/pnl",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Add account-level P&L endpoint handler: get_account_pnl",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Add routing for account-level P&L: /v1/accounts/{id}/pnl",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Integration tests: BayesMarketPnlTests with 11 tests covering unrealized P&L, realized P&L, ProbabilityEdit cost basis, 404s, account aggregation, sell orders, 405s, and losing side",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
