@@ -1,0 +1,122 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "CPT format: dict[str, dict[str, dict[str, float]]] — outer key is child variable_id, middle key is pipe-separated parent assignments (e.g., 'A=a0|B=b1'), inner dict is outcome distribution. Root nodes use empty string '' as the single parent-assignment key for their prior.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Tuple keys for parent assignments (less readable, harder to serialize)",
+        "Nested dicts keyed by individual parent values (harder to iterate over joint assignments)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use Shafer-Shenoy message passing. The existing message_schedule stores directed (src, dst) pairs matching Shafer-Shenoy's collect/distribute paradigm. No separator potential data structures exist, ruling out Hugin.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Hugin algorithm (requires separator potentials on edges, better for incremental updates but more complex infrastructure)"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d3",
+      "decision": "Standalone module only — no server.py wiring. Server query functions hardcode CURRENT_MODEL_QUERY_BACKEND. Integration is a separate task.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Wire into server.py query dispatch (expands scope significantly, requires backend selection logic)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Explicit elimination_ordering only. The _triangulate placeholder stays as-is. Auto-triangulation is a follow-up task.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Implement min-fill or min-degree heuristic now (adds graph algorithm complexity without blocking inference)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Unconditional marginals only for MVP. The context parameter in query_marginals will be accepted but ignored. Evidence handling is a follow-up.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Implement evidence/conditioning by modifying initial potentials (well-understood extension but adds complexity to potential initialization)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Factor representation: dict mapping tuple of outcome values (in sorted variable order within the clique) to float probability. E.g., for clique {A, B}: {('a0', 'b0'): 0.35, ('a0', 'b1'): 0.15, ...}. Compact, hashable keys, natural for marginalization.",
+      "based_on": ["q1", "q4"],
+      "alternatives_rejected": [
+        "numpy arrays (adds dependency, overkill for bounded treewidth)",
+        "Nested dicts by variable (harder to marginalize and multiply)"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Implement factor operations: _factor_multiply (product of two factors over shared variables), _factor_marginalize (sum out a set of variables), _factor_normalize (normalize to sum to 1). These are the core building blocks for Shafer-Shenoy. Factors are dict[tuple[str, ...], float] with an associated variable ordering tuple.",
+      "depends_on": [],
+      "estimated_lines": 80,
+      "risk": "medium"
+    },
+    {
+      "step": 2,
+      "task": "Implement _initialize_potentials: given CPTs, cliques, and variable metadata, create initial clique potential tables. Each CPT factor (child + parents) is assigned to the smallest clique that contains its family. The clique potential is the product of all assigned CPT factors. Cliques with no assigned factors get uniform potentials.",
+      "depends_on": [1],
+      "estimated_lines": 60,
+      "risk": "medium"
+    },
+    {
+      "step": 3,
+      "task": "Wire _initialize_potentials into compile_network: call it when graph['cpts'] is non-empty, store result in potential_tables field of JunctionTreeCompileArtifact.",
+      "depends_on": [2],
+      "estimated_lines": 15,
+      "risk": "low"
+    },
+    {
+      "step": 4,
+      "task": "Implement Shafer-Shenoy belief propagation: _run_belief_propagation takes cliques, separator_sets, message_schedule, and potential_tables. Choose first clique as root. Collect phase: process messages leaf-to-root (reverse of message_schedule for outgoing edges). Distribute phase: process root-to-leaves. Each message is the product of the sender's potential with all incoming messages except the recipient, marginalized to the separator set.",
+      "depends_on": [1, 3],
+      "estimated_lines": 80,
+      "risk": "high"
+    },
+    {
+      "step": 5,
+      "task": "Implement query_marginals: extract artifact, run belief propagation on potential_tables, for each variable find a clique containing it, marginalize the updated clique potential to that variable, normalize, return MarginalQueryResult with outcome probabilities.",
+      "depends_on": [4],
+      "estimated_lines": 40,
+      "risk": "medium"
+    },
+    {
+      "step": 6,
+      "task": "Implement query_atomic_event: extract artifact, find a clique containing the requested variable, run belief propagation (or reuse cached result), marginalize to the variable, return the probability for the requested outcome. Handle negated flag by returning 1 - p.",
+      "depends_on": [5],
+      "estimated_lines": 20,
+      "risk": "low"
+    },
+    {
+      "step": 7,
+      "task": "Update tests: (a) Add CPTs to _three_node_chain_graph and _diamond_graph fixtures with known distributions. (b) Change test_query_marginals_raises_unsupported and test_query_atomic_event_raises_unsupported to assert correct marginal values instead. (c) Add correctness tests: verify A->B->C chain marginals match hand-computed values, verify diamond graph marginals, verify query_atomic_event returns correct single-variable probability, verify negated query returns complement.",
+      "depends_on": [5, 6],
+      "estimated_lines": 80,
+      "risk": "low"
+    }
+  ],
+  "decomposition_assessment": {
+    "total_steps": 7,
+    "estimated_total_lines": 375,
+    "high_risk_steps": 1,
+    "parallelizable_groups": [["step1"], ["step2", "step3"], ["step4"], ["step5", "step6"], ["step7"]],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "estimated_total_lines (375) < 500 threshold. Only 1 high-risk step (< 2 threshold). No independent parallelizable groups — steps form a sequential chain where each depends on prior steps. Changes concentrated in 2 files (junction_tree.py and test_junction_tree.py)."
+  },
+  "spawn_children": false,
+  "children": []
+}
