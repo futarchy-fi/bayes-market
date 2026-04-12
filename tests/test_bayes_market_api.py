@@ -292,6 +292,68 @@ def rounded_score_delta(
     }
 
 
+def lmsr_min_asset_for_order(order: dict[str, object], risk_limit: float = 100.0) -> float:
+    """Compute the expected min-asset after a single order on a fresh account."""
+    market = server.MARKETS[str(order["marketId"])]
+    liquidity = float(market["liquidity"])
+    sd = rounded_score_delta(order["previousMarginals"], order["newMarginals"], liquidity)
+    return server.round_risk_value(risk_limit + min(float(v) / liquidity for v in sd.values()))
+
+
+def lmsr_min_asset_for_orders(orders: list, risk_limit: float = 100.0) -> float:
+    """Compute the expected account-level min-asset after multiple orders."""
+    slices: dict[str, tuple[dict[str, float], float]] = {}
+    for order in orders:
+        market_id = str(order["marketId"])
+        context = order["payload"]["context"]
+        slice_key = server.account_lmsr_slice_key(market_id, context)
+        market = server.MARKETS[market_id]
+        liquidity = float(market["liquidity"])
+        sd = rounded_score_delta(order["previousMarginals"], order["newMarginals"], liquidity)
+        if slice_key in slices:
+            existing_scores, liq = slices[slice_key]
+            for oid, delta in sd.items():
+                existing_scores[oid] = server.round_risk_value(
+                    existing_scores.get(oid, 0.0) + delta
+                )
+        else:
+            slices[slice_key] = (dict(sd), liquidity)
+    total = 0.0
+    for scores, liq in slices.values():
+        if scores and liq > 0:
+            total += min(float(v) / liq for v in scores.values())
+    return server.round_risk_value(risk_limit + total)
+
+
+def lmsr_market_min_asset_for_orders(
+    orders: list, target_market_id: str, risk_limit: float = 100.0,
+) -> float:
+    """Compute per-market min-asset after multiple orders."""
+    slices: dict[str, tuple[dict[str, float], float]] = {}
+    for order in orders:
+        market_id = str(order["marketId"])
+        if market_id != target_market_id:
+            continue
+        context = order["payload"]["context"]
+        slice_key = server.account_lmsr_slice_key(market_id, context)
+        market = server.MARKETS[market_id]
+        liquidity = float(market["liquidity"])
+        sd = rounded_score_delta(order["previousMarginals"], order["newMarginals"], liquidity)
+        if slice_key in slices:
+            existing_scores, liq = slices[slice_key]
+            for oid, delta in sd.items():
+                existing_scores[oid] = server.round_risk_value(
+                    existing_scores.get(oid, 0.0) + delta
+                )
+        else:
+            slices[slice_key] = (dict(sd), liquidity)
+    total = 0.0
+    for scores, liq in slices.values():
+        if scores and liq > 0:
+            total += min(float(v) / liq for v in scores.values())
+    return server.round_risk_value(risk_limit + total)
+
+
 def seed_account_min_asset(account_id: str, min_asset: float) -> dict[str, object]:
     account_state = expected_seeded_account_state(account_id, min_asset)
     server.ACCOUNT_RISK[account_id] = deepcopy(account_state)
@@ -314,6 +376,56 @@ def seed_exact_headroom_account(
     return seed_account_with_preview_multiplier(account_id, 1.0, market_id=market_id, probability=probability)
 
 
+def seed_account_lmsr_headroom(
+    account_id: str,
+    market_id: str,
+    previous_marginals: dict[str, float],
+    updated_marginals: dict[str, float],
+    multiplier: float,
+) -> tuple[dict[str, object], float]:
+    """Seed an account's LMSR state so that `multiplier` of the headroom needed
+    for the proposed edit is available.  multiplier=1 → afterMinAsset≈0 (accepts),
+    multiplier=0.5 → afterMinAsset<0 (rejects).
+
+    Returns (account_state, desired_beforeMinAsset).
+    """
+    market = server.MARKETS[market_id]
+    liquidity = float(market["liquidity"])
+    score_delta = rounded_score_delta(previous_marginals, updated_marginals, liquidity)
+    proposed_min = min(float(v) / liquidity for v in score_delta.values())
+
+    desired_before = server.round_risk_value(abs(proposed_min) * multiplier)
+    seed_contribution = desired_before - server.ACCOUNT_RISK_LIMIT
+
+    outcome_ids = [str(o["id"]) for o in market["outcomes"]]
+    seed_scores = {oid: server.round_risk_value(seed_contribution) for oid in outcome_ids}
+    seed_context = [{"variableId": "__seed__", "outcomeId": "__seed__"}]
+    seed_slice_key = server.account_lmsr_slice_key(market_id, seed_context)
+    seed_slices = {
+        seed_slice_key: {
+            "marketId": market_id,
+            "variableId": "__seed__",
+            "context": seed_context,
+            "contextKey": server.context_state_key(seed_context),
+            "liquidity": 1.0,
+            "scoreByOutcome": seed_scores,
+            "commandCount": 1,
+            "updatedAt": "2026-04-05T00:00:00Z",
+            "lastOrderId": "seed",
+            "lastCommandId": "seed",
+        }
+    }
+    lmsr_state = server.build_account_lmsr_state(slices=seed_slices)
+    account_state = server.build_account_risk_state(
+        account_id,
+        "2026-04-05T00:00:00Z",
+        min_asset=desired_before,
+        lmsr_state=lmsr_state,
+    )
+    server.ACCOUNT_RISK[account_id] = deepcopy(account_state)
+    return account_state, desired_before
+
+
 def seed_account_with_preview_multiplier(
     account_id: str,
     min_asset_multiplier: float,
@@ -325,8 +437,13 @@ def seed_account_with_preview_multiplier(
         build_unconditional_probability_edit_body(account_id, market_id, "yes", probability),
     )
     preview = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
-    seeded_min_asset = server.round_risk_value(preview["impactScore"] * min_asset_multiplier)
-    seed_account_min_asset(account_id, seeded_min_asset)
+    seed_account_lmsr_headroom(
+        account_id, market_id,
+        preview["previousMarginals"], preview["newMarginals"],
+        min_asset_multiplier,
+    )
+    preview = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
+    seeded_min_asset = preview["assetDelta"]["beforeMinAsset"]
     return preview["assetDelta"], seeded_min_asset
 
 
@@ -1381,7 +1498,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "accountId": "acct_test",
                 "marketId": "m1",
                 "beforeMinAsset": 100.0,
-                "afterMinAsset": round(100.0 - payload["order"]["impactScore"], 6),
+                "afterMinAsset": lmsr_min_asset_for_order(payload["order"]),
             },
         )
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.8, "no": 0.2})
@@ -1422,17 +1539,19 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(risk_status, 200)
         self.assertEqual(risk_payload["account"]["id"], "acct_test")
+        expected_min_asset = lmsr_min_asset_for_order(payload["order"])
+        expected_consumed = server.round_risk_value(100.0 - expected_min_asset)
         self.assertEqual(
             risk_payload["account"]["risk"]["minAssets"]["overall"],
-            round(100.0 - payload["order"]["impactScore"], 6),
+            expected_min_asset,
         )
         self.assertEqual(
             risk_payload["account"]["risk"]["capacityIndicators"],
             {
                 "limit": 100.0,
-                "available": round(100.0 - payload["order"]["impactScore"], 6),
-                "consumed": round(payload["order"]["impactScore"], 6),
-                "utilization": round(payload["order"]["impactScore"] / 100.0, 6),
+                "available": expected_min_asset,
+                "consumed": expected_consumed,
+                "utilization": server.round_risk_value(expected_consumed / 100.0),
                 "status": "healthy",
             },
         )
@@ -1442,9 +1561,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             [
                 {
                     "marketId": "m1",
-                    "minAsset": round(100.0 - payload["order"]["impactScore"], 6),
-                    "capacityConsumed": round(payload["order"]["impactScore"], 6),
-                    "utilization": round(payload["order"]["impactScore"] / 100.0, 6),
+                    "minAsset": expected_min_asset,
+                    "capacityConsumed": expected_consumed,
+                    "utilization": server.round_risk_value(expected_consumed / 100.0),
                     "commandCount": 1,
                     "lastOrderId": payload["order"]["id"],
                     "lastCommandId": payload["order"]["commandId"],
@@ -1508,7 +1627,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         self.assertEqual(status, 201)
         impact_score = payload["order"]["impactScore"]
-        after_min_asset = round(100.0 - impact_score, 6)
+        after_min_asset = lmsr_min_asset_for_order(payload["order"])
+        capacity_consumed = server.round_risk_value(100.0 - after_min_asset)
         event = server.EVENTS[payload["result"]["eventId"]]
         slice_key = server.account_lmsr_slice_key("m1", [])
 
@@ -1550,8 +1670,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     "m1": {
                         "marketId": "m1",
                         "minAsset": after_min_asset,
-                        "capacityConsumed": impact_score,
-                        "utilization": round(impact_score / 100.0, 6),
+                        "capacityConsumed": capacity_consumed,
+                        "utilization": server.round_risk_value(capacity_consumed / 100.0),
                         "commandCount": 1,
                         "updatedAt": payload["order"]["filledAt"],
                         "lastOrderId": payload["order"]["id"],
@@ -1753,14 +1873,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(risk_status, 200)
         self.assertEqual(
             risk_payload["account"]["risk"]["minAssets"]["overall"],
-            round(100.0 - first_payload["order"]["impactScore"] - second_payload["order"]["impactScore"], 6),
-        )
-        market_consumed = sum(
-            market["capacityConsumed"] for market in risk_payload["account"]["risk"]["minAssets"]["markets"]
+            lmsr_min_asset_for_orders([first_payload["order"], second_payload["order"]]),
         )
         self.assertEqual(
             risk_payload["account"]["risk"]["capacityIndicators"]["consumed"],
-            round(market_consumed, 6),
+            server.round_risk_value(100.0 - risk_payload["account"]["risk"]["minAssets"]["overall"]),
         )
         self.assertEqual(
             [market["marketId"] for market in risk_payload["account"]["risk"]["minAssets"]["markets"]],
@@ -1859,7 +1976,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(preview["previousMarginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(preview["newMarginals"], {"yes": 0.8, "no": 0.2})
         self.assertEqual(preview["assetDelta"]["beforeMinAsset"], 100.0)
-        self.assertEqual(preview["assetDelta"]["afterMinAsset"], round(100.0 - preview["impactScore"], 6))
+        liquidity = float(server.MARKETS["m1"]["liquidity"])
+        sd = rounded_score_delta(preview["previousMarginals"], preview["newMarginals"], liquidity)
+        self.assertEqual(preview["assetDelta"]["afterMinAsset"], server.round_risk_value(100.0 + min(float(v) / liquidity for v in sd.values())))
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(server.CONDITIONAL_MARGINALS, {})
         self.assertEqual(server.ORDERS, {})
@@ -2452,7 +2571,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         expected_previous = {"yes": 0.2, "no": 0.8}
         expected_new = {"yes": 0.5, "no": 0.5}
-        expected_impact = server.kl_divergence(expected_previous, expected_new)
+        expected_impact = server.round_risk_value(server.lmsr.lmsr_expected_edit_cost(expected_previous, expected_new, float(server.MARKETS["m1"]["liquidity"])))
 
         self.assertNotEqual(unconditional_preview["impactScore"], expected_impact)
         self.assertEqual(order["payload"]["context"], [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}])
@@ -2489,7 +2608,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(
             risk_payload["account"]["risk"]["minAssets"]["overall"],
-            round(100.0 - payload["order"]["impactScore"], 6),
+            lmsr_min_asset_for_order(payload["order"]),
         )
         self.assertEqual(risk_payload["account"]["risk"]["minAssets"]["markets"][0]["commandCount"], 1)
         event = server.EVENTS[payload["result"]["eventId"]]
@@ -2739,12 +2858,13 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertTrue(second_payload["meta"]["replayed"])
         self.assertEqual(
             risk_payload["account"]["risk"]["capacityIndicators"]["consumed"],
-            round(first_payload["order"]["impactScore"], 6),
+            server.round_risk_value(100.0 - lmsr_min_asset_for_order(first_payload["order"])),
         )
         self.assertEqual(risk_payload["account"]["risk"]["minAssets"]["markets"][0]["commandCount"], 1)
 
     def test_probability_edit_rejects_unconditional_min_asset_violation_without_side_effects(self):
         preview_delta, low_min_asset = seed_low_headroom_account("acct_low")
+        baseline_account = deepcopy(server.ACCOUNT_RISK["acct_low"])
         with patch.object(server, "create_probability_edit_order", autospec=True) as create_order_mock:
             with patch.object(server, "sync_account_risk_state", autospec=True) as sync_risk_mock:
                 with self.assertRaises(server.ApiError) as ctx:
@@ -2770,14 +2890,14 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "riskLimit": 100.0,
                 "beforeMinAsset": low_min_asset,
                 "impactScore": preview_delta["impactScore"],
-                "afterMinAsset": round(low_min_asset - preview_delta["impactScore"], 6),
+                "afterMinAsset": preview_delta["afterMinAsset"],
             },
         )
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(
             server.ACCOUNT_RISK["acct_low"],
-            expected_seeded_account_state("acct_low", low_min_asset),
+            baseline_account,
         )
         create_order_mock.assert_not_called()
         sync_risk_mock.assert_not_called()
@@ -2800,7 +2920,6 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(payload["result"]["status"], "accepted")
         self.assertEqual(payload["order"]["impactScore"], preview_delta["impactScore"])
-        self.assertEqual(payload["order"]["impactScore"], exact_headroom)
         self.assertEqual(
             server.EVENTS[payload["result"]["eventId"]]["payload"]["effects"]["assetDelta"][0],
             {
@@ -3078,8 +3197,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         command = server.COMMANDS[payload["result"]["commandId"]]
         retained_market = post_resolution_risk["account"]["risk"]["minAssets"]["markets"][0]
-        retained_impact_score = retained_order["order"]["impactScore"]
-        expected_remaining_min_asset = round(100.0 - retained_impact_score, 6)
+        expected_remaining_min_asset = lmsr_min_asset_for_order(retained_order["order"])
+        expected_remaining_consumed = server.round_risk_value(100.0 - expected_remaining_min_asset)
         self.assertEqual(command["commandType"], "AdminOp")
         self.assertEqual(command["payload"], expected_market_resolution_payload("m1", "yes"))
         self.assertNotIn("m1", server.CONDITIONAL_MARGINALS)
@@ -3111,8 +3230,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             {
                 "limit": 100.0,
                 "available": expected_remaining_min_asset,
-                "consumed": retained_impact_score,
-                "utilization": round(retained_impact_score / 100.0, 6),
+                "consumed": expected_remaining_consumed,
+                "utilization": server.round_risk_value(expected_remaining_consumed / 100.0),
                 "status": "healthy",
             },
         )
@@ -3122,8 +3241,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 {
                     "marketId": "m2",
                     "minAsset": expected_remaining_min_asset,
-                    "capacityConsumed": retained_impact_score,
-                    "utilization": round(retained_impact_score / 100.0, 6),
+                    "capacityConsumed": expected_remaining_consumed,
+                    "utilization": server.round_risk_value(expected_remaining_consumed / 100.0),
                     "commandCount": 1,
                     "lastOrderId": retained_order["order"]["id"],
                     "lastCommandId": retained_order["order"]["commandId"],
@@ -5494,11 +5613,14 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
             account_id = f"acct_property_accept_{case_index}"
             body = build_unconditional_probability_edit_body(account_id, market_id, outcome_id, probability)
             normalized_payload = server.normalize_probability_edit_payload(market_id, body)
-            impact_score = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)["assetDelta"][
-                "impactScore"
-            ]
-            starting_min_asset = server.round_risk_value(impact_score + (case_index % 4) * 0.25)
-            seed_account_min_asset(account_id, starting_min_asset)
+            fresh_preview = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
+            impact_score = fresh_preview["assetDelta"]["impactScore"]
+            headroom_multiplier = 1.0 + (case_index % 4) * 0.25
+            seed_account_lmsr_headroom(
+                account_id, market_id,
+                fresh_preview["previousMarginals"], fresh_preview["newMarginals"],
+                headroom_multiplier,
+            )
             seeded_preview = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
 
             payload, status = server.route_request(
@@ -5576,7 +5698,7 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
                 self.assertEqual(impact_score, preview["assetDelta"]["impactScore"])
                 self.assertEqual(before_min_asset, preview["assetDelta"]["beforeMinAsset"])
                 self.assertEqual(after_min_asset, preview["assetDelta"]["afterMinAsset"])
-                self.assertEqual(server.round_risk_value(before_min_asset - impact_score), after_min_asset)
+                self.assertEqual(after_min_asset, lmsr_min_asset_for_order(payload["order"]))
                 self.assertEqual(risk_payload["account"]["risk"]["minAssets"]["overall"], after_min_asset)
                 self.assertEqual(len(markets), 1)
                 self.assertEqual(markets[0]["marketId"], market_id)
@@ -5597,13 +5719,15 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
             account_id = f"acct_property_reject_{case_index}"
             body = build_unconditional_probability_edit_body(account_id, market_id, outcome_id, probability)
             normalized_payload = server.normalize_probability_edit_payload(market_id, body)
-            impact_score = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)["assetDelta"][
-                "impactScore"
-            ]
-            shortfall = server.round_risk_value(impact_score / 2)
-            starting_min_asset = server.round_risk_value(impact_score - shortfall)
+            fresh_preview = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
+            impact_score = fresh_preview["assetDelta"]["impactScore"]
+            seed_account_lmsr_headroom(
+                account_id, market_id,
+                fresh_preview["previousMarginals"], fresh_preview["newMarginals"],
+                0.5,
+            )
             baseline_market = deepcopy(server.MARKETS[market_id]["marginals"])
-            baseline_account = seed_account_min_asset(account_id, starting_min_asset)
+            baseline_account = deepcopy(server.ACCOUNT_RISK[account_id])
             seeded_preview = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
 
             with self.assertRaises(server.ApiError) as ctx:
@@ -5662,7 +5786,11 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
             )
             setup_normalized = server.normalize_probability_edit_payload(setup_market_id, setup_body)
             setup_preview = server.preview_unconditional_probability_edit(setup_market_id, setup_normalized, account_id)
-            seed_account_min_asset(account_id, setup_preview["impactScore"])
+            seed_account_lmsr_headroom(
+                account_id, setup_market_id,
+                setup_preview["previousMarginals"], setup_preview["newMarginals"],
+                1.0,
+            )
 
             setup_payload, setup_status = server.route_request(
                 "POST",
@@ -5747,7 +5875,11 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
             first_body = build_unconditional_probability_edit_body(account_id, market_id, first_outcome_id, first_probability)
             first_normalized = server.normalize_probability_edit_payload(market_id, first_body)
             first_preview = server.preview_unconditional_probability_edit(market_id, first_normalized, account_id)
-            seed_account_min_asset(account_id, first_preview["impactScore"])
+            seed_account_lmsr_headroom(
+                account_id, market_id,
+                first_preview["previousMarginals"], first_preview["newMarginals"],
+                1.0,
+            )
 
             first_payload, first_status = server.route_request(
                 "POST",
@@ -5768,21 +5900,31 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
             )
             follow_up_normalized = server.normalize_probability_edit_payload(market_id, follow_up_body)
             follow_up_preview = server.preview_unconditional_probability_edit(market_id, follow_up_normalized, account_id)
+            expect_rejection = follow_up_preview["assetDelta"]["afterMinAsset"] < 0
 
-            with self.assertRaises(server.ApiError) as follow_up_ctx:
-                server.route_request(
+            if expect_rejection:
+                with self.assertRaises(server.ApiError) as follow_up_ctx:
+                    server.route_request(
+                        "POST",
+                        f"/v1/markets/{market_id}/orders/probability-edit",
+                        follow_up_body,
+                    )
+                follow_up_error = follow_up_ctx.exception
+            else:
+                follow_up_payload, follow_up_status = server.route_request(
                     "POST",
                     f"/v1/markets/{market_id}/orders/probability-edit",
                     follow_up_body,
                 )
+                follow_up_error = None
 
-            follow_up_error = follow_up_ctx.exception
             with self.subTest(
                 case_index=case_index,
                 market_id=market_id,
                 first_outcome_id=first_outcome_id,
                 follow_up_outcome_id=follow_up_outcome_id,
                 follow_up_probability=follow_up_probability,
+                expect_rejection=expect_rejection,
             ):
                 self.assertEqual(first_status, 201)
                 self.assertEqual(first_payload["result"]["status"], "accepted")
@@ -5794,21 +5936,26 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
                 self.assertEqual(first_risk_payload["account"]["risk"]["minAssets"]["overall"], 0.0)
                 self.assertGreater(follow_up_preview["assetDelta"]["impactScore"], 0.0)
                 self.assertEqual(follow_up_preview["assetDelta"]["beforeMinAsset"], 0.0)
-                self.assertLess(follow_up_preview["assetDelta"]["afterMinAsset"], 0.0)
-                self.assertEqual(follow_up_error.status, 422)
-                self.assertEqual(follow_up_error.code, "min_asset_violation")
-                self.assertEqual(follow_up_error.details["beforeMinAsset"], 0.0)
-                self.assertEqual(
-                    follow_up_error.details["impactScore"],
-                    follow_up_preview["assetDelta"]["impactScore"],
-                )
-                self.assertEqual(
-                    follow_up_error.details["afterMinAsset"],
-                    follow_up_preview["assetDelta"]["afterMinAsset"],
-                )
-                self.assertEqual(server.MARKETS[market_id]["marginals"], post_first_market)
-                self.assertEqual(server.ACCOUNT_RISK[account_id], post_first_account)
-                self.assertEqual(len(server.ORDERS), 1)
+                if expect_rejection:
+                    self.assertLess(follow_up_preview["assetDelta"]["afterMinAsset"], 0.0)
+                    self.assertEqual(follow_up_error.status, 422)
+                    self.assertEqual(follow_up_error.code, "min_asset_violation")
+                    self.assertEqual(follow_up_error.details["beforeMinAsset"], 0.0)
+                    self.assertEqual(
+                        follow_up_error.details["impactScore"],
+                        follow_up_preview["assetDelta"]["impactScore"],
+                    )
+                    self.assertEqual(
+                        follow_up_error.details["afterMinAsset"],
+                        follow_up_preview["assetDelta"]["afterMinAsset"],
+                    )
+                    self.assertEqual(server.MARKETS[market_id]["marginals"], post_first_market)
+                    self.assertEqual(server.ACCOUNT_RISK[account_id], post_first_account)
+                    self.assertEqual(len(server.ORDERS), 1)
+                else:
+                    self.assertGreaterEqual(follow_up_preview["assetDelta"]["afterMinAsset"], 0.0)
+                    self.assertEqual(follow_up_status, 201)
+                    self.assertEqual(follow_up_payload["result"]["status"], "accepted")
 
     def test_unconditional_probability_edit_property_preserves_valid_marginal_distribution(self):
         rng = random.Random(584001)
@@ -5829,7 +5976,11 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
             if should_reject:
                 normalized_payload = server.normalize_probability_edit_payload(market_id, body)
                 preview = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
-                seed_account_min_asset(account_id, server.round_risk_value(preview["impactScore"] * 0.5))
+                seed_account_lmsr_headroom(
+                    account_id, market_id,
+                    preview["previousMarginals"], preview["newMarginals"],
+                    0.5,
+                )
 
             if should_reject:
                 with self.assertRaises(server.ApiError) as ctx:
@@ -5876,7 +6027,7 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
         self.assertGreater(accepted_count, 0)
         self.assertGreater(rejected_count, 0)
 
-    def test_unconditional_probability_edit_property_accepted_order_impact_matches_kl_divergence(self):
+    def test_unconditional_probability_edit_property_accepted_order_impact_matches_lmsr_cost(self):
         rng = random.Random(584002)
         active_market_ids = tuple(market_id for market_id, market in server.MARKETS.items() if market["status"] == "active")
 
@@ -5895,7 +6046,7 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
                 body,
             )
             after_marginals = deepcopy(server.MARKETS[market_id]["marginals"])
-            expected_impact = server.kl_divergence(before_marginals, after_marginals)
+            expected_impact = server.round_risk_value(server.lmsr.lmsr_expected_edit_cost(before_marginals, after_marginals, float(server.MARKETS[market_id]["liquidity"])))
 
             with self.subTest(
                 case_index=case_index,
@@ -5964,7 +6115,7 @@ class BayesMarketApiInferenceInvariantTests(unittest.TestCase):
                 assert_marginals_close(self, payload["order"]["newMarginals"], expected_marginals)
                 self.assertEqual(
                     payload["order"]["impactScore"],
-                    server.kl_divergence(payload["order"]["previousMarginals"], payload["order"]["newMarginals"]),
+                    server.round_risk_value(server.lmsr.lmsr_expected_edit_cost(payload["order"]["previousMarginals"], payload["order"]["newMarginals"], float(server.MARKETS[target_market_id]["liquidity"]))),
                 )
 
                 if context:
@@ -6036,7 +6187,7 @@ class BayesMarketApiInferenceInvariantTests(unittest.TestCase):
                     assert_marginals_close(self, payload["order"]["newMarginals"], expected_marginals)
                     self.assertEqual(
                         payload["order"]["impactScore"],
-                        server.kl_divergence(payload["order"]["previousMarginals"], payload["order"]["newMarginals"]),
+                        server.round_risk_value(server.lmsr.lmsr_expected_edit_cost(payload["order"]["previousMarginals"], payload["order"]["newMarginals"], float(server.MARKETS[target_market_id]["liquidity"]))),
                     )
 
                     if context:
@@ -6171,13 +6322,17 @@ class BayesMarketApiMarketInvariantTests(unittest.TestCase):
             rejecting_normalized,
             rejecting_account_id,
         )
-        seeded_min_asset = server.round_risk_value(rejecting_preview["impactScore"] * 0.5)
-        baseline_account = seed_account_min_asset(rejecting_account_id, seeded_min_asset)
+        seed_account_lmsr_headroom(
+            rejecting_account_id, market_id,
+            rejecting_preview["previousMarginals"], rejecting_preview["newMarginals"],
+            0.5,
+        )
         rejecting_preview = server.preview_unconditional_probability_edit(
             market_id,
             rejecting_normalized,
             rejecting_account_id,
         )
+        baseline_account = deepcopy(server.ACCOUNT_RISK[rejecting_account_id])
         baseline_market = deepcopy(server.MARKETS[market_id])
         baseline_event_count = len(server.EVENTS)
         baseline_head_seq = server.MARKET_EVENT_SEQUENCES[market_id]
@@ -6222,13 +6377,17 @@ class BayesMarketApiMarketInvariantTests(unittest.TestCase):
             rejecting_normalized,
             account_id,
         )
-        seeded_min_asset = server.round_risk_value(rejecting_preview["impactScore"] * 0.5)
-        baseline_account = seed_account_min_asset(account_id, seeded_min_asset)
+        seed_account_lmsr_headroom(
+            account_id, market_id,
+            rejecting_preview["previousMarginals"], rejecting_preview["newMarginals"],
+            0.5,
+        )
         rejecting_preview = server.preview_unconditional_probability_edit(
             market_id,
             rejecting_normalized,
             account_id,
         )
+        baseline_account = deepcopy(server.ACCOUNT_RISK[account_id])
         baseline_market = deepcopy(server.MARKETS[market_id])
 
         with self.assertRaises(server.ApiError) as ctx:
@@ -8613,6 +8772,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
 
     def test_probability_edit_http_rejects_unconditional_min_asset_violation(self):
         preview_delta, low_min_asset = seed_low_headroom_account("acct_http_low")
+        baseline_account = deepcopy(server.ACCOUNT_RISK["acct_http_low"])
         body = {
             "accountId": "acct_http_low",
             "idempotencyKey": "idem-http-low-headroom",
@@ -8643,7 +8803,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(
             server.ACCOUNT_RISK["acct_http_low"],
-            expected_seeded_account_state("acct_http_low", low_min_asset),
+            baseline_account,
         )
         self.assertEqual(len(server.COMMANDS), 0)
         self.assertEqual(len(server.EVENTS), 0)
@@ -8705,6 +8865,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
 
     def test_probability_edit_http_fresh_account_rejection_preserves_state_and_replay_is_stable(self):
         account_id = "acct_http_reject_full_chain"
+        seed_exact_headroom_account(account_id)
         market_path = "/v1/markets/m1/orders/probability-edit"
         market_status, market_payload = self.request("GET", "/v1/markets/m1")
 
@@ -8718,9 +8879,9 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         first_rejection_payload = None
         rejected_body = None
 
+        target_sequence = [0.8, 0.95, 0.99, 0.5, 0.1, 0.05, 0.001, 0.999]
         for index in range(32):
-            current_yes_probability = market_payload["market"]["marginals"]["yes"]
-            target_probability = 0.001 if current_yes_probability > 0.5 else 0.999
+            target_probability = target_sequence[index % len(target_sequence)]
             body = {
                 "accountId": account_id,
                 "idempotencyKey": f"idem-http-deplete-{index}",
@@ -8816,7 +8977,6 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(payload["result"]["status"], "accepted")
         self.assertEqual(payload["order"]["impactScore"], preview_delta["impactScore"])
-        self.assertEqual(payload["order"]["impactScore"], exact_headroom)
         self.assertEqual(
             server.EVENTS[payload["result"]["eventId"]]["payload"]["effects"]["assetDelta"][0],
             {
@@ -8860,7 +9020,6 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         risk_status, risk_payload = self.request("GET", f"/v1/accounts/{account_id}/risk")
 
         self.assertEqual(setup_status, 201)
-        self.assertEqual(setup_payload["order"]["impactScore"], setup_headroom)
         self.assertEqual(setup_risk_status, 200)
         self.assertEqual(setup_risk_payload["account"]["risk"]["minAssets"]["overall"], 0.0)
         self.assertEqual(
@@ -8999,19 +9158,21 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             },
         )
         self.assertEqual(event["payload"]["replayStateHash"], server.market_replay_state_hash("m1"))
+        expected_min_asset = lmsr_min_asset_for_order(post_payload["order"])
+        expected_consumed = server.round_risk_value(100.0 - expected_min_asset)
         self.assertEqual(risk_payload["account"]["id"], "acct_http_chain")
         self.assertEqual(
             risk_payload["account"]["risk"]["minAssets"]["overall"],
-            round(100.0 - post_payload["order"]["impactScore"], 6),
+            expected_min_asset,
         )
         self.assertEqual(
             risk_payload["account"]["risk"]["minAssets"]["markets"],
             [
                 {
                     "marketId": "m1",
-                    "minAsset": round(100.0 - post_payload["order"]["impactScore"], 6),
-                    "capacityConsumed": round(post_payload["order"]["impactScore"], 6),
-                    "utilization": round(post_payload["order"]["impactScore"] / 100.0, 6),
+                    "minAsset": expected_min_asset,
+                    "capacityConsumed": expected_consumed,
+                    "utilization": server.round_risk_value(expected_consumed / 100.0),
                     "commandCount": 1,
                     "lastOrderId": post_payload["order"]["id"],
                     "lastCommandId": post_payload["order"]["commandId"],
@@ -9045,8 +9206,8 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         events_status, events_payload = self.request("GET", "/v1/markets/m1/events")
         risk_status, risk_payload = self.request("GET", "/v1/accounts/acct_http_chain/risk")
 
-        first_after_min_asset = round(100.0 - first_payload["order"]["impactScore"], 6)
-        second_after_min_asset = round(first_after_min_asset - second_payload["order"]["impactScore"], 6)
+        first_after_min_asset = lmsr_min_asset_for_order(first_payload["order"])
+        second_after_min_asset = lmsr_min_asset_for_orders([first_payload["order"], second_payload["order"]])
 
         self.assertEqual(first_status, 201)
         self.assertEqual(second_status, 201)
@@ -9079,17 +9240,15 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             },
         )
         self.assertEqual(risk_payload["account"]["risk"]["minAssets"]["overall"], second_after_min_asset)
+        second_consumed = server.round_risk_value(100.0 - second_after_min_asset)
         self.assertEqual(
             risk_payload["account"]["risk"]["minAssets"]["markets"],
             [
                 {
                     "marketId": "m1",
                     "minAsset": second_after_min_asset,
-                    "capacityConsumed": round(first_payload["order"]["impactScore"] + second_payload["order"]["impactScore"], 6),
-                    "utilization": round(
-                        (first_payload["order"]["impactScore"] + second_payload["order"]["impactScore"]) / 100.0,
-                        6,
-                    ),
+                    "capacityConsumed": second_consumed,
+                    "utilization": server.round_risk_value(second_consumed / 100.0),
                     "commandCount": 2,
                     "lastOrderId": second_payload["order"]["id"],
                     "lastCommandId": second_payload["order"]["commandId"],
@@ -9111,16 +9270,17 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         )
         status, payload = self.request("GET", "/v1/accounts/acct_http/risk")
 
+        expected_min_asset = lmsr_min_asset_for_order(post_payload["order"])
         self.assertEqual(post_status, 201)
         self.assertEqual(status, 200)
         self.assertEqual(payload["account"]["id"], "acct_http")
         self.assertEqual(
             payload["account"]["risk"]["minAssets"]["overall"],
-            round(100.0 - post_payload["order"]["impactScore"], 6),
+            expected_min_asset,
         )
         self.assertEqual(
             payload["account"]["risk"]["capacityIndicators"]["consumed"],
-            round(post_payload["order"]["impactScore"], 6),
+            server.round_risk_value(100.0 - expected_min_asset),
         )
         self.assertEqual(payload["account"]["risk"]["minAssets"]["markets"][0]["marketId"], "m1")
         self.assertEqual(payload["account"]["risk"]["minAssets"]["markets"][0]["commandCount"], 1)
@@ -9149,14 +9309,15 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(first_status, 201)
         self.assertEqual(second_status, 201)
         self.assertEqual(risk_status, 200)
+        expected_min_asset = lmsr_min_asset_for_order(first_payload["order"])
         self.assertTrue(second_payload["meta"]["replayed"])
         self.assertEqual(
             risk_payload["account"]["risk"]["minAssets"]["overall"],
-            round(100.0 - first_payload["order"]["impactScore"], 6),
+            expected_min_asset,
         )
         self.assertEqual(
             risk_payload["account"]["risk"]["capacityIndicators"]["consumed"],
-            round(first_payload["order"]["impactScore"], 6),
+            server.round_risk_value(100.0 - expected_min_asset),
         )
         self.assertEqual(risk_payload["account"]["risk"]["minAssets"]["markets"][0]["commandCount"], 1)
         self.assertEqual(

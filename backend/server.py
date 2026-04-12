@@ -1692,18 +1692,81 @@ def settle_market_account_exposure(market_id: str, timestamp: str) -> list[dict[
     return cleanup
 
 
-def preview_account_min_asset(account_id: str, impact_score: float) -> dict[str, Any]:
-    """Preview the account-wide min-asset effect of a proposed impact score."""
+def derive_min_asset_from_lmsr_slices(
+    lmsr_state: dict[str, Any],
+    risk_limit: float,
+    *,
+    market_id: str | None = None,
+) -> float:
+    """Derive the minimum asset value from LMSR slice scores.
+
+    Iterates all slices (optionally filtered by market_id), computes
+    min(scoreByOutcome[o] / liquidity) per slice, sums them, and returns
+    riskLimit + sum.  Returns risk_limit unchanged if no slices exist.
+    """
+    slices = lmsr_state.get("slices", {})
+    total = 0.0
+    for slice_state in slices.values():
+        if market_id is not None and slice_state.get("marketId") != market_id:
+            continue
+        scores = slice_state.get("scoreByOutcome", {})
+        liquidity = float(slice_state.get("liquidity", 1.0))
+        if scores and liquidity > 0:
+            total += min(float(v) / liquidity for v in scores.values())
+    return round_risk_value(risk_limit + total)
+
+
+def preview_account_min_asset(
+    account_id: str,
+    market_id: str,
+    context: list[dict[str, str]],
+    previous_marginals: dict[str, float],
+    updated_marginals: dict[str, float],
+    liquidity: float,
+) -> dict[str, Any]:
+    """Preview the account-wide min-asset effect of a proposed probability edit.
+
+    Derives beforeMinAsset from current LMSR slices and projects afterMinAsset
+    by tentatively adding the proposed score delta to a copy of the target slice.
+    impactScore is lmsr_expected_edit_cost (informational, not used for solvency).
+    """
     account = ACCOUNT_RISK.get(account_id)
     if account is None:
         risk_limit = round_risk_value(ACCOUNT_RISK_LIMIT)
-        before_min_asset = risk_limit
+        current_lmsr_state = build_account_lmsr_state()
     else:
         risk_limit = round_risk_value(float(account["riskLimit"]))
-        before_min_asset = round_risk_value(float(account["minAsset"]))
+        current_lmsr_state = ensure_account_lmsr_state(account)
 
-    impact_score = round_risk_value(impact_score)
-    after_min_asset = round_risk_value(before_min_asset - impact_score)
+    before_min_asset = derive_min_asset_from_lmsr_slices(current_lmsr_state, risk_limit)
+
+    score_delta = _round_score_by_outcome(
+        lmsr.lmsr_score_delta(previous_marginals, updated_marginals, liquidity)
+    )
+    projected_slices = deepcopy(current_lmsr_state["slices"])
+    slice_key = account_lmsr_slice_key(market_id, context)
+    existing_slice = projected_slices.get(slice_key)
+    if isinstance(existing_slice, dict):
+        existing_scores = existing_slice.get("scoreByOutcome", {})
+        if not isinstance(existing_scores, dict):
+            existing_scores = {}
+        projected_slices[slice_key] = {
+            **existing_slice,
+            "scoreByOutcome": _accumulate_score_by_outcome(existing_scores, score_delta),
+        }
+    else:
+        projected_slices[slice_key] = {
+            "marketId": market_id,
+            "liquidity": round_risk_value(liquidity),
+            "scoreByOutcome": deepcopy(score_delta),
+        }
+    projected_lmsr_state = {**current_lmsr_state, "slices": projected_slices}
+    after_min_asset = derive_min_asset_from_lmsr_slices(projected_lmsr_state, risk_limit)
+
+    impact_score = round_risk_value(
+        lmsr.lmsr_expected_edit_cost(previous_marginals, updated_marginals, liquidity)
+    )
+
     return {
         "accountId": account_id,
         "riskLimit": risk_limit,
@@ -1821,11 +1884,17 @@ def sync_account_risk_state(order: dict[str, Any]) -> dict[str, Any]:
     account_id = str(order["accountId"])
     market_id = str(order["marketId"])
     timestamp = str(order["filledAt"])
-    impact = round_risk_value(float(order["impactScore"]))
 
     account = ensure_account_risk_state(account_id, timestamp)
+    risk_limit = round_risk_value(float(account["riskLimit"]))
     before_min_asset = round_risk_value(float(account["minAsset"]))
-    after_min_asset = round_risk_value(before_min_asset - impact)
+
+    # Sync LMSR slices FIRST so min-asset can be derived from updated state.
+    if str(order["type"]) == "ProbabilityEdit":
+        sync_probability_edit_lmsr_state(account, order)
+
+    lmsr_state = ensure_account_lmsr_state(account)
+    after_min_asset = derive_min_asset_from_lmsr_slices(lmsr_state, risk_limit)
     account["minAsset"] = after_min_asset
     account["updatedAt"] = timestamp
 
@@ -1843,8 +1912,7 @@ def sync_account_risk_state(order: dict[str, Any]) -> dict[str, Any]:
         }
         account["markets"][market_id] = market_risk
 
-    market_before_min_asset = round_risk_value(float(market_risk["minAsset"]))
-    market_after_min_asset = round_risk_value(market_before_min_asset - impact)
+    market_after_min_asset = derive_min_asset_from_lmsr_slices(lmsr_state, risk_limit, market_id=market_id)
     market_risk["minAsset"] = market_after_min_asset
     market_risk["capacityConsumed"] = round_risk_value(ACCOUNT_RISK_LIMIT - market_after_min_asset)
     market_risk["utilization"] = round_risk_value(float(market_risk["capacityConsumed"]) / ACCOUNT_RISK_LIMIT)
@@ -1852,9 +1920,6 @@ def sync_account_risk_state(order: dict[str, Any]) -> dict[str, Any]:
     market_risk["updatedAt"] = timestamp
     market_risk["lastOrderId"] = str(order["id"])
     market_risk["lastCommandId"] = str(order["commandId"])
-
-    if str(order["type"]) == "ProbabilityEdit":
-        sync_probability_edit_lmsr_state(account, order)
 
     return {
         "accountId": account_id,
@@ -3115,12 +3180,17 @@ def preview_unconditional_probability_edit(
         target["probability"],
         marginals=previous_marginals,
     )
-    impact_score = kl_divergence(previous_marginals, updated_marginals)
+    liquidity = float(market["liquidity"])
+    impact_score = round_risk_value(
+        lmsr.lmsr_expected_edit_cost(previous_marginals, updated_marginals, liquidity)
+    )
     return {
         "previousMarginals": previous_marginals,
         "newMarginals": deepcopy(updated_marginals),
         "impactScore": impact_score,
-        "assetDelta": preview_account_min_asset(account_id, impact_score),
+        "assetDelta": preview_account_min_asset(
+            account_id, market_id, [], previous_marginals, updated_marginals, liquidity,
+        ),
     }
 
 
@@ -3150,7 +3220,9 @@ def create_probability_edit_order(
             marginals=previous_marginals,
         )
         market_conditionals[context_key] = deepcopy(updated_marginals)
-        impact_score = kl_divergence(previous_marginals, updated_marginals)
+        impact_score = round_risk_value(
+            lmsr.lmsr_expected_edit_cost(previous_marginals, updated_marginals, float(market["liquidity"]))
+        )
     else:
         if preview is None:
             preview = preview_unconditional_probability_edit(
