@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import time
 from dataclasses import dataclass
@@ -343,6 +344,12 @@ class JunctionTreeCompiler:
 
         cliques_tuple = tuple(cliques)
         memory_bytes = _estimate_memory_bytes(cliques_tuple)
+
+        # Initialize potentials from CPTs if provided
+        potential_tables: dict[str, Factor] | None = None
+        if graph.get("cpts"):
+            potential_tables = _initialize_potentials(graph, cliques_tuple)
+
         compile_time_ms = round((time.perf_counter() - started_at) * 1000.0, 3)
 
         artifact = JunctionTreeCompileArtifact(
@@ -352,7 +359,7 @@ class JunctionTreeCompiler:
             separator_sets=separator_sets,
             elimination_ordering=elimination_ordering,
             message_schedule=message_schedule,
-            potential_tables=None,
+            potential_tables=potential_tables,
             junction_tree_width=treewidth,
             exact_eligible=exact_eligible,
             eligibility_reason=self.eligibility_reason if exact_eligible else f"treewidth_{treewidth}_exceeds_bound_{self.max_treewidth}",
@@ -381,6 +388,233 @@ class JunctionTreeCompiler:
     def _check_treewidth(self, treewidth: int) -> bool:
         """Return True if treewidth is within the configured bound."""
         return treewidth <= self.max_treewidth
+
+
+# ---------------------------------------------------------------------------
+# Factor operations
+# ---------------------------------------------------------------------------
+
+# A factor is a pair: (vars_tuple, table) where vars_tuple is a sorted tuple
+# of variable ids, and table is dict[tuple[str,...], float] mapping joint
+# outcome assignments (in the same order as vars_tuple) to probabilities.
+
+Factor = tuple[tuple[str, ...], dict[tuple[str, ...], float]]
+
+
+def _factor_multiply(f1: Factor, f2: Factor) -> Factor:
+    """Multiply two factors over their shared variables."""
+    vars1, tab1 = f1
+    vars2, tab2 = f2
+    result_vars = tuple(sorted(set(vars1) | set(vars2)))
+    idx1 = tuple(result_vars.index(v) for v in vars1)
+    idx2 = tuple(result_vars.index(v) for v in vars2)
+
+    # Index f2 by the shared variable positions for fast lookup
+    result: dict[tuple[str, ...], float] = {}
+    tab2_index: dict[tuple[str, ...], list[tuple[tuple[str, ...], float]]] = {}
+    shared_positions_in_vars2 = [i for i, v in enumerate(vars2) if v in set(vars1)]
+    for assignment2, val2 in tab2.items():
+        key = tuple(assignment2[p] for p in shared_positions_in_vars2)
+        tab2_index.setdefault(key, []).append((assignment2, val2))
+
+    for assignment1, val1 in tab1.items():
+        shared_key = tuple(assignment1[vars1.index(vars2[p])] for p in shared_positions_in_vars2)
+        for assignment2, val2 in tab2_index.get(shared_key, []):
+            res_assignment = [""] * len(result_vars)
+            for i, pos in enumerate(idx1):
+                res_assignment[pos] = assignment1[i]
+            for i, pos in enumerate(idx2):
+                res_assignment[pos] = assignment2[i]
+            result[tuple(res_assignment)] = val1 * val2
+
+    return result_vars, result
+
+
+def _factor_marginalize(f: Factor, eliminate: frozenset[str]) -> Factor:
+    """Sum out a set of variables from a factor."""
+    vars_f, tab = f
+    keep_indices = [i for i, v in enumerate(vars_f) if v not in eliminate]
+    result_vars = tuple(vars_f[i] for i in keep_indices)
+    if not result_vars:
+        return result_vars, {(): sum(tab.values())}
+    result: dict[tuple[str, ...], float] = {}
+    for assignment, val in tab.items():
+        key = tuple(assignment[i] for i in keep_indices)
+        result[key] = result.get(key, 0.0) + val
+    return result_vars, result
+
+
+def _factor_normalize(f: Factor) -> Factor:
+    """Normalize a factor so its values sum to 1."""
+    vars_f, tab = f
+    total = sum(tab.values())
+    if total == 0.0:
+        return vars_f, dict(tab)
+    return vars_f, {k: v / total for k, v in tab.items()}
+
+
+# ---------------------------------------------------------------------------
+# Potential initialization
+# ---------------------------------------------------------------------------
+
+
+def _initialize_potentials(
+    graph: BayesianNetworkGraph,
+    cliques: tuple[CliqueSummary, ...],
+) -> dict[str, Factor]:
+    """Create initial clique potential tables from the CPTs in the graph.
+
+    Each CPT factor is assigned to the smallest clique that contains its
+    family (child + parents). Unassigned cliques get a uniform potential.
+    """
+    variables = {v["id"]: v for v in graph["variables"]}
+    cpts = graph["cpts"]
+
+    # Build per-child parent list from edges
+    parents_of: dict[str, list[str]] = {v["id"]: [] for v in graph["variables"]}
+    for edge in graph["edges"]:
+        parents_of[edge["child"]].append(edge["parent"])
+
+    # Convert each CPT to a Factor and assign to the smallest containing clique
+    clique_factors: dict[str, list[Factor]] = {c.id: [] for c in cliques}
+
+    for var_id, cpt_table in cpts.items():
+        family = frozenset([var_id] + parents_of.get(var_id, []))
+        factor_vars = tuple(sorted(family))
+        factor_tab: dict[tuple[str, ...], float] = {}
+
+        for parent_key, dist in cpt_table.items():
+            # Parse parent assignment from pipe-separated key
+            parent_assignment: dict[str, str] = {}
+            if parent_key:
+                for part in parent_key.split("|"):
+                    pvar, pval = part.split("=")
+                    parent_assignment[pvar] = pval
+
+            for outcome, prob in dist.items():
+                assignment: dict[str, str] = dict(parent_assignment)
+                assignment[var_id] = outcome
+                key = tuple(assignment[v] for v in factor_vars)
+                factor_tab[key] = prob
+
+        factor: Factor = (factor_vars, factor_tab)
+
+        # Assign to smallest containing clique
+        best_clique: CliqueSummary | None = None
+        for c in cliques:
+            if family <= frozenset(c.nodes):
+                if best_clique is None or c.size < best_clique.size:
+                    best_clique = c
+        if best_clique is not None:
+            clique_factors[best_clique.id].append(factor)
+
+    # Build clique potentials by multiplying assigned factors
+    potentials: dict[str, Factor] = {}
+    for c in cliques:
+        factors = clique_factors[c.id]
+        if not factors:
+            # Uniform potential
+            factor_vars = tuple(sorted(c.nodes))
+            outcomes_list = [variables[v]["outcomes"] for v in factor_vars]
+            tab = {combo: 1.0 for combo in itertools.product(*outcomes_list)}
+            potentials[c.id] = (factor_vars, tab)
+        else:
+            pot = factors[0]
+            for f in factors[1:]:
+                pot = _factor_multiply(pot, f)
+            potentials[c.id] = pot
+
+    return potentials
+
+
+# ---------------------------------------------------------------------------
+# Shafer-Shenoy belief propagation
+# ---------------------------------------------------------------------------
+
+
+def _run_belief_propagation(
+    cliques: tuple[CliqueSummary, ...],
+    separator_sets: tuple[frozenset[str], ...],
+    message_schedule: tuple[tuple[str, str], ...],
+    potential_tables: dict[str, Factor],
+) -> dict[str, Factor]:
+    """Run Shafer-Shenoy message passing and return updated clique potentials."""
+    # Build adjacency: which cliques are neighbours and what is their separator
+    adjacency: dict[str, list[str]] = {c.id: [] for c in cliques}
+    separator_for: dict[tuple[str, str], frozenset[str]] = {}
+    clique_node_sets = {c.id: frozenset(c.nodes) for c in cliques}
+
+    for i, ci in enumerate(cliques):
+        for j in range(i + 1, len(cliques)):
+            cj = cliques[j]
+            sep = clique_node_sets[ci.id] & clique_node_sets[cj.id]
+            if sep:
+                adjacency[ci.id].append(cj.id)
+                adjacency[cj.id].append(ci.id)
+                separator_for[(ci.id, cj.id)] = sep
+                separator_for[(cj.id, ci.id)] = sep
+
+    # Use first clique as root; build collection order via BFS
+    root = cliques[0].id
+    visited_order: list[str] = []
+    parent_of: dict[str, str | None] = {root: None}
+    queue = [root]
+    head = 0
+    while head < len(queue):
+        node = queue[head]
+        head += 1
+        visited_order.append(node)
+        for nb in adjacency[node]:
+            if nb not in parent_of:
+                parent_of[nb] = node
+                queue.append(nb)
+
+    # Messages: (src, dst) -> Factor
+    messages: dict[tuple[str, str], Factor] = {}
+
+    # Working copies of potentials
+    updated = {cid: (vars_t, dict(tab)) for cid, (vars_t, tab) in potential_tables.items()}
+
+    # Collect phase: leaves to root (reverse BFS order)
+    for node in reversed(visited_order):
+        par = parent_of[node]
+        if par is None:
+            continue
+        sep = separator_for[(node, par)]
+        # Message = product of node's potential with all incoming messages except to par,
+        # marginalized down to the separator
+        product = updated[node]
+        for nb in adjacency[node]:
+            if nb != par and (nb, node) in messages:
+                product = _factor_multiply(product, messages[(nb, node)])
+        eliminate = frozenset(clique_node_sets[node]) - sep
+        msg = _factor_marginalize(product, eliminate)
+        messages[(node, par)] = msg
+
+    # Distribute phase: root to leaves (BFS order)
+    for node in visited_order:
+        par = parent_of[node]
+        if par is None:
+            continue
+        sep = separator_for[(par, node)]
+        product = updated[par]
+        for nb in adjacency[par]:
+            if nb != node and (nb, par) in messages:
+                product = _factor_multiply(product, messages[(nb, par)])
+        eliminate = frozenset(clique_node_sets[par]) - sep
+        msg = _factor_marginalize(product, eliminate)
+        messages[(par, node)] = msg
+
+    # Update clique beliefs: potential * all incoming messages
+    beliefs: dict[str, Factor] = {}
+    for c in cliques:
+        belief = updated[c.id]
+        for nb in adjacency[c.id]:
+            if (nb, c.id) in messages:
+                belief = _factor_multiply(belief, messages[(nb, c.id)])
+        beliefs[c.id] = belief
+
+    return beliefs
 
 
 # ---------------------------------------------------------------------------
@@ -441,9 +675,44 @@ def _require_junction_tree_artifact(compile_result: CompileResult) -> JunctionTr
     return artifact
 
 
+def _get_beliefs(artifact: JunctionTreeCompileArtifact) -> dict[str, Factor]:
+    """Run belief propagation on the artifact's potential tables."""
+    if artifact.potential_tables is None:
+        raise InferenceQueryError(
+            "Artifact has no potential tables — compile with CPTs first",
+            details={"compileId": artifact.compile_id},
+        )
+    return _run_belief_propagation(
+        artifact.cliques,
+        artifact.separator_sets,
+        artifact.message_schedule,
+        artifact.potential_tables,  # type: ignore[arg-type]
+    )
+
+
+def _extract_variable_marginal(
+    beliefs: dict[str, Factor],
+    cliques: tuple[CliqueSummary, ...],
+    variable_id: str,
+) -> dict[str, float]:
+    """Find a clique containing the variable and marginalize to get its marginal."""
+    for c in cliques:
+        if variable_id in c.nodes:
+            belief = beliefs[c.id]
+            eliminate = frozenset(c.nodes) - {variable_id}
+            marginal = _factor_marginalize(belief, eliminate)
+            marginal = _factor_normalize(marginal)
+            _, tab = marginal
+            return {k[0]: v for k, v in tab.items()}
+    raise InferenceQueryError(
+        f"Variable '{variable_id}' not found in any clique",
+        details={"variableId": variable_id},
+    )
+
+
 @dataclass(frozen=True)
 class JunctionTreeQueryBackend(InferenceQueryBackend):
-    """Execute queries against junction-tree compiled artifacts (placeholder)."""
+    """Execute queries against junction-tree compiled artifacts via Shafer-Shenoy."""
 
     def query_marginals(
         self,
@@ -451,11 +720,21 @@ class JunctionTreeQueryBackend(InferenceQueryBackend):
         *,
         context: Mapping[str, str] | None = None,
     ) -> MarginalQueryResult:
-        """Validate the artifact and raise — message passing not yet implemented."""
-        _require_junction_tree_artifact(compile_result)
-        raise InferenceUnsupportedQueryError(
-            "junction tree message passing not yet implemented",
-            details={"compileId": compile_result.compile_id},
+        """Compute marginal probabilities for all variables via belief propagation."""
+        started_at = time.perf_counter()
+        artifact = _require_junction_tree_artifact(compile_result)
+        beliefs = _get_beliefs(artifact)
+
+        all_marginals: dict[str, float] = {}
+        for var_id in artifact.variable_ids:
+            marginal = _extract_variable_marginal(beliefs, artifact.cliques, var_id)
+            all_marginals.update(marginal)
+
+        runtime_ms = round((time.perf_counter() - started_at) * 1000.0, 3)
+        return MarginalQueryResult(
+            marginals=all_marginals,
+            runtime_ms=runtime_ms,
+            compile_id=artifact.compile_id,
         )
 
     def query_atomic_event(
@@ -466,15 +745,23 @@ class JunctionTreeQueryBackend(InferenceQueryBackend):
         outcome_id: str,
         negated: bool = False,
     ) -> AtomicEventQueryResult:
-        """Validate the artifact and raise — message passing not yet implemented."""
-        _require_junction_tree_artifact(compile_result)
-        raise InferenceUnsupportedQueryError(
-            "junction tree message passing not yet implemented",
-            details={
-                "compileId": compile_result.compile_id,
-                "variableId": variable_id,
-                "outcomeId": outcome_id,
-            },
+        """Return the probability of a single variable-outcome pair."""
+        started_at = time.perf_counter()
+        artifact = _require_junction_tree_artifact(compile_result)
+        beliefs = _get_beliefs(artifact)
+
+        marginal = _extract_variable_marginal(beliefs, artifact.cliques, variable_id)
+        p = marginal.get(outcome_id, 0.0)
+        if negated:
+            p = 1.0 - p
+
+        runtime_ms = round((time.perf_counter() - started_at) * 1000.0, 3)
+        return AtomicEventQueryResult(
+            variable_id=variable_id,
+            outcome_id=outcome_id,
+            probability=p,
+            runtime_ms=runtime_ms,
+            compile_id=artifact.compile_id,
         )
 
 

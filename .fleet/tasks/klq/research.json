@@ -1,0 +1,106 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "CPTs should be dict[str, dict[tuple_key, dict[str, float]]] — keyed by variable_id, where each entry maps parent assignment combinations to child outcome distributions. The pipe-separated key format from current_model.py's conditional_marginals (e.g., 'varA=outcomeA|varB=outcomeB') is a reasonable encoding for parent assignment keys, but the outer key must be the child variable_id since CPTs are per-variable. The field is typed dict[str, Any] with no existing schema, tests pass empty dicts, and the compiler ignores cpts entirely (potential_tables=None at junction_tree.py:355). A practical format: {'B': {'A=a0': {'b0': 0.7, 'b1': 0.3}, 'A=a1': {'b0': 0.4, 'b1': 0.6}}} for a B conditioned on A. Root nodes use empty-string keys for their prior: {'A': {'': {'a0': 0.5, 'a1': 0.5}}}.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/inference/junction_tree.py:48 — cpts: dict[str, Any]",
+        "backend/inference/junction_tree.py:355 — potential_tables=None",
+        "backend/inference/current_model.py:230-233 — _context_mapping_key pipe-separated format",
+        "tests/test_junction_tree.py:37,56 — cpts: {} in fixtures"
+      ],
+      "uncertainty": "No existing schema or usage of CPTs anywhere in the codebase — the format is entirely a design choice. The pipe-separated key encoding is pragmatic but alternatives (tuple keys, nested dicts) are equally valid."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Explicit elimination_ordering is sufficient for MVP. The _triangulate stub is documented as 'Placeholder triangulation — raises until a real heuristic is implemented' (junction_tree.py). All existing tests pass explicit elimination_ordering, and compile_network gracefully handles None by raising InferenceUnsupportedQueryError. Auto-triangulation (min-fill/min-degree) should be a follow-up task.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/inference/junction_tree.py — _triangulate raises InferenceUnsupportedQueryError",
+        "tests/test_junction_tree.py:166 — elimination_ordering=('A', 'C', 'B')",
+        "tests/test_junction_tree.py:199 — elimination_ordering=('A', 'D', 'B', 'C')",
+        "tests/test_junction_tree.py:240-247 — test_triangulate_placeholder_raises confirms current behavior"
+      ],
+      "uncertainty": "None — the placeholder pattern is explicit and all tests confirm it."
+    },
+    {
+      "question_id": "q3",
+      "answer": "The JunctionTreeQueryBackend should remain a standalone module for now. Server query functions are hardcoded to CURRENT_MODEL_QUERY_BACKEND (server.py:1201,1219). The compiler selection already routes based on ENGINE_COMPILE_TYPE (server.py:1168), but query dispatch does not. Wiring junction tree queries into the server would require modifying query_market_marginals_for_inference and query_market_atomic_probability_for_inference to dispatch based on artifact type, plus handling the different context semantics (pre-stored lookups vs dynamic computation). This is a separate integration task.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:1201 — CURRENT_MODEL_QUERY_BACKEND.query_marginals hardcoded",
+        "backend/server.py:1219 — CURRENT_MODEL_QUERY_BACKEND.query_atomic_event hardcoded",
+        "backend/server.py:1168 — compiler selection uses ENGINE_COMPILE_TYPE",
+        "backend/inference/__init__.py — exports both backends as singletons"
+      ],
+      "uncertainty": "The task description says 'compile artifact and query backend' which aligns with standalone implementation, but the exact scope boundary isn't explicitly documented."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Shafer-Shenoy message passing is the right choice. The existing message_schedule is stored as tuple[tuple[str, str], ...] — directed (src, dst) pairs built by _build_message_schedule (junction_tree.py:222). This creates bidirectional edges between cliques that share variables, directly matching Shafer-Shenoy's collect/distribute message-passing pattern. Hugin would require additional data structures (separator potentials stored on edges) and in-place potential updates, none of which exist. The implementation path is: (1) initialize clique potentials from CPTs, (2) choose a root, (3) collect messages leaf-to-root, (4) distribute messages root-to-leaves, (5) normalize clique potentials to extract marginals.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/inference/junction_tree.py:86 — message_schedule: tuple[tuple[str, str], ...]",
+        "backend/inference/junction_tree.py:222-228 — _build_message_schedule creates bidirectional (src, dst) pairs",
+        "backend/inference/junction_tree.py:84 — separator_sets stored as frozensets (not as potentials)",
+        "backend/inference/contracts.py — no separator potential data structures"
+      ],
+      "uncertainty": "Hugin would be more efficient for incremental updates (re-entering evidence), but this is an optimization concern, not an MVP concern."
+    },
+    {
+      "question_id": "q5",
+      "answer": "MVP should support unconditional marginals only. The InferenceQueryBackend protocol requires context parameter (contracts.py), but the junction tree backend can initially ignore it (return unconditional marginals regardless of context). Evidence handling in junction trees requires modifying initial potentials before message passing — setting observed variable distributions to indicator functions. This is a well-understood extension but adds complexity to potential initialization. The CurrentModelQueryBackend handles evidence via pre-stored conditional marginal lookups (current_model.py:400-408), a fundamentally different approach. For MVP, compute correct unconditional marginals first, then layer evidence support as a follow-up.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/inference/contracts.py — InferenceQueryBackend protocol has context parameter",
+        "backend/inference/current_model.py:397-408 — context handled via pre-stored lookups",
+        "backend/inference/junction_tree.py — no evidence handling infrastructure",
+        "backend/inference/junction_tree.py:355 — potential_tables=None, no factor initialization"
+      ],
+      "uncertainty": "If downstream consumers immediately need conditional queries from junction trees, evidence support would need to be in scope. But the protocol allows graceful degradation (return unconditional when context doesn't match)."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.7,
+      "impact": "The pipe-separated key encoding from current_model.py is a reasonable pattern to reuse for parent assignment keys, but CPTs must be keyed by child variable_id at the outer level (not by context key). The exact format is a design choice since cpts: dict[str, Any] has no schema. Proposed format: {'child_var': {'parent1=val|parent2=val': {'outcome1': prob, ...}}} with root nodes using '' as the single key."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Shafer-Shenoy is confirmed as the right choice. The message_schedule as directed (src, dst) pairs, separator_sets as frozensets, and lack of separator potential data structures all favor Shafer-Shenoy. No restructuring needed."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Tests at test_junction_tree.py:295-362 explicitly assert InferenceUnsupportedQueryError for query_marginals and query_atomic_event. Implementing the actual inference will require updating these to assert correct marginal values instead."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Server query functions hardcode CURRENT_MODEL_QUERY_BACKEND (server.py:1201,1219). The task scope is implementing the inference engine in the junction tree module, not wiring it into the server. No server.py modifications needed."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "All tests provide explicit elimination_ordering. The _triangulate placeholder is clearly documented. Auto-triangulation is a separate follow-up task that doesn't block inference engine implementation."
+    }
+  ],
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.85,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All answers have confidence >= 0.85. No answer is below 0.7. The CPT format (q1) at 0.85 is the lowest but is a design choice with a clear proposed format, not a blocking unknown. The three subproblems (potential table init, message passing, test updates) are sequential dependencies in 2 files. No research gaps block implementation."
+  },
+  "spawn_children": false,
+  "children": []
+}

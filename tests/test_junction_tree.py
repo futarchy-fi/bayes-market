@@ -23,7 +23,7 @@ from backend.inference import (
 
 
 def _three_node_chain_graph() -> BayesianNetworkGraph:
-    """A -> B -> C chain graph for testing."""
+    """A -> B -> C chain graph for testing (without CPTs for structure tests)."""
     return {
         "variables": [
             {"id": "A", "outcomes": ["a0", "a1"]},
@@ -38,8 +38,49 @@ def _three_node_chain_graph() -> BayesianNetworkGraph:
     }
 
 
+def _three_node_chain_graph_with_cpts() -> BayesianNetworkGraph:
+    """A -> B -> C chain with known CPTs for correctness testing.
+
+    P(A): a0=0.6, a1=0.4
+    P(B|A): B=b0|A=a0 = 0.9, B=b1|A=a0 = 0.1
+             B=b0|A=a1 = 0.2, B=b1|A=a1 = 0.8
+    P(C|B): C=c0|B=b0 = 0.7, C=c1|B=b0 = 0.3
+             C=c0|B=b1 = 0.4, C=c1|B=b1 = 0.6
+
+    Hand-computed marginals:
+    P(A=a0) = 0.6, P(A=a1) = 0.4
+    P(B=b0) = 0.6*0.9 + 0.4*0.2 = 0.62
+    P(B=b1) = 0.6*0.1 + 0.4*0.8 = 0.38
+    P(C=c0) = P(C=c0|B=b0)*P(B=b0) + P(C=c0|B=b1)*P(B=b1)
+            = 0.7*0.62 + 0.4*0.38 = 0.434 + 0.152 = 0.586
+    P(C=c1) = 0.3*0.62 + 0.6*0.38 = 0.186 + 0.228 = 0.414
+    """
+    return {
+        "variables": [
+            {"id": "A", "outcomes": ["a0", "a1"]},
+            {"id": "B", "outcomes": ["b0", "b1"]},
+            {"id": "C", "outcomes": ["c0", "c1"]},
+        ],
+        "edges": [
+            {"parent": "A", "child": "B"},
+            {"parent": "B", "child": "C"},
+        ],
+        "cpts": {
+            "A": {"": {"a0": 0.6, "a1": 0.4}},
+            "B": {
+                "A=a0": {"b0": 0.9, "b1": 0.1},
+                "A=a1": {"b0": 0.2, "b1": 0.8},
+            },
+            "C": {
+                "B=b0": {"c0": 0.7, "c1": 0.3},
+                "B=b1": {"c0": 0.4, "c1": 0.6},
+            },
+        },
+    }
+
+
 def _diamond_graph() -> BayesianNetworkGraph:
-    """A diamond: A -> B, A -> C, B -> D, C -> D."""
+    """A diamond: A -> B, A -> C, B -> D, C -> D (without CPTs)."""
     return {
         "variables": [
             {"id": "A", "outcomes": ["a0", "a1"]},
@@ -54,6 +95,48 @@ def _diamond_graph() -> BayesianNetworkGraph:
             {"parent": "C", "child": "D"},
         ],
         "cpts": {},
+    }
+
+
+def _diamond_graph_with_cpts() -> BayesianNetworkGraph:
+    """A diamond graph with CPTs for correctness testing.
+
+    P(A): a0=0.5, a1=0.5
+    P(B|A): uniform — b0=0.5, b1=0.5 regardless of A
+    P(C|A): C=c0|A=a0=0.8, C=c1|A=a0=0.2; C=c0|A=a1=0.3, C=c1|A=a1=0.7
+    P(D|B,C): D=d0|B=b0,C=c0=1.0; D=d0|B=b0,C=c1=0.0;
+              D=d0|B=b1,C=c0=0.0; D=d0|B=b1,C=c1=1.0
+    """
+    return {
+        "variables": [
+            {"id": "A", "outcomes": ["a0", "a1"]},
+            {"id": "B", "outcomes": ["b0", "b1"]},
+            {"id": "C", "outcomes": ["c0", "c1"]},
+            {"id": "D", "outcomes": ["d0", "d1"]},
+        ],
+        "edges": [
+            {"parent": "A", "child": "B"},
+            {"parent": "A", "child": "C"},
+            {"parent": "B", "child": "D"},
+            {"parent": "C", "child": "D"},
+        ],
+        "cpts": {
+            "A": {"": {"a0": 0.5, "a1": 0.5}},
+            "B": {
+                "A=a0": {"b0": 0.5, "b1": 0.5},
+                "A=a1": {"b0": 0.5, "b1": 0.5},
+            },
+            "C": {
+                "A=a0": {"c0": 0.8, "c1": 0.2},
+                "A=a1": {"c0": 0.3, "c1": 0.7},
+            },
+            "D": {
+                "B=b0|C=c0": {"d0": 1.0, "d1": 0.0},
+                "B=b0|C=c1": {"d0": 0.0, "d1": 1.0},
+                "B=b1|C=c0": {"d0": 0.0, "d1": 1.0},
+                "B=b1|C=c1": {"d0": 1.0, "d1": 0.0},
+            },
+        },
     }
 
 
@@ -282,7 +365,7 @@ class TestJunctionTreeCompiler(unittest.TestCase):
 
 
 class TestJunctionTreeQueryBackend(unittest.TestCase):
-    """Test JunctionTreeQueryBackend placeholder behavior."""
+    """Test JunctionTreeQueryBackend inference correctness."""
 
     def _compile_chain(self, *, max_treewidth: int = 15) -> CompileResult:
         compiler = JunctionTreeCompiler(max_treewidth=max_treewidth)
@@ -292,21 +375,95 @@ class TestJunctionTreeQueryBackend(unittest.TestCase):
             last_updated="2026-04-11T00:00:00Z",
         )
 
-    def test_query_marginals_raises_unsupported(self):
-        result = self._compile_chain()
-        with self.assertRaises(InferenceUnsupportedQueryError) as ctx:
-            JUNCTION_TREE_QUERY_BACKEND.query_marginals(result)
-        self.assertIn("not yet implemented", str(ctx.exception))
+    def _compile_chain_with_cpts(self) -> CompileResult:
+        return JUNCTION_TREE_COMPILER.compile_network(
+            graph=_three_node_chain_graph_with_cpts(),
+            elimination_ordering=("A", "C", "B"),
+            last_updated="2026-04-11T00:00:00Z",
+        )
 
-    def test_query_atomic_event_raises_unsupported(self):
-        result = self._compile_chain()
-        with self.assertRaises(InferenceUnsupportedQueryError) as ctx:
-            JUNCTION_TREE_QUERY_BACKEND.query_atomic_event(
-                result,
-                variable_id="A",
-                outcome_id="a0",
-            )
-        self.assertIn("not yet implemented", str(ctx.exception))
+    def _compile_diamond_with_cpts(self) -> CompileResult:
+        return JUNCTION_TREE_COMPILER.compile_network(
+            graph=_diamond_graph_with_cpts(),
+            elimination_ordering=("A", "D", "B", "C"),
+            last_updated="2026-04-11T00:00:00Z",
+        )
+
+    # --- Correctness tests ---
+
+    def test_chain_marginals_match_hand_computed(self):
+        result = self._compile_chain_with_cpts()
+        qr = JUNCTION_TREE_QUERY_BACKEND.query_marginals(result)
+        m = qr.marginals
+        self.assertAlmostEqual(m["a0"], 0.6, places=6)
+        self.assertAlmostEqual(m["a1"], 0.4, places=6)
+        self.assertAlmostEqual(m["b0"], 0.62, places=6)
+        self.assertAlmostEqual(m["b1"], 0.38, places=6)
+        self.assertAlmostEqual(m["c0"], 0.586, places=6)
+        self.assertAlmostEqual(m["c1"], 0.414, places=6)
+
+    def test_chain_marginals_sum_to_one(self):
+        result = self._compile_chain_with_cpts()
+        qr = JUNCTION_TREE_QUERY_BACKEND.query_marginals(result)
+        m = qr.marginals
+        self.assertAlmostEqual(m["a0"] + m["a1"], 1.0, places=9)
+        self.assertAlmostEqual(m["b0"] + m["b1"], 1.0, places=9)
+        self.assertAlmostEqual(m["c0"] + m["c1"], 1.0, places=9)
+
+    def test_diamond_marginals_sum_to_one(self):
+        result = self._compile_diamond_with_cpts()
+        qr = JUNCTION_TREE_QUERY_BACKEND.query_marginals(result)
+        m = qr.marginals
+        self.assertAlmostEqual(m["a0"] + m["a1"], 1.0, places=9)
+        self.assertAlmostEqual(m["b0"] + m["b1"], 1.0, places=9)
+        self.assertAlmostEqual(m["c0"] + m["c1"], 1.0, places=9)
+        self.assertAlmostEqual(m["d0"] + m["d1"], 1.0, places=9)
+
+    def test_diamond_prior_marginals(self):
+        """A's prior and B's uniform CPT should produce known marginals."""
+        result = self._compile_diamond_with_cpts()
+        qr = JUNCTION_TREE_QUERY_BACKEND.query_marginals(result)
+        m = qr.marginals
+        self.assertAlmostEqual(m["a0"], 0.5, places=6)
+        self.assertAlmostEqual(m["a1"], 0.5, places=6)
+        # B is uniform given A, so marginal B should be uniform
+        self.assertAlmostEqual(m["b0"], 0.5, places=6)
+        self.assertAlmostEqual(m["b1"], 0.5, places=6)
+        # C: P(C=c0) = 0.5*0.8 + 0.5*0.3 = 0.55
+        self.assertAlmostEqual(m["c0"], 0.55, places=6)
+        self.assertAlmostEqual(m["c1"], 0.45, places=6)
+
+    def test_query_atomic_event_returns_correct_probability(self):
+        result = self._compile_chain_with_cpts()
+        qr = JUNCTION_TREE_QUERY_BACKEND.query_atomic_event(
+            result, variable_id="A", outcome_id="a0",
+        )
+        self.assertEqual(qr.variable_id, "A")
+        self.assertEqual(qr.outcome_id, "a0")
+        self.assertAlmostEqual(qr.probability, 0.6, places=6)
+
+    def test_query_atomic_event_negated(self):
+        result = self._compile_chain_with_cpts()
+        qr = JUNCTION_TREE_QUERY_BACKEND.query_atomic_event(
+            result, variable_id="A", outcome_id="a0", negated=True,
+        )
+        self.assertAlmostEqual(qr.probability, 0.4, places=6)
+
+    def test_query_atomic_event_intermediate_variable(self):
+        result = self._compile_chain_with_cpts()
+        qr = JUNCTION_TREE_QUERY_BACKEND.query_atomic_event(
+            result, variable_id="B", outcome_id="b0",
+        )
+        self.assertAlmostEqual(qr.probability, 0.62, places=6)
+
+    def test_query_atomic_event_leaf_variable(self):
+        result = self._compile_chain_with_cpts()
+        qr = JUNCTION_TREE_QUERY_BACKEND.query_atomic_event(
+            result, variable_id="C", outcome_id="c0",
+        )
+        self.assertAlmostEqual(qr.probability, 0.586, places=6)
+
+    # --- Validation tests ---
 
     def test_query_marginals_validates_artifact_presence(self):
         result = replace(self._compile_chain(), artifact=None)
