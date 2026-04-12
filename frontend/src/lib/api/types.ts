@@ -380,6 +380,34 @@ export interface CommentResponse {
   meta: CommandResponseMeta;
 }
 
+export interface MarketEventMessage {
+  type: "snapshot" | "event";
+  marketId: string;
+  event?: MarketEvent;
+  events?: MarketEvent[];
+  seq: number;
+  emittedAt: string;
+}
+
+export interface AccountRiskMessage {
+  type: "snapshot" | "risk";
+  accountId: string;
+  risk: {
+    accountId: string;
+    riskLimit: number;
+    minAsset: number;
+    updatedAt: string;
+    markets: Record<string, MarketRisk>;
+  } | null;
+  exposure: {
+    accountId: string;
+    updatedAt: string;
+    positions: Record<string, AccountExposurePosition>;
+  } | null;
+  seq: number;
+  emittedAt: string;
+}
+
 export interface OutcomePnl {
   outcomeId: string;
   netSize: number;

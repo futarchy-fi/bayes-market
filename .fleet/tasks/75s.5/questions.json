@@ -1,0 +1,100 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the new streams use WebSocket (extending existing /ws/ pattern) or SSE (Server-Sent Events), or both? The task title says 'websocket/SSE' but the codebase only has WS infrastructure today.",
+      "category": "requirements",
+      "why_it_matters": "SSE requires a completely new transport implementation (chunked HTTP responses, text/event-stream content type, reconnection semantics). WS can reuse the existing RFC 6455 helpers (ws_send_text, ws_read_frame, ws_register/unregister, WS_CONNECTIONS registry). Picking one affects ~200 lines of plumbing."
+    },
+    {
+      "id": "q2",
+      "question": "The existing market price WS uses a global monotonic _WS_SEQ counter (shared across all markets). Event journal uses per-market seq. Should the new event and risk streams use the global WS seq, per-market/per-account seq, or a new per-stream counter?",
+      "category": "design",
+      "why_it_matters": "Sequencing strategy determines how clients detect gaps, request backfill, and reconcile across streams. Global seq is simpler but leaks ordering info across unrelated markets. Per-entity seq matches the event journal pattern but requires more client bookkeeping."
+    },
+    {
+      "id": "q3",
+      "question": "Should the event stream support backfill from a specific sequence number on connect (like the REST GET /v1/markets/{id}/events?fromSeq=N), or just emit live events going forward with an initial snapshot?",
+      "category": "requirements",
+      "why_it_matters": "Backfill-on-connect is needed for clients that reconnect after a disconnect to avoid missing events. Without it, clients must fall back to the REST endpoint to fill gaps, adding complexity to the frontend. With it, the WS handler needs access to the event journal for replay."
+    },
+    {
+      "id": "q4",
+      "question": "What is the expected WS route topology? Likely candidates: /ws/markets/{id}/events for event streams, /ws/accounts/{id}/risk for risk streams. Should these be separate endpoints or multiplexed into the existing /ws/markets/{id}/prices stream?",
+      "category": "design",
+      "why_it_matters": "Multiplexing into the existing price stream is simpler (one connection per market) but mixes concerns and makes the message schema more complex. Separate endpoints are cleaner but require more WS connections per client and separate connection management."
+    },
+    {
+      "id": "q5",
+      "question": "For risk streams, what triggers a broadcast? Currently sync_account_exposure_state() and sync_probability_edit_lmsr_state() update ACCOUNT_RISK/ACCOUNT_EXPOSURE in-memory. Should every mutation broadcast, or only when capacity/minAsset cross thresholds?",
+      "category": "design",
+      "why_it_matters": "Every-mutation broadcasting could be noisy (every trade by any account on any market triggers a risk update for that account). Threshold-based reduces traffic but adds complexity and may miss important intermediate states."
+    },
+    {
+      "id": "q6",
+      "question": "Does 'execution streams' mean streaming filled orders/trades in realtime, or is the event journal stream sufficient since CommandAccepted events already carry order details in their payload?",
+      "category": "requirements",
+      "why_it_matters": "If execution means a separate order-fill stream (e.g., per-account trade confirmations), that's a third stream type with per-account scoping. If the event journal stream covers it (events include pricing effects and order details), no additional stream is needed."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "We should extend the existing WebSocket infrastructure rather than implement SSE, since WS is already built (RFC 6455 helpers, connection registry, broadcast pattern) and WS supports bidirectional communication for future use (e.g., client-initiated subscriptions).",
+      "confidence": 0.85,
+      "if_wrong": "Need to implement SSE transport from scratch: chunked transfer encoding, text/event-stream MIME type, Last-Event-ID reconnection header, and a separate connection registry. ~150 additional lines of server code."
+    },
+    {
+      "id": "a2",
+      "assumption": "The existing /ws/markets/{id}/prices stream for market marginals is already sufficient and does not need modification — the task is about adding new streams for events and risk, not replacing the price stream.",
+      "confidence": 0.9,
+      "if_wrong": "If the price stream needs to be unified with the event stream (e.g., one combined market stream), we'd need to refactor the existing WS handler and update all frontend consumers and tests."
+    },
+    {
+      "id": "a3",
+      "assumption": "Event streams should be per-market (matching the existing event journal scoping) and risk streams should be per-account (matching the existing ACCOUNT_RISK scoping).",
+      "confidence": 0.9,
+      "if_wrong": "If a global firehose is needed (all events across all markets, or risk across all accounts), the broadcast pattern changes from targeted to fan-out, and the connection registry needs restructuring."
+    },
+    {
+      "id": "a4",
+      "assumption": "Use the existing global _WS_SEQ counter for WS message ordering on all streams (consistent with current price stream behavior) while preserving the per-market event journal seq in the payload for event-level ordering.",
+      "confidence": 0.7,
+      "if_wrong": "If per-stream or per-entity sequencing is required, we need separate atomic counters for each stream type and modify the gap-detection logic on the client side."
+    },
+    {
+      "id": "a5",
+      "assumption": "Risk broadcasts should fire on every account state mutation (after sync_account_exposure_state and related calls), not on threshold crossings, since the market is event-sourced and clients expect complete state updates.",
+      "confidence": 0.75,
+      "if_wrong": "Need to add threshold detection logic with configurable levels, debounce timers, and delta comparison before broadcasting."
+    },
+    {
+      "id": "a6",
+      "assumption": "Frontend work is limited to adding TypeScript types, WS client hooks, and TanStack Query integration for the new streams — no new route components or UI panels are required in this task.",
+      "confidence": 0.8,
+      "if_wrong": "If full UI integration is expected (e.g., realtime event feed panel, live risk dashboard), the scope roughly doubles with component, styling, and additional test work."
+    },
+    {
+      "id": "a7",
+      "assumption": "The new WS endpoints will follow the same pattern as /ws/markets/{id}/prices: send an initial snapshot on connect, then push updates on state changes. No backfill-from-seq on connect.",
+      "confidence": 0.65,
+      "if_wrong": "Need to add query parameter parsing on WS upgrade, event journal lookback logic, and ordered replay before switching to live mode — adds ~50-80 lines of complexity per stream."
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 3,
+    "complexity_reason": "Extends well-established WS patterns in server.py (~200 lines for 2 new endpoints + broadcast hooks), plus frontend type/hook additions (~50 lines). Single main file (server.py) handles most changes. No architectural shifts — just new WS routes, connection registries, and broadcast trigger points following the exact same pattern as the existing price stream.",
+    "uncertainty_score": 2,
+    "uncertainty_reason": "The existing WS implementation provides a clear template. The event journal and risk state are already well-structured with clear mutation points where broadcasts should be inserted. Main uncertainty is around exact stream scoping (per-market vs global) and whether backfill-on-connect is needed, but both have sensible defaults.",
+    "independent_subproblems": [
+      "Event stream: WS endpoint /ws/markets/{id}/events + broadcast hook in emit_terminal_event()",
+      "Risk stream: WS endpoint /ws/accounts/{id}/risk + broadcast hooks in sync_account_* functions",
+      "Frontend integration: TypeScript types, WS client hooks, TanStack Query integration"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity 3 < 4 threshold. Uncertainty 2 < 4 threshold. Changes span ~3-4 files (server.py, types.ts, client.ts, hooks.ts) within 2 modules, not 5+ across different modules. All subproblems share the same WS infrastructure and must be coordinated (e.g., common sequencing strategy), so parallel execution provides limited benefit."
+  },
+  "spawn_children": false,
+  "children": []
+}
