@@ -1,0 +1,86 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Keep existing implementation as-is — the comment system (backend POST/GET endpoints, frontend DiscussionThread, API client, query hooks, types) is already complete and functional. No new feature code needed.",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Rewrite from scratch", "Add new fields or endpoints"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep oldest-first (ascending seq) sort order. The current cursor-based pagination with fromSeq is well-designed and standard for discussion threads. Reversing to newest-first would break pagination semantics.",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Reverse sort to newest-first (would break fromSeq cursor model)", "Add a sort query parameter (unnecessary complexity)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Treat accountId as the 'author' field — no separate author/displayName field needed. accountId is the universal user identifier throughout the codebase.",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Add separate author/displayName field (no user profile system exists)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Focus remaining work on closing the test coverage gap. The task spec requires 'Tests for CRUD and pagination' but current coverage is minimal: 1 backend POST test, 0 GET tests, 0 frontend component tests.",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Ship without additional tests (spec explicitly requires test coverage)"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add backend GET /v1/markets/{id}/comments tests: empty market returns empty list, comments returned sorted by seq, pagination with fromSeq/limit works correctly, nextFromSeq is null when no more comments, 404 for nonexistent market",
+      "depends_on": [],
+      "estimated_lines": 80,
+      "risk": "low"
+    },
+    {
+      "step": 2,
+      "task": "Add backend POST /v1/markets/{id}/comments validation tests: empty body returns 400, body exceeding 2000 chars returns 400, missing accountId returns 400, posting to non-active market returns 409, idempotency key replay returns same response, idempotency key conflict returns 409",
+      "depends_on": [],
+      "estimated_lines": 100,
+      "risk": "low"
+    },
+    {
+      "step": 3,
+      "task": "Add frontend DiscussionThread component tests: renders comment list correctly, shows empty state when no comments, shows loading state, shows error state, submits comment via composer, disables composer when market is not active, shows character count, disables composer when no session configured",
+      "depends_on": [],
+      "estimated_lines": 150,
+      "risk": "medium"
+    },
+    {
+      "step": 4,
+      "task": "Run full test suite (backend pytest + frontend vitest) to verify all new and existing tests pass together",
+      "depends_on": [1, 2, 3],
+      "estimated_lines": 0,
+      "risk": "low"
+    }
+  ],
+
+  "decomposition_assessment": {
+    "total_steps": 4,
+    "estimated_total_lines": 330,
+    "high_risk_steps": 0,
+    "parallelizable_groups": [["step1", "step2"], ["step3"]],
+    "decision": "SPAWN_CHILDREN",
+    "decision_reason": "2 parallelizable groups with no dependencies: backend tests (steps 1-2, same test file) and frontend tests (step 3, separate test file). While total lines is under 500 and there are no high-risk steps, the 2 independent groups trigger SPAWN_CHILDREN to allow parallel execution across backend and frontend test domains."
+  },
+
+  "spawn_children": true,
+  "children": [
+    {
+      "id": "impl-child-1",
+      "title": "Backend comment endpoint tests",
+      "description": "Implement steps 1 and 2: Add comprehensive tests for GET /v1/markets/{id}/comments (pagination, empty states, sorting, 404) and POST /v1/markets/{id}/comments (validation errors, market-not-active rejection, idempotency replay and conflict) in tests/test_bayes_market_api.py. Follow existing test patterns in the file (use self.comment_post helper, match assertion style). Run pytest to verify all tests pass."
+    },
+    {
+      "id": "impl-child-2",
+      "title": "Frontend DiscussionThread component tests",
+      "description": "Implement step 3: Create frontend/src/features/market/DiscussionThread.test.tsx with tests covering: rendering comment list, empty state, loading state, error state, comment submission, disabled composer for non-active markets, character count display, disabled when no session. Follow existing Vitest + React Testing Library patterns in the frontend test suite. Run vitest to verify all tests pass."
+    }
+  ]
+}

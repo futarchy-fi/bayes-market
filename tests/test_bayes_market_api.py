@@ -6708,12 +6708,14 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         account_id: str = "acct_http_auth_comment",
         comment_body: str = "HTTP auth comment",
         agent_id: str | None = None,
+        idempotency_key: str | None = None,
     ):
         status, payload, _ = self.comment_post_with_headers(
             market_id=market_id,
             account_id=account_id,
             comment_body=comment_body,
             agent_id=agent_id,
+            idempotency_key=idempotency_key,
         )
         return status, payload
 
@@ -6724,11 +6726,15 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         account_id: str = "acct_http_auth_comment",
         comment_body: str = "HTTP auth comment",
         agent_id: str | None = None,
+        idempotency_key: str | None = None,
     ):
+        body = {"accountId": account_id, "body": comment_body}
+        if idempotency_key is not None:
+            body["idempotencyKey"] = idempotency_key
         return self.request_with_headers(
             "POST",
             f"/v1/markets/{market_id}/comments",
-            {"accountId": account_id, "body": comment_body},
+            body,
             headers=self._headers_with_agent_id(agent_id),
         )
 
@@ -7263,6 +7269,223 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "not_found")
         self.assertEqual(payload["error"]["details"]["path"], "/v1/orders/probability-edit")
         self.assert_rate_limit_headers_absent(response_headers)
+
+    # ── POST /v1/markets/{id}/comments validation tests ──
+
+    def test_comment_post_rejects_missing_account_id(self):
+        status, payload = self.request(
+            "POST",
+            "/v1/markets/m1/comments",
+            {"body": "missing account"},
+            headers=self._headers_with_agent_id("agent-val-1"),
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"]["code"], "invalid_comment")
+        self.assertEqual(payload["error"]["details"]["field"], "accountId")
+
+    def test_comment_post_rejects_missing_body(self):
+        status, payload = self.request(
+            "POST",
+            "/v1/markets/m1/comments",
+            {"accountId": "acct_val_body"},
+            headers=self._headers_with_agent_id("agent-val-2"),
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"]["code"], "invalid_comment")
+        self.assertEqual(payload["error"]["details"]["field"], "body")
+
+    def test_comment_post_rejects_empty_body(self):
+        status, payload = self.comment_post(
+            comment_body="   ",
+            agent_id="agent-val-3",
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"]["code"], "invalid_comment")
+        self.assertEqual(payload["error"]["details"]["field"], "body")
+
+    def test_comment_post_rejects_body_exceeding_max_length(self):
+        long_body = "x" * (server.MAX_COMMENT_BODY_LENGTH + 1)
+        status, payload = self.comment_post(
+            comment_body=long_body,
+            agent_id="agent-val-4",
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"]["code"], "invalid_comment")
+        self.assertEqual(payload["error"]["details"]["field"], "body")
+        self.assertEqual(payload["error"]["details"]["maximum"], server.MAX_COMMENT_BODY_LENGTH)
+
+    def test_comment_post_rejects_empty_idempotency_key(self):
+        status, payload = self.comment_post(
+            comment_body="valid body",
+            agent_id="agent-val-5",
+            idempotency_key="",
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"]["code"], "invalid_comment")
+        self.assertEqual(payload["error"]["details"]["field"], "idempotencyKey")
+
+    # ── POST market-not-active rejection test ──
+
+    def test_comment_post_rejects_comment_on_non_active_market(self):
+        server.MARKETS["m1"]["status"] = "closed"
+        try:
+            status, payload = self.comment_post(
+                market_id="m1",
+                comment_body="should be rejected",
+                agent_id="agent-not-active",
+            )
+            self.assertEqual(status, 409)
+            self.assertEqual(payload["error"]["code"], "market_not_active")
+            self.assertEqual(payload["error"]["details"]["marketId"], "m1")
+            self.assertEqual(payload["error"]["details"]["status"], "closed")
+            self.assertEqual(payload["error"]["details"]["allowedStatus"], "active")
+            self.assertIn("commandId", payload["error"]["details"])
+        finally:
+            server.MARKETS["m1"]["status"] = "active"
+
+    # ── POST idempotency replay test ──
+
+    def test_comment_post_idempotency_replay_returns_same_comment(self):
+        status1, payload1 = self.comment_post(
+            comment_body="replay body",
+            account_id="acct_idem_replay",
+            agent_id="agent-idem-replay",
+            idempotency_key="idem-replay-1",
+        )
+        self.assertEqual(status1, 201)
+
+        status2, payload2 = self.comment_post(
+            comment_body="replay body",
+            account_id="acct_idem_replay",
+            agent_id="agent-idem-replay",
+            idempotency_key="idem-replay-1",
+        )
+        self.assertEqual(status2, 201)
+        self.assertTrue(payload2["meta"]["replayed"])
+        self.assertEqual(payload2["comment"], payload1["comment"])
+
+    # ── POST idempotency conflict test ──
+
+    def test_comment_post_idempotency_conflict_returns_409(self):
+        status1, _ = self.comment_post(
+            comment_body="first body",
+            account_id="acct_idem_conflict",
+            agent_id="agent-idem-conflict",
+            idempotency_key="idem-conflict-1",
+        )
+        self.assertEqual(status1, 201)
+
+        status2, payload2 = self.comment_post(
+            comment_body="different body",
+            account_id="acct_idem_conflict",
+            agent_id="agent-idem-conflict",
+            idempotency_key="idem-conflict-1",
+        )
+        self.assertEqual(status2, 409)
+        self.assertEqual(payload2["error"]["code"], "idempotency_conflict")
+
+    # ── GET /v1/markets/{id}/comments basic test ──
+
+    def test_get_comments_returns_posted_comments_sorted_by_seq(self):
+        for i in range(1, 4):
+            status, _ = self.comment_post(
+                comment_body=f"comment {i}",
+                account_id=f"acct_get_{i}",
+                agent_id="agent-get-basic",
+            )
+            self.assertEqual(status, 201)
+
+        status, payload = self.request(
+            "GET",
+            "/v1/markets/m1/comments",
+            headers=self._headers_with_agent_id("agent-get-basic"),
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["marketId"], "m1")
+        self.assertEqual(len(payload["comments"]), 3)
+        seqs = [c["seq"] for c in payload["comments"]]
+        self.assertEqual(seqs, sorted(seqs))
+        self.assertEqual(payload["pagination"]["fromSeq"], 1)
+        self.assertEqual(payload["pagination"]["limit"], 100)
+        self.assertEqual(payload["pagination"]["returned"], 3)
+        self.assertIsNone(payload["pagination"]["nextFromSeq"])
+
+    # ── GET comments pagination tests ──
+
+    def test_get_comments_pagination_with_limit(self):
+        for i in range(1, 4):
+            s, _ = self.comment_post(
+                comment_body=f"page comment {i}",
+                account_id=f"acct_page_{i}",
+                agent_id="agent-page",
+            )
+            self.assertEqual(s, 201)
+
+        status, payload = self.request(
+            "GET",
+            "/v1/markets/m1/comments?limit=2",
+            headers=self._headers_with_agent_id("agent-page"),
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["pagination"]["returned"], 2)
+        self.assertEqual(payload["pagination"]["nextFromSeq"], 3)
+
+    def test_get_comments_pagination_with_from_seq(self):
+        for i in range(1, 4):
+            s, _ = self.comment_post(
+                comment_body=f"seq comment {i}",
+                account_id=f"acct_seq_{i}",
+                agent_id="agent-seq",
+            )
+            self.assertEqual(s, 201)
+
+        status, payload = self.request(
+            "GET",
+            "/v1/markets/m1/comments?fromSeq=2",
+            headers=self._headers_with_agent_id("agent-seq"),
+        )
+        self.assertEqual(status, 200)
+        for comment in payload["comments"]:
+            self.assertGreaterEqual(comment["seq"], 2)
+
+    def test_get_comments_pagination_with_from_seq_and_limit(self):
+        for i in range(1, 4):
+            s, _ = self.comment_post(
+                comment_body=f"combo comment {i}",
+                account_id=f"acct_combo_{i}",
+                agent_id="agent-combo",
+            )
+            self.assertEqual(s, 201)
+
+        status, payload = self.request(
+            "GET",
+            "/v1/markets/m1/comments?fromSeq=2&limit=1",
+            headers=self._headers_with_agent_id("agent-combo"),
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["pagination"]["returned"], 1)
+        self.assertEqual(payload["pagination"]["nextFromSeq"], 3)
+
+    # ── GET comments edge case tests ──
+
+    def test_get_comments_returns_404_for_non_existent_market(self):
+        status, payload = self.request(
+            "GET",
+            "/v1/markets/nonexistent/comments",
+            headers=self._headers_with_agent_id("agent-edge-1"),
+        )
+        self.assertEqual(status, 404)
+        self.assertEqual(payload["error"]["code"], "market_not_found")
+
+    def test_get_comments_returns_empty_for_market_with_no_comments(self):
+        status, payload = self.request(
+            "GET",
+            "/v1/markets/m1/comments",
+            headers=self._headers_with_agent_id("agent-edge-2"),
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["comments"], [])
+        self.assertEqual(payload["pagination"]["returned"], 0)
 
 
 class BayesMarketApiIntegrationTests(unittest.TestCase):

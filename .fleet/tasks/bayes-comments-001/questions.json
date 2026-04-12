@@ -1,0 +1,64 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The comment system already exists end-to-end (backend POST/GET endpoints, frontend DiscussionThread component, backend+frontend tests). Is the task to verify/enhance the existing implementation, or was the task description written before features were implemented?",
+      "category": "requirements",
+      "why_it_matters": "If the system is already complete, the work is validation-only. If there are specific enhancements needed, the scope changes significantly."
+    },
+    {
+      "id": "q2",
+      "question": "The task specifies 'newest first' for GET /v1/markets/{id}/comments, but the current implementation returns comments sorted by ascending seq (oldest first), which is natural for cursor-based pagination with fromSeq. Should the sort order be reversed to newest-first?",
+      "category": "requirements",
+      "why_it_matters": "Changing to newest-first would require rethinking the cursor-based pagination model (fromSeq would need to work in reverse), affecting both backend pagination logic and frontend rendering."
+    },
+    {
+      "id": "q3",
+      "question": "The task mentions 'author' as a POST field, but the existing implementation uses 'accountId'. Is there an expectation to add a separate author/display-name field, or does accountId fulfill the 'author' requirement?",
+      "category": "requirements",
+      "why_it_matters": "Adding a separate author field would require schema changes to comments, validation logic, and frontend updates."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The existing comment system (backend endpoints, frontend DiscussionThread, tests) fully satisfies the task requirements and no new code needs to be written.",
+      "confidence": 0.85,
+      "if_wrong": "Would need to identify specific gaps and implement missing functionality."
+    },
+    {
+      "id": "a2",
+      "assumption": "'author' in the task description maps to 'accountId' in the existing implementation - no separate author/display-name field is needed.",
+      "confidence": 0.9,
+      "if_wrong": "Would need to add an 'author' or 'displayName' field to the comment schema, backend validation, and frontend rendering."
+    },
+    {
+      "id": "a3",
+      "assumption": "The current oldest-first (ascending seq) pagination is acceptable despite the task saying 'newest first', because cursor-based pagination naturally flows forward.",
+      "confidence": 0.7,
+      "if_wrong": "Would need to redesign pagination to support reverse ordering - e.g., using a descending cursor or adding a 'sort' query parameter."
+    },
+    {
+      "id": "a4",
+      "assumption": "The existing test coverage (16 frontend component tests, backend HTTP contract + rate limit tests) satisfies the 'Tests for CRUD and pagination' requirement.",
+      "confidence": 0.8,
+      "if_wrong": "May need additional backend unit tests specifically for pagination edge cases (empty markets, boundary sequences, limit enforcement)."
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 1,
+    "complexity_reason": "The entire feature already exists: backend endpoints (GET/POST with pagination, idempotency, rate limiting), frontend component (DiscussionThread with composer, loading/error/empty states), and tests (frontend Vitest + backend unittest). At most, minor adjustments may be needed.",
+    "uncertainty_score": 2,
+    "uncertainty_reason": "Main uncertainty is whether the task expects changes to the existing implementation (e.g., newest-first sort order) or is simply a validation exercise. The codebase patterns are well-understood.",
+    "independent_subproblems": [
+      "Verify existing backend endpoints match task requirements",
+      "Verify frontend component matches task requirements",
+      "Verify test coverage is sufficient"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity is 1 (feature already exists), uncertainty is 2 (minor clarifications needed). No new files or architectural changes required. All subproblems are simple verification steps that don't warrant parallel agents."
+  },
+  "spawn_children": false,
+  "children": []
+}
