@@ -1,0 +1,108 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Install recharts dependency",
+      "files_created": [],
+      "files_modified": ["frontend/package.json", "frontend/package-lock.json"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Add P&L TypeScript types to types.ts",
+      "files_created": [],
+      "files_modified": ["frontend/src/lib/api/types.ts"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Add P&L API client functions to client.ts",
+      "files_created": [],
+      "files_modified": ["frontend/src/lib/api/client.ts"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Add P&L React Query hooks and update useMarketAnalytics refetchInterval",
+      "files_created": [],
+      "files_modified": ["frontend/src/lib/query/hooks.ts"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Create PriceHistoryChart component",
+      "files_created": ["frontend/src/features/analytics/PriceHistoryChart.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Create VolumeChart component",
+      "files_created": ["frontend/src/features/analytics/VolumeChart.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Create MarketAnalytics component",
+      "files_created": ["frontend/src/features/analytics/MarketAnalytics.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 8,
+      "task": "Create PnLSummary component",
+      "files_created": ["frontend/src/features/analytics/PnLSummary.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 9,
+      "task": "Create AccountPnL component",
+      "files_created": ["frontend/src/features/analytics/AccountPnL.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 10,
+      "task": "Create analytics barrel export",
+      "files_created": ["frontend/src/features/analytics/index.ts"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 11,
+      "task": "Integrate MarketAnalytics and PnLSummary into MarketDetail",
+      "files_created": [],
+      "files_modified": ["frontend/src/routes/MarketDetail.tsx"],
+      "verified": true
+    },
+    {
+      "step": 12,
+      "task": "Integrate AccountPnL into Portfolio",
+      "files_created": [],
+      "files_modified": ["frontend/src/routes/Portfolio.tsx"],
+      "verified": true
+    },
+    {
+      "step": 13,
+      "task": "Write component tests for MarketAnalytics, PnLSummary, AccountPnL",
+      "files_created": [
+        "frontend/src/__tests__/MarketAnalytics.test.tsx",
+        "frontend/src/__tests__/PnLSummary.test.tsx",
+        "frontend/src/__tests__/AccountPnL.test.tsx"
+      ],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 14,
+      "task": "End-to-end verification: build and test pass",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}

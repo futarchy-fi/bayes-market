@@ -6,6 +6,8 @@ import type {
   MarketCommentsResponse,
   EngineStatsResponse,
   MarketAnalyticsResponse,
+  MarketPnlResponse,
+  AccountPnlResponse,
   AccountRiskResponse,
   AccountExposureResponse,
   OrderResponse,
@@ -323,5 +325,22 @@ export function submitMarketComment(
       body: JSON.stringify(payload),
     },
     session,
+  );
+}
+
+export function getMarketPnl(
+  marketId: string,
+  accountId: string,
+): Promise<MarketPnlResponse> {
+  return request<MarketPnlResponse>(
+    `/v1/markets/${encodeURIComponent(marketId)}/accounts/${encodeURIComponent(accountId)}/pnl`,
+  );
+}
+
+export function getAccountPnl(
+  accountId: string,
+): Promise<AccountPnlResponse> {
+  return request<AccountPnlResponse>(
+    `/v1/accounts/${encodeURIComponent(accountId)}/pnl`,
   );
 }

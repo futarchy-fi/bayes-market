@@ -21,6 +21,8 @@ export const queryKeys = {
   marketAnalytics: (id: string, interval?: string) => ["markets", id, "analytics", interval ?? "1h"] as const,
   accountRisk: (id: string) => ["accounts", id, "risk"] as const,
   accountExposure: (id: string) => ["accounts", id, "exposure"] as const,
+  marketPnl: (marketId: string, accountId: string) => ["markets", marketId, "accounts", accountId, "pnl"] as const,
+  accountPnl: (accountId: string) => ["accounts", accountId, "pnl"] as const,
   health: () => ["health"] as const,
   serviceIndex: () => ["service-index"] as const,
 };
@@ -316,6 +318,7 @@ export function useMarketAnalytics(marketId: string, opts?: { interval?: string;
     queryKey: queryKeys.marketAnalytics(marketId, interval),
     queryFn: () => api.getMarketAnalytics(marketId, interval),
     enabled: opts?.enabled ?? true,
+    refetchInterval: 30000,
   });
 }
 
@@ -412,5 +415,23 @@ export function usePostMarketComment(marketId: string) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.marketComments(marketId) });
     },
+  });
+}
+
+export function useMarketPnl(marketId: string, accountId: string) {
+  return useQuery({
+    queryKey: queryKeys.marketPnl(marketId, accountId),
+    queryFn: () => api.getMarketPnl(marketId, accountId),
+    enabled: accountId.length > 0,
+    refetchInterval: 30000,
+  });
+}
+
+export function useAccountPnl(accountId: string) {
+  return useQuery({
+    queryKey: queryKeys.accountPnl(accountId),
+    queryFn: () => api.getAccountPnl(accountId),
+    enabled: accountId.length > 0,
+    refetchInterval: 30000,
   });
 }
