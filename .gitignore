@@ -2,3 +2,6 @@ __pycache__/
 node_modules/
 dist/
 !frontend/dist/
+test-results/
+playwright-report/
+blob-report/
