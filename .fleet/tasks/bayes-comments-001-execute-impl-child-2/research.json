@@ -1,0 +1,72 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The existing test file at frontend/src/__tests__/DiscussionThread.test.tsx does NOT exist. No DiscussionThread test file exists anywhere in the codebase. The grep for 'DiscussionThread' across all *.test.* files returns zero results. The task needs to create the test file from scratch. The test should be placed in frontend/src/__tests__/DiscussionThread.test.tsx following the existing convention, not at the co-located path.",
+      "confidence": 1.0,
+      "evidence": [
+        "Glob for frontend/src/__tests__/DiscussionThread.test.tsx: No files found",
+        "Glob for frontend/src/**/*.test.*: Only 9 test files, none for DiscussionThread",
+        "Grep for 'DiscussionThread' in *.test.* files: No files found"
+      ],
+      "uncertainty": "None — the file definitively does not exist"
+    },
+    {
+      "question_id": "q2",
+      "answer": "The project convention places ALL test files in frontend/src/__tests__/ (currently 9 test files: ErrorBoundary, format, Portfolio, MarketDetail, EventTradePanel, CreateMarketForm, api-client, MarketList, System). The test file should follow this convention and be placed at frontend/src/__tests__/DiscussionThread.test.tsx, NOT at the co-located path frontend/src/features/market/DiscussionThread.test.tsx. The existing vitest config has no special include/exclude patterns — it uses default discovery which would find tests in either location, but consistency matters.",
+      "confidence": 0.95,
+      "evidence": [
+        "Glob frontend/src/__tests__/*.test.*: 9 files all in __tests__/ directory",
+        "Glob frontend/src/**/*.test.*: same 9 files, no tests elsewhere",
+        "frontend/vitest.config.ts: setupFiles points to __tests__/setup.ts, no testMatch override",
+        "frontend/src/__tests__/helpers.tsx: shared test helpers in __tests__/ directory"
+      ],
+      "uncertainty": "The task description says co-located path but convention says __tests__/. Following convention is the right call but noting the discrepancy."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "WRONG",
+      "confidence": 1.0,
+      "impact": "Critical — the test file does not exist at all. We need to create frontend/src/__tests__/DiscussionThread.test.tsx from scratch with tests covering all 8 specified scenarios: rendering comment list, empty state, loading state, error state, comment submission, disabled composer for non-active markets, character count display, disabled when no session."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "WRONG",
+      "confidence": 1.0,
+      "impact": "The prior child task (bayes-comments-001-execute-impl-child-1) only implemented backend tests (14 new tests in tests/test_bayes_market_api.py). No frontend tests were created. This task must create the frontend tests from scratch."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "WRONG",
+      "confidence": 1.0,
+      "impact": "There are no DiscussionThread tests to pass or fail. The tests need to be written. The testing infrastructure is set up (vitest + jsdom + @testing-library/react + @testing-library/jest-dom) and working (9 existing test files), so the foundation is solid."
+    }
+  ],
+  "implementation_notes": {
+    "test_file_path": "frontend/src/__tests__/DiscussionThread.test.tsx",
+    "component_path": "frontend/src/features/market/DiscussionThread.tsx",
+    "mocking_strategy": "Mock @/lib/api/client (same pattern as MarketDetail.test.tsx and CreateMarketForm.test.tsx). The component uses useMarketComments and usePostMarketComment hooks which call api.getMarketComments and api.submitMarketComment respectively. Mock these at the api level.",
+    "test_helpers": "Use renderWithProviders from ./helpers which wraps with QueryClientProvider, SessionProvider, and MemoryRouter",
+    "scenarios_to_cover": [
+      "1. Renders comment list correctly (mock getMarketComments with comments array)",
+      "2. Shows empty state ('No comments yet.') when comments array is empty",
+      "3. Shows loading state ('Loading discussion...') before data resolves",
+      "4. Shows error state when query fails",
+      "5. Submits comment via composer form (type in textarea, click Post Comment)",
+      "6. Disables composer when market.status !== 'active' (shows read-only note)",
+      "7. Shows character count remaining",
+      "8. Disables composer when no session configured (shows 'Set your Account ID' note)"
+    ],
+    "key_mock_data_shapes": {
+      "market": "{ id, title, description, variableId, status, outcomes, marginals, liquidity, volume, created_at, expires_at }",
+      "comments_response": "{ marketId, comments: MarketComment[], pagination: { fromSeq, limit, returned, nextFromSeq }, meta }",
+      "comment": "{ commentId, marketId, seq, accountId, body, createdAt }"
+    },
+    "session_handling": "SessionProvider reads from localStorage. To test 'no session' state, don't set localStorage. To test 'configured' state, set localStorage with bayes-session key before rendering."
+  },
+  "spawn_children": false,
+  "children": []
+}
