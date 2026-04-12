@@ -42,6 +42,13 @@ jobs:
         run: pnpm --dir frontend test
         timeout-minutes: 5
 
+      - name: Install Playwright Chromium
+        run: npx --prefix frontend playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: pnpm --dir frontend test:e2e
+        timeout-minutes: 5
+
       - name: Build frontend
         run: pnpm --dir frontend build
         timeout-minutes: 5

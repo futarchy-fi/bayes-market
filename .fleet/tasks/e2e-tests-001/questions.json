@@ -1,0 +1,99 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should E2E tests run against a real backend (Python server on :8080) or use Playwright route interception to mock API responses? The backend is a single-file Python HTTP server with in-memory state—no database seeding scripts exist.",
+      "category": "design",
+      "why_it_matters": "This is the most fundamental architectural decision. Real backend gives true integration coverage but requires starting/stopping the Python server and seeding test data. Mocked routes are faster and more deterministic but won't catch backend regressions."
+    },
+    {
+      "id": "q2",
+      "question": "If using a real backend: how should test data (markets, accounts, positions) be seeded before each test? The backend has no seed/fixture endpoint and state lives in-memory. Should we add a test-only reset/seed API, or create data via the existing POST endpoints in test setup?",
+      "category": "design",
+      "why_it_matters": "Without a seeding strategy, tests will be flaky or coupled to execution order. Creating data via POST endpoints is realistic but slow; a test-only endpoint is fast but adds non-production code to the server."
+    },
+    {
+      "id": "q3",
+      "question": "Should Playwright E2E tests be added to the CI pipeline? The current CI runs backend Python tests, frontend Vitest tests, and a build step. Adding E2E would require installing Playwright browsers and starting both the frontend dev server and the Python backend.",
+      "category": "requirements",
+      "why_it_matters": "CI integration determines whether we need a playwright.config.ts webServer config, CI-specific browser installation steps, and how much CI time budget is acceptable. Without CI, tests only run locally."
+    },
+    {
+      "id": "q4",
+      "question": "Which browsers should E2E tests target? Chromium only for speed, or also Firefox and WebKit for cross-browser coverage?",
+      "category": "requirements",
+      "why_it_matters": "Affects Playwright config, CI runtime (each browser adds ~30-60s of install + run time), and whether we discover browser-specific rendering/behavior issues."
+    },
+    {
+      "id": "q5",
+      "question": "The app has no authentication—session is configured by typing an Account ID and optional Agent ID into header inputs, persisted to localStorage. Should E2E tests set up sessions via localStorage injection (fast, skips UI) or by interacting with the header inputs (more realistic)?",
+      "category": "design",
+      "why_it_matters": "Affects test helper design and execution speed. localStorage injection is a common Playwright pattern but skips testing the session UI itself. Header input interaction tests the real flow but adds setup time to every test."
+    },
+    {
+      "id": "q6",
+      "question": "What scope of 'happy path' is expected for each view? For example, MarketDetail has ~10 distinct sections (header, probability bar, analytics charts, position card, P&L, trading panel, discussion, Bayes net graph, junction tree, event journal). Should tests verify all visible sections or just the core trading-relevant ones?",
+      "category": "requirements",
+      "why_it_matters": "Determines test count and granularity. Testing every section thoroughly could mean 15-20 tests for MarketDetail alone. A focused approach (header loads, trading works, key data displays) might be 4-5 tests."
+    },
+    {
+      "id": "q7",
+      "question": "Should E2E tests verify WebSocket-driven real-time updates (price subscriptions on MarketDetail, risk updates on Portfolio)? These require either a real backend pushing updates or sophisticated mock WebSocket servers.",
+      "category": "design",
+      "why_it_matters": "WebSocket testing is significantly more complex than HTTP request testing. If real-time updates are out of scope for 'happy path first', we can defer this and focus on initial page load state."
+    },
+    {
+      "id": "q8",
+      "question": "Where should the E2E test files live? Options: frontend/e2e/, frontend/tests/e2e/, or a top-level e2e/ directory (since tests may need to orchestrate both frontend and backend)?",
+      "category": "design",
+      "why_it_matters": "Affects project structure, tsconfig scope, and whether Playwright config lives in frontend/ or project root. A top-level directory makes sense if tests start the backend; frontend-scoped makes sense if tests only touch the frontend."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Playwright will be installed as a devDependency in the frontend/package.json alongside the existing Vitest setup, with its own playwright.config.ts in the frontend directory.",
+      "confidence": 0.7,
+      "if_wrong": "If tests need to orchestrate the Python backend, the config and dependencies may belong at the project root instead."
+    },
+    {
+      "id": "a2",
+      "assumption": "For the initial 'happy path first' scope, API route interception (mocking) is the pragmatic choice—it avoids backend orchestration complexity and gives deterministic, fast tests.",
+      "confidence": 0.6,
+      "if_wrong": "If real backend integration is required, we need to build a test harness that starts the Python server, seeds data, and tears it down. This significantly increases scope."
+    },
+    {
+      "id": "a3",
+      "assumption": "Only Chromium will be targeted initially, with Firefox/WebKit added later.",
+      "confidence": 0.8,
+      "if_wrong": "Multi-browser config is straightforward in Playwright but increases CI time and may surface browser-specific failures to fix."
+    },
+    {
+      "id": "a4",
+      "assumption": "The four test suites will be: (1) market-list.spec.ts—load, filter, search, navigate; (2) market-detail.spec.ts—load, view sections, probability display; (3) trade-execution.spec.ts—select outcome, enter size, submit trade, see receipt; (4) portfolio.spec.ts—configure account, view risk metrics, view positions.",
+      "confidence": 0.75,
+      "if_wrong": "If the scope is broader or differently structured, the test file organization changes but the Playwright infrastructure stays the same."
+    },
+    {
+      "id": "a5",
+      "assumption": "Session setup will use localStorage injection via page.addInitScript() or page.evaluate() rather than UI interaction, with one dedicated test verifying the header input flow.",
+      "confidence": 0.7,
+      "if_wrong": "If every test must go through the UI for session setup, tests will be slower and more brittle, but more realistic."
+    },
+    {
+      "id": "a6",
+      "assumption": "WebSocket real-time update testing is out of scope for the initial happy path tests. Tests will verify the page loads correctly with initial HTTP-fetched data.",
+      "confidence": 0.75,
+      "if_wrong": "Need to implement WebSocket mocking in Playwright, which is possible but adds complexity to the test fixtures."
+    },
+    {
+      "id": "a7",
+      "assumption": "The Vite dev server (port 3000) will be used as the test target via Playwright's webServer config, not a production build.",
+      "confidence": 0.85,
+      "if_wrong": "If testing against production build, we'd use 'pnpm preview' instead, which is more representative but requires a build step before each test run."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
