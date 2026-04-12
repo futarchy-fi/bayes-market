@@ -1,0 +1,39 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Both AssumptionContext.test.tsx (136 lines, 16 tests) and session.test.tsx (122 lines, 13 tests) already exist with comprehensive coverage and all 29 tests pass. The only gap is that setAllAssumptions is not tested. Should this task focus solely on adding the missing setAllAssumptions test, or is there other coverage expected?",
+      "category": "requirements",
+      "why_it_matters": "The task description says to 'Write AssumptionContext.test.tsx (~90 lines)' and 'Write SessionContext.test.tsx (~70 lines)' but both files already exist with more lines and more tests than specified. The scope needs clarification to avoid duplicating or overwriting existing work."
+    },
+    {
+      "id": "q2",
+      "question": "The existing tests cover: initial state, add/remove/clear/has/get/contextPayload, dedup (replace by variableId), outside-provider throw for AssumptionContext; and defaults, localStorage load/persist, corrupt data, partial data, isConfigured, outside-provider throw for SessionContext. Is the setAllAssumptions gap the only additional coverage needed?",
+      "category": "codebase",
+      "why_it_matters": "If setAllAssumptions is the only missing test, this is a ~10-line addition, not a full file rewrite. Understanding the actual gap determines the correct implementation approach."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The task was planned before the test files were written, and the existing tests already satisfy the requirements. The only remaining gap is a test for setAllAssumptions.",
+      "confidence": 0.9,
+      "if_wrong": "There may be additional test scenarios beyond what's currently covered that the task intended (e.g., edge cases, concurrent state updates, specific ordering guarantees)."
+    },
+    {
+      "id": "a2",
+      "assumption": "Adding 1-2 tests for setAllAssumptions (restore full set, used by undo) is the only work needed to complete this task.",
+      "confidence": 0.85,
+      "if_wrong": "The parent task may have intended entirely new test files with a different structure or additional edge cases not currently covered."
+    },
+    {
+      "id": "a3",
+      "assumption": "The existing test patterns (renderHook + act + wrapper) are the correct approach and should be followed for any additions.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to restructure tests, but this is very unlikely given all existing context tests follow this pattern."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
