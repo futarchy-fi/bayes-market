@@ -1,0 +1,82 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "T558 scope is structural admissible-range bounds for conditional edits only — no solvency checks. Solvency for conditional edits belongs to T559 (GS minimum-assets path).",
+      "based_on": ["q1", "q6"],
+      "alternatives_rejected": [
+        "Include solvency (min-asset) checks for conditional edits — rejected because T559 owns GS minimum-assets path, and the current asset model is a placeholder (impactScore = KL divergence). Adding solvency on a placeholder model creates a false contract."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use a new error code 'conditional_range_violation' at HTTP 400 with admissible range {min, max} in error details.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Reuse 'invalid_probability_edit' — rejected because it conflates payload normalization with semantic range validation",
+        "Reuse 'invalid_structure_preserving_edit' — rejected because T551 boundary freeze explicitly owns that code for base-slice preservation"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Insert conditional range validation AFTER resolve_probability_edit_base_marginals and BEFORE validate_structure_preserving_edit in normalize_probability_edit_payload (server.py ~line 3464-3469). Only runs when context is non-empty.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "After validate_structure_preserving_edit — rejected because a tighter, earlier error is more informative",
+        "As a separate pre-check during normalization — rejected because base marginals must be resolved first"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Compute admissible range locally from resolved base marginals using the proportional rescaling algorithm — no additional inference engine queries.",
+      "based_on": ["q5", "q7"],
+      "alternatives_rejected": [
+        "Query inference engine for joint distribution constraints — rejected because the range is fully derivable from the conditional slice and rescaling algorithm (proportional rescaling preserves non-negativity for any p in (0,1) given valid base marginals)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Server-side validation only. Include admissible range in error details when rejecting. No new API endpoint; no frontend changes.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Add a dedicated query endpoint for admissible range — rejected because T558 scope is enforcement, not API surface expansion. Frontend (T575) can adopt bounds from error details later.",
+        "Modify ConditionalEditor.tsx slider bounds — rejected because T575 owns UI baseline changes"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add compute_conditional_admissible_range() function in server.py. Takes market, target_outcome_id, and base_marginals. Returns {min, max} tuple. For proportional rescaling: structural min is a small epsilon above 0 (matching existing 0<p<1 check), structural max is 1-epsilon. Edge case: if all non-target base marginals are zero, range is exactly {1.0, 1.0} (target must be 1.0). Apply 12-decimal rounding tolerance for edge cases near 0 or 1.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add validate_conditional_range_bounds() function in server.py. Takes market, normalized_payload, and base_marginals. Calls compute_conditional_admissible_range(). If target probability is outside the admissible range, raises ApiError(400, 'conditional_range_violation', message, {min, max, marketId, outcomeId, requestedProbability}).",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Wire validate_conditional_range_bounds() into normalize_probability_edit_payload() at server.py:3469 (after base_marginals resolution, before validate_structure_preserving_edit). Only call when context is non-empty (conditional edit). Guard: if normalized_payload['context'] is truthy.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Add unit tests for compute_conditional_admissible_range(): binary market normal case, N>2 outcomes, all-zero non-target marginals edge case, rounding edge cases near 0 and 1.",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Add integration tests for validate_conditional_range_bounds() through normalize_probability_edit_payload(): conditional edit within range succeeds, conditional edit outside range returns 400 with 'conditional_range_violation' and includes admissible range in details, unconditional edit bypasses the check entirely.",
+      "depends_on": [3]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

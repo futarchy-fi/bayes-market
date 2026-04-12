@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What exactly are 'conditional edit range bounds'? Is this about computing the admissible min/max probability for a given outcome under a specific context (conditioning assignment), derived from joint distribution constraints?",
+      "category": "requirements",
+      "why_it_matters": "T556 says 'T558 owns conditional admissible-range logic' but no T558 spec doc exists. The implementation depends entirely on whether bounds are derived from the inference engine's joint distribution, from LMSR score constraints, or from structural properties of the conditional slice."
+    },
+    {
+      "id": "q2",
+      "question": "Should the admissible range be exposed in the API response (e.g., in a preview or query endpoint) so the frontend can constrain the slider, or is it purely server-side validation that rejects out-of-range edits with an error?",
+      "category": "requirements",
+      "why_it_matters": "The frontend ConditionalEditor.tsx uses a range slider with implicit 0-1 bounds. If the API should return the admissible range, we need a new or modified endpoint. If it's validation-only, we just add a check in the pipeline."
+    },
+    {
+      "id": "q3",
+      "question": "What error code family should conditional range-bounds violations use? Should it be 'invalid_probability_edit' (generic payload), 'invalid_structure_preserving_edit' (T551 distribution preservation), or a new error code like 'conditional_range_violation'?",
+      "category": "design",
+      "why_it_matters": "T551 boundary freeze explicitly separates error families. Adding a new code creates a clean boundary but expands the error surface. Reusing an existing code must respect the frozen partitions documented in T551."
+    },
+    {
+      "id": "q4",
+      "question": "Where in the pipeline should conditional range bounds validation sit — before T551 structure-preserving validation, after it, or as a separate pre-check during normalization?",
+      "category": "design",
+      "why_it_matters": "The frozen pipeline (T551 doc) defines a specific ordering: normalize → resolve base marginals → validate_structure_preserving_edit → apply_probability_target. Inserting a new check must not violate the boundary freeze or duplicate existing checks."
+    },
+    {
+      "id": "q5",
+      "question": "How should the admissible range be computed? Is it purely mathematical (from the conditional slice and number of outcomes), or does it require querying the inference engine for joint distribution constraints?",
+      "category": "design",
+      "why_it_matters": "Currently the inference engine is queried for base marginals (resolve_probability_edit_base_marginals). If range computation requires additional inference queries (e.g., min/max achievable conditional probabilities given the full joint), that's a different complexity level than a local computation on the existing conditional slice."
+    },
+    {
+      "id": "q6",
+      "question": "Should conditional edits also be subject to solvency (min-asset) checks like unconditional edits, or is this out of scope for T558? Currently line 4542 skips solvency for conditional edits entirely.",
+      "category": "requirements",
+      "why_it_matters": "T538 scope matrix groups T558 under 'Risk/solvency'. If T558 is about admissible-range bounds AND solvency for conditional edits, the scope is much larger. If solvency is deferred to T559/T561, T558 can focus purely on range validation."
+    },
+    {
+      "id": "q7",
+      "question": "For markets with more than 2 outcomes, does the admissible range depend on how non-target outcomes are renormalized? The current rescale_probability_edit proportionally redistributes to non-target outcomes — does the range need to account for this?",
+      "category": "design",
+      "why_it_matters": "With binary markets, the admissible range is simple (0,1) minus structural limits. With N>2 outcomes, the range may be tighter because renormalization can push non-target outcomes to zero or negative. validate_structure_preserving_edit already checks for this but rejects after the fact rather than computing bounds upfront."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "T558 is about computing and validating the admissible probability range for conditional edits (edits with non-empty context), not unconditional edits which are already covered by existing 0<p<1 validation and T557 solvency.",
+      "confidence": 0.85,
+      "if_wrong": "If T558 also covers unconditional range bounds, the scope expands to include solvency-derived bounds for all edit types, not just conditional context-dependent bounds."
+    },
+    {
+      "id": "a2",
+      "assumption": "The admissible range can be derived from the current conditional slice without additional inference engine queries — it's a function of the base marginals, the target outcome, and the number of outcomes.",
+      "confidence": 0.6,
+      "if_wrong": "If the range requires full joint distribution analysis from the inference engine, we need to add new inference query endpoints and handle latency/failure modes."
+    },
+    {
+      "id": "a3",
+      "assumption": "The validation is server-side only for now. The frontend can adopt the bounds later but T558 doesn't require frontend changes.",
+      "confidence": 0.7,
+      "if_wrong": "If T558 requires the API to return admissible ranges and the frontend to use them, this becomes a full-stack task requiring a new endpoint or response field and ConditionalEditor.tsx changes."
+    },
+    {
+      "id": "a4",
+      "assumption": "The error should use a new code (e.g., 'conditional_range_violation') since the T551 boundary freeze explicitly separates error families and this is a new validation concept.",
+      "confidence": 0.5,
+      "if_wrong": "If it should reuse 'invalid_probability_edit', the implementation is simpler but muddies the error taxonomy. If it should be under T551's 'invalid_structure_preserving_edit', it would violate the documented boundary."
+    },
+    {
+      "id": "a5",
+      "assumption": "Solvency checks for conditional edits are out of scope for T558 and belong to T559/T561.",
+      "confidence": 0.7,
+      "if_wrong": "If T558 must also add min-asset checks for conditional edits, we need to implement preview_conditional_probability_edit analogous to preview_unconditional_probability_edit, which is a significant addition."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
