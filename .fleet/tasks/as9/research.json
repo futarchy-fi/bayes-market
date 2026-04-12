@@ -1,0 +1,129 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes, `impactScore` should switch from raw KL-divergence to `lmsr_expected_edit_cost(previous, updated, market.liquidity)`. However, this creates a calibration issue: raw LMSR cost is `b * KL` where `b` is market liquidity (150000, 89000, 200000), so impactScore jumps from ~0.01-0.5 to ~1500-100000. Since `ACCOUNT_RISK_LIMIT = 100.0` and the current solvency math does `afterMinAsset = beforeMinAsset - impactScore`, using raw LMSR cost would make every edit fail the solvency check. This means Q1 and Q3 are coupled: if impactScore becomes LMSR cost, the min-asset derivation MUST also change to be score-based (not subtraction-based). The cleanest path is: (1) impactScore = `lmsr_expected_edit_cost` for pricing/display, (2) min-asset is independently derived from accumulated LMSR scores via the `scalar-min-asset-v1` model, (3) `preview_account_min_asset` stops using `before - impact` and instead projects min-asset from tentative LMSR score state. The T556 scope doc supports this: 'Internal formulas, stored asset state, and how min-asset summaries are derived may change behind that boundary.'",
+      "confidence": 0.82,
+      "evidence": [
+        "backend/server.py:2530-2539 (kl_divergence returns sum(new*log(new/old)) rounded 6dp)",
+        "backend/lmsr.py:148-161 (lmsr_expected_edit_cost returns sum(updated * liquidity * log(updated/previous)) = b*KL)",
+        "backend/server.py:212 (ACCOUNT_RISK_LIMIT = 100.0)",
+        "backend/server.py:160,177,195 (market liquidity values: 150000, 89000, 200000)",
+        "backend/server.py:1704-1705 (preview_account_min_asset does before - impact)",
+        "docs/t556-scope-and-compatibility-boundary-freeze.md:169 (internal formulas may change)",
+        "docs/t557-unconditional-solvency-contract-freeze.md:21 (placeholder model until T556/T559 replace math)"
+      ],
+      "uncertainty": "Whether impactScore should be raw LMSR cost (b*KL, large numbers) or normalized cost (KL, same scale as today). Raw LMSR is more semantically correct but breaks the `beforeMinAsset - impactScore` arithmetic unless min-asset derivation is also changed. An alternative is impactScore = lmsr_expected_edit_cost/liquidity = KL (functionally identical to today), with the LMSR state providing richer internal state for later tasks."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes, `riskLimit + sum_over_slices(min_over_outcomes(scoreByOutcome))` is the right direction, BUT the raw scores need normalization by dividing by each slice's liquidity. Raw scores are `b * log(p_new/p_old)` which are ~100K scale, incompatible with riskLimit=100. Normalized scores are `log(p_new/p_old)` which are ~0.01-1.0 scale, compatible with riskLimit. The LMSR slices already store both `scoreByOutcome` and `liquidity` per slice (server.py:1793,1811), so the derivation would be: `riskLimit + sum_over_slices(min_over_outcomes(slice.scoreByOutcome[o] / slice.liquidity))`. This gives a worst-case min-asset that is more conservative than the current expected-case KL-subtraction model. Example: binary 50/50→80/20, current min-asset=99.81, new score-based min-asset=99.08. Both reasonable, new model captures worst-case rather than expected-case loss.",
+      "confidence": 0.72,
+      "evidence": [
+        "backend/server.py:223 (ACCOUNT_LMSR_RISK_READ_MODEL = 'scalar-min-asset-v1')",
+        "backend/server.py:1793 (slice stores liquidity: round_risk_value(float(market['liquidity'])))",
+        "backend/server.py:1811 (slice stores scoreByOutcome via _accumulate_score_by_outcome)",
+        "backend/lmsr.py:134-145 (lmsr_score_delta = {outcome: liquidity * log(updated/previous)})",
+        "backend/server.py:1747-1761 (_accumulate_score_by_outcome accumulates raw score deltas)"
+      ],
+      "uncertainty": "The exact normalization approach is uncertain. Dividing by per-slice liquidity works when all slices for a market share the same liquidity, but if liquidity changes between edits (unlikely but possible), the accumulated scores span different liquidity regimes. Also unclear whether T556 should implement this derivation now or leave it as groundwork for T559 (GS minimum-assets path)."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes, `sync_account_risk_state` should be refactored to derive min-asset from cumulative LMSR ledger slices instead of incremental subtraction. Evidence: (1) the current `before - impact` model is explicitly called a 'placeholder' in T557 scope doc; (2) `sync_probability_edit_lmsr_state` already maintains cumulative scoreByOutcome per slice; (3) the resolution/settlement path at server.py:3716-3722 already computes min-asset from remaining consumed capacity (not incremental), establishing precedent for re-derivation. The refactored `sync_account_risk_state` would: apply LMSR score delta to the ledger, then recompute min-asset as `riskLimit + sum(min(normalized_scores_per_slice))`. The `preview_account_min_asset` function would similarly need to project min-asset from tentative score state rather than subtracting impactScore.",
+      "confidence": 0.8,
+      "evidence": [
+        "backend/server.py:1818-1828 (sync_account_risk_state does before_min_asset - impact)",
+        "backend/server.py:1764-1815 (sync_probability_edit_lmsr_state accumulates scoreByOutcome)",
+        "backend/server.py:3716-3722 (settle_market_account_risk recomputes from remaining capacity)",
+        "docs/t557-unconditional-solvency-contract-freeze.md:21 (placeholder until T556/T559 replace)",
+        "backend/server.py:1694-1712 (preview_account_min_asset does before - impact)"
+      ],
+      "uncertainty": "The performance implication of recomputing from all slices on every order vs. incremental update. For a small number of slices (typical for a single user), this is negligible. Also unclear whether this should be a full recompute or an incremental update that maintains a cached min-asset derived from scores."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes, the LMSR cost path should use `round_risk_value()` instead of the standalone `round(..., 6)` in `kl_divergence()`. Both produce identical results (round to 6 decimal places), but `round_risk_value` is the canonical precision function for the risk pipeline. The `kl_divergence` function's inline `round(..., 6)` at server.py:2532 is a one-off that doesn't participate in the shared precision contract. When `lmsr_expected_edit_cost` replaces `kl_divergence`, its result should be passed through `round_risk_value()` for consistency. Note: `lmsr_expected_edit_cost` in lmsr.py does NOT round internally - it returns full-precision float. So the caller (server.py) must apply rounding.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:1370-1372 (round_risk_value returns round(float(value), 6))",
+        "backend/server.py:2530-2539 (kl_divergence uses round(..., 6) inline)",
+        "backend/lmsr.py:148-161 (lmsr_expected_edit_cost returns unrounded float)",
+        "backend/server.py:1704,1823,1826-1828 (risk pipeline uses round_risk_value throughout)"
+      ],
+      "uncertainty": "None significant. This is a straightforward consistency improvement."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Yes, both `preview_unconditional_probability_edit` and `create_probability_edit_order` must be updated to pass `market['liquidity']` into the LMSR cost computation. Currently at server.py:3050, the preview computes `impact_score = kl_divergence(prev, updated)` with no liquidity parameter. At server.py:3085, the conditional order path does the same. Meanwhile, `sync_probability_edit_lmsr_state` at server.py:1780 ALREADY reads `market['liquidity']` for score delta computation. The T556 scope doc freezes `market.liquidity == LMSR b` (docs/t556:118-119,173-178). So the wiring change is: both preview and order creation must read `market['liquidity']` and pass it to `lmsr_expected_edit_cost(prev, updated, market['liquidity'])`.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:3050 (preview uses kl_divergence, no liquidity)",
+        "backend/server.py:3085 (conditional order uses kl_divergence, no liquidity)",
+        "backend/server.py:1780 (sync_probability_edit_lmsr_state reads market['liquidity'])",
+        "backend/server.py:160,177,195 (markets carry liquidity: 150000, 89000, 200000)",
+        "docs/t556-scope-and-compatibility-boundary-freeze.md:118 (market.liquidity == LMSR b)",
+        "docs/t556-scope-and-compatibility-boundary-freeze.md:177 (T556 should read market.liquidity as internal b)"
+      ],
+      "uncertainty": "None significant. This is the concrete wiring change all questions point toward."
+    },
+    {
+      "question_id": "q6",
+      "answer": "Conditional edits should compute LMSR cost using the same `lmsr_expected_edit_cost(prev, updated, liquidity)` formula as unconditional edits. Each conditional slice already stores scores separately keyed by `account_lmsr_slice_key(market_id, context)` at server.py:1774. Each slice independently contributes to the min-asset sum: `sum_over_slices(min(normalized_scores_per_slice))`. The cost computation is identical for both paths - only the min-asset accumulation differs in where the scores are stored. T558 defers conditional solvency BOUNDS, but T556 should still compute correct costs and accumulate scores for conditional edits so the LMSR ledger state is accurate for later tasks.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/server.py:3074-3085 (conditional path uses kl_divergence, same as unconditional)",
+        "backend/server.py:1732-1737 (account_lmsr_slice_key generates per-market-context keys)",
+        "backend/server.py:1764-1815 (sync_probability_edit_lmsr_state manages per-slice scores)",
+        "docs/t556-scope-and-compatibility-boundary-freeze.md:43-44 (T558 owns conditional admissible-range)",
+        "backend/server.py:1786-1801 (new slices created per context with separate scoreByOutcome)"
+      ],
+      "uncertainty": "T558 defers conditional solvency bounds. T556 should ensure the LMSR ledger correctly accumulates conditional slice scores so T558 can consume them, but should NOT invent conditional solvency policy. The cost itself is straightforward; the solvency application of per-slice min-asset for conditional edits is T558's concern."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "CORRECT that `lmsr_expected_edit_cost` replaces `kl_divergence` as the cost function. The function exists at lmsr.py:148 and returns `b * KL(updated || previous)`. Key nuance: using this as impactScore requires coordinated change to min-asset derivation (Q3), since raw LMSR cost is ~150000x larger than raw KL and would break the `beforeMinAsset - impactScore` arithmetic with riskLimit=100. The 'if_wrong' path (C(q_new)-C(q_old) log-sum-exp formulation) is not needed because `lmsr_expected_edit_cost` IS the expected cost form of the LMSR cost function and is equivalent for probability-based markets."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.75,
+      "impact": "CORRECT direction. `scalar-min-asset-v1` naming at server.py:223 confirms the per-slice-minimum approach. However, raw accumulated scores (which include the liquidity factor) must be normalized by dividing by slice liquidity to produce values in the same scale as riskLimit=100. Without normalization, min-asset would be ~-100K which always breaches. The independence assumption (sum of per-slice minimums) is correct for the current system where markets are structurally independent in the LMSR model."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.7,
+      "impact": "lmsr.py provides `lmsr_score_delta`, `lmsr_expected_edit_cost`, `quote_probability_edit`, and `rescale_probability_edit`. These cover the pricing primitives. However, the min-asset derivation from accumulated scores may benefit from a helper function - something like `lmsr_worst_case_score(score_by_outcome)` that returns `min(scores.values())`, or a normalized variant. This is simple enough to implement inline in server.py, but extracting it to lmsr.py would improve testability and separation of concerns."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "CORRECT. T556 scope doc explicitly states: 'keep these surfaces stable' including acceptance/rejection envelopes, event shapes, and risk read model. Only numeric values change (impactScore magnitude, minAsset values). Field names and response structure remain identical. The T556 scope doc at line 169 is unambiguous: 'Internal formulas, stored asset state, and how min-asset summaries are derived may change behind that boundary.'"
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "CORRECT. Tests are heavily coupled to placeholder math. Key tests that must change: (1) test_unconditional_probability_edit_property_accepted_order_impact_matches_kl_divergence at line 5715 - name and assertion both reference kl_divergence; (2) invariant tests at lines 5801-5803 and 5873-5875 assert `impactScore == server.kl_divergence(prev, new)`; (3) many tests compute expected minAsset as `100.0 - impactScore` which will produce different values with LMSR cost; (4) seed helpers at test line 328 compute seeded_min_asset from preview impactScore. Total test surface: ~60 impactScore references, ~43 minAsset references across the test file."
+    }
+  ],
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.72,
+    "num_uncertain_answers": 2,
+    "research_gaps": [
+      "Exact normalization formula for score-to-minAsset derivation: should scores be divided by per-slice liquidity, or should a different normalization be used? This affects Q2 confidence.",
+      "Whether impactScore should be raw LMSR cost (b*KL) or normalized (KL). Both are defensible but have different implications for the preview_account_min_asset and solvency check paths."
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "No answer has confidence < 0.5. Only 2 answers have confidence < 0.7 (Q2 at 0.72 is borderline). The two research gaps are design decisions that can be resolved during implementation by examining the existing LMSR ledger structure (which already stores both raw scores and liquidity per slice). The T556 scope doc and T557 placeholder doc together provide sufficient guardrails. The core implementation path is clear: (1) wire lmsr_expected_edit_cost into preview/order paths with market.liquidity, (2) derive min-asset from LMSR ledger scores instead of subtraction, (3) update tests. The normalization question will resolve naturally when implementing Q3 - the slice already stores liquidity, enabling normalization at derivation time."
+  },
+  "spawn_children": false,
+  "children": []
+}

@@ -1,0 +1,48 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Add derive_min_asset_from_lmsr_slices(lmsr_state, risk_limit) helper in server.py",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Refactor preview_account_min_asset to accept market_id, context, previous_marginals, updated_marginals, and liquidity. Compute beforeMinAsset/afterMinAsset from LMSR slices via derive helper. impactScore is lmsr_expected_edit_cost.",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "In preview_unconditional_probability_edit, replace kl_divergence with round_risk_value(lmsr.lmsr_expected_edit_cost(...)). Update preview_account_min_asset call signature.",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "In create_probability_edit_order, replace kl_divergence with round_risk_value(lmsr.lmsr_expected_edit_cost(...)) in the conditional path.",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Refactor sync_account_risk_state to derive min-asset from LMSR ledger via derive_min_asset_from_lmsr_slices after sync_probability_edit_lmsr_state updates slices.",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Update test assertions: all kl_divergence references replaced with lmsr_expected_edit_cost, minAsset values use score-based derivation, seed helpers use preview multiplier.",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
