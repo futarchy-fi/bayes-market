@@ -1,0 +1,84 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The comment system was implemented before this task was created. The full feature already exists end-to-end: backend POST/GET endpoints (server.py:3972 and server.py:2423), frontend DiscussionThread component (DiscussionThread.tsx:1-268), API client functions (client.ts:179-190, 314-327), React Query hooks (hooks.ts:298-302, 407-416), TypeScript types (types.ts:125-139, 365-369), and backend tests (test_bayes_market_api.py:6858). The task description was written as a specification for work that has already been completed. The remaining work is validation and potentially minor adjustments to align with the spec (e.g., sort order).",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:3972 (handle_comment_post)",
+        "backend/server.py:2423 (get_market_comments)",
+        "frontend/src/features/market/DiscussionThread.tsx:1-268",
+        "frontend/src/lib/api/client.ts:179-190 (getMarketComments)",
+        "frontend/src/lib/api/client.ts:314-327 (submitMarketComment)",
+        "frontend/src/lib/query/hooks.ts:298-302 (useMarketComments)",
+        "frontend/src/lib/query/hooks.ts:407-416 (usePostMarketComment)",
+        "frontend/src/lib/api/types.ts:125-132 (MarketComment)",
+        "frontend/src/lib/api/types.ts:365-369 (CommentPayload)",
+        "tests/test_bayes_market_api.py:6858 (test_comment_post)"
+      ],
+      "uncertainty": "None - the implementation clearly exists and is comprehensive."
+    },
+    {
+      "question_id": "q2",
+      "answer": "The task description specifies 'newest first' but the current implementation sorts ascending by seq (oldest first) at server.py:2434-2441. The current oldest-first ordering is the correct design for cursor-based pagination with fromSeq (which is an inclusive lower bound, default=1). Changing to newest-first would break the pagination model: fromSeq semantics would need to become 'fromSeq going backwards' or a new parameter would be needed. Since the existing pagination is well-designed and functional, the oldest-first order should be kept. The task spec's 'newest first' was likely a UI-level preference (show recent comments at the bottom, which is what chat-style UIs naturally do), not a strict API requirement. The frontend renders comments in API order (oldest first), which is standard for discussion threads.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/server.py:2428 (fromSeq default=1, minimum=1)",
+        "backend/server.py:2434-2441 (sorted ascending by seq)",
+        "backend/server.py:2445-2449 (nextFromSeq = tail_seq + 1, forward pagination)",
+        "frontend/src/features/market/DiscussionThread.tsx:72 (comments.data.comments.map - renders in API order)"
+      ],
+      "uncertainty": "The task spec says 'newest first' which contradicts the implementation. However, changing this would break the well-designed cursor pagination. The current oldest-first is standard for discussion threads (chat-style, scroll down for newer). Confidence is 0.85 rather than higher because the spec is explicit about 'newest first'."
+    },
+    {
+      "question_id": "q3",
+      "answer": "The task mentions 'author' as a POST field but the implementation uses 'accountId'. The accountId field serves the same purpose as 'author' - it identifies who wrote the comment. The frontend displays it as the author identifier (DiscussionThread.tsx:75). There is no separate display name field, and adding one would be unnecessary because: (1) The system identifies users by accountId consistently across all endpoints (trades, orders, comments), (2) There is no user profile or display name system in the codebase, (3) The task spec's 'author' was a natural-language description of what the field does, not a literal field name requirement.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:3978-3980 (accountId validation in handle_comment_post)",
+        "backend/server.py:3922-3929 (comment schema uses accountId)",
+        "frontend/src/lib/api/types.ts:365-369 (CommentPayload uses accountId)",
+        "frontend/src/features/market/DiscussionThread.tsx:75 (displays comment.accountId as author)"
+      ],
+      "uncertainty": "Minimal - 'author' in the spec clearly maps to 'accountId' in the implementation, which is the standard user identifier throughout the codebase."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "The existing comment system satisfies the task requirements. Backend endpoints exist (POST with accountId/body/idempotencyKey, GET with fromSeq/limit pagination), frontend DiscussionThread component works (composer, comment list, loading/error/empty states), and backend tests cover the POST contract. The only potential gap is the sort order discrepancy (oldest-first vs spec's 'newest first') and the lack of dedicated frontend component tests."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "accountId is the universal user identifier in this codebase. No display name system exists. The 'author' field in the task spec was descriptive, not prescriptive. No schema changes needed."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "The oldest-first (ascending seq) pagination is well-designed and standard for discussion threads. Cursor-based pagination with fromSeq naturally flows forward. The spec's 'newest first' is best interpreted as a UI preference for showing recent activity, which is already achieved by the chronological thread view (newer comments appear lower). Reversing the sort would break pagination semantics."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.7,
+      "impact": "Backend has one test covering POST contract with rate limit headers (test_bayes_market_api.py:6858). There are NO dedicated tests for: GET pagination (fromSeq/limit behavior, empty markets, boundary sequences), frontend DiscussionThread component, or frontend API client comment functions. The task spec requires 'Tests for CRUD and pagination'. While the existing implementation is tested implicitly through the POST contract test, pagination edge cases and the GET endpoint are not explicitly tested. Additional tests may be warranted."
+    }
+  ],
+
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.85,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All three questions answered with confidence >= 0.85. The feature is fully implemented. The only potential work items are: (1) Verifying the existing implementation passes all requirements (validation), (2) Potentially adding more test coverage for GET pagination and the DiscussionThread component. These are straightforward tasks that don't require spawning children. No research gaps remain - the codebase is well understood."
+  },
+
+  "spawn_children": false,
+  "children": []
+}
