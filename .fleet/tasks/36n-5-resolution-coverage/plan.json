@@ -1,0 +1,73 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Expand HTTP-layer resolution test with full event payload assertions to match direct-layer parity (marginalDelta, pricing, replayStateHash, resolution.outcomeId, resolution.finalProbabilities, eventType)",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Leave HTTP test as-is since direct layer already covers event payload — rejected because the task explicitly requires parity between direct and HTTP layers"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Add a direct-layer test for already-resolved market rejection (409/market_already_resolved) via route_request, mirroring the existing HTTP-layer test",
+      "based_on": ["q6"],
+      "alternatives_rejected": ["Skip direct-layer rejection test since HTTP layer covers it — rejected because the task requires coverage at both layers"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Strengthen idempotent replay test to compare event payload fields (resolution, effects, pricing, replayStateHash) between first and replayed responses",
+      "based_on": ["q5"],
+      "alternatives_rejected": ["Full response body deep-equal — rejected because request echo may structurally differ due to cross-shape idempotency (legacy vs finalProbabilities body)"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Leave closed-market test (line 3198) as-is — it is intentionally minimal since no orders/risk/exposure exist to settle",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Expand closed-market test with settlement assertions — rejected because that would require adding order/risk setup, creating a fundamentally different test"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "No changes needed for risk doc retention assertions (q1) or single-market resolution (q3) — both are already functionally covered",
+      "based_on": ["q1", "q3"],
+      "alternatives_rejected": ["Add a dedicated single-market-only resolution test — rejected because the HTTP test already covers sole-risk-market resolution with markets={}, slices={}"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Expand test_market_resolve_http_settles_account_exposure (around line 8183) with event payload assertions: assert eventType, resolution.outcomeId, resolution.finalProbabilities, effects.marginalDelta (full array with per-outcome deltas), pricing (cost=0, fee=0), and replayStateHash. Follow the same assertion pattern used in the direct-layer test at lines 3092-3130.",
+      "depends_on": [],
+      "estimated_lines": 35,
+      "risk": "low"
+    },
+    {
+      "step": 2,
+      "task": "Add a new direct-layer test method test_market_resolution_rejects_already_resolved near the existing rejection tests (around line 3261). Use route_request to resolve m3 (pre-resolved in setUp), assert ApiError with status 409 and code 'market_already_resolved'. Follow the pattern from the HTTP test at line 8051.",
+      "depends_on": [],
+      "estimated_lines": 20,
+      "risk": "low"
+    },
+    {
+      "step": 3,
+      "task": "Strengthen the idempotent replay test (line 3239) to compare event payload fields between first and replayed responses. After the existing ID/replayed assertions, extract the event from both responses and assert that resolution, effects, and pricing fields match. replayStateHash should also match.",
+      "depends_on": [],
+      "estimated_lines": 15,
+      "risk": "low"
+    }
+  ],
+  "decomposition_assessment": {
+    "total_steps": 3,
+    "estimated_total_lines": 70,
+    "high_risk_steps": 0,
+    "parallelizable_groups": [["step1", "step2", "step3"]],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Total estimated lines (70) is well under 500. Zero high-risk steps. All changes are in a single file (tests/test_bayes_market_api.py) following established assertion patterns, making parallel execution impractical and unnecessary. All three steps are independent but share the same file, so sequential execution in one session is optimal."
+  },
+  "spawn_children": false,
+  "children": []
+}

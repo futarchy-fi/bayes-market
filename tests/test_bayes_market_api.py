@@ -3254,6 +3254,30 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertTrue(second_payload["meta"]["replayed"])
         self.assertEqual(len(server.COMMANDS), 1)
         self.assertEqual(len(server.EVENTS), 1)
+        first_event = server.EVENTS[first_payload["result"]["eventId"]]
+        second_event = server.EVENTS[second_payload["result"]["eventId"]]
+        self.assertIs(first_event, second_event)
+        self.assertEqual(first_event["payload"]["resolution"], second_event["payload"]["resolution"])
+        self.assertEqual(first_event["payload"]["effects"], second_event["payload"]["effects"])
+        self.assertEqual(first_event["payload"]["pricing"], second_event["payload"]["pricing"])
+        self.assertEqual(first_event["payload"]["replayStateHash"], second_event["payload"]["replayStateHash"])
+
+    def test_market_resolution_rejects_already_resolved(self):
+        payload, status = server.route_request(
+            "POST",
+            "/v1/markets/m3/resolve",
+            build_market_resolution_body("ops_admin", "no", idempotency_key="idem-already-resolved-direct"),
+        )
+
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"]["code"], "market_already_resolved")
+        self.assertEqual(payload["error"]["message"], "Market is already resolved")
+        self.assertEqual(payload["error"]["details"]["currentResolution"], "no")
+        self.assertEqual(payload["error"]["details"]["marketId"], "m3")
+        self.assertEqual(payload["result"]["status"], "rejected")
+        self.assertEqual(payload["result"]["eventType"], "CommandRejected")
+        self.assertEqual(payload["meta"]["idempotencyKeyEcho"], "idem-already-resolved-direct")
+        self.assertEqual(server.MARKETS["m3"]["marginals"], {"yes": 0.0, "no": 1.0})
 
     def test_market_resolution_rejects_non_point_mass_final_probabilities(self):
         before_state = snapshot_domain_state()
@@ -8193,6 +8217,28 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
                 }
             ],
         )
+        self.assertEqual(event["eventType"], "CommandAccepted")
+        self.assertEqual(event["payload"]["resolution"]["outcomeId"], "yes")
+        self.assertEqual(event["payload"]["resolution"]["finalProbabilities"], {"yes": 1.0, "no": 0.0})
+        self.assertEqual(
+            event["payload"]["effects"]["marginalDelta"],
+            [
+                {
+                    "variableId": "eth_price_gt_3000_mar15",
+                    "outcomeId": "yes",
+                    "before": 0.8,
+                    "after": 1.0,
+                },
+                {
+                    "variableId": "eth_price_gt_3000_mar15",
+                    "outcomeId": "no",
+                    "before": 0.2,
+                    "after": 0.0,
+                },
+            ],
+        )
+        self.assertEqual(event["payload"]["pricing"], {"cost": 0.0, "fee": 0.0})
+        self.assertEqual(event["payload"]["replayStateHash"], server.market_replay_state_hash("m1"))
 
     def test_probability_edit_legacy_route_is_not_found(self):
         status, payload = self.request(
