@@ -1,0 +1,117 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Use Playwright route interception (API mocking) instead of a real backend. Tests intercept /v1/* requests at the browser network layer, so neither the Python server nor the Vite proxy are needed.",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Real backend integration: rejected for initial scope due to orchestration overhead (start/stop server, seed data, no reset endpoint). Can be added as a follow-up layer."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Target Chromium only. The app uses standard React with no browser-specific APIs.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Multi-browser (Firefox + WebKit): rejected for initial scope. One-line config change to add later."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Place tests in frontend/e2e/ with playwright.config.ts in frontend/. Tests are purely frontend-scoped with mocked APIs.",
+      "based_on": ["q8"],
+      "alternatives_rejected": [
+        "Top-level e2e/ directory: rejected because no backend orchestration is needed with mocking."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Use localStorage injection (key='bayes-session') for session setup in most tests. One dedicated test verifies the header input UI flow.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "UI interaction for every test: rejected as slower and more brittle."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "WebSocket real-time update testing is out of scope. Tests verify initial HTTP-fetched page state only.",
+      "based_on": ["q7"],
+      "alternatives_rejected": [
+        "Mock WebSocket servers: rejected for initial scope due to complexity. WS subscriptions are additive to already-loaded data."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Focus on core trading-relevant sections (~12-16 tests across 4 spec files). Defer BayesNetGraph, JunctionTreePanel, detailed analytics charts.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "Comprehensive section coverage (~20+ tests for MarketDetail alone): rejected as overkill for initial happy-path scope."
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d7",
+      "decision": "Add E2E tests to CI pipeline. With mocked APIs, only Playwright browser install and Vite dev server are needed (no Python backend in CI for E2E).",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Local-only tests: rejected because CI ensures tests don't regress silently."
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Install Playwright as a devDependency in frontend/package.json. Create frontend/playwright.config.ts with: Chromium-only project, baseURL http://localhost:3000, webServer running 'pnpm dev' on port 3000, testDir './e2e', retries 0 locally / 2 in CI. Add 'test:e2e' and 'test:e2e:ui' scripts to package.json.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Create frontend/e2e/fixtures/ directory with shared test infrastructure: (a) mock-data.ts — typed mock responses for /v1/markets, /v1/markets/:id, /v1/account/:id/risk, /v1/account/:id/portfolio, /v1/markets/:id/orders, derived from actual API response shapes in frontend/src/lib/api/client.ts types. (b) test-fixtures.ts — custom Playwright test fixture that extends base test with: session setup via localStorage injection, API route handlers (page.route for /v1/* endpoints returning mock data), and helper to configure account/agent IDs.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Create frontend/e2e/market-list.spec.ts — Tests: (1) page loads and displays market cards, (2) search input filters markets by title, (3) sort dropdown changes market order, (4) status filter shows only matching markets, (5) clicking a market card navigates to /markets/:id.",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Create frontend/e2e/market-detail.spec.ts — Tests: (1) page loads and shows market title/description, (2) probability bar displays outcomes with correct values, (3) trading panel is visible with outcome selector and size input, (4) position card shows current position when account has one, (5) P&L section renders for accounts with positions.",
+      "depends_on": [2]
+    },
+    {
+      "step": 5,
+      "task": "Create frontend/e2e/trade-execution.spec.ts — Tests: (1) select an outcome in the trading panel, (2) enter a position size and see cost preview, (3) submit a trade and verify success confirmation/receipt, (4) verify position updates after trade. Mock the POST /v1/markets/:id/orders/* endpoint to return a successful order response.",
+      "depends_on": [2]
+    },
+    {
+      "step": 6,
+      "task": "Create frontend/e2e/portfolio.spec.ts — Tests: (1) page loads with configured account and shows risk metrics (limit, available, utilization, health), (2) positions table displays current positions with market name and P&L, (3) account P&L summary renders correctly, (4) page handles empty portfolio (no positions) gracefully.",
+      "depends_on": [2]
+    },
+    {
+      "step": 7,
+      "task": "Create frontend/e2e/session-navigation.spec.ts — Tests: (1) entering Account ID in header input persists to localStorage, (2) navigation links work (Markets link, Portfolio link), (3) page loads without session configured show appropriate empty/default state.",
+      "depends_on": [2]
+    },
+    {
+      "step": 8,
+      "task": "Update .github/workflows/ci.yml: add a new step after 'Run frontend tests' that installs Playwright Chromium ('npx playwright install --with-deps chromium') and runs 'pnpm --dir frontend test:e2e'. Set timeout-minutes: 5.",
+      "depends_on": [1]
+    },
+    {
+      "step": 9,
+      "task": "Run all E2E tests locally to verify they pass. Fix any flaky selectors or timing issues. Ensure 'pnpm --dir frontend test:e2e' exits cleanly with all tests passing.",
+      "depends_on": [3, 4, 5, 6, 7]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
