@@ -1712,6 +1712,23 @@ def preview_account_min_asset(account_id: str, impact_score: float) -> dict[str,
     }
 
 
+def min_asset_check(asset_preview: dict[str, Any]) -> None:
+    """Raise ApiError(422) if the asset preview shows negative state-contingent assets."""
+    if asset_preview["afterMinAsset"] < 0:
+        raise ApiError(
+            422,
+            "min_asset_violation",
+            "Edit would produce negative state-contingent assets",
+            {
+                "accountId": asset_preview["accountId"],
+                "riskLimit": asset_preview["riskLimit"],
+                "beforeMinAsset": asset_preview["beforeMinAsset"],
+                "impactScore": asset_preview["impactScore"],
+                "afterMinAsset": asset_preview["afterMinAsset"],
+            },
+        )
+
+
 def account_lmsr_slice_key(
     market_id: str,
     context: list[dict[str, str]],
@@ -4154,25 +4171,11 @@ def handle_probability_edit(market_id: str, payload: dict[str, Any] | None) -> t
         preview: dict[str, Any] | None = None
         if not normalized_payload["context"]:
             preview = preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
-            asset_preview = preview["assetDelta"]
-            if asset_preview["afterMinAsset"] < 0:
-                return build_terminal_rejection_response(
-                    command,
-                    code="min_asset_violation",
-                    message="Edit would produce negative state-contingent assets",
-                    details={
-                        "accountId": account_id,
-                        "marketId": market_id,
-                        "commandId": command["commandId"],
-                        "riskLimit": asset_preview["riskLimit"],
-                        "beforeMinAsset": asset_preview["beforeMinAsset"],
-                        "impactScore": asset_preview["impactScore"],
-                        "afterMinAsset": asset_preview["afterMinAsset"],
-                    },
-                    retry_hint="reduce probability target",
-                    status=409,
-                    scope_key=scope_key,
-                )
+            try:
+                min_asset_check(preview["assetDelta"])
+            except ApiError:
+                del COMMANDS[command["commandId"]]
+                raise
 
         order = create_probability_edit_order(command, preview=preview)
         asset_delta = sync_account_risk_state(order)

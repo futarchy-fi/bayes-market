@@ -1,0 +1,102 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "YES — the new min_asset_check() should raise ApiError(422, 'min_asset_violation', ...) instead of using build_terminal_rejection_response(). The original task description explicitly states: 'Change negative-headroom failures to ApiError status 422 with code min_asset_violation.' This intentionally changes the rejection semantics from 'terminal command rejection' (persisted CommandRejected event with idempotency replay) to 'validation error' (transient, retryable). The ApiError handler at server.py:4655 converts raised ApiErrors to the standard error envelope via error_payload(). This is the correct semantic: min_asset violations are pre-flight solvency checks, not terminal business events. Retries should re-evaluate the check (asset balances may change between requests) rather than replay a stored rejection.",
+      "confidence": 0.95,
+      "evidence": [
+        "task spec: 'Change negative-headroom failures to ApiError status 422 with code min_asset_violation'",
+        "server.py:391-406 (ApiError class definition)",
+        "server.py:4655-4656 (ApiError handler: payload, status = error_payload(exc.code, exc.message, **exc.details), exc.status)",
+        "server.py:932-941 (error_payload function)",
+        "server.py:4158-4175 (current inline min_asset guard using build_terminal_rejection_response with status=409)"
+      ],
+      "uncertainty": "None — the task description is unambiguous about using ApiError with status 422."
+    },
+    {
+      "question_id": "q2",
+      "answer": "The helper should RAISE ApiError on failure, not return a response tuple. The task description says 'ApiError status 422' which means raising. The ApiError raise pattern is used 50+ times in server.py for validation errors, making it the standard pattern. The helper acts as a guard: call it, and if the check fails, it raises. On success, it returns None (or the caller simply continues). This means: no CommandRejected event is persisted, no idempotency replay for min_asset rejections, and the response format changes to the standard error envelope (error.code, error.message, error.details, meta).",
+      "confidence": 0.95,
+      "evidence": [
+        "server.py:391-406 (ApiError class — standard raise-based pattern)",
+        "server.py:543,587,619,671,1139,... (50+ raise ApiError(...) call sites in server.py)",
+        "server.py:4655-4656 (ApiError catch-all handler in HTTP layer)",
+        "server.py:3606-3633 (build_terminal_rejection_response — the pattern we're moving away from)"
+      ],
+      "uncertainty": "None — the raise-based pattern is well-established in this codebase."
+    },
+    {
+      "question_id": "q3",
+      "answer": "This is a regression guard — the current check is `asset_preview['afterMinAsset'] < 0` (strict less than at server.py:4158), so afterMinAsset == 0 is already accepted. The task just wants to ensure this boundary condition is preserved when extracting to the helper. No change needed to the comparison operator. The existing test `test_probability_edit_accepts_unconditional_edit_at_zero_min_asset_boundary` (test_bayes_market_api.py:2737-2764) already validates this, along with property test `test_unconditional_probability_edit_property_accepts_zero_or_positive_headroom` (test_bayes_market_api.py:5302-5355).",
+      "confidence": 0.98,
+      "evidence": [
+        "server.py:4158 (if asset_preview['afterMinAsset'] < 0: — strict less than)",
+        "test_bayes_market_api.py:2737-2764 (test_probability_edit_accepts_unconditional_edit_at_zero_min_asset_boundary)",
+        "test_bayes_market_api.py:5302-5355 (property test: accepts_zero_or_positive_headroom)",
+        "test_bayes_market_api.py:309-314 (seed_exact_headroom_account helper)"
+      ],
+      "uncertainty": "None — the code and tests are clear."
+    },
+    {
+      "question_id": "q4",
+      "answer": "The helper should be generic — it should accept a pre-computed asset_preview dict and check afterMinAsset, without knowing about unconditional vs conditional edits. Currently only unconditional edits call this guard (inside the `if not normalized_payload['context']` block at server.py:4155), but the helper's signature should be reusable. Note that conditional edits intentionally bypass the min_asset check (test_bayes_market_api.py:8670-8753 shows conditional bypass after zero boundary acceptance). The helper doesn't decide WHEN to check — the caller does.",
+      "confidence": 0.90,
+      "evidence": [
+        "server.py:4155 (if not normalized_payload['context']: — guard only runs for unconditional edits)",
+        "test_bayes_market_api.py:8670-8753 (test_probability_edit_http_journals_conditional_bypass_after_zero_boundary_acceptance)",
+        "server.py:1694-1712 (preview_account_min_asset — generic preview used by both paths)"
+      ],
+      "uncertainty": "Minor — the conditional path's future min_asset needs are unclear, but designing the helper to accept asset_preview dict covers both cases."
+    },
+    {
+      "question_id": "q5",
+      "answer": "The simplest effective signature is: `min_asset_check(asset_preview: dict[str, Any]) -> None`. The asset_preview dict (from preview_account_min_asset) already contains all needed fields: accountId, riskLimit, beforeMinAsset, impactScore, afterMinAsset. The helper checks afterMinAsset < 0 and raises ApiError(422, 'min_asset_violation', message, details=asset_preview). No need for separate market_id or command_id parameters — with ApiError semantics (no terminal event), we don't need command context. The error details from asset_preview are sufficient for the client. The caller computes the preview first (via preview_unconditional_probability_edit or equivalent), then passes the assetDelta portion to min_asset_check.",
+      "confidence": 0.85,
+      "evidence": [
+        "server.py:1694-1712 (preview_account_min_asset returns: accountId, riskLimit, beforeMinAsset, impactScore, afterMinAsset)",
+        "server.py:4163-4170 (current details include accountId, marketId, commandId, riskLimit, beforeMinAsset, impactScore, afterMinAsset)",
+        "server.py:932-941 (error_payload(**details) — details dict is preserved in response)",
+        "server.py:391-406 (ApiError constructor: details: dict[str, Any] | None)"
+      ],
+      "uncertainty": "The current rejection includes marketId and commandId in details which are NOT in asset_preview. The caller could add these to asset_preview before passing, or we could add market_id/command_id params. Given that ApiError semantics don't need command context and marketId is in the URL, the minimal signature is preferred, but tests may need updating to reflect the smaller details dict."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The task description explicitly says 'Change negative-headroom failures to ApiError status 422 with code min_asset_violation.' This means raising ApiError(422), which bypasses the build_terminal_rejection_response() flow entirely. No CommandRejected event, no idempotency replay for min_asset rejections. This is intentional — min_asset violations are pre-flight validation, not terminal business events."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "No impact — the `< 0` check already accepts afterMinAsset == 0. Just carry forward the same comparison operator in the helper. Existing boundary tests (test_bayes_market_api.py:2737-2764, 5302-5355) serve as regression guards."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "The helper receives asset_preview dict (from preview_account_min_asset). This decouples it from specific preview logic (unconditional vs conditional edit). The caller computes the preview, extracts assetDelta, and passes it. The helper just checks afterMinAsset < 0 and raises if violated."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.90,
+      "impact": "Significant test changes needed. At least 15 tests reference min_asset rejection behavior. Tests must be updated for: (1) HTTP 422 instead of 409, (2) ApiError-style response envelope (error.code/message/details, no result block, no CommandRejected event), (3) No idempotency replay for min_asset rejections (replay tests must be removed or rewritten — retries now re-evaluate instead of replaying stored rejection), (4) No CommandRejected event assertions, (5) Details dict may be smaller (no marketId/commandId unless added explicitly). Property tests and invariant tests that check for CommandRejected events on min_asset violations will need the most work."
+    }
+  ],
+
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.85,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All questions answered with confidence >= 0.85. The task description is unambiguous about the target contract (ApiError 422). The implementation is a focused refactor: extract ~3 lines into a helper function, change one call site in server.py, and update tests to match the new contract. No cross-module changes, no frontend impact, no new dependencies. The 15 affected tests are substantial but the changes are mechanical (status code, response shape, remove event/replay assertions). All sub-tasks are sequential (helper definition → call site change → test updates), so parallelization isn't beneficial."
+  },
+
+  "spawn_children": false,
+  "children": []
+}

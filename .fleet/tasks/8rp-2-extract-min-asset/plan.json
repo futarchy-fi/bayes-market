@@ -1,0 +1,113 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "min_asset_check() raises ApiError(422, 'min_asset_violation', ...) instead of using build_terminal_rejection_response(409). This changes the rejection semantics from terminal command rejection (persisted CommandRejected event with idempotency replay) to transient validation error (no event, no replay, retries re-evaluate).",
+      "based_on": ["q1", "q2"],
+      "alternatives_rejected": [
+        "Keep build_terminal_rejection_response but change status to 422 — rejected because the task explicitly says 'ApiError status 422', and min_asset violations are pre-flight solvency checks, not terminal business events",
+        "Return response tuple from helper — rejected because raise-based ApiError pattern is used 50+ times in server.py and the task specifies ApiError semantics"
+      ],
+      "reversibility": "medium"
+    },
+    {
+      "id": "d2",
+      "decision": "Helper signature is min_asset_check(asset_preview: dict[str, Any]) -> None. Receives pre-computed asset_preview dict from preview_account_min_asset. The caller decides WHEN to check; the helper decides IF the check passes.",
+      "based_on": ["q4", "q5"],
+      "alternatives_rejected": [
+        "Pass individual fields (account_id, market_id, command_id, etc.) — rejected because asset_preview already bundles all needed fields and decouples from specific edit types",
+        "Have helper call preview_account_min_asset internally — rejected because it would couple the helper to one preview type"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep the min_asset check in its current code position (after command creation, after market_not_active check). Even though ApiError semantics are pre-flight, moving the check before command creation would also move it before the market_not_active check, causing wasted preview computation on inactive markets.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Move check before command creation — rejected because it would run the preview and min_asset check even for inactive markets (market_not_active check is currently between command creation and min_asset check, and it depends on the command for build_terminal_rejection_response)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "ApiError details dict includes only asset_preview fields (accountId, riskLimit, beforeMinAsset, impactScore, afterMinAsset). Drops marketId and commandId that were in the old terminal rejection details, since these are command-lifecycle concerns and the ApiError is a validation error.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Add market_id/command_id params to helper — rejected because ApiError semantics don't need command context, and marketId is available from the URL path"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Preserve the strict less-than check (afterMinAsset < 0). The boundary condition afterMinAsset == 0 is accepted, matching current behavior. This is a regression guard per q3.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Define min_asset_check(asset_preview: dict) -> None helper in server.py near preview_account_min_asset (around line 1713). The function checks asset_preview['afterMinAsset'] < 0 and raises ApiError(422, 'min_asset_violation', 'Edit would produce negative state-contingent assets', details=asset_preview).",
+      "depends_on": [],
+      "estimated_lines": 8,
+      "risk": "low"
+    },
+    {
+      "step": 2,
+      "task": "Replace inline min_asset guard at server.py:4158-4175 with a single call: min_asset_check(asset_preview). Removes 17 lines (the if-block with build_terminal_rejection_response), adds 1 line (the function call).",
+      "depends_on": [1],
+      "estimated_lines": 3,
+      "risk": "low"
+    },
+    {
+      "step": 3,
+      "task": "Update unit tests for new rejection contract. Tests affected: (a) test_probability_edit_rejects_unconditional_min_asset_violation_without_side_effects (line 2691) — change status 409->422, remove result/event assertions (no CommandRejected event, no result block), update details to match asset_preview-only fields, update COMMANDS/EVENTS count assertions (no command or event created for ApiError path). (b) test_probability_edit_replays_unconditional_min_asset_rejection (line 2766) — rewrite to verify retry re-evaluates the check (no idempotency replay; second request gets a fresh 422 ApiError, not a replayed response). (c) test_probability_edit_replay_returns_stored_min_asset_rejection_contract (line 2800) — rewrite to verify retry re-evaluates (no terminal outcome stored, no replay).",
+      "depends_on": [1, 2],
+      "estimated_lines": 80,
+      "risk": "medium"
+    },
+    {
+      "step": 4,
+      "task": "Update property tests for new contract. Tests affected: (a) test_unconditional_probability_edit_property_rejects_negative_headroom (line 5410) — change 409->422, remove result block assertions, update details assertions. (b) test_unconditional_probability_edit_property_second_edit_exhausts_headroom (line ~5560) — change 409->422, remove result/reasonCode assertions. (c) test_unconditional_probability_edit_property_preserves_valid_marginal_distribution (line 5632) — change 409->422, remove result block assertions.",
+      "depends_on": [1, 2],
+      "estimated_lines": 40,
+      "risk": "medium"
+    },
+    {
+      "step": 5,
+      "task": "Update HTTP integration tests for new contract. Tests affected: (a) test_probability_edit_http_rejects_unconditional_min_asset_violation (line 8423) — change 409->422, remove result/event/replay assertions (ApiError is transient, no idempotency replay). (b) test_probability_edit_http_replay_preserves_min_asset_rejection_contract (line 8462) — rewrite to verify re-evaluation instead of replay. (c) test_probability_edit_http_journals_unconditional_rejection_in_event_stream (line ~8530) — change 409->422, remove CommandRejected event-stream assertions (no event is appended). (d) test_probability_edit_http_accepts_zero_min_asset_boundary (line 8641) — verify unchanged (boundary acceptance, no regression).",
+      "depends_on": [1, 2],
+      "estimated_lines": 80,
+      "risk": "medium"
+    },
+    {
+      "step": 6,
+      "task": "Update invariant tests for new contract. Tests affected: (a) test_invariant_rejection_appends_rejection_event_and_preserves_state (line ~5940) — change 409->422, remove CommandRejected event assertions, remove event-stream assertions (no event is created). (b) test_invariant_first_market_event_can_be_rejection_without_state_mutation (line 6038) — change 409->422, remove event assertions.",
+      "depends_on": [1, 2],
+      "estimated_lines": 60,
+      "risk": "medium"
+    },
+    {
+      "step": 7,
+      "task": "Run full test suite (python -m pytest tests/) and fix any missed assertion failures or regressions.",
+      "depends_on": [3, 4, 5, 6],
+      "estimated_lines": 10,
+      "risk": "low"
+    }
+  ],
+
+  "decomposition_assessment": {
+    "total_steps": 7,
+    "estimated_total_lines": 281,
+    "high_risk_steps": 0,
+    "parallelizable_groups": [["step1"], ["step2"], ["step3", "step4", "step5", "step6"], ["step7"]],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Estimated total lines (281) is under 500. Zero high-risk steps. While steps 3-6 (test updates) are logically independent, they all modify the same test file (test_bayes_market_api.py) so parallel agents would create merge conflicts. The changes are mechanical (status code, response shape, remove event assertions) and straightforward for a single worker."
+  },
+
+  "spawn_children": false,
+  "children": []
+}

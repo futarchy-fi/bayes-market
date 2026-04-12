@@ -1,0 +1,55 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Define min_asset_check(asset_preview: dict) -> None helper in server.py near preview_account_min_asset. Checks afterMinAsset < 0 and raises ApiError(422, 'min_asset_violation', ..., details=asset_preview fields).",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Replace inline min_asset guard at server.py with min_asset_check call. Uses try/except to clean up orphan command on ApiError before re-raising.",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Update unit tests: changed 409->422, switched from payload/status assertions to assertRaises(ApiError), removed result/event assertions, updated COMMANDS/EVENTS counts to 0.",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Update property tests: changed 409->422, switched to assertRaises(ApiError), removed result block assertions, updated COMMANDS/EVENTS counts to 0.",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Update HTTP integration tests: changed 409->422, removed replay/idempotency assertions for min_asset path, removed CommandRejected event assertions, updated COMMANDS/EVENTS/TERMINAL_OUTCOMES counts to 0.",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Update invariant tests: changed 409->422, switched to assertRaises(ApiError), removed event/event-stream assertions, verified no state mutation.",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Ran full test suite (423 tests across all test files). All passed with zero failures.",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}

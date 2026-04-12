@@ -1,0 +1,76 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The current rejection uses HTTP 409 with code 'min_asset_violation'. The task says to change to ApiError status 422. Should the new min_asset_check() helper raise an ApiError(422, 'min_asset_violation', ...) instead of calling build_terminal_rejection_response() with status=409?",
+      "category": "requirements",
+      "why_it_matters": "The current flow uses build_terminal_rejection_response() which persists a CommandRejected event and handles idempotency replay. Switching to a raised ApiError(422) would bypass that persistence/replay machinery entirely, changing the rejection contract significantly."
+    },
+    {
+      "id": "q2",
+      "question": "Should the extracted min_asset_check() return a rejection response tuple (dict, status) on failure and None/preview on success, or should it raise an ApiError on failure?",
+      "category": "design",
+      "why_it_matters": "Raising ApiError is simpler but skips the command-event lifecycle (CommandRejected event, idempotency replay). Returning a response tuple preserves the existing rejection contract. The task says 'ApiError status 422' which implies raising, but this would break the 3 existing tests that check for CommandRejected events and idempotency replay on min_asset violations."
+    },
+    {
+      "id": "q3",
+      "question": "The task says 'preserve acceptance when afterMinAsset == 0'. The current code already accepts at afterMinAsset == 0 (check is `< 0`, not `<= 0`). Is this just confirming no regression, or does it imply the boundary condition should be made more explicit in the new helper?",
+      "category": "requirements",
+      "why_it_matters": "If this is just a regression guard, the test already covers it. If it implies changing the check or adding documentation, extra work is needed."
+    },
+    {
+      "id": "q4",
+      "question": "Should the new min_asset_check() helper only handle unconditional edits (as currently implemented), or should it also be callable from a conditional edit path in the future?",
+      "category": "design",
+      "why_it_matters": "The current guard is inside an `if not normalized_payload['context']` block. The helper's signature and return contract should accommodate future conditional-edit callers if intended."
+    },
+    {
+      "id": "q5",
+      "question": "What signature should min_asset_check() have? The current inline code depends on: command, account_id, market_id, asset_preview dict, and scope_key. Should the helper receive the raw preview or compute it internally?",
+      "category": "design",
+      "why_it_matters": "If the helper calls preview_unconditional_probability_edit() internally, it couples to one edit type. If it receives the asset_preview dict, it's more reusable but the caller must compute the preview first."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The extracted min_asset_check() should raise ApiError(422, 'min_asset_violation', ...) rather than using the build_terminal_rejection_response() flow, based on the task description saying 'ApiError status 422'.",
+      "confidence": 0.7,
+      "if_wrong": "We'd need to keep using build_terminal_rejection_response() but change its status from 409 to 422, and the helper would return a response tuple instead of raising."
+    },
+    {
+      "id": "a2",
+      "assumption": "The 'preserve acceptance when afterMinAsset == 0' requirement is a regression guard — the current `< 0` check already handles this correctly and just needs to be carried forward.",
+      "confidence": 0.9,
+      "if_wrong": "We'd need to add an explicit boundary test or change the comparison operator."
+    },
+    {
+      "id": "a3",
+      "assumption": "The min_asset_check() helper should receive a pre-computed asset_preview dict (the result of preview_account_min_asset) rather than computing it internally, so it's reusable across edit types.",
+      "confidence": 0.6,
+      "if_wrong": "The helper would need to call preview_unconditional_probability_edit() or preview_account_min_asset() internally, coupling it to specific preview logic."
+    },
+    {
+      "id": "a4",
+      "assumption": "Existing tests (rejection, boundary acceptance, idempotency replay) will need to be updated to expect HTTP 422 instead of 409, and possibly to expect ApiError-style responses instead of CommandRejected event responses.",
+      "confidence": 0.8,
+      "if_wrong": "If we keep the build_terminal_rejection_response() flow and just change the status code, test changes are minimal (just status code assertions)."
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 2,
+    "complexity_reason": "Single file extraction (server.py ~15 lines of logic), plus updating 3 tests. No new files, no cross-module changes, no frontend impact.",
+    "uncertainty_score": 3,
+    "uncertainty_reason": "The key uncertainty is whether 'ApiError status 422' means raising an ApiError (breaking the command-event lifecycle) or just changing the HTTP status code in the existing rejection flow. This design choice affects tests significantly.",
+    "independent_subproblems": [
+      "Extract the min_asset guard into a min_asset_check() helper function",
+      "Change rejection status from 409 to 422 with appropriate error contract",
+      "Update existing tests to match new contract"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity is low (2/5) — this is a focused refactor in a single backend file plus test updates. The 3 sub-tasks are sequential (helper extraction informs the rejection contract which informs test updates), so parallelization isn't beneficial."
+  },
+  "spawn_children": false,
+  "children": []
+}
