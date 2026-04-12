@@ -1,0 +1,113 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "The existing coverage is correct and sufficient for 'retain risk doc but lose resolved market exposure'. The direct-layer test (line 3081-3089) asserts ACCOUNT_RISK[account_id] persists with only m2 in .markets and m2 lmsrState slices — m1 is pruned. The HTTP-layer test (line 8172-8179) asserts ACCOUNT_RISK[account_id] persists with markets={} and lmsrState.slices={} — verifying the risk doc survives even when the last risk-bearing market is resolved. Both tests also verify minAssets/capacityIndicators recalculation. No additional risk doc retention assertions are missing.",
+      "confidence": 0.9,
+      "evidence": [
+        "tests/test_bayes_market_api.py:3081-3089 (direct: m2 retained in risk)",
+        "tests/test_bayes_market_api.py:8160-8179 (HTTP: empty markets/slices, risk doc persists)",
+        "tests/test_bayes_market_api.py:3090 (direct: m2|yes retained in exposure)",
+        "tests/test_bayes_market_api.py:8182 (HTTP: m2|yes retained in exposure)"
+      ],
+      "uncertainty": "None — both scenarios (multi-market retention and single-risk-market cleanup) are covered."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes, the HTTP-layer test has a clear event payload assertion gap. The direct-layer test (lines 3092-3130) asserts ALL event payload fields: eventType, resolution.outcomeId, resolution.finalProbabilities, resolution.resolvedAt, effects.marginalDelta (full array), effects.assetDelta, pricing (cost=0, fee=0), and replayStateHash. The HTTP-layer test (lines 8183-8195) only asserts: resolution.resolvedAt (via exposure updatedAt comparison) and effects.assetDelta. Missing from HTTP: marginalDelta, pricing, replayStateHash, resolution.outcomeId, resolution.finalProbabilities, eventType. This should be expanded for parity.",
+      "confidence": 0.95,
+      "evidence": [
+        "tests/test_bayes_market_api.py:3092-3130 (direct: full event payload assertions)",
+        "tests/test_bayes_market_api.py:8183-8195 (HTTP: only resolvedAt and assetDelta checked)",
+        "backend/server.py:3812-3854 (build_market_resolution_acceptance_response defines full payload)"
+      ],
+      "uncertainty": "None — the gap is clearly visible by comparing the two test methods line-by-line."
+    },
+    {
+      "question_id": "q3",
+      "answer": "The HTTP test already effectively covers this scenario. In test_market_resolve_http_settles_account_exposure (line 8091), the account has a probability edit only on m1, and event trades on m1 and m2. Since event trades do NOT create ACCOUNT_RISK entries (confirmed: server.py lines 4275-4281 call sync_account_exposure_state, not sync_account_risk_state), m1 is the ONLY market in ACCOUNT_RISK. After resolving m1, the test verifies markets={} and slices={}. There's also test_market_resolution_prunes_last_live_exposure (line 3150) which covers single-market event-trade-only resolution where ACCOUNT_EXPOSURE is entirely pruned. A standalone single-market test could be clearer, but the gap is already functionally covered.",
+      "confidence": 0.85,
+      "evidence": [
+        "tests/test_bayes_market_api.py:8091-8107 (HTTP setup: only m1 has prob edit = only m1 in risk)",
+        "tests/test_bayes_market_api.py:8172-8179 (HTTP: markets={}, slices={} after resolving sole risk market)",
+        "tests/test_bayes_market_api.py:3150-3196 (direct: single event-trade, exposure pruned entirely)",
+        "backend/server.py:4275-4281 (event trades skip sync_account_risk_state)"
+      ],
+      "uncertainty": "The HTTP test mixes concerns (multi-market exposure with single-market risk). A dedicated single-market test would be more explicit, but the functional coverage exists."
+    },
+    {
+      "question_id": "q4",
+      "answer": "The closed-market test (line 3198-3216) is intentionally minimal and appropriately so. It sets MARKETS['m1']['status']='closed' directly without creating any orders/risk/exposure first, then resolves. Since there are no positions to settle, there are no settlement effects (assetDelta would be empty, no lmsrState to clean, no exposure to prune). The test verifies the status transition closed→resolved works and the market metadata is correct. Expanding it to verify settlement semantics would require adding order/risk setup before the status override, which would make it a different test entirely. The existing test is correct for its purpose: proving closed markets can be resolved.",
+      "confidence": 0.9,
+      "evidence": [
+        "tests/test_bayes_market_api.py:3198-3216 (closed market test: no orders created, just status override)",
+        "tests/test_bayes_market_api.py:3199 (server.MARKETS['m1']['status'] = 'closed' — direct mutation, no setup)",
+        "backend/server.py:3692-3735 (settle_market_account_risk: iterates ACCOUNT_RISK, empty if no orders)"
+      ],
+      "uncertainty": "One could argue a combined test (create orders → close → resolve → verify settlement) adds value, but that's a new test case, not an expansion of the existing one."
+    },
+    {
+      "question_id": "q5",
+      "answer": "The idempotent replay test (lines 3239-3256) only verifies eventId, commandId, meta.replayed=true, and counts (1 command, 1 event). It does NOT compare first_payload vs second_payload for full body equality. The replay should return the same event, so comparing at least the event payload fields (resolution, effects, pricing, replayStateHash) between first and replayed responses would strengthen the assertion. However, the test's primary goal is cross-shape idempotency (legacy outcomeId body vs finalProbabilities body), so response bodies may structurally differ in the request echo. The event payload itself should be identical since it's replayed from storage.",
+      "confidence": 0.85,
+      "evidence": [
+        "tests/test_bayes_market_api.py:3250-3256 (only checks IDs and counts)",
+        "tests/test_bayes_market_api.py:3247-3248 (two different body shapes, same idempotency key)"
+      ],
+      "uncertainty": "Need to verify whether replayed responses preserve the exact same payload structure or if the response envelope differs (e.g. request echo). The event payload in EVENTS should be identical."
+    },
+    {
+      "question_id": "q6",
+      "answer": "Confirmed: there is NO direct-layer test for already-resolved market rejection. The HTTP test test_market_resolve_http_rejects_already_resolved_market (line 8051) covers 409/market_already_resolved via self.request() (HTTP layer). Searching for 'market_already_resolved' finds only line 8059. No direct-layer test uses route_request() to resolve an already-resolved market and assert the 409/market_already_resolved ApiError. This is a genuine coverage gap — the direct layer tests all resolve m1 (active), never attempting to resolve m3 (pre-resolved) via route_request.",
+      "confidence": 0.95,
+      "evidence": [
+        "tests/test_bayes_market_api.py:8051-8066 (HTTP: only test for already-resolved rejection)",
+        "grep 'market_already_resolved' → only line 8059",
+        "grep 'already.resolved' → only lines 8051, 8059"
+      ],
+      "uncertainty": "None — the gap is confirmed by exhaustive search."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Task scope is test-only. No server.py changes needed."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Contract docs (t544, t586) define the expected event payload fields. Server implementation matches. Tests can assert against the frozen contract."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Event trades call sync_account_exposure_state() (line 4280), not sync_account_risk_state(). ProbabilityEdit calls sync_account_risk_state() (line 4181). This explains why HTTP test shows markets={} after resolving m1 despite m2 having an event trade — m2 never entered ACCOUNT_RISK. The HTTP test assertions at lines 8172-8179 are correct."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "All test changes confined to tests/test_bayes_market_api.py."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Existing helpers (build_market_resolution_body, snapshot_domain_state, etc.) are sufficient. No new helpers needed — the missing assertions use the same patterns already in the direct-layer test."
+    }
+  ],
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.85,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All 6 questions answered with confidence >= 0.85. No answers below 0.7. The gaps are clearly identified: (1) HTTP event payload parity (q2, missing marginalDelta/pricing/replayStateHash/resolution fields), (2) direct-layer already-resolved rejection test (q6, missing entirely), (3) optional idempotency payload comparison (q5, minor strengthening). All work is in a single file following established patterns. No research gaps block implementation."
+  },
+  "spawn_children": false,
+  "children": []
+}
