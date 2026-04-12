@@ -1,0 +1,113 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "ProbabilityEdit impactScore IS in currency-like units and CAN reasonably be treated as cost basis. The function lmsr_expected_edit_cost (lmsr.py:148-161) computes liquidity × KL_divergence(updated || previous). Since liquidity is in currency units and KL divergence is dimensionless (nats), the product is in currency units — it represents the LMSR market maker's cost to move probabilities. This is the same unit space as EventTrade.notional (size × price). However, server.py annotates impactScore as 'informational, not used for solvency'. Recommendation: follow plan decision d2 and include impactScore in cost basis. It's semantically valid (represents real economic cost of probability edits) though it's an approximation. For ProbabilityEdit orders, we need to attribute the impactScore to specific outcomes — the cost can be split proportionally across outcomes whose probabilities changed, or attributed to the outcome that was the 'target' of the edit.",
+      "confidence": 0.8,
+      "evidence": [
+        "backend/lmsr.py:148-161 (lmsr_expected_edit_cost function)",
+        "backend/server.py:3171 (impactScore assignment in create_probability_edit_order)",
+        "backend/server.py:3185 (round_risk_value on impactScore)",
+        "backend/server.py:3188-3206 (ProbabilityEdit order fields include impactScore)",
+        "tests/test_bayes_market_lmsr.py:75-86 (test confirms impactScore = liquidity × KL divergence)"
+      ],
+      "uncertainty": "How to attribute ProbabilityEdit cost to specific outcomes. The order has previousMarginals and newMarginals but no single targetOutcomeId. May need to split cost proportionally or treat the whole impactScore as the cost for the outcome whose probability increased most."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Yes, realized P&L must be reconstructed from ORDERS history. Orders are PRESERVED after market resolution — they are never deleted (only in full reset at line 415). The settlement value for each outcome is available from market['resolutionProbabilities'] (e.g., {'yes': 0.0, 'no': 1.0} for m3). The winning outcome gets value 1.0 per unit of position, losing outcomes get 0.0. To compute realized P&L: (1) scan ORDERS for all orders with matching marketId+accountId, (2) for EventTrade orders, accumulate net position per outcome (buy = +size, sell = -size) and cost basis (sum of notional for buys, subtract for sells), (3) for each outcome, realized P&L = (netSize × settlementPrice) - costBasis, where settlementPrice comes from market['resolutionProbabilities'][outcomeId]. Important caveat: m3 starts resolved with ORDERS dict empty, so there's no pre-seeded order history to test against.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:264 (ORDERS dict, empty at init)",
+        "backend/server.py:1642-1691 (settle_market_account_exposure removes positions but not orders)",
+        "backend/server.py:3894-3897 (resolution, resolutionProbabilities, marginals set on resolve)",
+        "backend/server.py:182-199 (m3 initial state: resolved, resolution='no')",
+        "backend/server.py:415 (ORDERS.clear only in full reset)"
+      ],
+      "uncertainty": "None significant — the mechanism is clear. The only nuance is handling ProbabilityEdit orders in resolved markets (do they affect position/cost basis?)."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Response schema should use camelCase (matching all existing API responses) with a meta wrapper. Recommended shape for per-market P&L: { 'pnl': { 'marketId': str, 'accountId': str, 'outcomes': { '<outcomeId>': { 'outcomeId': str, 'netSize': float, 'costBasis': float, 'currentValue': float, 'unrealizedPnl': float, 'realizedPnl': float, 'totalPnl': float } }, 'summary': { 'totalCostBasis': float, 'totalCurrentValue': float, 'totalUnrealizedPnl': float, 'totalRealizedPnl': float, 'totalPnl': float } }, 'meta': { 'timestamp': str } }. For account-level: { 'pnl': { 'accountId': str, 'markets': [ { marketId, outcomes, summary } ], 'summary': { totalPnl, totalUnrealizedPnl, totalRealizedPnl } }, 'meta': { 'timestamp': str } }. This follows existing patterns: GET endpoints return data+meta for lists, entity+meta for single items.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:715-719 (make_meta function)",
+        "backend/server.py:806-807 (list response pattern: data+meta)",
+        "backend/server.py:932-941 (error_payload with error+meta)",
+        "backend/server.py:4636 (mutation response: order+result+meta)",
+        "backend/server.py:2039-2054 (GET exposure response pattern)"
+      ],
+      "uncertainty": "Whether the top-level key should be 'pnl' or 'data'. Existing GET endpoints use various top-level keys ('data' for lists, specific entity names for single items). 'pnl' seems most descriptive and consistent."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Return zero values, NOT 404. Rationale: P&L is a computed view over ORDERS history, not a live projection like ACCOUNT_EXPOSURE. An account may have had orders in a market that all netted out, or the market resolved with zero P&L — returning 404 would incorrectly imply the account never participated. However, if the account has literally zero orders in the given market (never traded there), then 404 with 'no_orders_found' is appropriate to distinguish 'never participated' from 'participated but zero P&L'. This differs from exposure/risk endpoints because those are live projection models where absence truly means 'not found'.",
+      "confidence": 0.75,
+      "evidence": [
+        "backend/server.py:2039-2054 (get_account_exposure returns 404 for missing accounts)",
+        "backend/server.py:2057-2072 (get_account_positions returns 404 for missing/pruned)",
+        "backend/server.py:2075+ (get_account_risk returns 404 for missing)"
+      ],
+      "uncertainty": "The exact threshold — should we return 404 only when zero orders exist, or also when no EventTrade orders exist (only ProbabilityEdits)? Leaning toward 404 only when zero orders of any type exist for that account+market combination."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Aggregate across ALL markets including resolved ones. The plan explicitly says 'aggregated across all markets'. This gives users lifetime P&L visibility: realized P&L from resolved markets plus unrealized P&L from active markets. Implementation: scan all ORDERS, group by marketId, then for each market check its status. Active markets contribute unrealized P&L (using current marginals). Resolved markets contribute realized P&L (using resolutionProbabilities). Both are summed for totalPnl. This is the most useful view since hiding resolved market P&L would mean users can't see their historical performance.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:262 (MARKETS dict with all markets including resolved)",
+        "backend/server.py:264 (ORDERS dict preserves all orders)",
+        "backend/server.py:182-199 (m3 resolved market still in MARKETS)",
+        ".fleet/tasks/uy1/plan.json (decision d3: 'aggregated across all markets')"
+      ],
+      "uncertainty": "Performance concern: scanning all orders for all markets on every request. But since this is a query-time computation and the dataset is in-memory, it should be fine for the expected scale."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No materialized P&L state exists. ORDERS dict preserves all order history. Query-time computation by scanning ORDERS is the right approach. Cost basis for EventTrade = sum of notional (size × price) per side."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.75,
+      "impact": "impactScore IS in currency-like units (liquidity × KL divergence), making it semantically valid as cost basis. However, server.py marks it as 'informational'. The plan decision d2 explicitly includes it. We should follow the plan but note that ProbabilityEdit cost attribution to specific outcomes needs design (use proportional split based on marginal changes). If this proves too complex, a fallback is to only count EventTrade orders for cost basis."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Formulas are sound. Unrealized P&L = (netSize × currentMarginal) - costBasis for active markets. Realized P&L = (netSize × settlementPrice) - costBasis for resolved markets. Settlement prices come from market['resolutionProbabilities'] (1.0 for winner, 0.0 for losers). Need to handle the sign correctly: buy increases position (positive netSize), sell decreases it."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Route matching with len(parts)==6 and parts pattern ['v1','markets',marketId,'accounts',accountId,'pnl'] will work. The existing route_request function handles variable path lengths. Also need len(parts)==4 route for account-level: ['v1','accounts',accountId,'pnl']."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "All API responses use camelCase (accountId, marketId, netSize, lastTradePrice, etc.). Meta wrapper via make_meta() is used everywhere. P&L endpoint should follow same conventions: costBasis, currentValue, unrealizedPnl, realizedPnl, totalPnl."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Orders persist in ORDERS dict after resolution. Positions are pruned from ACCOUNT_EXPOSURE by settle_market_account_exposure (line 1642). Reconstruction from ORDERS is the only way to get historical position data for resolved markets. Must filter ORDERS by accountId + marketId and replay buy/sell to compute net position and cost basis."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.6,
+      "impact": "m3 starts resolved with EMPTY ORDERS dict — no pre-seeded order history exists. Cannot simply query P&L for m3 out of the box. Tests for realized P&L need one of: (1) manually seed ORDERS with synthetic historical orders for m3, (2) create trades on an active market (m1/m2), resolve it, then check realized P&L, or (3) use the reset function and build up state from scratch. Option 2 is cleanest as it tests the full flow. Option 1 is faster but couples tests to internal data structures."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

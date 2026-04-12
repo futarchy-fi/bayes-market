@@ -1,6 +1,7 @@
 import { useSession } from "@/features/session/context";
 import { BayesApiError } from "@/lib/api/client";
 import { useAccountExposure, useAccountRisk, useMarkets } from "@/lib/query/hooks";
+import { AccountPnL } from "@/features/analytics";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { Link } from "react-router-dom";
 import { formatProbability, formatRelativeTime } from "@/lib/utils/format";
@@ -100,6 +101,8 @@ export default function Portfolio() {
       {riskError && (
         <ErrorMessage message={getErrorMessage(riskError, "Unable to load risk metrics.")} />
       )}
+
+      <AccountPnL accountId={session.accountId} />
 
       <div>
         <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--space-sm)" }}>Live Outcome Holdings</h2>

@@ -1,0 +1,173 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "YES — the MarketAnalyticsResponse TypeScript type accurately matches the backend JSON response. The backend analytics endpoint (get_market_analytics at backend/server.py:2624) returns a FLAT, snake_case response: { market_id, total_volume, trade_count, price_history, top_traders, interval, meta }. The frontend type (frontend/src/lib/api/types.ts:100-108) mirrors this exactly with snake_case fields. This is intentionally different from the P&L endpoints which use camelCase with { pnl: {...}, meta: {...} } wrappers. The existing useMarketAnalytics hook and getMarketAnalytics client function are correctly typed.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:2716-2724 (response construction with snake_case keys)",
+        "frontend/src/lib/api/types.ts:100-108 (MarketAnalyticsResponse interface)",
+        "frontend/src/lib/api/types.ts:89-92 (PriceHistoryEntry with timestamp + marginals)",
+        "frontend/src/lib/api/types.ts:94-98 (TopTrader with account_id, volume, trade_count)",
+        "frontend/src/lib/api/client.ts:200-210 (getMarketAnalytics function)"
+      ],
+      "uncertainty": "Haven't run the endpoint end-to-end to confirm runtime behavior matches code, but the type definition directly mirrors the Python dict construction."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Market P&L (GET /v1/markets/{marketId}/accounts/{accountId}/pnl) returns: { pnl: { marketId: string, outcomes: { [outcomeId]: { outcomeId, netSize, costBasis, currentValue, unrealizedPnl, realizedPnl, totalPnl } }, summary: { totalCostBasis, totalCurrentValue, totalUnrealizedPnl, totalRealizedPnl, totalPnl } }, meta: { timestamp } }. Account P&L (GET /v1/accounts/{accountId}/pnl) returns: { pnl: { accountId: string, markets: [{ marketId, outcomes: {...}, summary: {...} }], summary: { totalCostBasis, totalCurrentValue, totalUnrealizedPnl, totalRealizedPnl, totalPnl } }, meta: { timestamp } }. ALL fields use camelCase. Wrapper is { pnl: {...}, meta: {...} }. Per-outcome data is an OBJECT keyed by outcomeId (not an array). Values are rounded to 6 decimal places.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:2202-2220 (get_market_account_pnl handler)",
+        "backend/server.py:2223-2276 (get_account_pnl handler)",
+        "backend/server.py:2174-2182 (outcome-level fields in result_outcomes dict)",
+        "backend/server.py:2192-2198 (summary fields construction)",
+        "backend/server.py:2075-2129 (compute_orders_pnl returns dict[str, dict[str, float]])",
+        "backend/server.py:715-719 (make_meta function)",
+        "tests/test_bayes_market_api.py:9520-9707 (P&L test coverage confirming shapes)"
+      ],
+      "uncertainty": "None — comprehensive backend code and test coverage confirm the response shapes."
+    },
+    {
+      "question_id": "q3",
+      "answer": "MarketDetail renders 9 sections in order: Header → ProbabilityBar → PositionCard → ResolveMarketPanel → AssumptionPanel → EventTradePanel → DiscussionThread → BayesNetGraph → EventJournal → JunctionTreePanel. The MarketAnalytics section should go BETWEEN ProbabilityBar and PositionCard — this places analytics data (price history, volume) right after the probability overview and before position/trading decisions, matching the user flow of 'see probabilities → see analytics context → check position → trade'. PnLSummary should go immediately after PositionCard since it extends position information with P&L data. Both should be collapsible sections. The existing collapsible pattern is Event Journal rows (useState toggle with ▶/▼ triangles), which can be adapted for section-level collapsibility.",
+      "confidence": 0.80,
+      "evidence": [
+        "frontend/src/routes/MarketDetail.tsx:38-97 (full component layout)",
+        "frontend/src/routes/MarketDetail.tsx:51 (ProbabilityBar position)",
+        "frontend/src/routes/MarketDetail.tsx:53 (PositionCard position)",
+        "frontend/src/routes/MarketDetail.tsx:63 (EventTradePanel position)",
+        "frontend/src/routes/MarketDetail.tsx:150-179 (EventRow collapsible pattern)"
+      ],
+      "uncertainty": "This is a design recommendation. The plan says 'collapsible section' but doesn't specify exact placement. Placing after ProbabilityBar seems natural but could also go after PositionCard if analytics is seen as secondary to position info."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Three distinct states need handling: (1) No accountId configured → don't render the PnLSummary component at all (guard with enabled: false on the hook). (2) Never traded (backend returns 404 with error code 'no_orders_found') → show a 'No trades yet' placeholder with muted text. (3) Traded but zero P&L (200 with zero values) → show the full P&L display with zero values. The backend explicitly differentiates: 404 means no orders exist at all, 200 with zeros means orders exist but net to zero. The existing BayesApiError class (client.ts:10-27) captures the error code, enabling the component to distinguish 404/no_orders_found from other errors.",
+      "confidence": 0.90,
+      "evidence": [
+        "backend/server.py:2208-2215 (market P&L returns 404 when compute_market_pnl returns None)",
+        "backend/server.py:2230-2236 (account P&L returns 404 for no markets with orders)",
+        "backend/server.py:2255-2261 (account P&L returns 404 when no P&L could be computed)",
+        "frontend/src/lib/api/client.ts:10-27 (BayesApiError class with code field)",
+        "tests/test_bayes_market_api.py:9609-9625 (tests confirming 404 for no orders)"
+      ],
+      "uncertainty": "The UX decision (placeholder vs hidden) is a judgment call. Showing 'No trades yet' is more informative than hiding entirely, as it confirms the system is working but the user hasn't traded."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Multi-line chart (one line per outcome) is the correct approach. The analytics endpoint returns price_history as an array of { timestamp, marginals: Record<string, number> } where marginals contains ALL outcome probabilities at each timestamp (e.g., { yes: 0.65, no: 0.35 }). A multi-line chart naturally represents this data: each outcome gets its own line showing probability over time. For binary markets this is 2 lines; for multi-outcome markets it scales. Recharts LineChart supports multiple <Line> elements with different dataKeys. Color assignment should use a fixed palette derived from CSS variables (--color-primary, --color-success, --color-warning, etc.) mapped by outcome index. A legend is needed to identify outcome lines.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/server.py:2658-2692 (price_history bucket construction with marginals)",
+        "backend/server.py:2690 (each bucket: { timestamp: bucket_key, marginals: marginals })",
+        "frontend/src/lib/api/types.ts:89-92 (PriceHistoryEntry: { timestamp: string, marginals: Record<string, number> })",
+        "backend/server.py:159,176,194 (sample marginals: { yes: 0.65, no: 0.35 })"
+      ],
+      "uncertainty": "For markets with many outcomes (5+), the chart could become cluttered. May need to limit displayed outcomes or add a toggle. Binary markets (the common case) are clean with 2 lines."
+    },
+    {
+      "question_id": "q6",
+      "answer": "Recommended: 30s refetchInterval for P&L hooks, 30s for analytics hooks. Rationale: P&L data only changes when trades execute, so aggressive polling wastes bandwidth. Existing patterns: useMarkets/useMarket poll at 5s (they show live market state), useHealth at 10s. P&L and analytics are less time-sensitive — 30s provides reasonable freshness without overloading. The parent plan suggests '10-30s' range. useMarketAnalytics currently has NO polling and should be updated to 30s. Both useMarketPnl and useAccountPnl (new hooks) should use 30s. This can be made configurable via a refetchInterval option on the hooks if needed.",
+      "confidence": 0.80,
+      "evidence": [
+        "frontend/src/lib/query/hooks.ts:278 (useMarkets: refetchInterval 5000)",
+        "frontend/src/lib/query/hooks.ts:286 (useMarket: refetchInterval 5000)",
+        "frontend/src/lib/query/hooks.ts:326 (useHealth: refetchInterval 10000)",
+        "frontend/src/lib/query/hooks.ts:313-320 (useMarketAnalytics: no polling)"
+      ],
+      "uncertainty": "30s is a design choice. Could be 15s for more responsiveness or 60s for less load. The right value depends on expected trading frequency and backend capacity."
+    },
+    {
+      "question_id": "q7",
+      "answer": "Use the known hex values from CSS variables directly as recharts props. The CSS variables are defined in frontend/src/styles/globals.css with specific hex values: --color-primary (#6366f1), --color-success (#22c55e), --color-warning (#eab308), --color-danger (#ef4444), --color-info (#3b82f6), --color-text (#e4e5ea), --color-text-muted (#8b8fa3), --color-bg-surface (#1a1d27), --color-border (#2a2e3d). Define a CHART_COLORS constant array using these hex values for outcome lines. Use --color-bg-surface for chart background, --color-border for grid lines, --color-text-muted for axis labels. This avoids runtime getComputedStyle calls while maintaining visual consistency. If CSS variable values ever change, the chart colors would need manual sync — but this matches the existing inline-style pattern in the codebase.",
+      "confidence": 0.90,
+      "evidence": [
+        "frontend/src/styles/globals.css:1-28 (CSS variable definitions with hex values)",
+        "frontend/src/components/ui/StatusBadge.tsx:6-17 (inline style pattern with var())",
+        "frontend/src/app/App.tsx:48-63 (CSSProperties pattern)"
+      ],
+      "uncertainty": "Could alternatively use getComputedStyle(document.documentElement).getPropertyValue('--color-primary') at component mount. Duplicating hex values is simpler but creates a sync risk. Given the small number of colors and the inline-style convention, direct hex values are pragmatic."
+    },
+    {
+      "question_id": "q8",
+      "answer": "Yes, there are 10 existing test files under frontend/src/__tests__/ using Vitest + React Testing Library. Tests exist for Portfolio, MarketDetail, EventTradePanel, CreateMarketForm, DiscussionThread, MarketList, System, ErrorBoundary, format utils, and the api-client. The test pattern uses vi.mock() for API/router mocking, a renderWithProviders helper (wraps with QueryClientProvider + SessionProvider + MemoryRouter), and @testing-library/jest-dom matchers. Given this established pattern, new analytics components SHOULD have test coverage following the same pattern. However, the parent plan's step 9 covers 'integration tests' which may be backend-focused. Recommendation: write basic component tests alongside implementation (rendering, loading states, error states) and defer complex integration tests to step 9.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/__tests__/Portfolio.test.tsx (Portfolio component test pattern)",
+        "frontend/src/__tests__/MarketDetail.test.tsx (MarketDetail test pattern)",
+        "frontend/src/__tests__/EventTradePanel.test.tsx (trading component test)",
+        "frontend/src/__tests__/api-client.test.ts (API client unit tests)",
+        "frontend/src/__tests__/helpers.tsx:27-32 (renderWithProviders helper)",
+        "frontend/src/__tests__/setup.ts:1 (test setup imports jest-dom/vitest)",
+        "frontend/vitest.config.ts:1-17 (Vitest config with jsdom environment)"
+      ],
+      "uncertainty": "Whether step 9 expects frontend component tests or only backend integration tests is ambiguous. Writing basic tests alongside components is low-risk and follows the established pattern."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "recharts is specified in the parent plan and is not yet installed (not in package.json). Will need `npm install recharts` as first step. No alternative library needed."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Confirmed: all components use inline React.CSSProperties with CSS variable references (var(--color-primary) etc). No CSS modules, Tailwind, or styled-components in the codebase. New components should follow this pattern exactly."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.90,
+      "impact": "No features/analytics/ directory exists yet. Existing domains: assumptions, graph, market, session, trading. Creating features/analytics/ follows the pattern. Components could alternatively go in features/market/ but analytics is a distinct domain with its own types and hooks."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.90,
+      "impact": "The useMarketAnalytics hook (hooks.ts:313-320) and getMarketAnalytics client (client.ts:200-210) are correctly wired. The MarketAnalyticsResponse type matches the backend response. Only addition needed: refetchInterval for polling. No P&L hooks/client functions exist yet — those must be created."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "No new routes needed. MarketDetail (routes/MarketDetail.tsx) will embed analytics and market P&L. Portfolio (routes/Portfolio.tsx) will embed account-level P&L. Current routes already cover /markets/:marketId and /portfolio."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "P&L endpoints confirmed in backend/server.py. Response uses camelCase keys (netSize, costBasis, unrealizedPnl) with { pnl: {...}, meta: {...} } wrapper. Per-outcome data is object keyed by outcomeId. TypeScript types must match this exact shape."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Multi-line chart is appropriate — analytics returns marginals with all outcome probabilities per timestamp. Each outcome gets its own line. For binary markets (most common), this is clean 2-line chart. May need outcome limit for markets with many outcomes."
+    },
+    {
+      "assumption_id": "a8",
+      "verdict": "CORRECT",
+      "confidence": 0.90,
+      "impact": "Button group with useState for interval selection matches the inline-style pattern. Valid intervals from backend: 1h, 6h, 1d, 7d. Simple horizontal button row with active state highlighting."
+    },
+    {
+      "assumption_id": "a9",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.60,
+      "impact": "10 existing test files establish a strong testing pattern (Vitest + RTL). Whether step 9 includes frontend tests is ambiguous. Recommendation: write basic component tests alongside implementation to match the established pattern, and defer comprehensive integration tests to step 9."
+    },
+    {
+      "assumption_id": "a10",
+      "verdict": "CORRECT",
+      "confidence": 0.80,
+      "impact": "30s refetchInterval is reasonable. Existing polling: useMarkets 5s, useMarket 5s, useHealth 10s. P&L and analytics are less time-sensitive. 30s balances freshness with bandwidth. useMarketAnalytics should also get 30s polling added."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

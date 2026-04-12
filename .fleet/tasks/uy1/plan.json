@@ -1,0 +1,128 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Embed analytics into existing pages: per-market analytics (price history, volume, top traders) as a collapsible section in MarketDetail; account-level P&L as a section in Portfolio. No new top-level route.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "New /analytics top-level route — fragments UX, adds nav complexity for MVP",
+        "New /markets/:id/analytics sub-route — unnecessary indirection when MarketDetail already shows market data"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Compute cost basis by aggregating from ORDERS at query time. EventTrade.notional for directional trades, ProbabilityEdit.impactScore for LMSR edits. No schema changes to position state.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Add running cost_basis field to position projection — requires modifying sync_account_exposure_state and backfilling existing positions, too invasive for first iteration"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Provide both per-market and per-account P&L, each with unrealized and realized components. Two endpoints: GET /v1/accounts/{id}/pnl and GET /v1/markets/{id}/accounts/{accountId}/pnl.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Account-level only — loses per-market granularity that's natural for the MarketDetail view",
+        "Per-market only — forces frontend to aggregate manually for Portfolio"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Use recharts for price history and volume charts. It is React-native, composable, tree-shakeable (~40KB gzipped), and avoids building time-series axes/tooltips/formatting from scratch.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Plain HTML/CSS — time-series charts need axes, tooltips, responsive sizing; disproportionate effort vs. library",
+        "lightweight-charts (TradingView) — heavier, less React-native",
+        "SVG polyline sparklines — no interactivity (tooltips, hover)"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Reuse existing GET /v1/markets/{id}/analytics for price_history, volume, top_traders. Only new backend work is P&L endpoints.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "New cross-market analytics endpoint — out of scope for MVP, System page already shows aggregate stats"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Use polling via React Query (10-30s refetchInterval) for analytics data. No WebSocket extension.",
+      "based_on": ["q6"],
+      "alternatives_rejected": [
+        "WebSocket real-time updates — analytics data is aggregated/historical, doesn't need sub-second updates"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Backend: Implement P&L computation helper that calculates cost basis from ORDERS (EventTrade.notional for buys/sells, ProbabilityEdit.impactScore for LMSR edits) and computes unrealized P&L (netSize * currentMarginal - costBasis) and realized P&L (settlementValue - costBasis for resolved markets).",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Backend: Add GET /v1/markets/{marketId}/accounts/{accountId}/pnl endpoint returning per-market P&L breakdown (unrealized, realized, total, cost_basis, current_value) per outcome.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Backend: Add GET /v1/accounts/{accountId}/pnl endpoint returning account-level P&L aggregated across all markets (per-market breakdown + totals).",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Frontend: Install recharts dependency (npm install recharts).",
+      "depends_on": []
+    },
+    {
+      "step": 5,
+      "task": "Frontend: Add API client functions and React Query hooks for the two new P&L endpoints (useMarketPnl, useAccountPnl) and ensure useMarketAnalytics is wired up.",
+      "depends_on": [4]
+    },
+    {
+      "step": 6,
+      "task": "Frontend: Build MarketAnalytics component with price history line chart (recharts LineChart), volume bar chart, and top traders table. Render as a collapsible section in MarketDetail page.",
+      "depends_on": [5]
+    },
+    {
+      "step": 7,
+      "task": "Frontend: Build PnLSummary component showing per-market P&L (unrealized, realized, total) and integrate into MarketDetail page alongside the analytics section.",
+      "depends_on": [5]
+    },
+    {
+      "step": 8,
+      "task": "Frontend: Build AccountPnL component showing account-wide P&L with per-market breakdown table and totals. Integrate into Portfolio page.",
+      "depends_on": [5]
+    },
+    {
+      "step": 9,
+      "task": "Integration test: Verify P&L endpoints return correct values using resolved market m3 as test case for realized P&L, and active markets for unrealized P&L.",
+      "depends_on": [3]
+    },
+    {
+      "step": 10,
+      "task": "End-to-end verification: Confirm MarketDetail shows analytics section with charts and P&L, Portfolio shows account P&L, polling refreshes data correctly.",
+      "depends_on": [6, 7, 8, 9]
+    }
+  ],
+  "spawn_children": true,
+  "children": [
+    {
+      "id": "uy1-backend-pnl",
+      "title": "Backend P&L Endpoints",
+      "description": "Implement P&L computation helper and two new REST endpoints: GET /v1/markets/{marketId}/accounts/{accountId}/pnl (per-market P&L) and GET /v1/accounts/{accountId}/pnl (account-level P&L). Cost basis derived from ORDERS aggregation. Covers steps 1-3 and 9."
+    },
+    {
+      "id": "uy1-frontend-analytics",
+      "title": "Frontend Analytics Dashboard Components",
+      "description": "Install recharts, add API hooks for P&L endpoints, build MarketAnalytics component (price history chart, volume chart, top traders), PnLSummary component (per-market P&L), and AccountPnL component (account-wide P&L in Portfolio). Integrate into MarketDetail and Portfolio pages. Covers steps 4-8 and 10."
+    }
+  ]
+}

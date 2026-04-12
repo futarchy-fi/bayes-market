@@ -201,6 +201,7 @@ INITIAL_MARKETS: dict[str, dict[str, Any]] = {
 }
 
 ALLOWED_MARKET_STATUSES = frozenset({"active", "resolved", "closed", "draft"})
+ALLOWED_MARKET_SORTS = frozenset({"volume", "liquidity", "created"})
 MARKET_SUMMARY_FIELDS = (
     "id",
     "title",
@@ -2171,6 +2172,210 @@ def get_account_positions(account_id: str) -> tuple[dict[str, Any], int]:
     }, 200
 
 
+def compute_orders_pnl(market_id: str, account_id: str) -> dict[str, dict[str, float]]:
+    """Scan ORDERS and accumulate per-outcome net_size and cost_basis for one account in one market.
+
+    For EventTrade orders, notional is added (buy) or subtracted (sell) from cost basis,
+    and size is added/subtracted from net_size for the target outcome.
+
+    For ProbabilityEdit orders, impactScore is attributed proportionally across outcomes
+    based on absolute marginal changes.
+
+    Returns a dict keyed by outcome_id with {"netSize": float, "costBasis": float}.
+    """
+    outcomes: dict[str, dict[str, float]] = {}
+
+    for order in ORDERS.values():
+        if str(order.get("marketId")) != market_id or str(order.get("accountId")) != account_id:
+            continue
+
+        order_type = str(order.get("type", ""))
+
+        if order_type == "EventTrade":
+            outcome_id = str(order["targetOutcomeId"])
+            if outcome_id not in outcomes:
+                outcomes[outcome_id] = {"netSize": 0.0, "costBasis": 0.0}
+
+            size = float(order["size"])
+            notional = float(order["notional"])
+            side = str(order["side"])
+
+            if side == "buy":
+                outcomes[outcome_id]["netSize"] += size
+                outcomes[outcome_id]["costBasis"] += notional
+            elif side == "sell":
+                outcomes[outcome_id]["netSize"] -= size
+                outcomes[outcome_id]["costBasis"] -= notional
+
+        elif order_type == "ProbabilityEdit":
+            impact_score = float(order["impactScore"])
+            previous = order["previousMarginals"]
+            new_marginals = order["newMarginals"]
+
+            abs_changes: dict[str, float] = {}
+            total_abs_change = 0.0
+            for oid in previous:
+                change = abs(float(new_marginals.get(oid, 0.0)) - float(previous.get(oid, 0.0)))
+                abs_changes[oid] = change
+                total_abs_change += change
+
+            if total_abs_change > 0.0:
+                for oid, change in abs_changes.items():
+                    if change > 0.0:
+                        if oid not in outcomes:
+                            outcomes[oid] = {"netSize": 0.0, "costBasis": 0.0}
+                        outcomes[oid]["costBasis"] += impact_score * (change / total_abs_change)
+
+    return outcomes
+
+
+def compute_market_pnl(market_id: str, account_id: str) -> dict[str, Any] | None:
+    """Compute P&L for one account in one market.
+
+    Returns None if the account has zero orders in the market.
+    For active markets, uses current marginals for unrealized P&L.
+    For resolved markets, uses resolutionProbabilities for realized P&L.
+    """
+    market = MARKETS.get(market_id)
+    if market is None:
+        raise ApiError(404, "market_not_found", "Market not found", {"marketId": market_id})
+
+    per_outcome = compute_orders_pnl(market_id, account_id)
+    if not per_outcome:
+        return None
+
+    is_resolved = str(market.get("status")) == "resolved"
+    if is_resolved:
+        probabilities = market.get("resolutionProbabilities", {})
+    else:
+        probabilities = market.get("marginals", {})
+
+    result_outcomes: dict[str, dict[str, Any]] = {}
+    total_cost_basis = 0.0
+    total_current_value = 0.0
+    total_unrealized_pnl = 0.0
+    total_realized_pnl = 0.0
+
+    for outcome_id, data in per_outcome.items():
+        net_size = data["netSize"]
+        cost_basis = data["costBasis"]
+        probability = float(probabilities.get(outcome_id, 0.0))
+        current_value = net_size * probability
+
+        if is_resolved:
+            realized_pnl = current_value - cost_basis
+            unrealized_pnl = 0.0
+        else:
+            unrealized_pnl = current_value - cost_basis
+            realized_pnl = 0.0
+
+        outcome_total_pnl = realized_pnl + unrealized_pnl
+
+        result_outcomes[outcome_id] = {
+            "outcomeId": outcome_id,
+            "netSize": round_risk_value(net_size),
+            "costBasis": round_risk_value(cost_basis),
+            "currentValue": round_risk_value(current_value),
+            "unrealizedPnl": round_risk_value(unrealized_pnl),
+            "realizedPnl": round_risk_value(realized_pnl),
+            "totalPnl": round_risk_value(outcome_total_pnl),
+        }
+
+        total_cost_basis += cost_basis
+        total_current_value += current_value
+        total_unrealized_pnl += unrealized_pnl
+        total_realized_pnl += realized_pnl
+
+    return {
+        "marketId": market_id,
+        "outcomes": result_outcomes,
+        "summary": {
+            "totalCostBasis": round_risk_value(total_cost_basis),
+            "totalCurrentValue": round_risk_value(total_current_value),
+            "totalUnrealizedPnl": round_risk_value(total_unrealized_pnl),
+            "totalRealizedPnl": round_risk_value(total_realized_pnl),
+            "totalPnl": round_risk_value(total_unrealized_pnl + total_realized_pnl),
+        },
+    }
+
+
+def get_market_account_pnl(market_id: str, account_id: str) -> tuple[dict[str, Any], int]:
+    """Return P&L for one account in one market with per-outcome breakdown."""
+    market = MARKETS.get(market_id)
+    if market is None:
+        raise ApiError(404, "market_not_found", "Market not found", {"marketId": market_id})
+
+    pnl = compute_market_pnl(market_id, account_id)
+    if pnl is None:
+        raise ApiError(
+            404,
+            "no_orders_found",
+            "No orders found for this account in this market",
+            {"marketId": market_id, "accountId": account_id},
+        )
+
+    return {
+        "pnl": pnl,
+        "meta": make_meta(),
+    }, 200
+
+
+def get_account_pnl(account_id: str) -> tuple[dict[str, Any], int]:
+    """Return aggregate P&L for one account across all markets."""
+    account_market_ids: set[str] = set()
+    for order in ORDERS.values():
+        if str(order.get("accountId")) == account_id:
+            account_market_ids.add(str(order.get("marketId")))
+
+    if not account_market_ids:
+        raise ApiError(
+            404,
+            "no_orders_found",
+            "No orders found for this account",
+            {"accountId": account_id},
+        )
+
+    markets_pnl: list[dict[str, Any]] = []
+    total_cost_basis = 0.0
+    total_current_value = 0.0
+    total_unrealized_pnl = 0.0
+    total_realized_pnl = 0.0
+
+    for mid in sorted(account_market_ids):
+        market_pnl = compute_market_pnl(mid, account_id)
+        if market_pnl is None:
+            continue
+        markets_pnl.append(market_pnl)
+        summary = market_pnl["summary"]
+        total_cost_basis += float(summary["totalCostBasis"])
+        total_current_value += float(summary["totalCurrentValue"])
+        total_unrealized_pnl += float(summary["totalUnrealizedPnl"])
+        total_realized_pnl += float(summary["totalRealizedPnl"])
+
+    if not markets_pnl:
+        raise ApiError(
+            404,
+            "no_orders_found",
+            "No orders found for this account",
+            {"accountId": account_id},
+        )
+
+    return {
+        "pnl": {
+            "accountId": account_id,
+            "markets": markets_pnl,
+            "summary": {
+                "totalCostBasis": round_risk_value(total_cost_basis),
+                "totalCurrentValue": round_risk_value(total_current_value),
+                "totalUnrealizedPnl": round_risk_value(total_unrealized_pnl),
+                "totalRealizedPnl": round_risk_value(total_realized_pnl),
+                "totalPnl": round_risk_value(total_unrealized_pnl + total_realized_pnl),
+            },
+        },
+        "meta": make_meta(),
+    }, 200
+
+
 def get_account_risk(account_id: str) -> tuple[dict[str, Any], int]:
     """Return the read model for one account's current risk state."""
     account = ACCOUNT_RISK.get(account_id)
@@ -2211,7 +2416,8 @@ def get_account_risk(account_id: str) -> tuple[dict[str, Any], int]:
 
 
 def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
-    """Return the market collection, optionally filtered by status."""
+    """Return the market collection with optional status, sort, and search filters."""
+    # Parse status param
     statuses = query.get("status", [])
     if len(statuses) > 1:
         raise ApiError(
@@ -2220,30 +2426,80 @@ def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
             "status must be provided at most once",
             {"parameter": "status", "received": statuses},
         )
-
     status = statuses[0] if statuses else None
-    markets = list(MARKETS.values())
-    if status is not None:
-        if status not in ALLOWED_MARKET_STATUSES:
-            raise ApiError(
-                400,
-                "invalid_query",
-                "status must be one of the supported market states",
-                {"parameter": "status", "received": status, "allowed": sorted(ALLOWED_MARKET_STATUSES)},
-            )
+    status_all = status == "all"
+    if status_all:
+        status = None
+    elif status is not None and status not in ALLOWED_MARKET_STATUSES:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "status must be one of the supported market states",
+            {"parameter": "status", "received": status, "allowed": sorted(ALLOWED_MARKET_STATUSES | {"all"})},
+        )
+
+    # Parse sort param
+    sorts = query.get("sort", [])
+    if len(sorts) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "sort must be provided at most once",
+            {"parameter": "sort", "received": sorts},
+        )
+    sort = sorts[0] if sorts else None
+    if sort is not None and sort not in ALLOWED_MARKET_SORTS:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "sort must be one of the supported sort orders",
+            {"parameter": "sort", "received": sort, "allowed": sorted(ALLOWED_MARKET_SORTS)},
+        )
+
+    # Parse q (title search) param
+    queries = query.get("q", [])
+    if len(queries) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "q must be provided at most once",
+            {"parameter": "q", "received": queries},
+        )
+    title_query = queries[0].strip() if queries else None
+    if title_query == "":
+        title_query = None
+
     include_resolved = parse_boolean_query_param(query, "include_resolved", default=False)
 
-    effective_include_resolved = include_resolved or status == "resolved"
+    # Build result set
+    markets = list(MARKETS.values())
+    effective_include_resolved = include_resolved or status == "resolved" or status_all
     if not effective_include_resolved:
         markets = [market for market in markets if market["status"] != "resolved"]
     if status is not None:
         markets = [market for market in markets if market["status"] == status]
+    if title_query is not None:
+        needle = title_query.casefold()
+        markets = [market for market in markets if needle in str(market["title"]).casefold()]
+
+    # Apply sorting
+    if sort == "volume":
+        markets = sorted(markets, key=lambda m: float(m.get("volume", 0)), reverse=True)
+    elif sort == "liquidity":
+        markets = sorted(markets, key=lambda m: float(m.get("liquidity", 0)), reverse=True)
+    elif sort == "created":
+        markets = sorted(markets, key=lambda m: str(m.get("created_at", "")), reverse=True)
 
     summaries = [market_summary(market) for market in markets]
+    filters = {"status": status, "include_resolved": effective_include_resolved}
+    if sort:
+        filters["sort"] = sort
+    if title_query:
+        filters["q"] = title_query
     return {
         "markets": summaries,
         "count": len(summaries),
-        "meta": make_meta(filters={"status": status, "include_resolved": effective_include_resolved}),
+        "meta": make_meta(filters=filters),
     }, 200
 
 
@@ -4685,7 +4941,7 @@ def route_request(
         )
 
     parts = [part for part in path.split("/") if part]
-    if len(parts) == 4 and parts[:2] == ["v1", "accounts"] and parts[3] in {"risk", "exposure", "positions"}:
+    if len(parts) == 4 and parts[:2] == ["v1", "accounts"] and parts[3] in {"risk", "exposure", "positions", "pnl"}:
         account_id = parts[2]
         resource = parts[3]
         if method != "GET":
@@ -4699,6 +4955,8 @@ def route_request(
             return get_account_risk(account_id)
         if resource == "exposure":
             return get_account_exposure(account_id)
+        if resource == "pnl":
+            return get_account_pnl(account_id)
         return get_account_positions(account_id)
 
     if len(parts) >= 3 and parts[:2] == ["v1", "markets"]:
@@ -4843,6 +5101,16 @@ def route_request(
                 duration_ms = (time.perf_counter() - started_at) * 1000.0
                 record_market_engine_request(market_id, duration_ms, error=status >= 400)
             return payload, status
+
+        if len(parts) == 6 and parts[3] == "accounts" and parts[5] == "pnl":
+            if method != "GET":
+                raise ApiError(
+                    405,
+                    "method_not_allowed",
+                    f"{method} is not allowed for this resource",
+                    {"method": method, "path": path},
+                )
+            return get_market_account_pnl(market_id, parts[4])
 
     raise ApiError(404, "not_found", "Not found", {"path": path})
 

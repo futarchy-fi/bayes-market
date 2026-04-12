@@ -4,20 +4,85 @@ import { useMarkets } from "@/lib/query/hooks";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { formatCurrency, timeUntil } from "@/lib/utils/format";
+import type { MarketSortField } from "@/lib/api/types";
 
 const STATUSES = ["", "active", "resolved", "closed", "draft"] as const;
 type StatusFilter = (typeof STATUSES)[number];
 
+const SORT_OPTIONS: Array<{ value: MarketSortField | ""; label: string }> = [
+  { value: "", label: "Default order" },
+  { value: "volume", label: "Volume (high to low)" },
+  { value: "liquidity", label: "Liquidity (high to low)" },
+  { value: "created", label: "Newest first" },
+];
+
 export default function MarketList() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
-  const marketFilters = statusFilter ? { status: statusFilter } : undefined;
-  const { data, isLoading, error } = useMarkets(marketFilters);
+  const [sortField, setSortField] = useState<MarketSortField | "">("");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const marketFilters = {
+    ...(statusFilter ? { status: statusFilter } : {}),
+    ...(sortField ? { sort: sortField } : {}),
+    ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
+  };
+  const hasFilters = Object.keys(marketFilters).length > 0;
+  const { data, isLoading, error } = useMarkets(hasFilters ? marketFilters : undefined);
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-lg)" }}>
         <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>Markets</h1>
         <div style={{ display: "flex", gap: "var(--space-sm)", alignItems: "center" }}>
+          <input
+            type="text"
+            placeholder="Search markets..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              padding: "6px 12px",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid var(--color-border)",
+              background: "var(--color-bg-surface)",
+              color: "var(--color-text)",
+              fontSize: "0.875rem",
+              width: "180px",
+            }}
+          />
+          <select
+            aria-label="Sort by"
+            value={sortField}
+            onChange={(e) => setSortField(e.target.value as MarketSortField | "")}
+            style={{
+              padding: "6px 12px",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid var(--color-border)",
+              background: "var(--color-bg-surface)",
+              color: "var(--color-text)",
+              fontSize: "0.875rem",
+            }}
+          >
+            {SORT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <select
+            aria-label="Filter by status"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            style={{
+              padding: "6px 12px",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid var(--color-border)",
+              background: "var(--color-bg-surface)",
+              color: "var(--color-text)",
+              fontSize: "0.875rem",
+            }}
+          >
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>{s || "All statuses"}</option>
+            ))}
+          </select>
           <Link
             to="/markets/new"
             style={{
@@ -32,22 +97,6 @@ export default function MarketList() {
           >
             + New Market
           </Link>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          style={{
-            padding: "6px 12px",
-            borderRadius: "var(--radius-sm)",
-            border: "1px solid var(--color-border)",
-            background: "var(--color-bg-surface)",
-            color: "var(--color-text)",
-            fontSize: "0.875rem",
-          }}
-        >
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>{s || "All statuses"}</option>
-          ))}
-        </select>
         </div>
       </div>
 

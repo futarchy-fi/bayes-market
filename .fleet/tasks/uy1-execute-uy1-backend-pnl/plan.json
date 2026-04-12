@@ -1,0 +1,96 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Include ProbabilityEdit.impactScore in cost basis, attributed proportionally across outcomes based on absolute marginal changes. impactScore is liquidity × KL_divergence which is in currency units, making it semantically valid as cost basis alongside EventTrade.notional.",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Exclude ProbabilityEdit from cost basis — simplifies implementation but loses real economic cost of probability edits, contradicts parent plan decision d2",
+        "Attribute full impactScore to single outcome with largest probability increase — arbitrary when multiple outcomes shift"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Compute P&L at query time by scanning ORDERS dict. No materialized P&L state. EventTrade cost basis = sum of notional (positive for buys, negative for sells). Unrealized P&L = netSize × currentMarginal - costBasis. Realized P&L = netSize × resolutionProbability - costBasis.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Add ACCOUNT_PNL projection dict synced on each trade — too invasive for first iteration, requires modifying multiple write paths"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Return 404 when account has zero orders in the given market (never participated). Return zero values when orders exist but net P&L is zero. This distinguishes 'never traded' from 'traded but broke even'.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "Always return 404 for zero P&L — incorrectly implies no participation",
+        "Always return zero values — can't distinguish 'never traded' from 'zero P&L'"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Account-level P&L aggregates across ALL markets including resolved ones. Resolved markets contribute realized P&L, active markets contribute unrealized P&L. Gives lifetime performance view.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Only active markets — hides historical P&L from resolved markets"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Response uses camelCase with top-level 'pnl' key and meta wrapper. Per-outcome breakdown nested under 'outcomes' dict keyed by outcomeId. Market-level summary with totals. Consistent with existing endpoint patterns (make_meta, entity+meta).",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Use 'data' top-level key — less descriptive than 'pnl' for a domain-specific endpoint"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "For integration tests, create trades on an active market, then resolve it to test realized P&L. Also test unrealized P&L on markets that stay active. Do not manually seed ORDERS since m3 starts resolved with empty order history.",
+      "based_on": ["q2"],
+      "alternatives_rejected": [
+        "Manually seed ORDERS dict — couples tests to internal data structures, fragile",
+        "Test only against m3 — has no order history, would return 404"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add P&L computation core in server.py: (a) compute_orders_pnl(market_id, account_id) that scans ORDERS, accumulates per-outcome net_size and cost_basis from EventTrade.notional and ProbabilityEdit.impactScore (proportional attribution), (b) compute_market_pnl(market_id, account_id) that wraps compute_orders_pnl and calculates current_value/unrealized/realized P&L based on market status (active: use marginals; resolved: use resolutionProbabilities). Place helpers near existing account query functions (~line 2075).",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add per-market P&L endpoint handler: get_market_account_pnl(market_id, account_id) that calls compute_market_pnl, serializes response with per-outcome breakdown {outcomeId, netSize, costBasis, currentValue, unrealizedPnl, realizedPnl, totalPnl} and market-level summary {totalCostBasis, totalCurrentValue, totalUnrealizedPnl, totalRealizedPnl, totalPnl}. Returns 404 if market not found or zero orders for account+market. Uses make_meta() for response wrapper.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Add routing for per-market P&L: in route_request, match len(parts)==6 with parts pattern ['v1','markets',marketId,'accounts',accountId,'pnl']. GET only, 405 for other methods. Insert in the market resource patterns section (~line 4535+).",
+      "depends_on": [2]
+    },
+    {
+      "step": 4,
+      "task": "Add account-level P&L endpoint handler: get_account_pnl(account_id) that scans all ORDERS for the account, groups by marketId, calls compute_market_pnl for each, returns per-market breakdown list plus account-level summary {totalPnl, totalUnrealizedPnl, totalRealizedPnl, totalCostBasis, totalCurrentValue}. Returns 404 if account has zero orders across all markets.",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Add routing for account-level P&L: in route_request, add 'pnl' to the allowed resources in the account resource pattern (len(parts)==4, parts[3]=='pnl'). GET only. Insert alongside existing risk/exposure/positions routing (~line 4519).",
+      "depends_on": [4]
+    },
+    {
+      "step": 6,
+      "task": "Integration tests in tests/ directory: (a) Test unrealized P&L — create EventTrade buy orders on active market m1, query per-market P&L, verify costBasis=notional, currentValue=netSize×marginal, unrealizedPnl=currentValue-costBasis. (b) Test realized P&L — create trades on m1 or m2, resolve market, verify realizedPnl uses resolutionProbabilities. (c) Test ProbabilityEdit cost basis — create probability edit, verify impactScore included in costBasis. (d) Test 404 for no orders. (e) Test account-level aggregation across multiple markets. (f) Test sell orders reduce position and cost basis correctly.",
+      "depends_on": [3, 5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
