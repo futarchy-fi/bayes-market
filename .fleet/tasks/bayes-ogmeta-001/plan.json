@@ -1,0 +1,98 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Add an 'outcomes' array of {id, name, probability} objects to build_market_preview() and the /v1/markets/{id}/meta response, sourced from market['outcomes'] + market['marginals'].",
+      "based_on": ["q1"],
+      "alternatives_rejected": [
+        "Flat map {outcome_id: probability} — less self-descriptive, forces consumers to resolve outcome names separately",
+        "Keep probabilities out of preview (previous task's decision) — explicitly overridden by this task's requirements"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Use a static placeholder og:image at /og-image.png, placed in frontend/public/og-image.png so Vite copies it to dist/ verbatim.",
+      "based_on": ["q2", "q6"],
+      "alternatives_rejected": [
+        "Skip og:image entirely — social previews lack visual element, reduces engagement",
+        "Dynamic per-market image generation — no rendering pipeline exists, large scope increase"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Include live probabilities in og:description, formatted as 'Yes: 65% | No: 35% — {market description}'. The server already injects OG tags per-request so staleness is bounded by crawler cache TTL.",
+      "based_on": ["q3"],
+      "alternatives_rejected": [
+        "Static description only — contradicts task requirement for 'current probabilities' in previews"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Add Twitter Card meta tags (twitter:card, twitter:title, twitter:description, twitter:image) alongside OG tags. Use 'summary' card type since the image is a generic placeholder.",
+      "based_on": ["q4"],
+      "alternatives_rejected": [
+        "OG tags only — Twitter/X only partially falls back to OG, previews may not render correctly",
+        "summary_large_image card type — better suited when per-market images exist"
+      ],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Minimal frontend changes: update MarketPreview TypeScript interface to include optional 'outcomes' field. No share button UI or new hooks — task scope is OG meta infrastructure, not UI components.",
+      "based_on": ["q5"],
+      "alternatives_rejected": [
+        "Add share button component — out of scope for this task's focus on meta tags and deep linking",
+        "Add useMarketPreview hook — not needed without a consumer component"
+      ],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add regex patterns for og:image and Twitter Card meta tags (twitter:card, twitter:title, twitter:description, twitter:image) as module-level constants alongside the existing OG_*_META_TAG_RE patterns in backend/server.py (~line 249-254).",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Update build_market_preview() in backend/server.py (~line 781) to: (a) build an 'outcomes' array from market['outcomes'] + market['marginals'], (b) build an 'og_description' string with probability text ('Yes: 65% | No: 35% — description'), (c) add 'image' field with absolute URL to /og-image.png via absolute_public_url(). Also update build_default_preview() to include 'image' field.",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Update render_frontend_index_html() in backend/server.py (~line 846) to inject: og:image, twitter:card, twitter:title, twitter:description, twitter:image tags. Use the preview's 'og_description' for og:description and twitter:description (falling back to 'description' if not present). Use the preview's 'image' for og:image and twitter:image.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Add default twitter:* and og:image placeholder tags to frontend/index.html so they exist for the regex replacement pattern to match.",
+      "depends_on": []
+    },
+    {
+      "step": 5,
+      "task": "Create a minimal static placeholder image at frontend/public/og-image.png (a simple 1200x630 branded PNG — the standard OG image size).",
+      "depends_on": []
+    },
+    {
+      "step": 6,
+      "task": "Update the MarketPreview TypeScript interface in frontend/src/lib/api/types.ts (~line 74) to add an optional 'outcomes' field: outcomes?: Array<{id: string; name: string; probability: number}>.",
+      "depends_on": []
+    },
+    {
+      "step": 7,
+      "task": "Add backend tests: (a) test build_market_preview() includes 'outcomes' array with correct probabilities and 'og_description' with probability text, (b) test render_frontend_index_html() injects og:image and all twitter:* tags, (c) test the /v1/markets/{id}/meta endpoint returns the new outcomes field. Follow existing unittest patterns in test_bayes_market_api.py.",
+      "depends_on": [2, 3]
+    },
+    {
+      "step": 8,
+      "task": "Run full test suite to verify no regressions. Fix any failures from changed preview contract.",
+      "depends_on": [7]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
