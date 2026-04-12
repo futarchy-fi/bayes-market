@@ -1,0 +1,80 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Place test file at frontend/src/__tests__/DiscussionThread.test.tsx following the existing __tests__/ convention, not co-located at frontend/src/features/market/DiscussionThread.test.tsx",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Co-located test at frontend/src/features/market/DiscussionThread.test.tsx — breaks project convention where all 9 existing test files live in __tests__/"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Mock at the api client level (vi.mock('@/lib/api/client')) so useMarketComments and usePostMarketComment hooks work naturally through react-query, matching the established pattern in MarketDetail.test.tsx",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Mocking hooks directly — more brittle, doesn't test hook wiring", "MSW/network-level mocking — overkill for unit tests, not used elsewhere in the project"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Use localStorage manipulation to control session state (isConfigured vs not) since SessionProvider reads from localStorage key 'bayes-session'",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Mocking useSession — bypasses real provider, less realistic", "Custom wrapper replacing SessionProvider — unnecessary complexity"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create frontend/src/__tests__/DiscussionThread.test.tsx with test scaffolding: imports (vitest, testing-library, renderWithProviders, api mock), vi.mock('@/lib/api/client'), mock data factories for Market, CommentsResponse, and individual Comment objects",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Implement test: 'renders comment list with author, body, seq, and relative time' — mock getMarketComments returning 2 comments, set localStorage with session, assert comment bodies, accountIds, and seq numbers are visible",
+      "depends_on": [1]
+    },
+    {
+      "step": 3,
+      "task": "Implement test: 'shows empty state when no comments' — mock getMarketComments returning empty comments array, assert 'No comments yet.' text is present",
+      "depends_on": [1]
+    },
+    {
+      "step": 4,
+      "task": "Implement test: 'shows loading state before data resolves' — mock getMarketComments with a never-resolving promise, assert 'Loading discussion...' text is present",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Implement test: 'shows error state when query fails' — mock getMarketComments rejecting with an Error, assert error message is displayed",
+      "depends_on": [1]
+    },
+    {
+      "step": 6,
+      "task": "Implement test: 'submits comment via composer form' — set localStorage with session, mock getMarketComments (empty) and submitMarketComment, type in textarea, click 'Post Comment', assert submitMarketComment was called with correct payload shape including accountId and body",
+      "depends_on": [1]
+    },
+    {
+      "step": 7,
+      "task": "Implement test: 'disables composer when market status is not active' — pass market with status='resolved', assert read-only note 'Discussion is read-only because this market is resolved.' is shown, assert textarea is absent",
+      "depends_on": [1]
+    },
+    {
+      "step": 8,
+      "task": "Implement test: 'shows character count remaining' — set localStorage with session, render with active market, type text in textarea, assert '{remaining} characters remaining' updates correctly",
+      "depends_on": [1]
+    },
+    {
+      "step": 9,
+      "task": "Implement test: 'disables composer when no session configured' — do NOT set localStorage, render with active market, assert 'Set your Account ID in the header to join the discussion.' note is shown, assert textarea is absent",
+      "depends_on": [1]
+    },
+    {
+      "step": 10,
+      "task": "Run vitest for the new test file to verify all tests pass: cd frontend && npx vitest run src/__tests__/DiscussionThread.test.tsx",
+      "depends_on": [2, 3, 4, 5, 6, 7, 8, 9]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
