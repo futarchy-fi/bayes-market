@@ -1,0 +1,117 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "WebSocket endpoints should be excluded from the OpenAPI spec entirely. The existing docs/openapi.yaml already makes this decision explicitly: the info.description section states 'These are not representable in OpenAPI 3.0 and are excluded from this specification.' The three WebSocket endpoints (/ws/markets/{id}/prices, /ws/markets/{id}/events, /ws/accounts/{id}/risk) use full RFC 6455 bidirectional messaging with ping/pong, initial snapshots, and streaming broadcasts — none of which can be expressed in OpenAPI 3.0. A brief mention in the spec description noting their existence is sufficient.",
+      "confidence": 0.95,
+      "evidence": [
+        "docs/openapi.yaml:22-25 — existing spec explicitly excludes WebSocket endpoints",
+        "backend/server.py:5278 — _handle_risk_websocket handler",
+        "backend/server.py:5340 — _handle_events_websocket handler",
+        "backend/server.py:5410 — _handle_websocket (prices) handler",
+        "backend/server.py:5481-5486 — do_GET routes WebSocket upgrades before API"
+      ],
+      "uncertainty": "None — this decision is already codified in the existing spec."
+    },
+    {
+      "question_id": "q2",
+      "answer": "The OpenAPI schema must document the actual wire format as-is, preserving the mixed casing. The codebase genuinely uses both conventions: snake_case for temporal fields (expires_at, created_at) and some list-view fields (trade_count, price_history), while using camelCase for identifiers (variableId, marketId, commandId) and most nested structures. The existing openapi.yaml already follows this approach — for example, the Market schema has both 'expires_at' (snake_case) and 'variableId' (camelCase) as properties. Normalizing names would break code generation and create a spec that doesn't match the actual API.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/lib/api/types.ts:15-29 — Market interface mixes created_at/expires_at with variableId/resolutionProbabilities",
+        "frontend/src/lib/api/types.ts:6-13 — MarketSummary uses expires_at (snake_case)",
+        "frontend/src/lib/api/types.ts:44-58 — MarketPriceMessage uses camelCase throughout",
+        "docs/openapi.yaml — existing spec preserves mixed casing as-is"
+      ],
+      "uncertainty": "None — documenting the actual wire format is the only correct approach for a spec intended for code generation."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Document only the primary JSON responses. The GET / content negotiation is a server-side routing concern: when Accept: application/json is present, it returns the JSON service index; otherwise it serves the frontend SPA shell — this is not API content negotiation but frontend hosting. The meta endpoint (/v1/markets/{id}/meta) always returns JSON. For idempotency replay on POST endpoints, the response shape is identical to fresh creation except for a 'replayed: true' field added to meta — this is a minor annotation, not a different response shape. The existing spec documents only the primary JSON response for each endpoint, which is correct.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:5490-5492 — GET / checks Accept header for application/json, otherwise serves static",
+        "backend/server.py:4076-4082 — replay_terminal_outcome adds replayed=true to meta",
+        "backend/server.py:4048-4053 — command_response_meta_kwargs echoes idempotencyKey",
+        "backend/server.py:2671-2684 — get_market_preview_response always returns JSON"
+      ],
+      "uncertainty": "Minor: the 'replayed' boolean in command response meta could be documented as an optional field on CommandResponseMeta. The existing spec may or may not include it."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Rate-limiting headers and 429 responses should be documented in the spec description as conditional behavior, but not as required response components on every endpoint. Rate limiting is only enforced on write operations (POST endpoints) when BAYES_RATE_LIMIT_PER_MIN is set. The existing spec already handles this correctly: the info.description mentions rate limiting as conditional, and individual write endpoints can note 429 as a possible response. The X-RateLimit-* headers (Limit, Remaining, Reset, Policy) should be documented as optional response headers on write endpoints.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:605 — RATE_LIMIT_PER_MIN defaults to 0 (disabled)",
+        "backend/server.py:5176 — enforce_rate_limit called in _enforce_write_controls",
+        "backend/server.py:5206 — rate_limit_headers added only on successful write responses",
+        "backend/server.py:786 — rate_limit_headers function returns X-RateLimit-* headers",
+        "docs/openapi.yaml:16-19 — existing spec describes rate limiting as conditional in description"
+      ],
+      "uncertainty": "None — the conditional nature is well-documented and the existing spec already handles this."
+    },
+    {
+      "question_id": "q5",
+      "answer": "OpenAPI schemas should cover only REST request/response types. WebSocket message types (MarketPriceMessage, MarketEventMessage, AccountRiskMessage) and client-only types (Session) should be excluded. These types don't map to any REST operation and would bloat the components section with schemas that no path references. The existing 1814-line spec already follows this principle — it defines schemas only for types that appear in REST endpoint request bodies or responses. The MarketListFilterInput type (a client-side union) is also excluded as it's a frontend convenience type.",
+      "confidence": 0.95,
+      "evidence": [
+        "frontend/src/lib/api/types.ts:44-58 — MarketPriceMessage is WebSocket-only",
+        "frontend/src/lib/api/types.ts:383-390 — MarketEventMessage is WebSocket-only",
+        "frontend/src/lib/api/types.ts:392-409 — AccountRiskMessage is WebSocket-only",
+        "frontend/src/lib/api/types.ts:457-460 — Session is client-only state",
+        "docs/openapi.yaml — existing spec contains no WebSocket message schemas"
+      ],
+      "uncertainty": "None — REST-only scoping is the standard approach for OpenAPI specs."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The existing spec documents the actual wire format including mixed casing conventions. No API design changes needed."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "The existing spec declares 'openapi: 3.0.3' on line 1. Nullable types use the OpenAPI 3.0 'nullable: true' pattern, not JSON Schema 3.1 'type: [\"string\", \"null\"]'."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 1.0,
+      "impact": "A single docs/openapi.yaml file already exists at 1814 lines. All schemas use internal $ref paths (e.g., '#/components/schemas/Meta'), no external file references."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The existing spec defines an 'AgentId' security scheme as apiKey in header 'X-Bayes-Agent-Id'. It's applied only to write endpoints (createMarket, postComment, resolveMarket, probabilityEdit, eventTrade) via per-operation 'security: [AgentId: []]', not globally. This correctly models the optional/conditional nature."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The existing spec documents GET /health (line 94), GET /healthz (line 108), and GET /v1/health (line 125). The /healthz description notes it's 'kept for backward compatibility with existing monitoring tools'."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "WRONG",
+      "confidence": 0.95,
+      "impact": "The existing spec excludes WebSocket endpoints entirely rather than documenting them as stubs. The description section mentions their existence and paths but no path entries or schemas are defined for them. This is the better approach — stubs would be misleading since OpenAPI 3.0 cannot represent bidirectional streaming. The description-level mention is sufficient."
+    }
+  ],
+
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.9,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All five questions answered with confidence >= 0.9. The existing docs/openapi.yaml (1814 lines) already exists and has made definitive decisions on all the questioned areas (WebSocket exclusion, mixed casing preservation, JSON-only responses, conditional rate limiting, REST-only schemas). All six assumptions verified against the codebase and existing spec. No research gaps remain — the task is well-scoped documentation that is already substantially complete."
+  },
+
+  "spawn_children": false,
+  "children": []
+}
