@@ -35,6 +35,8 @@ export class BayesApiError extends Error {
 export interface NormalizedMarketListFilters {
   status?: string;
   includeResolved?: true;
+  sort?: string;
+  q?: string;
 }
 
 async function request<T>(
@@ -83,10 +85,14 @@ export function normalizeMarketListFilters(
     typeof filters !== "string"
     && filters?.includeResolved === true
   ) || status === "resolved";
+  const sort = typeof filters !== "string" ? filters?.sort : undefined;
+  const q = typeof filters !== "string" ? filters?.q?.trim() || undefined : undefined;
 
   return {
     ...(status ? { status } : {}),
     ...(includeResolved ? { includeResolved: true } : {}),
+    ...(sort ? { sort } : {}),
+    ...(q ? { q } : {}),
   };
 }
 
@@ -100,6 +106,14 @@ function serializeMarketListFilters(filters?: MarketListFilterInput): string {
 
   if (normalizedFilters.includeResolved) {
     params.set("include_resolved", "true");
+  }
+
+  if (normalizedFilters.sort) {
+    params.set("sort", normalizedFilters.sort);
+  }
+
+  if (normalizedFilters.q) {
+    params.set("q", normalizedFilters.q);
   }
 
   const queryString = params.toString();

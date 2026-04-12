@@ -151,7 +151,7 @@ describe("MarketList", () => {
 
     await screen.findByText("Fed cuts rates before Q4");
 
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "active" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by status" }), { target: { value: "active" } });
 
     await waitFor(() => {
       expect(api.listMarkets).toHaveBeenLastCalledWith({ status: "active" });
@@ -167,7 +167,7 @@ describe("MarketList", () => {
 
     await screen.findByText("ETH Price > $3000");
 
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "resolved" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by status" }), { target: { value: "resolved" } });
 
     await waitFor(() => {
       expect(api.listMarkets).toHaveBeenLastCalledWith({ status: "resolved" });
