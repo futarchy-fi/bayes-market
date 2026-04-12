@@ -1,0 +1,134 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use WebSocket only, extending the existing WS infrastructure. No SSE infrastructure exists in the codebase — implementing SSE would require building chunked HTTP responses, text/event-stream content type, and a separate connection registry from scratch (~150+ lines). The existing WS infrastructure is complete and proven: RFC 6455 helpers (ws_send_text, ws_read_frame, ws_accept_key), WS_CONNECTIONS registry keyed by entity ID, ws_broadcast() fan-out pattern, and _next_ws_seq() for message ordering. The price stream at /ws/markets/{id}/prices demonstrates the full lifecycle (upgrade → register → snapshot → broadcast loop → unregister) that can be replicated for new streams.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:71 (_WS_MAGIC RFC 6455 constant)",
+        "backend/server.py:74-146 (ws_accept_key, ws_read_frame, ws_send_text, ws_send_close helpers)",
+        "backend/server.py:285-288 (WS_CONNECTIONS, _WS_LOCK, _WS_SEQ globals)",
+        "backend/server.py:299-320 (_next_ws_seq, ws_register, ws_unregister)",
+        "backend/server.py:323-355 (ws_broadcast function)",
+        "backend/server.py:4903-4969 (_handle_websocket full lifecycle)",
+        "No matches found for SSE, EventSource, text/event-stream anywhere in codebase"
+      ],
+      "uncertainty": "None significant. The task title mentions 'websocket/SSE' but the codebase is WS-only and WS covers all requirements."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Use the global _WS_SEQ counter for WS transport-level message ordering on all new streams (consistent with existing price stream). Preserve the per-market event journal seq in the event payload for event-level ordering and integrity. These serve different purposes: _WS_SEQ is for client-side WS gap detection across any stream, while per-market seq is for event journal hash-chain integrity and backfill via REST. For risk streams (per-account), the global _WS_SEQ is sufficient since risk updates don't have a journal with hash chains — they're projections of current state.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/server.py:288 (_WS_SEQ = 0, global counter)",
+        "backend/server.py:299-304 (_next_ws_seq() thread-safe increment)",
+        "backend/server.py:337 (ws_broadcast uses _next_ws_seq() for message seq)",
+        "backend/server.py:4935 (snapshot also uses _next_ws_seq())",
+        "backend/server.py:272 (MARKET_EVENT_SEQUENCES per-market counters, separate concern)",
+        "backend/server.py:3627 (emit_terminal_event increments per-market seq)"
+      ],
+      "uncertainty": "Minor: clients subscribing to multiple streams will see interleaved global seq values with gaps, but this is already the case with the price stream and is the expected WS behavior."
+    },
+    {
+      "question_id": "q3",
+      "answer": "No backfill-on-connect. Follow the existing price stream pattern: send an initial snapshot on connect, then push live events going forward. The REST endpoint GET /v1/markets/{id}/events already supports fromSeq parameter with pagination (fromSeq inclusive, limit up to 100, nextFromSeq for continuation). Clients that reconnect can use the REST endpoint to fill gaps between their last-seen per-market seq and current head, then resume the WS stream. This keeps WS handler complexity low and avoids duplicating the pagination/replay logic already in the REST layer.",
+      "confidence": 0.80,
+      "evidence": [
+        "backend/server.py:4928-4945 (existing price stream sends snapshot on connect, no backfill)",
+        "backend/server.py:2530-2531 (REST fromSeq and limit query parameters)",
+        "backend/server.py:2554-2569 (REST response with pagination.nextFromSeq for continuation)",
+        "frontend/src/lib/query/hooks.ts:216-231 (frontend already invalidates queries on reconnect)"
+      ],
+      "uncertainty": "If high-frequency event markets create noticeable gaps on reconnect, backfill-on-connect could be added later as an enhancement. The REST fallback is functional but adds a round-trip."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Separate endpoints: /ws/markets/{id}/events for market event streams and /ws/accounts/{id}/risk for account risk streams. Keep the existing /ws/markets/{id}/prices unchanged. Rationale: (1) Different data shapes — prices are marginals snapshots, events are journal entries with hash chains, risk is account state with LMSR details. (2) Different update frequencies — prices update on every probability edit, events on every command completion, risk on orders affecting that account. (3) Different scoping — prices and events are per-market, risk is per-account. (4) Follows REST route topology: /v1/markets/{id}/events and /v1/accounts/{id}/risk already exist as separate endpoints. Multiplexing would mix concerns and complicate the message schema.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/server.py:4905 (existing route: /ws/markets/{id}/prices, separate endpoint pattern)",
+        "backend/server.py:285 (WS_CONNECTIONS keyed by market_id — new registries needed for other entity types)",
+        "backend/server.py:4639-4647 (REST /v1/markets/{id}/events handler)",
+        "backend/server.py:4591-4595 (REST /v1/accounts/{id}/risk, /exposure, /positions handlers)"
+      ],
+      "uncertainty": "Two new WS connections per client (if they need all three streams) increases connection count. For a prediction market with moderate users this is fine. Could add multiplexing later if connection limits become an issue."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Broadcast on every account state mutation after sync_account_risk_state() and sync_account_exposure_state() complete. This is not excessively noisy because: (1) Mutations only happen on actual order acceptance — not on background calculations. (2) Each mutation is already scoped to a specific account. (3) The event-sourced model means every state transition is meaningful and clients expect completeness. Broadcast should also fire after settlement (settle_market_account_risk, settle_market_account_exposure) during market resolution, since these cause significant risk state changes.",
+      "confidence": 0.80,
+      "evidence": [
+        "backend/server.py:4355 (sync_account_risk_state called after ProbabilityEdit acceptance)",
+        "backend/server.py:4454 (sync_account_exposure_state called after EventTrade acceptance)",
+        "backend/server.py:3981-3982 (settle_market_account_risk/exposure called during resolution)",
+        "backend/server.py:3244 (existing price broadcast fires on every probability edit, same philosophy)"
+      ],
+      "uncertainty": "If an account trades heavily (many EventTrades in rapid succession), the risk stream could be chatty. A debounce or batching mechanism could be added later if needed, but start simple."
+    },
+    {
+      "question_id": "q6",
+      "answer": "The event journal stream is sufficient for 'execution streams.' CommandAccepted events for EventTrade orders already carry complete trade details in the payload: trade.side, trade.size, trade.price, trade.notional, trade.marketId, trade.outcomeId, plus effects (marginalDelta, assetDelta) and pricing (cost, fee, unitPrice). A separate per-account order-fill stream would be redundant — clients can filter the market event stream for events matching their account's commandIds, or the event payload could include accountId. No third stream type is needed.",
+      "confidence": 0.90,
+      "evidence": [
+        "backend/server.py:4107-4125 (EventTrade CommandAccepted payload with full trade field)",
+        "backend/server.py:3847-3851 (ProbabilityEdit CommandAccepted with effects and pricing)",
+        "backend/server.py:3629-3641 (event envelope includes commandId for correlation)"
+      ],
+      "uncertainty": "If per-account execution filtering is needed (only see your own trades), the event stream is per-market not per-account. Clients would need to correlate commandIds. This is acceptable since the frontend already knows which commands it submitted."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "No SSE implementation needed. Extend existing WS infrastructure with proven helpers, registry, and broadcast pattern. Saves ~150 lines of new transport code."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.90,
+      "impact": "Price stream (/ws/markets/{id}/prices) stays as-is. New event and risk streams are additive — no refactoring of existing WS handler or frontend consumers needed."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.90,
+      "impact": "Event streams scoped per-market (matching MARKET_EVENT_SEQUENCES). Risk streams scoped per-account (matching ACCOUNT_RISK/ACCOUNT_EXPOSURE). Connection registries follow same pattern: WS_EVENT_CONNECTIONS[market_id] and WS_RISK_CONNECTIONS[account_id]."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Global _WS_SEQ used for transport ordering on all streams. Per-market event seq preserved in event payload for journal integrity. No new atomic counters needed."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.80,
+      "impact": "Every mutation broadcasts. Mutations are already scoped (only fire on order acceptance and settlement). Not excessively noisy. Can add debouncing later if needed."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Frontend needs: new WS message types (MarketEventMessage, AccountRiskMessage), new useMarketEventSubscription and useAccountRiskSubscription hooks following existing useMarketPriceSubscription pattern, TanStack Query cache integration. queryKeys for accountRisk and accountExposure already exist in hooks.ts."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.80,
+      "impact": "Initial snapshot + live updates, no backfill-on-connect. REST fromSeq endpoint handles gap recovery. Keeps WS handler simple. Matches existing price stream pattern."
+    }
+  ],
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.80,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All 6 answers have confidence >= 0.80. All 7 assumptions verified as CORRECT with confidence >= 0.80. No research gaps remain. The implementation follows well-established patterns in the codebase (WS lifecycle, broadcast, registry) with clear mutation points for broadcast hooks. Changes span server.py (new routes + registries + broadcast hooks) and frontend (types + hooks + cache integration) — coordinated but not complex."
+  },
+  "spawn_children": false,
+  "children": []
+}
