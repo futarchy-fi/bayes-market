@@ -1,0 +1,114 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Embed analytics into existing pages rather than creating a new route. Per-market analytics (price history, volume, top traders) should be added as a collapsible section or tab within MarketDetail (/markets/:marketId). Account-level P&L should be added as a section within Portfolio (/portfolio). Rationale: (1) The router has 4 clean routes; a 5th top-level route for analytics would fragment the UX. (2) MarketDetail already shows market-specific data (volume, liquidity, probability bars, event journal) — analytics is a natural extension. (3) Portfolio already shows account exposure and risk metrics — P&L belongs alongside those. (4) No new nav link needed, reducing surface area. If a global cross-market analytics view is later needed, it can be added as /analytics then.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/app/router.tsx:13-19",
+        "frontend/src/routes/MarketDetail.tsx:1-201",
+        "frontend/src/routes/Portfolio.tsx:1-164",
+        "frontend/src/app/App.tsx:19-23"
+      ],
+      "uncertainty": "Whether stakeholders want a standalone analytics page accessible without first navigating to a specific market."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Derive cost basis by aggregating from ORDERS at query time. Orders already contain the needed data: EventTrade orders have 'notional' (size × price, server.py:4024) and ProbabilityEdit orders have 'impactScore' (LMSR edit cost, server.py:3199). Cost basis for a position = sum of notional values for buy orders minus sum for sell orders on that account+market+outcome. This is O(n) per request where n = number of orders for the account/market, but order counts per position are typically small. Adding a running cost_basis field to position state would require modifying sync_account_exposure_state (server.py:1604-1632) and backfilling existing positions — significantly more invasive for a first iteration.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/server.py:4024",
+        "backend/server.py:3199",
+        "backend/server.py:1474-1493",
+        "backend/server.py:1604-1632",
+        "backend/server.py:2499"
+      ],
+      "uncertainty": "Whether ProbabilityEdit impactScore should be included in P&L cost basis (it's an LMSR cost, not a directional position cost). EventTrade notional is the clearer cost basis component."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Both per-account and per-market P&L, including unrealized and realized. Specifically: (1) Per-market unrealized P&L: for each active position, P&L = netSize × currentMarginal - costBasis. Positions track netSize (server.py:1488) and markets have current marginals. (2) Per-market realized P&L: for resolved markets (like m3 which resolved to 'no' with resolution probabilities {yes:0.0, no:1.0}), P&L = settlementValue - costBasis. (3) Per-account P&L: aggregate of all per-market P&L values for that account. The 'P&L endpoints' (plural) in the task spec maps naturally to: GET /v1/accounts/{id}/pnl (account-level) and GET /v1/markets/{id}/accounts/{accountId}/pnl (market-level). Resolved market m3 (server.py:182-199) provides a test case for realized P&L.",
+      "confidence": 0.8,
+      "evidence": [
+        "backend/server.py:182-199",
+        "backend/server.py:1474-1493",
+        "backend/server.py:3850-3906",
+        "backend/server.py:1642-1691",
+        "backend/server.py:3893-3898"
+      ],
+      "uncertainty": "Whether 'P&L endpoints' means just account-level or truly both granularities. The per-market variant is a natural building block for the per-account aggregate."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Use a lightweight charting library — specifically recharts (React-native, composable, tree-shakeable). While the codebase has zero charting dependencies and uses custom SVG/CSS for visualizations (BayesNetGraph.tsx, ProbabilityBar.tsx), the analytics use case (time-series line charts for price history, bar charts for volume) requires axes, tooltips, responsive sizing, and time formatting that are disproportionately complex to build from scratch. The existing custom SVG visualizations (node-link graphs, probability bars) are structurally simpler than time-series charts. recharts adds ~40KB gzipped, is React-idiomatic, and avoids the D3 learning curve. Alternative: lightweight-charts (TradingView) if a financial chart style is desired, but it's heavier and less React-native.",
+      "confidence": 0.7,
+      "evidence": [
+        "frontend/package.json:1-30",
+        "frontend/src/features/graph/BayesNetGraph.tsx:1-100",
+        "frontend/src/components/ui/ProbabilityBar.tsx:1-50"
+      ],
+      "uncertainty": "Whether the project's minimal-dependency philosophy should take precedence. A simpler alternative is SVG polyline sparklines with no library, but this sacrifices interactivity (tooltips, hover) and formatting."
+    },
+    {
+      "question_id": "q5",
+      "answer": "The existing per-market analytics endpoint (GET /v1/markets/{id}/analytics) is sufficient for price history, volume, and top traders — it already returns price_history (bucketed marginals over time), total_volume, trade_count, and top_traders (top 10 by volume). The main backend work is new P&L endpoint(s). Cross-market aggregation (global volume, platform-wide leaderboard) is NOT needed for the analytics dashboard MVP. The System page already shows aggregate platform stats (total volume, liquidity, market counts). If cross-market analytics are later desired, a new GET /v1/analytics endpoint can aggregate, but that's a separate scope.",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:2420-2520",
+        "backend/server.py:2436-2442",
+        "backend/server.py:2468-2486",
+        "backend/server.py:2488-2510",
+        "frontend/src/routes/System.tsx:1-154",
+        "frontend/src/lib/query/hooks.ts:67-70"
+      ],
+      "uncertainty": "Whether the existing analytics endpoint's price_history format (bucketed by interval) is granular enough for the dashboard charts, or if finer-grained data is needed."
+    },
+    {
+      "question_id": "q6",
+      "answer": "Polling/manual refresh is acceptable. Analytics data is aggregated and historical — it doesn't change sub-second. React Query already polls market data every 5 seconds (hooks.ts useMarkets/useMarket refetchInterval: 5000). The analytics dashboard can use the same pattern with a 10-30 second refetchInterval. The WebSocket infrastructure exists and is extensible (adding a new broadcast trigger is low effort — just call ws_broadcast() at new points), but the cost/benefit doesn't justify it for analytics. P&L values change when trades occur or prices move, but 5-10 second polling captures this adequately for a dashboard view. Real-time WebSocket updates can be added later if users request live P&L streaming.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/server.py:322-354",
+        "backend/server.py:4841-4909",
+        "frontend/src/lib/query/hooks.ts:133-272",
+        "frontend/src/lib/query/hooks.ts:41-55"
+      ],
+      "uncertainty": "Whether the product expectation is a 'live trading dashboard' feel vs. a 'reporting/analytics' feel. The former would benefit from WebSocket; the latter is fine with polling."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Per-market analytics in MarketDetail and P&L in Portfolio is the right approach. No new top-level route needed for MVP. The existing route structure supports this cleanly — MarketDetail already has multiple sections (probability bars, event journal, discussion) and Portfolio already shows risk metrics and positions."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Order aggregation is the right approach for cost basis. EventTrade.notional (size × price) and ProbabilityEdit.impactScore are already stored. Computing at query time avoids schema changes to the position state. The analytics endpoint already uses the same pattern (server.py:2499) to compute volume from orders. Only concern: ProbabilityEdit impactScore is an LMSR cost, not a directional position cost — may need special handling in P&L calculation."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.5,
+      "impact": "The codebase favors minimal dependencies (zero charting libs, custom SVG/CSS), but time-series charts are materially harder than the existing visualizations. A lightweight library (recharts ~40KB) significantly reduces implementation effort for axes, tooltips, and responsive behavior. If the decision is no library, implementation time increases substantially and interactivity suffers. This is a judgment call between consistency with the codebase philosophy vs. practical complexity."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "The existing GET /v1/markets/{id}/analytics endpoint covers price_history, total_volume, trade_count, and top_traders. Backend work is focused on P&L endpoint(s) only. The frontend hook useMarketAnalytics() already exists (hooks.ts:67-70). No cross-market aggregation needed — System page already has aggregate stats."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.8,
+      "impact": "Polling with React Query (5-30 second intervals) is sufficient for analytics data. No WebSocket extension needed. This simplifies both backend (no new broadcast points) and frontend (no new subscription hooks) significantly. The existing polling infrastructure handles this pattern well."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
