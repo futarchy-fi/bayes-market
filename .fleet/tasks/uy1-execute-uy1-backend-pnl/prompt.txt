@@ -1,27 +1,32 @@
-[Task uy1-execute-uy1-backend-pnl] PHASE 1: QUESTION GENERATION
+[Task uy1-execute-uy1-backend-pnl] PHASE 2: RESEARCH & DECISION
 Title: Backend P&L Endpoints
-Description: Implement P&L computation helper and two new REST endpoints: GET /v1/markets/{marketId}/accounts/{accountId}/pnl (per-market P&L) and GET /v1/accounts/{accountId}/pnl (account-level P&L). Cost basis derived from ORDERS aggregation. Covers steps 1-3 and 9.
-Repo: /home/kelvin/bayes-market
 
-Explore the codebase. Identify what you need to know before building.
+Read .fleet/tasks/uy1-execute-uy1-backend-pnl/questions.json for the questions to answer.
+Research each question in the codebase. Provide answers with confidence scores.
 
-YOU MUST create .fleet/tasks/uy1-execute-uy1-backend-pnl/questions.json with this structure:
+YOU MUST create .fleet/tasks/uy1-execute-uy1-backend-pnl/research.json with this structure:
 {
-  "phase": "question",
-  "questions": [
-    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "...",
+      "confidence": 0.0-1.0,
+      "evidence": ["file:line", ...],
+      "uncertainty": "what you're not sure about"
+    }
   ],
-  "assumptions": [
-    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  "assumption_checks": [
+    { "assumption_id": "a1", "verdict": "CORRECT|WRONG|UNCERTAIN", "confidence": 0.0-1.0, "impact": "..." }
   ],
   "spawn_children": false,
   "children": []
 }
 
-DO NOT STOP until questions.json exists and contains at least one question.
+DO NOT STOP until research.json exists and contains answers to all questions.
 Verify: ls -la .fleet/tasks/uy1-execute-uy1-backend-pnl/ to confirm the file was written.
 
-DECOMPOSITION: Set spawn_children=true only if sub-questions warrant their own
-full 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
+DECOMPOSITION: Set spawn_children=true for low-confidence answers (< 0.5) or
+complex questions needing their own research cycle.
 
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: uy1-execute-uy1-backend-pnl"
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "research: uy1-execute-uy1-backend-pnl"
