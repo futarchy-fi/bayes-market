@@ -1,0 +1,106 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Tests should be added to BayesMarketApiAuthRateLimitTests. This class already has: (1) comment_post and comment_post_with_headers helpers (lines 6704-6733), (2) a running HTTP server via setUpClass (lines 6542-6549), (3) the existing comment contract test (lines 6858-6886), and (4) the request()/request_with_headers() methods for making HTTP calls. BayesMarketApiUnitTests uses server.route_request() directly without HTTP, but POST comments requires agent_id auth via X-Bayes-Agent-Id header (TRADE_WRITE_CATEGORY), which is only testable through the HTTP layer. Adding to BayesMarketApiAuthRateLimitTests keeps all comment tests co-located with existing helpers.",
+      "confidence": 0.95,
+      "evidence": [
+        "tests/test_bayes_market_api.py:6541 (BayesMarketApiAuthRateLimitTests class)",
+        "tests/test_bayes_market_api.py:6704-6718 (comment_post helper)",
+        "tests/test_bayes_market_api.py:6720-6733 (comment_post_with_headers helper)",
+        "tests/test_bayes_market_api.py:6858-6886 (existing comment test)",
+        "tests/test_bayes_market_api.py:6542-6549 (HTTP server setup)",
+        "tests/test_bayes_market_api.py:6614-6624 (request method)"
+      ],
+      "uncertainty": "None significant. The existing pattern is clear."
+    },
+    {
+      "question_id": "q2",
+      "answer": "GET /v1/markets/{id}/comments tests should use the HTTP request() method in BayesMarketApiAuthRateLimitTests. Although GET does not require agent_id auth, testing via HTTP is more realistic and keeps GET+POST comment tests co-located. The request() method in BayesMarketApiAuthRateLimitTests supports arbitrary methods and paths (lines 6614-6624). To populate data for GET tests, use comment_post() first to create comments. The GET endpoint returns 200 with {marketId, comments, pagination: {fromSeq, limit, returned, nextFromSeq}, meta: {timestamp}} (server.py lines 2451-2461).",
+      "confidence": 0.92,
+      "evidence": [
+        "backend/server.py:2423-2461 (get_market_comments function)",
+        "tests/test_bayes_market_api.py:6614-6624 (request method supports GET)",
+        "backend/server.py:567-568 (only POST comments requires TRADE_WRITE_CATEGORY, not GET)"
+      ],
+      "uncertainty": "GET could also be tested via server.route_request in BayesMarketApiUnitTests, but co-location with POST tests is more maintainable."
+    },
+    {
+      "question_id": "q3",
+      "answer": "To trigger a 409 idempotency_conflict, send the same idempotencyKey+accountId+marketId but a DIFFERENT 'body' text. The normalize_comment_post_payload function (lines 3895-3915) returns only {'body': normalized_body}, so the normalized_payload comparison in handle_comment_post (lines 3998-4010) compares just the body field. Specifically, at line 4004: `if existing_command['commandType'] != 'CommentPost' or existing_command['payload'] != normalized_payload` triggers the conflict. So same idempotencyKey with different body text → 409; same idempotencyKey with same body text → 201 replay with meta.replayed=True.",
+      "confidence": 0.98,
+      "evidence": [
+        "backend/server.py:3895-3915 (normalize_comment_post_payload returns {'body': normalized_body})",
+        "backend/server.py:3998-4010 (idempotency check compares commandType and payload)",
+        "backend/server.py:3516-3536 (build_idempotency_conflict_response returns 409)",
+        "backend/server.py:3507-3513 (replay_comment_post_outcome adds meta.replayed=True)"
+      ],
+      "uncertainty": "None. The code path is clear."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Tests should directly manipulate server.MARKETS[market_id]['status'] to set a non-active value (e.g., 'closed'). This matches the existing test pattern: line 3164 does `server.MARKETS['m1']['status'] = 'closed'` and line 3415 does `server.MARKETS['m1']['status'] = 'draft'`. The comment endpoint checks `market['status'] != 'active'` at line 4022, returning a 409 with error code 'market_not_active'. Only the 'active' status allows comment posting; 'resolved', 'closed', and 'draft' all reject.",
+      "confidence": 0.97,
+      "evidence": [
+        "tests/test_bayes_market_api.py:3164 (existing pattern: server.MARKETS['m1']['status'] = 'closed')",
+        "tests/test_bayes_market_api.py:3415 (existing pattern: server.MARKETS['m1']['status'] = 'draft')",
+        "backend/server.py:4021-4035 (market not active check, returns 409)",
+        "backend/server.py:202 (ALLOWED_MARKET_STATUSES: active, resolved, closed, draft)"
+      ],
+      "uncertainty": "None. Direct manipulation is the established test pattern."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "BayesMarketApiAuthRateLimitTests is the right class. It has comment_post helper, HTTP server, and the existing comment test."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.92,
+      "impact": "GET tests should use request() in BayesMarketApiAuthRateLimitTests for co-location. POST first to populate data, then GET to verify."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Response structure confirmed at server.py:2451-2461. Structure is {marketId, comments: [], pagination: {fromSeq, limit, returned, nextFromSeq}, meta: {timestamp}}. Comments sorted by seq ascending (line 2440)."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Confirmed at server.py:3507-3513. replay_comment_post_outcome adds response['meta']['replayed'] = True and returns original status code (which is 201 for successful comment posts)."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.97,
+      "impact": "Direct manipulation of server.MARKETS['m1']['status'] is the established pattern (test_bayes_market_api.py lines 3164 and 3415)."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Validation in normalize_comment_post_payload (server.py:3895-3915) and handle_comment_post (server.py:3972-3991) covers: missing/non-string accountId → 400, missing/non-string body → 400, empty body (after strip) → 400, body > 2000 chars → 400, empty idempotencyKey string → 400. Note: idempotencyKey is optional; only validated when present."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "GET pagination (server.py:2423-2461): fromSeq defaults to 1, limit defaults to 100 (max 100), nextFromSeq is set when tail_seq < head_seq (more comments exist), null when at end. 404 for non-existent market confirmed at line 2425-2426."
+    },
+    {
+      "assumption_id": "a8",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "POST comments is TRADE_WRITE_CATEGORY (server.py:567-568), which requires X-Bayes-Agent-Id header (server.py:357-360). All POST comment tests must include agent_id parameter."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
