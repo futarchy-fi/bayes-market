@@ -1,0 +1,89 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The task says 'accounts retain risk doc but lose resolved market exposure'. The direct-layer test (line 3021) already asserts that ACCOUNT_RISK[account_id] persists with only m2 in .markets and only m2 lmsrState slices. The HTTP-layer test (line 8165) asserts ACCOUNT_RISK[account_id].markets == {} and lmsrState.slices == {}. Are there specific additional assertions about risk doc retention that are currently missing, or is this confirming the existing coverage is correct?",
+      "category": "requirements",
+      "why_it_matters": "Without clarity on what 'retain risk doc' means beyond what's already tested, I might add redundant assertions or miss the actual gap."
+    },
+    {
+      "id": "q2",
+      "question": "The HTTP test (test_market_resolve_http_settles_account_exposure, line 8165) does not assert event payload fields like marginalDelta, pricing, replayStateHash, or resolution.resolvedAt — but the direct-layer test (line 3155-3193) does. Should the HTTP-layer test be expanded to also verify these event payload fields for full parity with the direct-layer test?",
+      "category": "requirements",
+      "why_it_matters": "The task says 'direct and HTTP resolution coverage' — if the goal is parity between both layers, the HTTP test needs additional event payload assertions."
+    },
+    {
+      "id": "q3",
+      "question": "The existing direct-layer test resolves m1 while m2 has activity (so m2 survives). The HTTP test does the same pattern. Neither test covers the case where the resolved market is the ONLY market with risk entries (no m2 fallback). Should there be a standalone resolution test where the account has risk ONLY on the resolved market, verifying the account risk doc still exists but with empty markets and slices?",
+      "category": "design",
+      "why_it_matters": "The task mentions 'accounts retain risk doc but lose resolved market exposure' — testing with a single-market account would be the clearest proof of risk doc retention vs. exposure removal."
+    },
+    {
+      "id": "q4",
+      "question": "The direct-layer closed-market test (test_market_resolution_accepts_closed_market, line 3261) only checks basic market fields (status, resolution, marginals) but does not verify settlement effects (assetDelta, lmsrState cleanup, exposure cleanup). Is this test intentionally minimal, or should it be expanded to verify full settlement semantics for closed-market resolution?",
+      "category": "requirements",
+      "why_it_matters": "The task says 'closed-market + invalid-resolution rejections remain covered' — but if closed-market resolution should also verify settlement, the existing test is incomplete."
+    },
+    {
+      "id": "q5",
+      "question": "The idempotent replay test (line 3302) verifies that replaying returns the same eventId/commandId and meta.replayed=true, and that only 1 command/event exist. It does NOT verify that the full event payload (effects, pricing, resolution details) is identical between first and replayed responses. Should the idempotency assertion be strengthened to verify payload preservation?",
+      "category": "requirements",
+      "why_it_matters": "The task says 'idempotent replays preserve original event' — if 'preserve' means the full response body matches, the current test only checks IDs, not content."
+    },
+    {
+      "id": "q6",
+      "question": "Is there a test that verifies resolution of an already-resolved market via the direct route_request layer (not HTTP)? The HTTP-layer test_market_resolve_http_rejects_already_resolved_market (line 8125) covers this for m3, but I don't see a direct-layer equivalent that asserts 409/market_already_resolved via route_request.",
+      "category": "codebase",
+      "why_it_matters": "If the task requires parity between direct and HTTP layers for rejection cases, this gap needs to be filled."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The task is about strengthening and adding assertions to existing resolution tests in test_bayes_market_api.py — not about changing server behavior or adding new server features.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to also modify backend/server.py, changing the scope from a test-only task to a server+test change."
+    },
+    {
+      "id": "a2",
+      "assumption": "The frozen contract is defined by t544-event-sourcing-contract.md and t586-full-chain-http-contract-freeze.md, and the current server implementation matches that contract (tests passed at 62 tests OK per t586).",
+      "confidence": 0.95,
+      "if_wrong": "Would need to identify and reconcile server-contract divergences before writing test assertions."
+    },
+    {
+      "id": "a3",
+      "assumption": "Event trades (POST /v1/markets/{id}/orders/event-trade) create ACCOUNT_EXPOSURE positions but do NOT create ACCOUNT_RISK.markets entries or lmsrState slices — only probability edits do. This explains why the HTTP test shows minAssets.markets=[] after resolving m1 despite having a m2 trade.",
+      "confidence": 0.9,
+      "if_wrong": "The HTTP test assertion at line 8228 (minAssets overall=100.0, markets=[]) would be incorrect, and m2 should appear in the risk markets list."
+    },
+    {
+      "id": "a4",
+      "assumption": "All changes are confined to a single file: tests/test_bayes_market_api.py. No new test files need to be created.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to create additional test files or modify other existing test files."
+    },
+    {
+      "id": "a5",
+      "assumption": "The helper functions (build_market_resolution_body, expected_market_resolution_payload, snapshot_domain_state, assert_domain_state_unchanged) are already correct and sufficient for the task. No new helpers are needed.",
+      "confidence": 0.85,
+      "if_wrong": "May need to add new helper functions for assertion patterns not yet captured."
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 2,
+    "complexity_reason": "Single file to modify (tests/test_bayes_market_api.py). Changes are assertion additions/updates within existing test methods, not architectural. The settlement semantics and contract are well-documented and the existing tests provide clear patterns to follow.",
+    "uncertainty_score": 2,
+    "uncertainty_reason": "The frozen contract is clearly documented in t544 and t586. The server code is readable and the existing tests demonstrate the assertion patterns. The main uncertainty is precisely which assertions are 'missing' vs 'already covered', but the exploration has narrowed this substantially.",
+    "independent_subproblems": [
+      "Strengthen direct-layer resolution test assertions (risk doc retention, lmsrState, assetDelta)",
+      "Strengthen HTTP-layer resolution test assertions (event payload parity with direct layer)",
+      "Verify idempotency replay assertions preserve full event content",
+      "Verify closed-market and rejection test coverage completeness"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity=2 and uncertainty=2, both well below the threshold of 4. All changes are in a single test file, following well-established patterns. The subproblems are all in the same file and share setup/teardown context, making parallel execution unnecessary."
+  },
+  "spawn_children": false,
+  "children": []
+}

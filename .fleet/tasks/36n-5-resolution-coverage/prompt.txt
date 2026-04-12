@@ -1,0 +1,39 @@
+[Task 36n-5-resolution-coverage] PHASE 1: QUESTION GENERATION
+Title: Realign direct and HTTP resolution coverage with settlement semantics
+Description: Update tests/test_bayes_market_api.py so resolution assertions match the frozen contract. After resolve: accounts retain risk doc but lose resolved market exposure, lmsrState slices removed, assetDelta reflects minAsset release, idempotent replays preserve original event, closed-market + invalid-resolution rejections remain covered.
+Repo: /home/kelvin/bayes-market
+
+Explore the codebase. Identify what you need to know before building.
+
+YOU MUST create .fleet/tasks/36n-5-resolution-coverage/questions.json with this structure:
+{
+  "phase": "question",
+  "questions": [
+    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  ],
+  "assumptions": [
+    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  ],
+
+  "decomposition_assessment": {
+    "complexity_score": <1-5>,
+    "complexity_reason": "why this score - consider: lines of code, number of files, architectural changes needed",
+    "uncertainty_score": <1-5>,
+    "uncertainty_reason": "what you don't know - consider: unfamiliar APIs, unclear requirements, risky changes",
+    "independent_subproblems": ["list clearly separable sub-tasks that could run in parallel"],
+    "decision": "PROCEED_ALONE | SPAWN_CHILDREN",
+    "decision_reason": "justify based on scores and subproblems"
+  },
+
+  "spawn_children": <true if decision=SPAWN_CHILDREN>,
+  "children": [{ "id": "child-1", "title": "...", "description": "..." }]
+}
+
+DECOMPOSITION DECISION RULES:
+- complexity >= 4 AND 2+ independent subproblems → SPAWN_CHILDREN
+- uncertainty >= 4 AND questions span multiple domains → SPAWN_CHILDREN
+- Task requires changes to 5+ files across different modules → SPAWN_CHILDREN
+- Otherwise → PROCEED_ALONE
+
+DO NOT STOP until questions.json exists and contains at least one question.
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: 36n-5-resolution-coverage"
