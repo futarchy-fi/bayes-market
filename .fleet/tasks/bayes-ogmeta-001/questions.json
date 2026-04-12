@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The task requests 'current probabilities' in the /v1/markets/{id}/meta response, but the existing build_market_preview() only returns title, description, url, siteName, and type. Should the preview include marginals (outcome probabilities) as a top-level field, and if so, what format — flat map like {outcome_id: probability} or an array of {name, probability} objects?",
+      "category": "requirements",
+      "why_it_matters": "The previous task (bayes-market-0e6) explicitly decided NOT to inject probabilities into the preview. This task's description says to include them, so we need to confirm the format before changing the contract."
+    },
+    {
+      "id": "q2",
+      "question": "The task requests og:image support. There are no image assets in the repo and no image generation pipeline. Should we: (a) skip og:image for now, (b) use a static placeholder image checked into the repo, or (c) dynamically generate preview images (e.g. SVG/PNG with probability bars)?",
+      "category": "design",
+      "why_it_matters": "Dynamic image generation is a large scope increase. A static image is trivial. Skipping it keeps the previous task's decision intact. This fundamentally changes the implementation effort."
+    },
+    {
+      "id": "q3",
+      "question": "Should the og:description tag include live probability data (e.g. 'Yes: 72% | No: 28%') or remain the market's static description field? The previous task decided against volatile text in previews.",
+      "category": "requirements",
+      "why_it_matters": "If the description tag should show probabilities, the server-side HTML injection needs to build a dynamic string from marginals. This affects how stale cached link previews become."
+    },
+    {
+      "id": "q4",
+      "question": "Should Twitter Card meta tags (twitter:card, twitter:title, twitter:description, twitter:image) be added alongside the OG tags, or is Open Graph sufficient for this task?",
+      "category": "requirements",
+      "why_it_matters": "Twitter/X uses its own card tags and falls back to OG tags only partially. Adding twitter:card ensures proper rendering on that platform. It's low effort if we're already touching the tag injection code."
+    },
+    {
+      "id": "q5",
+      "question": "The existing MarketPreview TypeScript interface matches the current backend contract (no probabilities). If we add probabilities to the meta endpoint, should we also add a useMarketPreview React Query hook and/or a share button UI component in MarketDetail?",
+      "category": "design",
+      "why_it_matters": "The task says 'frontend: ensure /markets/{id} route resolves correctly for deep links' which already works. But the frontend API client already has getMarketPreview() — clarifying whether we need frontend UI changes scopes the work."
+    },
+    {
+      "id": "q6",
+      "question": "For og:image, if we go with a static image, what should the canonical URL be? The backend serves static assets from frontend/dist/ with immutable caching for hashed filenames but no-store for HTML. Should the image live at a stable path like /og-image.png?",
+      "category": "design",
+      "why_it_matters": "Social crawlers cache og:image URLs aggressively. A stable, non-hashed path avoids broken previews after deploys. But we need to confirm the static serving path works for root-level assets."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The existing /v1/markets/{id}/meta endpoint, OG tag injection, and SPA fallback routing from the previous task (bayes-market-0e6) are correct and should be extended rather than rewritten.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to audit and potentially rewrite the existing OG infrastructure before extending it."
+    },
+    {
+      "id": "a2",
+      "assumption": "The market 'marginals' dict (outcome_id → probability) on each market object is the correct source for 'current probabilities' referenced in the task description.",
+      "confidence": 0.9,
+      "if_wrong": "May need to compute probabilities from a different source like the LMSR engine or conditional marginals table."
+    },
+    {
+      "id": "a3",
+      "assumption": "og:image can be deferred or implemented with a static placeholder, since dynamic image generation is out of scope for this task.",
+      "confidence": 0.7,
+      "if_wrong": "Would need to build an image generation service or endpoint, significantly increasing scope."
+    },
+    {
+      "id": "a4",
+      "assumption": "Deep linking already works correctly — the backend serves index.html for /markets/{id} routes with injected OG tags, and React Router handles client-side rendering.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to debug SPA routing or server-side fallback behavior."
+    },
+    {
+      "id": "a5",
+      "assumption": "The existing test patterns (unittest in test_bayes_market_api.py calling route_request() directly) should be followed for new test cases.",
+      "confidence": 0.95,
+      "if_wrong": "Different test approach needed, but unlikely given the well-established patterns."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
