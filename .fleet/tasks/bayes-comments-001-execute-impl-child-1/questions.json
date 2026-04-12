@@ -1,0 +1,81 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the new tests be added to BayesMarketApiAuthRateLimitTests (which has the existing comment test and HTTP server setup) or to BayesMarketApiUnitTests (which calls server.route_request directly without HTTP)?",
+      "category": "codebase",
+      "why_it_matters": "BayesMarketApiAuthRateLimitTests already has the comment_post helper, HTTP server, and the one existing comment test. BayesMarketApiUnitTests uses direct server.route_request calls. The choice determines which helpers are available and whether tests go through HTTP auth/rate-limit middleware."
+    },
+    {
+      "id": "q2",
+      "question": "For GET /v1/markets/{id}/comments tests, should we test via HTTP (BayesMarketApiAuthRateLimitTests.request) or via direct server.route_request? GET does not require agent_id auth.",
+      "category": "design",
+      "why_it_matters": "GET comments doesn't go through write-route auth, so it could be tested in either class. Testing via HTTP is more realistic but slower. The existing comment test is in the auth/rate-limit class, so GET tests could go there for co-location."
+    },
+    {
+      "id": "q3",
+      "question": "For the idempotency conflict test, what exact payload field should differ to trigger a conflict? The normalization only keeps 'body', so sending a different 'body' with the same idempotencyKey should trigger the conflict path.",
+      "category": "requirements",
+      "why_it_matters": "The conflict check compares normalized_payload (which is just {\"body\": ...}). We need to confirm that sending the same idempotencyKey+accountId+marketId but a different body text triggers the 409 idempotency_conflict response."
+    },
+    {
+      "id": "q4",
+      "question": "Should tests for market-not-active rejection directly manipulate server.MARKETS[market_id]['status'] or use the resolve/close API endpoints to change market status?",
+      "category": "design",
+      "why_it_matters": "Direct manipulation is simpler and more isolated. Existing tests already set server.MARKETS['m1']['status'] = 'closed' directly (line 157). Using API calls would be more realistic but adds dependencies."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "Tests should be added to BayesMarketApiAuthRateLimitTests class since it has the comment_post helper, HTTP server, and the existing comment test.",
+      "confidence": 0.9,
+      "if_wrong": "Would need to create helpers in a different test class or create a new dedicated class for comment tests."
+    },
+    {
+      "id": "a2",
+      "assumption": "GET comments tests should use the HTTP request() method in BayesMarketApiAuthRateLimitTests (no agent_id needed since GET is not a write route), posting comments first via comment_post to populate data.",
+      "confidence": 0.85,
+      "if_wrong": "Would need to test via server.route_request directly in BayesMarketApiUnitTests instead."
+    },
+    {
+      "id": "a3",
+      "assumption": "The GET comments endpoint returns 200 with {marketId, comments: [], pagination: {fromSeq, limit, returned, nextFromSeq}, meta: {timestamp}} structure, and comments are sorted by seq ascending.",
+      "confidence": 0.95,
+      "if_wrong": "Response structure mismatch would cause assertion failures; would need to read the actual response format."
+    },
+    {
+      "id": "a4",
+      "assumption": "For idempotency replay, the replayed response includes 'meta.replayed': True and returns status 201, matching the replay_comment_post_outcome function behavior.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to adjust assertions for the replay response format."
+    },
+    {
+      "id": "a5",
+      "assumption": "For market-not-active rejection, directly setting server.MARKETS['m1']['status'] to a non-active value (e.g., 'closed') is acceptable, matching existing test patterns.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to use API endpoints to change market status instead."
+    },
+    {
+      "id": "a6",
+      "assumption": "Validation error tests for POST should cover: missing accountId, missing body, empty body, body exceeding MAX_COMMENT_BODY_LENGTH (2000 chars), and invalid idempotencyKey (empty string).",
+      "confidence": 0.9,
+      "if_wrong": "May need additional or fewer validation cases."
+    },
+    {
+      "id": "a7",
+      "assumption": "GET comments pagination test should verify: default pagination (no params), fromSeq filtering, limit capping, nextFromSeq calculation (present when more comments exist, null when at end), and 404 for non-existent market.",
+      "confidence": 0.9,
+      "if_wrong": "May need different pagination test scenarios."
+    },
+    {
+      "id": "a8",
+      "assumption": "All POST comment tests need an agent_id header since comments are categorized as TRADE_WRITE_CATEGORY which requires X-Bayes-Agent-Id.",
+      "confidence": 0.95,
+      "if_wrong": "Tests would fail with 401/403 auth errors if agent_id is needed but not provided."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
