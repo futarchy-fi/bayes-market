@@ -1,39 +1,36 @@
-[Task 8rp-2-extract-min-asset] PHASE 1: QUESTION GENERATION
+[Task 8rp-2-extract-min-asset] PHASE 2: RESEARCH & DECISION
 Title: Extract min_asset_check and align the rejection contract
-Description: Move the solvency guard out of handle_probability_edit() into a dedicated min_asset_check() helper. Preserve acceptance when afterMinAsset == 0. Change negative-headroom failures to ApiError status 422 with code min_asset_violation.
-Repo: /home/kelvin/bayes-market
 
-Explore the codebase. Identify what you need to know before building.
+Read .fleet/tasks/8rp-2-extract-min-asset/questions.json for the questions to answer.
+Research each question in the codebase. Provide answers with confidence scores.
 
-YOU MUST create .fleet/tasks/8rp-2-extract-min-asset/questions.json with this structure:
+YOU MUST create .fleet/tasks/8rp-2-extract-min-asset/research.json with this structure:
 {
-  "phase": "question",
-  "questions": [
-    { "id": "q1", "question": "...", "category": "requirements|codebase|design", "why_it_matters": "..." }
+  "phase": "research",
+  "answers": [
+    { "question_id": "q1", "answer": "...", "confidence": 0.0-1.0, "evidence": ["file:line"], "uncertainty": "..." }
   ],
-  "assumptions": [
-    { "id": "a1", "assumption": "...", "confidence": 0.0-1.0, "if_wrong": "..." }
+  "assumption_checks": [
+    { "assumption_id": "a1", "verdict": "CORRECT|WRONG|UNCERTAIN", "confidence": 0.0-1.0, "impact": "..." }
   ],
 
   "decomposition_assessment": {
-    "complexity_score": <1-5>,
-    "complexity_reason": "why this score - consider: lines of code, number of files, architectural changes needed",
-    "uncertainty_score": <1-5>,
-    "uncertainty_reason": "what you don't know - consider: unfamiliar APIs, unclear requirements, risky changes",
-    "independent_subproblems": ["list clearly separable sub-tasks that could run in parallel"],
+    "lowest_confidence_answer": <0.0-1.0>,
+    "num_uncertain_answers": <count where confidence < 0.7>,
+    "research_gaps": ["questions that need deeper investigation"],
     "decision": "PROCEED_ALONE | SPAWN_CHILDREN",
-    "decision_reason": "justify based on scores and subproblems"
+    "decision_reason": "justify based on confidence levels and gaps"
   },
 
   "spawn_children": <true if decision=SPAWN_CHILDREN>,
-  "children": [{ "id": "child-1", "title": "...", "description": "..." }]
+  "children": [{ "id": "research-child-1", "title": "...", "description": "investigate: ..." }]
 }
 
 DECOMPOSITION DECISION RULES:
-- complexity >= 4 AND 2+ independent subproblems → SPAWN_CHILDREN
-- uncertainty >= 4 AND questions span multiple domains → SPAWN_CHILDREN
-- Task requires changes to 5+ files across different modules → SPAWN_CHILDREN
+- Any answer with confidence < 0.5 on a critical question → SPAWN_CHILDREN to investigate
+- 3+ answers with confidence < 0.7 → SPAWN_CHILDREN to reduce uncertainty
+- Research gaps that block implementation → SPAWN_CHILDREN
 - Otherwise → PROCEED_ALONE
 
-DO NOT STOP until questions.json exists and contains at least one question.
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "question: 8rp-2-extract-min-asset"
+DO NOT STOP until research.json exists and contains answers to all questions.
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "research: 8rp-2-extract-min-asset"
