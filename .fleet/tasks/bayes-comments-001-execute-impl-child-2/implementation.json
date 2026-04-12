@@ -1,0 +1,76 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Create frontend/src/__tests__/DiscussionThread.test.tsx with test scaffolding: imports, vi.mock, mock data factories for Market, CommentsResponse, and Comment objects",
+      "files_created": ["frontend/src/__tests__/DiscussionThread.test.tsx"],
+      "files_modified": [],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Implement test: renders comment list with author, body, seq, and relative time",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/DiscussionThread.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Implement test: shows empty state when no comments",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/DiscussionThread.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Implement test: shows loading state before data resolves",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/DiscussionThread.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Implement test: shows error state when query fails",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/DiscussionThread.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Implement test: submits comment via composer form",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/DiscussionThread.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Implement test: disables composer when market status is not active",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/DiscussionThread.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 8,
+      "task": "Implement test: shows character count remaining",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/DiscussionThread.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 9,
+      "task": "Implement test: disables composer when no session configured",
+      "files_created": [],
+      "files_modified": ["frontend/src/__tests__/DiscussionThread.test.tsx"],
+      "verified": true
+    },
+    {
+      "step": 10,
+      "task": "Run vitest for the new test file — all 8 tests pass",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
