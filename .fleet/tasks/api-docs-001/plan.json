@@ -1,0 +1,115 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Target OpenAPI 3.0.3 for maximum tooling compatibility (Swagger UI, code generators, linters)",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["OpenAPI 3.1.0 — better JSON Schema alignment but narrower tooling support; project schemas are simple enough that 3.0.3 handles them well"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Exclude WebSocket endpoints from the OpenAPI spec (REST-only focus)",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Include WS via AsyncAPI or x-extensions — adds significant complexity for 3 endpoints that OpenAPI 3.0 cannot natively represent"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Include all health endpoints: /, /health, /healthz (legacy), and /v1/health (versioned)",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Exclude legacy endpoints — monitoring tools (probe scripts) depend on /healthz per t586 docs"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Document auth as required on protected routes (production behavior) with a description note about the BAYES_REQUIRE_AGENT_ID env var toggle",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Document both modes with conditional security — adds complexity for a dev-only toggle", "Document as optional — misleads about production expectations"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Use contract freeze docs as primary schema source for frozen endpoints, server.py for undocumented endpoints, cross-referencing both",
+      "based_on": ["q5"],
+      "alternatives_rejected": ["Server.py only — misses agreed contract guarantees", "Contract docs only — may miss endpoints without contract docs"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Output as a single docs/openapi.yaml file with tag-based grouping (Health, Markets, Orders, Accounts)",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Multiple spec files per domain — unnecessary complexity for ~21 endpoints in one server"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Create OpenAPI spec skeleton: info block (title, description, version, contact), servers array, tags (Health, Markets, Orders, Accounts), and securitySchemes (X-Bayes-Agent-Id apiKey header)",
+      "depends_on": [],
+      "estimated_lines": 50,
+      "risk": "low"
+    },
+    {
+      "step": 2,
+      "task": "Define shared component schemas: ErrorResponse envelope ({error: {code, message, details}, meta: {timestamp}}), MetaObject, standard error codes (400/401/404/405/422/429/500), and pagination parameters",
+      "depends_on": [1],
+      "estimated_lines": 150,
+      "risk": "low"
+    },
+    {
+      "step": 3,
+      "task": "Document Health endpoints: GET / (service index), GET /health + /healthz (legacy health with {service, status, timestamp}), GET /v1/health (component health with db/inference/auth breakdown). Define HealthResponse and V1HealthResponse schemas",
+      "depends_on": [2],
+      "estimated_lines": 100,
+      "risk": "low"
+    },
+    {
+      "step": 4,
+      "task": "Document Market read endpoints: GET /v1/markets (list with status/sort/q query params), GET /v1/markets/{id} (detail), GET /v1/markets/{id}/meta (preview), GET /v1/markets/{id}/engine-stats, GET /v1/markets/{id}/analytics, GET /v1/markets/{id}/events (paginated), GET /v1/markets/{id}/comments (paginated). Define Market, MarketDetail, MarketPreview, EngineStats, MarketEvent, Comment schemas",
+      "depends_on": [2],
+      "estimated_lines": 300,
+      "risk": "medium"
+    },
+    {
+      "step": 5,
+      "task": "Document Market write endpoints: POST /v1/markets (create with title/description/outcomes/expires_at/liquidity/maxPositionSize), POST /v1/markets/{id}/comments (post comment), POST /v1/markets/{id}/resolve (resolve market). Define request body schemas and CommandAccepted/CommandRejected response schemas per t544 contract",
+      "depends_on": [2],
+      "estimated_lines": 150,
+      "risk": "medium"
+    },
+    {
+      "step": 6,
+      "task": "Document Market order endpoints: POST /v1/markets/{id}/orders/probability-edit (per t1737 contract), POST /v1/markets/{id}/orders/event-trade. Define ProbabilityEditRequest/Response and EventTradeRequest/Response schemas cross-referencing t586 and t1737 contract freeze docs",
+      "depends_on": [2],
+      "estimated_lines": 120,
+      "risk": "medium"
+    },
+    {
+      "step": 7,
+      "task": "Document Account endpoints: GET /v1/accounts/{id}/risk, GET /v1/accounts/{id}/exposure, GET /v1/accounts/{id}/positions, GET /v1/accounts/{id}/pnl, GET /v1/markets/{market_id}/accounts/{account_id}/pnl. Define AccountRisk, Exposure, Position, PnL schemas",
+      "depends_on": [2],
+      "estimated_lines": 150,
+      "risk": "low"
+    },
+    {
+      "step": 8,
+      "task": "Validate the complete spec: check YAML syntax, verify all $ref pointers resolve, ensure all endpoints have responses defined, and confirm schema consistency with contract freeze docs",
+      "depends_on": [3, 4, 5, 6, 7],
+      "estimated_lines": 0,
+      "risk": "low"
+    }
+  ],
+  "decomposition_assessment": {
+    "total_steps": 8,
+    "estimated_total_lines": 1020,
+    "high_risk_steps": 0,
+    "parallelizable_groups": [["step3", "step4", "step5", "step6", "step7"]],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Although estimated_total_lines exceeds 500, this is a single output file (docs/openapi.yaml) where all sections share component schemas, security definitions, and must be internally consistent. Spawning children to write to the same YAML file would create merge conflicts and consistency issues. There are 0 high-risk steps (3 medium at most), and while steps 3-7 are logically parallel, they cannot be independently written to the same file. Both prior phases (questions, research) independently concluded PROCEED_ALONE for the same reason."
+  },
+  "spawn_children": false,
+  "children": []
+}
