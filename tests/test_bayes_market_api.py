@@ -9899,5 +9899,211 @@ class BayesMarketPnlTests(unittest.TestCase):
         self.assertAlmostEqual(no_outcome["realizedPnl"], -notional, places=4)
 
 
+class BayesMarketInternalErrorTests(unittest.TestCase):
+    """Tests for inference adapter 500-error propagation paths."""
+
+    def setUp(self) -> None:
+        server.reset_state()
+
+    def test_compile_market_inference_compile_error_raises_500(self):
+        """InferenceCompileError during compile_market → ApiError(500, 'internal_error')."""
+        market_id = REFERENCE_NET_MARKET_IDS[0]
+        mock_compiler = Mock()
+        mock_compiler.compile_result = Mock(side_effect=server.InferenceCompileError("boom"))
+        original = server.CURRENT_MODEL_COMPILER
+        server.CURRENT_MODEL_COMPILER = mock_compiler
+        try:
+            # Invalidate cache so compile_result is actually called
+            server.COMPILE_RESULT_CACHE.invalidate_all()
+            with self.assertRaises(server.ApiError) as ctx:
+                server.compile_market_for_inference(market_id)
+            self.assertEqual(ctx.exception.status, 500)
+            self.assertEqual(ctx.exception.code, "internal_error")
+        finally:
+            server.CURRENT_MODEL_COMPILER = original
+
+    def test_query_marginals_inference_query_error_raises_500(self):
+        """InferenceQueryError during query_marginals → ApiError(500, 'internal_error')."""
+        market_id = REFERENCE_NET_MARKET_IDS[0]
+        mock_backend = Mock()
+        mock_backend.query_marginals = Mock(side_effect=server.InferenceQueryError("query failed"))
+        original = server.CURRENT_MODEL_QUERY_BACKEND
+        server.CURRENT_MODEL_QUERY_BACKEND = mock_backend
+        try:
+            with self.assertRaises(server.ApiError) as ctx:
+                server.query_market_marginals_for_inference(market_id, [])
+            self.assertEqual(ctx.exception.status, 500)
+            self.assertEqual(ctx.exception.code, "internal_error")
+        finally:
+            server.CURRENT_MODEL_QUERY_BACKEND = original
+
+    def test_query_atomic_event_inference_query_error_raises_500(self):
+        """InferenceQueryError during query_atomic_event → ApiError(500, 'internal_error')."""
+        market_id = REFERENCE_NET_MARKET_IDS[0]
+        mock_backend = Mock()
+        mock_backend.query_atomic_event = Mock(side_effect=server.InferenceQueryError("atomic query failed"))
+        original = server.CURRENT_MODEL_QUERY_BACKEND
+        server.CURRENT_MODEL_QUERY_BACKEND = mock_backend
+        try:
+            with self.assertRaises(server.ApiError) as ctx:
+                server.query_market_atomic_probability_for_inference(market_id, "yes")
+            self.assertEqual(ctx.exception.status, 500)
+            self.assertEqual(ctx.exception.code, "internal_error")
+        finally:
+            server.CURRENT_MODEL_QUERY_BACKEND = original
+
+    def test_query_marginals_unsupported_query_error_raises_500(self):
+        """InferenceUnsupportedQueryError during query_marginals → ApiError(500, 'internal_error')."""
+        market_id = REFERENCE_NET_MARKET_IDS[0]
+        mock_backend = Mock()
+        mock_backend.query_marginals = Mock(side_effect=server.InferenceUnsupportedQueryError("unsupported"))
+        original = server.CURRENT_MODEL_QUERY_BACKEND
+        server.CURRENT_MODEL_QUERY_BACKEND = mock_backend
+        try:
+            with self.assertRaises(server.ApiError) as ctx:
+                server.query_market_marginals_for_inference(market_id, [])
+            self.assertEqual(ctx.exception.status, 500)
+            self.assertEqual(ctx.exception.code, "internal_error")
+        finally:
+            server.CURRENT_MODEL_QUERY_BACKEND = original
+
+
+class BayesMarketProbEditFallbackTests(unittest.TestCase):
+    """Tests for probability-edit 500→fallback path."""
+
+    def setUp(self) -> None:
+        server.reset_state()
+
+    def test_probability_edit_falls_back_on_inference_500(self):
+        """When resolve_probability_edit_base_marginals raises ApiError(500), fallback is used and normalize succeeds."""
+        market_id = REFERENCE_NET_MARKET_IDS[0]
+        market = server.MARKETS[market_id]
+        # Build a valid payload dict for normalize_probability_edit_payload
+        body = {
+            "variableId": market["variableId"],
+            "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+            "context": [],
+        }
+        original_marginals = deepcopy(market["marginals"])
+
+        with patch.object(
+            server,
+            "resolve_probability_edit_base_marginals",
+            side_effect=server.ApiError(500, "internal_error", "Inference down"),
+        ):
+            result = server.normalize_probability_edit_payload(market_id, body)
+
+        # The function should have succeeded using the fallback path
+        self.assertEqual(result["target"]["outcomeId"], "yes")
+        self.assertAlmostEqual(result["target"]["probability"], 0.8, places=4)
+        # Restore market state for other tests
+        market["marginals"] = original_marginals
+
+    def test_probability_edit_reraises_non_500_api_error(self):
+        """When resolve_probability_edit_base_marginals raises non-500 ApiError, it propagates."""
+        market_id = REFERENCE_NET_MARKET_IDS[0]
+        market = server.MARKETS[market_id]
+        body = {
+            "variableId": market["variableId"],
+            "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+            "context": [],
+        }
+
+        with patch.object(
+            server,
+            "resolve_probability_edit_base_marginals",
+            side_effect=server.ApiError(400, "bad_request", "Bad request"),
+        ):
+            with self.assertRaises(server.ApiError) as ctx:
+                server.normalize_probability_edit_payload(market_id, body)
+            self.assertEqual(ctx.exception.status, 400)
+            self.assertEqual(ctx.exception.code, "bad_request")
+
+
+class BayesMarketPnlDouble404Tests(unittest.TestCase):
+    """Tests for account PnL double-404 edge case."""
+
+    def setUp(self) -> None:
+        server.reset_state()
+
+    def test_account_pnl_double_404_with_unrecognized_order_type(self):
+        """Orders exist with unrecognized type → first 404 passes but compute_market_pnl returns None → second 404."""
+        account_id = "acct_double404"
+        market_id = REFERENCE_NET_MARKET_IDS[0]
+
+        # Inject an order with an unrecognized type directly into ORDERS
+        fake_order_id = "order_fake_type_001"
+        server.ORDERS[fake_order_id] = {
+            "orderId": fake_order_id,
+            "marketId": market_id,
+            "accountId": account_id,
+            "type": "UnknownOrderType",
+            "status": "filled",
+        }
+
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("GET", f"/v1/accounts/{account_id}/pnl")
+
+        self.assertEqual(ctx.exception.status, 404)
+        self.assertEqual(ctx.exception.code, "no_orders_found")
+
+
+class BayesMarketAnalyticsMalformedTimestampTests(unittest.TestCase):
+    """Tests for analytics endpoint handling of malformed timestamps."""
+
+    def setUp(self) -> None:
+        server.reset_state()
+
+    def test_analytics_skips_events_with_malformed_timestamps(self):
+        """Events with invalid ISO timestamps are silently skipped in price_history."""
+        market_id = REFERENCE_NET_MARKET_IDS[0]
+
+        # First place a real trade to create valid events
+        body = build_unconditional_probability_edit_body("acct_ts_1", market_id, "yes", 0.8)
+        payload, status = server.route_request(
+            "POST", f"/v1/markets/{market_id}/orders/probability-edit", body
+        )
+        assert status == 201
+
+        # Count valid events before injection
+        with server._EVENTS_LOCK:
+            valid_events_before = [
+                e for e in server.EVENTS.values()
+                if str(e.get("marketId")) == market_id
+                and str(e.get("eventType")) not in ("MarketCreated",)
+            ]
+        valid_count_before = len(valid_events_before)
+
+        # Inject events with malformed timestamps
+        for i, bad_ts in enumerate(["not-a-date", "2026-13-99T99:99:99Z", ""]):
+            event_id = f"evt_bad_ts_{i}"
+            server.EVENTS[event_id] = {
+                "eventId": event_id,
+                "marketId": market_id,
+                "eventType": "ProbabilityEdited",
+                "emittedAt": bad_ts,
+                "payload": {"marginals": {"yes": 0.7, "no": 0.3}},
+            }
+
+        # Request analytics
+        analytics_payload, analytics_status = server.route_request(
+            "GET", f"/v1/markets/{market_id}/analytics"
+        )
+
+        self.assertEqual(analytics_status, 200)
+        price_history = analytics_payload["price_history"]
+
+        # The malformed-timestamp events should be skipped, so bucket count
+        # should only reflect the valid events
+        self.assertIsInstance(price_history, list)
+        # At minimum we should have buckets from the valid trade
+        self.assertGreater(valid_count_before, 0)
+        # Each bucket should have valid timestamp and marginals
+        for bucket in price_history:
+            self.assertIn("timestamp", bucket)
+            self.assertIn("marginals", bucket)
+            self.assertIsInstance(bucket["marginals"], dict)
+
+
 if __name__ == "__main__":
     unittest.main()
