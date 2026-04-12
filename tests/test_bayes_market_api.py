@@ -2692,31 +2692,26 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         preview_delta, low_min_asset = seed_low_headroom_account("acct_low")
         with patch.object(server, "create_probability_edit_order", autospec=True) as create_order_mock:
             with patch.object(server, "sync_account_risk_state", autospec=True) as sync_risk_mock:
-                payload, status = server.route_request(
-                    "POST",
-                    "/v1/markets/m1/orders/probability-edit",
-                    {
-                        "accountId": "acct_low",
-                        "variableId": "eth_price_gt_3000_mar15",
-                        "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
-                        "context": [],
-                    },
-                )
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(
+                        "POST",
+                        "/v1/markets/m1/orders/probability-edit",
+                        {
+                            "accountId": "acct_low",
+                            "variableId": "eth_price_gt_3000_mar15",
+                            "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                            "context": [],
+                        },
+                    )
 
-        self.assertEqual(status, 409)
-        self.assertEqual(payload["error"]["code"], "min_asset_violation")
-        self.assertEqual(payload["error"]["message"], "Edit would produce negative state-contingent assets")
-        self.assertEqual(payload["result"]["status"], "rejected")
-        self.assertEqual(payload["result"]["eventType"], "CommandRejected")
-        self.assertEqual(payload["result"]["reasonCode"], "min_asset_violation")
-        self.assertEqual(payload["result"]["reason"], "Edit would produce negative state-contingent assets")
-        self.assertEqual(payload["result"]["retryHint"], "reduce probability target")
+        error = ctx.exception
+        self.assertEqual(error.status, 422)
+        self.assertEqual(error.code, "min_asset_violation")
+        self.assertEqual(error.message, "Edit would produce negative state-contingent assets")
         self.assertEqual(
-            payload["error"]["details"],
+            error.details,
             {
                 "accountId": "acct_low",
-                "marketId": "m1",
-                "commandId": payload["result"]["commandId"],
                 "riskLimit": 100.0,
                 "beforeMinAsset": low_min_asset,
                 "impactScore": preview_delta["impactScore"],
@@ -2731,8 +2726,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         )
         create_order_mock.assert_not_called()
         sync_risk_mock.assert_not_called()
-        self.assertEqual(len(server.COMMANDS), 1)
-        self.assertEqual(len(server.EVENTS), 1)
+        self.assertEqual(len(server.COMMANDS), 0)
+        self.assertEqual(len(server.EVENTS), 0)
 
     def test_probability_edit_accepts_unconditional_edit_at_zero_min_asset_boundary(self):
         preview_delta, exact_headroom = seed_exact_headroom_account("acct_edge")
@@ -2773,29 +2768,30 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "context": [],
         }
 
-        first_payload, first_status = server.route_request(
-            "POST",
-            "/v1/markets/m1/orders/probability-edit",
-            body,
-        )
-        second_payload, second_status = server.route_request(
-            "POST",
-            "/v1/markets/m1/orders/probability-edit",
-            body,
-        )
+        with self.assertRaises(server.ApiError) as first_ctx:
+            server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/probability-edit",
+                body,
+            )
+        with self.assertRaises(server.ApiError) as second_ctx:
+            server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/probability-edit",
+                body,
+            )
 
-        self.assertEqual(first_status, 409)
-        self.assertEqual(second_status, 409)
-        self.assertEqual(first_payload["error"]["code"], "min_asset_violation")
-        self.assertEqual(second_payload["error"]["details"]["impactScore"], preview_delta["impactScore"])
-        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
-        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
-        self.assertTrue(second_payload["meta"]["replayed"])
+        first_error = first_ctx.exception
+        second_error = second_ctx.exception
+        self.assertEqual(first_error.status, 422)
+        self.assertEqual(second_error.status, 422)
+        self.assertEqual(first_error.code, "min_asset_violation")
+        self.assertEqual(second_error.details["impactScore"], preview_delta["impactScore"])
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(server.ACCOUNT_RISK["acct_low"]["minAsset"], low_min_asset)
-        self.assertEqual(len(server.COMMANDS), 1)
-        self.assertEqual(len(server.EVENTS), 1)
+        self.assertEqual(len(server.COMMANDS), 0)
+        self.assertEqual(len(server.EVENTS), 0)
 
     def test_probability_edit_replay_returns_stored_min_asset_rejection_contract(self):
         seed_low_headroom_account("acct_low_replay_contract")
@@ -2807,32 +2803,28 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "context": [],
         }
 
-        first_payload, first_status = server.route_request(
-            "POST",
-            "/v1/markets/m1/orders/probability-edit",
-            body,
-        )
-        with patch.object(server, "preview_unconditional_probability_edit", autospec=True) as preview_mock:
-            second_payload, second_status = server.route_request(
+        with self.assertRaises(server.ApiError) as first_ctx:
+            server.route_request(
+                "POST",
+                "/v1/markets/m1/orders/probability-edit",
+                body,
+            )
+        with self.assertRaises(server.ApiError) as second_ctx:
+            server.route_request(
                 "POST",
                 "/v1/markets/m1/orders/probability-edit",
                 body,
             )
 
-        self.assertEqual(first_status, 409)
-        self.assertEqual(second_status, 409)
-        preview_mock.assert_not_called()
-        self.assertEqual(second_payload["error"], first_payload["error"])
-        self.assertEqual(second_payload["result"], first_payload["result"])
-        self.assertEqual(second_payload["meta"]["idempotencyKeyEcho"], first_payload["meta"]["idempotencyKeyEcho"])
-        self.assertEqual(
-            {key: value for key, value in second_payload["meta"].items() if key != "replayed"},
-            first_payload["meta"],
-        )
-        self.assertTrue(second_payload["meta"]["replayed"])
-        self.assertEqual(len(server.COMMANDS), 1)
-        self.assertEqual(len(server.EVENTS), 1)
-        self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
+        first_error = first_ctx.exception
+        second_error = second_ctx.exception
+        self.assertEqual(first_error.status, 422)
+        self.assertEqual(second_error.status, 422)
+        self.assertEqual(first_error.code, second_error.code)
+        self.assertEqual(first_error.details, second_error.details)
+        self.assertEqual(len(server.COMMANDS), 0)
+        self.assertEqual(len(server.EVENTS), 0)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), 0)
 
     def test_probability_edit_replays_rejected_idempotent_submission(self):
         body = {
@@ -5426,12 +5418,14 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
             baseline_account = seed_account_min_asset(account_id, starting_min_asset)
             seeded_preview = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
 
-            payload, status = server.route_request(
-                "POST",
-                f"/v1/markets/{market_id}/orders/probability-edit",
-                body,
-            )
+            with self.assertRaises(server.ApiError) as ctx:
+                server.route_request(
+                    "POST",
+                    f"/v1/markets/{market_id}/orders/probability-edit",
+                    body,
+                )
 
+            error = ctx.exception
             with self.subTest(
                 case_index=case_index,
                 market_id=market_id,
@@ -5439,27 +5433,26 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
                 probability=probability,
                 impact_score=impact_score,
             ):
-                self.assertEqual(status, 409)
-                self.assertEqual(payload["error"]["code"], "min_asset_violation")
-                self.assertEqual(payload["result"]["status"], "rejected")
+                self.assertEqual(error.status, 422)
+                self.assertEqual(error.code, "min_asset_violation")
                 self.assertEqual(
-                    payload["error"]["details"]["beforeMinAsset"],
+                    error.details["beforeMinAsset"],
                     seeded_preview["assetDelta"]["beforeMinAsset"],
                 )
                 self.assertEqual(
-                    payload["error"]["details"]["impactScore"],
+                    error.details["impactScore"],
                     seeded_preview["assetDelta"]["impactScore"],
                 )
                 self.assertEqual(
-                    payload["error"]["details"]["afterMinAsset"],
+                    error.details["afterMinAsset"],
                     seeded_preview["assetDelta"]["afterMinAsset"],
                 )
-                self.assertLess(payload["error"]["details"]["afterMinAsset"], 0.0)
+                self.assertLess(error.details["afterMinAsset"], 0.0)
                 self.assertEqual(server.MARKETS[market_id]["marginals"], baseline_market)
                 self.assertEqual(server.ACCOUNT_RISK[account_id], baseline_account)
                 self.assertEqual(server.ORDERS, {})
-                self.assertEqual(len(server.COMMANDS), 1)
-                self.assertEqual(len(server.EVENTS), 1)
+                self.assertEqual(len(server.COMMANDS), 0)
+                self.assertEqual(len(server.EVENTS), 0)
 
     def test_conditional_probability_edit_property_bypasses_unconditional_guard_after_exact_zero_acceptance(self):
         rng = random.Random(587)
@@ -5588,12 +5581,14 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
             follow_up_normalized = server.normalize_probability_edit_payload(market_id, follow_up_body)
             follow_up_preview = server.preview_unconditional_probability_edit(market_id, follow_up_normalized, account_id)
 
-            follow_up_payload, follow_up_status = server.route_request(
-                "POST",
-                f"/v1/markets/{market_id}/orders/probability-edit",
-                follow_up_body,
-            )
+            with self.assertRaises(server.ApiError) as follow_up_ctx:
+                server.route_request(
+                    "POST",
+                    f"/v1/markets/{market_id}/orders/probability-edit",
+                    follow_up_body,
+                )
 
+            follow_up_error = follow_up_ctx.exception
             with self.subTest(
                 case_index=case_index,
                 market_id=market_id,
@@ -5612,17 +5607,15 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
                 self.assertGreater(follow_up_preview["assetDelta"]["impactScore"], 0.0)
                 self.assertEqual(follow_up_preview["assetDelta"]["beforeMinAsset"], 0.0)
                 self.assertLess(follow_up_preview["assetDelta"]["afterMinAsset"], 0.0)
-                self.assertEqual(follow_up_status, 409)
-                self.assertEqual(follow_up_payload["error"]["code"], "min_asset_violation")
-                self.assertEqual(follow_up_payload["result"]["status"], "rejected")
-                self.assertEqual(follow_up_payload["result"]["reasonCode"], "min_asset_violation")
-                self.assertEqual(follow_up_payload["error"]["details"]["beforeMinAsset"], 0.0)
+                self.assertEqual(follow_up_error.status, 422)
+                self.assertEqual(follow_up_error.code, "min_asset_violation")
+                self.assertEqual(follow_up_error.details["beforeMinAsset"], 0.0)
                 self.assertEqual(
-                    follow_up_payload["error"]["details"]["impactScore"],
+                    follow_up_error.details["impactScore"],
                     follow_up_preview["assetDelta"]["impactScore"],
                 )
                 self.assertEqual(
-                    follow_up_payload["error"]["details"]["afterMinAsset"],
+                    follow_up_error.details["afterMinAsset"],
                     follow_up_preview["assetDelta"]["afterMinAsset"],
                 )
                 self.assertEqual(server.MARKETS[market_id]["marginals"], post_first_market)
@@ -5650,11 +5643,23 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
                 preview = server.preview_unconditional_probability_edit(market_id, normalized_payload, account_id)
                 seed_account_min_asset(account_id, server.round_risk_value(preview["impactScore"] * 0.5))
 
-            payload, status = server.route_request(
-                "POST",
-                f"/v1/markets/{market_id}/orders/probability-edit",
-                body,
-            )
+            if should_reject:
+                with self.assertRaises(server.ApiError) as ctx:
+                    server.route_request(
+                        "POST",
+                        f"/v1/markets/{market_id}/orders/probability-edit",
+                        body,
+                    )
+                reject_error = ctx.exception
+                payload = None
+                status = None
+            else:
+                payload, status = server.route_request(
+                    "POST",
+                    f"/v1/markets/{market_id}/orders/probability-edit",
+                    body,
+                )
+                reject_error = None
             current_marginals = deepcopy(server.MARKETS[market_id]["marginals"])
 
             with self.subTest(
@@ -5666,9 +5671,8 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
             ):
                 if should_reject:
                     rejected_count += 1
-                    self.assertEqual(status, 409)
-                    self.assertEqual(payload["result"]["status"], "rejected")
-                    self.assertEqual(payload["error"]["code"], "min_asset_violation")
+                    self.assertEqual(reject_error.status, 422)
+                    self.assertEqual(reject_error.code, "min_asset_violation")
                     self.assertEqual(current_marginals, baseline_marginals)
                 else:
                     accepted_count += 1
@@ -5991,21 +5995,18 @@ class BayesMarketApiMarketInvariantTests(unittest.TestCase):
         baseline_head_seq = server.MARKET_EVENT_SEQUENCES[market_id]
         baseline_head_hash = server.LAST_EVENT_HASHES[market_id]
 
-        payload, status = server.route_request("POST", market_path, rejecting_body)
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", market_path, rejecting_body)
         events_payload, events_status = server.route_request("GET", f"/v1/markets/{market_id}/events")
 
-        self.assertEqual(status, 409)
+        error = ctx.exception
+        self.assertEqual(error.status, 422)
         self.assertEqual(events_status, 200)
-        self.assertEqual(payload["error"]["code"], "min_asset_violation")
-        self.assertEqual(payload["result"]["status"], "rejected")
-        self.assertEqual(payload["result"]["eventType"], "CommandRejected")
-        self.assertEqual(payload["result"]["reasonCode"], "min_asset_violation")
+        self.assertEqual(error.code, "min_asset_violation")
         self.assertEqual(
-            payload["error"]["details"],
+            error.details,
             {
                 "accountId": rejecting_account_id,
-                "marketId": market_id,
-                "commandId": payload["result"]["commandId"],
                 "riskLimit": rejecting_preview["assetDelta"]["riskLimit"],
                 "beforeMinAsset": rejecting_preview["assetDelta"]["beforeMinAsset"],
                 "impactScore": rejecting_preview["assetDelta"]["impactScore"],
@@ -6014,26 +6015,12 @@ class BayesMarketApiMarketInvariantTests(unittest.TestCase):
         )
         self.assertEqual(server.MARKETS[market_id], baseline_market)
         self.assertEqual(server.ACCOUNT_RISK[rejecting_account_id], baseline_account)
-        self.assertEqual(len(server.EVENTS), baseline_event_count + 1)
-
-        rejection_event = server.EVENTS[payload["result"]["eventId"]]
-        self.assertEqual(rejection_event["eventType"], "CommandRejected")
-        self.assertEqual(rejection_event["seq"], baseline_head_seq + 1)
-        self.assertEqual(rejection_event["prevEventHash"], baseline_head_hash)
-        self.assertEqual(
-            rejection_event["payload"],
-            {
-                "reasonCode": "min_asset_violation",
-                "reason": "Edit would produce negative state-contingent assets",
-                "retryHint": "reduce probability target",
-            },
-        )
-        self.assertEqual(server.MARKET_EVENT_SEQUENCES[market_id], rejection_event["seq"])
-        self.assertEqual(server.LAST_EVENT_HASHES[market_id], rejection_event["eventHash"])
-        self.assertEqual(len(events_payload["events"]), baseline_event_count + 1)
-        self.assertEqual(events_payload["events"][-1], rejection_event)
-        self.assertEqual(events_payload["chain"]["headSeq"], rejection_event["seq"])
-        self.assertEqual(events_payload["chain"]["headHash"], rejection_event["eventHash"])
+        self.assertEqual(len(server.EVENTS), baseline_event_count)
+        self.assertEqual(server.MARKET_EVENT_SEQUENCES[market_id], baseline_head_seq)
+        self.assertEqual(server.LAST_EVENT_HASHES[market_id], baseline_head_hash)
+        self.assertEqual(len(events_payload["events"]), baseline_event_count)
+        self.assertEqual(events_payload["chain"]["headSeq"], baseline_head_seq)
+        self.assertEqual(events_payload["chain"]["headHash"], baseline_head_hash)
 
     def test_invariant_first_market_event_can_be_rejection_without_state_mutation(self):
         market_id = "m2"
@@ -6056,45 +6043,39 @@ class BayesMarketApiMarketInvariantTests(unittest.TestCase):
         )
         baseline_market = deepcopy(server.MARKETS[market_id])
 
-        payload, status = server.route_request("POST", market_path, rejecting_body)
+        with self.assertRaises(server.ApiError) as ctx:
+            server.route_request("POST", market_path, rejecting_body)
         events_payload, events_status = server.route_request("GET", f"/v1/markets/{market_id}/events")
 
-        self.assertEqual(status, 409)
+        error = ctx.exception
+        self.assertEqual(error.status, 422)
         self.assertEqual(events_status, 200)
-        self.assertEqual(payload["error"]["code"], "min_asset_violation")
-        self.assertEqual(payload["result"]["status"], "rejected")
+        self.assertEqual(error.code, "min_asset_violation")
         self.assertEqual(server.MARKETS[market_id], baseline_market)
         self.assertEqual(server.ACCOUNT_RISK[account_id], baseline_account)
         self.assertEqual(server.ORDERS, {})
-        self.assertEqual(len(server.EVENTS), 1)
-
-        rejection_event = server.EVENTS[payload["result"]["eventId"]]
-        self.assertEqual(rejection_event["eventType"], "CommandRejected")
-        self.assertEqual(rejection_event["seq"], 1)
-        self.assertEqual(rejection_event["prevEventHash"], server.GENESIS_EVENT_HASH)
+        self.assertEqual(len(server.EVENTS), 0)
         self.assertEqual(
-            payload["error"]["details"],
+            error.details,
             {
                 "accountId": account_id,
-                "marketId": market_id,
-                "commandId": payload["result"]["commandId"],
                 "riskLimit": rejecting_preview["assetDelta"]["riskLimit"],
                 "beforeMinAsset": rejecting_preview["assetDelta"]["beforeMinAsset"],
                 "impactScore": rejecting_preview["assetDelta"]["impactScore"],
                 "afterMinAsset": rejecting_preview["assetDelta"]["afterMinAsset"],
             },
         )
-        self.assertEqual(events_payload["events"], [rejection_event])
+        self.assertEqual(events_payload["events"], [])
         self.assertEqual(
             events_payload["chain"],
             {
                 "genesisHash": server.GENESIS_EVENT_HASH,
-                "headSeq": 1,
-                "headHash": rejection_event["eventHash"],
+                "headSeq": 0,
+                "headHash": server.GENESIS_EVENT_HASH,
             },
         )
-        self.assertEqual(server.MARKET_EVENT_SEQUENCES[market_id], 1)
-        self.assertEqual(server.LAST_EVENT_HASHES[market_id], rejection_event["eventHash"])
+        self.assertEqual(server.MARKET_EVENT_SEQUENCES.get(market_id, 0), 0)
+        self.assertEqual(server.LAST_EVENT_HASHES.get(market_id, server.GENESIS_EVENT_HASH), server.GENESIS_EVENT_HASH)
 
 
     def test_invariant_canonical_json_hash_is_deterministic_and_order_independent(self):
@@ -8441,23 +8422,22 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             body,
         )
 
-        self.assertEqual(first_status, 409)
-        self.assertEqual(second_status, 409)
+        self.assertEqual(first_status, 422)
+        self.assertEqual(second_status, 422)
         self.assertEqual(first_payload["error"]["code"], "min_asset_violation")
         self.assertEqual(first_payload["error"]["details"]["beforeMinAsset"], low_min_asset)
         self.assertEqual(first_payload["error"]["details"]["impactScore"], preview_delta["impactScore"])
-        self.assertEqual(second_payload["result"]["eventId"], first_payload["result"]["eventId"])
-        self.assertEqual(second_payload["result"]["commandId"], first_payload["result"]["commandId"])
-        self.assertTrue(second_payload["meta"]["replayed"])
+        self.assertEqual(second_payload["error"]["code"], "min_asset_violation")
+        self.assertEqual(second_payload["error"]["details"]["impactScore"], preview_delta["impactScore"])
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(
             server.ACCOUNT_RISK["acct_http_low"],
             expected_seeded_account_state("acct_http_low", low_min_asset),
         )
-        self.assertEqual(len(server.COMMANDS), 1)
-        self.assertEqual(len(server.EVENTS), 1)
-        self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
+        self.assertEqual(len(server.COMMANDS), 0)
+        self.assertEqual(len(server.EVENTS), 0)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), 0)
 
     def test_probability_edit_http_replay_preserves_min_asset_rejection_contract(self):
         seed_low_headroom_account("acct_http_low_replay_contract")
@@ -8480,19 +8460,12 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             body,
         )
 
-        self.assertEqual(first_status, 409)
-        self.assertEqual(second_status, 409)
+        self.assertEqual(first_status, 422)
+        self.assertEqual(second_status, 422)
         self.assertEqual(second_payload["error"], first_payload["error"])
-        self.assertEqual(second_payload["result"], first_payload["result"])
-        self.assertEqual(second_payload["meta"]["idempotencyKeyEcho"], first_payload["meta"]["idempotencyKeyEcho"])
-        self.assertEqual(
-            {key: value for key, value in second_payload["meta"].items() if key != "replayed"},
-            first_payload["meta"],
-        )
-        self.assertTrue(second_payload["meta"]["replayed"])
-        self.assertEqual(len(server.COMMANDS), 1)
-        self.assertEqual(len(server.EVENTS), 1)
-        self.assertEqual(len(server.TERMINAL_OUTCOMES), 1)
+        self.assertEqual(len(server.COMMANDS), 0)
+        self.assertEqual(len(server.EVENTS), 0)
+        self.assertEqual(len(server.TERMINAL_OUTCOMES), 0)
 
     def test_probability_edit_http_replays_rejected_idempotency_key(self):
         body = {
@@ -8586,17 +8559,15 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         replay_market_status, replay_market_payload = self.request("GET", "/v1/markets/m1")
         replay_events_status, replay_events_payload = self.request("GET", "/v1/markets/m1/events")
 
-        self.assertEqual(first_rejection_status, 409)
+        self.assertEqual(first_rejection_status, 422)
         self.assertEqual(post_rejection_risk_status, 200)
         self.assertEqual(post_rejection_market_status, 200)
         self.assertEqual(post_rejection_events_status, 200)
-        self.assertEqual(replay_status, 409)
+        self.assertEqual(replay_status, 422)
         self.assertEqual(replay_risk_status, 200)
         self.assertEqual(replay_market_status, 200)
         self.assertEqual(replay_events_status, 200)
         self.assertEqual(first_rejection_payload["error"]["code"], "min_asset_violation")
-        self.assertEqual(first_rejection_payload["result"]["status"], "rejected")
-        self.assertEqual(first_rejection_payload["result"]["eventType"], "CommandRejected")
         self.assertGreater(first_rejection_payload["error"]["details"]["impactScore"], 0.0)
         self.assertEqual(
             first_rejection_payload["error"]["details"]["beforeMinAsset"],
@@ -8608,28 +8579,9 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             post_rejection_market_payload["market"]["marginals"],
             last_successful_market_payload["market"]["marginals"],
         )
-        self.assertEqual(post_rejection_events_payload["events"][:-1], last_successful_events_payload["events"])
-        self.assertEqual(len(post_rejection_events_payload["events"]), len(last_successful_events_payload["events"]) + 1)
-        self.assertEqual(
-            post_rejection_events_payload["events"][-1]["eventId"],
-            first_rejection_payload["result"]["eventId"],
-        )
-        self.assertEqual(post_rejection_events_payload["events"][-1]["eventType"], "CommandRejected")
-        self.assertEqual(
-            post_rejection_events_payload["events"][-1]["prevEventHash"],
-            last_successful_events_payload["chain"]["headHash"],
-        )
-        self.assertEqual(
-            post_rejection_events_payload["chain"]["headSeq"],
-            last_successful_events_payload["chain"]["headSeq"] + 1,
-        )
-        self.assertEqual(
-            post_rejection_events_payload["chain"]["headHash"],
-            post_rejection_events_payload["events"][-1]["eventHash"],
-        )
-        self.assertEqual(replay_payload["result"]["eventId"], first_rejection_payload["result"]["eventId"])
-        self.assertEqual(replay_payload["result"]["commandId"], first_rejection_payload["result"]["commandId"])
-        self.assertTrue(replay_payload["meta"]["replayed"])
+        self.assertEqual(post_rejection_events_payload["events"], last_successful_events_payload["events"])
+        self.assertEqual(post_rejection_events_payload["chain"], last_successful_events_payload["chain"])
+        self.assertEqual(replay_payload["error"]["code"], "min_asset_violation")
         self.assertEqual(replay_risk_payload["account"]["risk"], post_rejection_risk_payload["account"]["risk"])
         self.assertEqual(
             replay_market_payload["market"]["marginals"],
