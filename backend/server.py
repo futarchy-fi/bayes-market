@@ -2952,6 +2952,64 @@ def _validated_market_marginals(
     return normalized
 
 
+def compute_conditional_admissible_range(
+    market: dict[str, Any],
+    target_outcome_id: str,
+    base_marginals: dict[str, float],
+) -> tuple[float, float]:
+    """Compute the structural admissible probability range for a conditional edit.
+
+    Returns a (min, max) tuple representing the tightest bounds that the
+    proportional-rescaling algorithm can satisfy without producing negative
+    marginals.
+    """
+    outcome_ids = _market_outcome_ids(market)
+    non_target_ids = [oid for oid in outcome_ids if oid != target_outcome_id]
+    non_target_sum = round(
+        sum(base_marginals.get(oid, 0.0) for oid in non_target_ids), 12
+    )
+
+    # Edge case: all non-target base marginals are zero — target must be 1.0.
+    if non_target_sum <= 0.0:
+        return (1.0, 1.0)
+
+    # Normal case: proportional rescaling preserves non-negativity for any
+    # probability in the open interval (0, 1).  Use a 12-decimal epsilon to
+    # mirror the rounding tolerance used elsewhere in the pipeline.
+    epsilon = 1e-12
+    return (round(epsilon, 12), round(1.0 - epsilon, 12))
+
+
+def validate_conditional_range_bounds(
+    market: dict[str, Any],
+    normalized_payload: dict[str, Any],
+    base_marginals: dict[str, float],
+) -> None:
+    """Reject a conditional edit whose target probability falls outside the
+    structurally admissible range derived from the resolved base marginals."""
+    target = normalized_payload["target"]
+    target_outcome_id = str(target["outcomeId"])
+    requested_probability = float(target["probability"])
+
+    admissible_min, admissible_max = compute_conditional_admissible_range(
+        market, target_outcome_id, base_marginals,
+    )
+
+    if requested_probability < admissible_min or requested_probability > admissible_max:
+        raise ApiError(
+            400,
+            "conditional_range_violation",
+            f"target.probability {requested_probability} is outside the admissible range [{admissible_min}, {admissible_max}]",
+            {
+                "min": admissible_min,
+                "max": admissible_max,
+                "marketId": market["id"],
+                "outcomeId": target_outcome_id,
+                "requestedProbability": requested_probability,
+            },
+        )
+
+
 def validate_structure_preserving_edit(
     market: dict[str, Any],
     normalized_payload: dict[str, Any],
@@ -3722,6 +3780,8 @@ def normalize_probability_edit_payload(market_id: str, payload: dict[str, Any]) 
         if exc.status != 500 or exc.code != "internal_error":
             raise
         base_marginals = fallback_probability_edit_base_marginals(market_id, context)
+    if context:
+        validate_conditional_range_bounds(market, normalized_payload, base_marginals)
     validate_structure_preserving_edit(market, normalized_payload, marginals=base_marginals)
     apply_probability_target(
         market,

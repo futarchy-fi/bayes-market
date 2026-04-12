@@ -1,0 +1,41 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Add compute_conditional_admissible_range() function in server.py",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Add validate_conditional_range_bounds() function in server.py",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Wire validate_conditional_range_bounds() into normalize_probability_edit_payload() after base_marginals resolution, before validate_structure_preserving_edit, guarded by non-empty context",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Add unit tests for compute_conditional_admissible_range(): binary market normal case, N>2 outcomes, all-zero non-target marginals edge case, rounding edge cases near 0 and 1",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Add integration tests for validate_conditional_range_bounds() through normalize_probability_edit_payload(): conditional edit within range succeeds, conditional edit outside range returns 400 with conditional_range_violation and includes admissible range in details, unconditional edit bypasses the check entirely. Updated 2 existing tests whose error code changed from invalid_structure_preserving_edit to conditional_range_violation due to earlier interception.",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
