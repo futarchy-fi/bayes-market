@@ -1,0 +1,76 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The test files ResolveMarketPanel.test.tsx (290 lines), ConditionalEditor.test.tsx (380 lines), and VariableRow.test.tsx (416 lines) already exist with comprehensive coverage. Were these created by child-1 and do they currently pass, or do they need enhancement/replacement?",
+      "category": "requirements",
+      "why_it_matters": "If tests already pass, the task may only need verification and gap-filling rather than writing from scratch. If they fail, we need to fix them."
+    },
+    {
+      "id": "q2",
+      "question": "The task description specifies ~150 lines for ResolveMarketPanel and ~150 for VariableRow, but the existing files are 290 and 416 lines respectively. Should the tests be trimmed to match target line counts, or are the existing comprehensive tests acceptable?",
+      "category": "requirements",
+      "why_it_matters": "The line count targets in the description may indicate a simpler scope was planned. Existing tests go well beyond those targets with additional edge cases."
+    },
+    {
+      "id": "q3",
+      "question": "Are there any additional test scenarios needed beyond what exists? The current tests cover: guard clauses, render states, two-step confirmation, mutation payloads, context row CRUD, assumption toggling, inline editing, and session-dependent UI.",
+      "category": "requirements",
+      "why_it_matters": "Ensures no test scenarios from steps 3-5 are missed. The existing tests appear to cover all scenarios mentioned in the task description."
+    },
+    {
+      "id": "q4",
+      "question": "Do the ContextRow tests need to validate outcome select disabled state when no market is selected? The current ConditionalEditor test checks market selection populating outcomes but doesn't explicitly test the disabled state.",
+      "category": "codebase",
+      "why_it_matters": "The ContextRow subcomponent disables the outcome select until a market is selected. This is a key interaction pattern that should be tested."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The existing test files were created by the child-1 task and represent the intended implementation for steps 3-5",
+      "confidence": 0.85,
+      "if_wrong": "Would need to rewrite tests from scratch following the task description's specifications"
+    },
+    {
+      "id": "a2",
+      "assumption": "The existing tests follow the established module-level mock pattern (vi.mock before imports, defaultMutationState helper, renderWithProviders) correctly",
+      "confidence": 0.95,
+      "if_wrong": "Would need to restructure the mock setup to match other test files in the project"
+    },
+    {
+      "id": "a3",
+      "assumption": "The existing tests currently pass against the component implementations",
+      "confidence": 0.7,
+      "if_wrong": "Would need to run tests, diagnose failures, and fix either tests or identify component API mismatches"
+    },
+    {
+      "id": "a4",
+      "assumption": "The AssumptionProvider wrapper with Seeder helper pattern in VariableRow.test.tsx correctly seeds assumptions into context",
+      "confidence": 0.9,
+      "if_wrong": "Would need to adjust the Seeder approach or use a different method to inject assumptions"
+    },
+    {
+      "id": "a5",
+      "assumption": "No additional test utilities or shared helpers need to be created beyond what already exists in helpers.tsx",
+      "confidence": 0.95,
+      "if_wrong": "May need to extend helpers.tsx with additional providers or mock factories"
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 2,
+    "complexity_reason": "Test files already exist with comprehensive coverage (1086 total lines across 3 files). Work involves verifying tests pass, potentially filling minor gaps, not writing from scratch. All files are in the same __tests__ directory following identical patterns.",
+    "uncertainty_score": 2,
+    "uncertainty_reason": "Established testing patterns are clear, component APIs are well-documented in existing tests, and mock structures are consistent. Main uncertainty is whether existing tests pass as-is.",
+    "independent_subproblems": [
+      "Verify/fix ResolveMarketPanel.test.tsx",
+      "Verify/fix ConditionalEditor.test.tsx",
+      "Verify/fix VariableRow.test.tsx"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity 2 and uncertainty 2 are both well below the threshold for spawning children. Only 3 files in the same directory, all following identical patterns. The test files already exist with comprehensive coverage - this is primarily a verification and gap-filling task."
+  },
+  "spawn_children": false,
+  "children": []
+}
