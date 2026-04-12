@@ -1,0 +1,116 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Are there any specific coverage thresholds or CI checks that frontend tests must satisfy (e.g., minimum % line/branch coverage)?",
+      "category": "requirements",
+      "why_it_matters": "Determines whether we need to hit a quantitative target or just cover the identified gaps qualitatively."
+    },
+    {
+      "id": "q2",
+      "question": "Should BayesNetGraph tests mock the SVG rendering or use snapshot testing for the complex visualization output?",
+      "category": "design",
+      "why_it_matters": "BayesNetGraph is the most complex untested component with circular layout math, edge rendering, and clique overlays. The testing approach significantly affects test maintainability vs. coverage depth."
+    },
+    {
+      "id": "q3",
+      "question": "For TradingPanel and ResolveMarketPanel, should tests verify the actual API mutation payloads or just that the mutation function was called?",
+      "category": "design",
+      "why_it_matters": "These are critical user-facing forms that handle trades and market resolution. Deeper payload verification catches more bugs but couples tests to API contract details."
+    },
+    {
+      "id": "q4",
+      "question": "Should SessionContext tests interact with real localStorage or mock it, given that the context serializes/deserializes JSON?",
+      "category": "design",
+      "why_it_matters": "The session context manages accountId and agentId in localStorage with JSON parsing. Real localStorage tests cover serialization edge cases but are slower; mocks are faster but may miss parse errors."
+    },
+    {
+      "id": "q5",
+      "question": "Are there any known bugs or regressions in the untested components that tests should specifically target?",
+      "category": "requirements",
+      "why_it_matters": "Known bugs indicate high-value test targets. Tests written to catch specific past failures prevent regression more effectively than generic coverage."
+    },
+    {
+      "id": "q6",
+      "question": "Should router.tsx tests validate the full route tree integration (rendering correct pages for URLs) or just the route configuration structure?",
+      "category": "design",
+      "why_it_matters": "Integration route tests catch real navigation bugs but are heavier. The existing page-level tests already render individual pages, so route config tests may be redundant."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "We should follow the existing Vitest + React Testing Library patterns using renderWithProviders(), vi.mock(), and createMockQueryResult/createMockMutationResult helpers already in src/__tests__/helpers.tsx.",
+      "confidence": 0.95,
+      "if_wrong": "Would need to establish new testing conventions and possibly new helper utilities, adding scope."
+    },
+    {
+      "id": "a2",
+      "assumption": "The 12 untested component files identified (App.tsx, providers.tsx, router.tsx, Spinner.tsx, StatusBadge.tsx, ProbabilityBar.tsx, BayesNetGraph.tsx, JunctionTreePanel.tsx, TradingPanel.tsx, ResolveMarketPanel.tsx, AssumptionPanel.tsx, SessionContext) represent the full set of coverage gaps.",
+      "confidence": 0.85,
+      "if_wrong": "There may be additional untested hooks, utilities, or sub-components not surfaced in the initial scan. Would need deeper exploration of each feature directory."
+    },
+    {
+      "id": "a3",
+      "assumption": "Priority should be: (1) components handling user input or critical data (TradingPanel, ResolveMarketPanel, App.tsx, SessionContext), (2) complex display components (BayesNetGraph, JunctionTreePanel, ProbabilityBar, AssumptionPanel), (3) simple UI (Spinner, StatusBadge), (4) config (providers, router).",
+      "confidence": 0.9,
+      "if_wrong": "If the task requires equal coverage across all components, we'd need to allocate effort differently and possibly spawn more children."
+    },
+    {
+      "id": "a4",
+      "assumption": "For BayesNetGraph and JunctionTreePanel, mocking the custom hooks (useMarkets, useMarket, useEngineStats) at the module level and testing rendered output is sufficient - no need for canvas/SVG pixel-level testing.",
+      "confidence": 0.9,
+      "if_wrong": "Would need to add SVG testing utilities or snapshot tests, increasing complexity and potentially requiring new dependencies."
+    },
+    {
+      "id": "a5",
+      "assumption": "Tests for ResolveMarketPanel's two-step confirmation flow (click once to confirm, click again to resolve) should use fireEvent to simulate the user interaction sequence.",
+      "confidence": 0.95,
+      "if_wrong": "If the confirmation uses a modal or dialog pattern, we'd need different interaction testing approaches."
+    },
+    {
+      "id": "a6",
+      "assumption": "The jsdom environment in vitest is sufficient for all new tests - no need for browser-based testing or Playwright.",
+      "confidence": 0.95,
+      "if_wrong": "Some SVG rendering or layout tests might need a real browser environment, requiring significant infrastructure changes."
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 4,
+    "complexity_reason": "12 untested component files spanning UI components, complex graph visualizations, interactive trading forms, session management, and app infrastructure. Each requires different mock setups and test strategies. Estimated 500-800 lines of new test code across 10+ new test files.",
+    "uncertainty_score": 2,
+    "uncertainty_reason": "Testing patterns are well-established in existing tests. The test infrastructure (helpers, vitest config, mocking patterns) is mature. Main uncertainty is around SVG graph component testing approach and depth of mutation payload verification.",
+    "independent_subproblems": [
+      "UI component tests: Spinner, StatusBadge, ProbabilityBar - simple presentational components with no API dependencies",
+      "Graph feature tests: BayesNetGraph, JunctionTreePanel - complex visualization components requiring mocked hooks",
+      "Interactive feature tests: TradingPanel, ResolveMarketPanel, AssumptionPanel - form components with mutations and user interactions",
+      "App infrastructure tests: App.tsx, providers.tsx, router.tsx, SessionContext - app shell and configuration"
+    ],
+    "decision": "SPAWN_CHILDREN",
+    "decision_reason": "Complexity score of 4 with 4 clearly independent subproblems that can be worked on in parallel. Each group has distinct mock requirements and testing approaches. Parallelizing will significantly speed up implementation since none of these test groups depend on each other."
+  },
+  "spawn_children": true,
+  "children": [
+    {
+      "id": "child-1",
+      "title": "UI component tests: Spinner, StatusBadge, ProbabilityBar",
+      "description": "Add unit tests for the three untested presentational UI components in frontend/src/components/ui/. Test Spinner (SVG rendering, size prop, LoadingPage full-page layout, ErrorMessage display), StatusBadge (status color mapping, text rendering), and ProbabilityBar (outcome rendering, probability display, color coding, edge cases like empty outcomes or probabilities not summing to 1). Follow existing patterns using renderWithProviders() and screen queries."
+    },
+    {
+      "id": "child-2",
+      "title": "Graph feature tests: BayesNetGraph, JunctionTreePanel",
+      "description": "Add unit tests for the graph visualization components in frontend/src/features/graph/. For BayesNetGraph, test loading state ('Loading network...'), empty state ('No markets to visualize.'), rendering with mocked market data, node display with truncated titles, and edge/clique rendering. For JunctionTreePanel, test loading state, null return when no data, clique card rendering, metric box styling (warn when errors > 0), inference diagnostics display. Mock useMarkets, useMarket, and useEngineStats hooks at module level."
+    },
+    {
+      "id": "child-3",
+      "title": "Interactive feature tests: TradingPanel, ResolveMarketPanel, AssumptionPanel",
+      "description": "Add unit tests for user-interactive feature components. For TradingPanel (frontend/src/features/trading/TradingPanel.tsx), test: account-not-configured message, form submission with probability edit, pending/success/error mutation states, outcome selection. For ResolveMarketPanel (frontend/src/features/market/ResolveMarketPanel.tsx), test: two-step confirmation flow, resolved market display, loading/error states, null return for missing accountId. For AssumptionPanel (frontend/src/features/assumptions/AssumptionPanel.tsx), test: empty market list message, active market filtering, assumption count display. Mock hooks using vi.mock() and createMockMutationResult()."
+    },
+    {
+      "id": "child-4",
+      "title": "App infrastructure tests: App, providers, router, SessionContext",
+      "description": "Add unit tests for app shell components and session management. For App.tsx (frontend/src/app/App.tsx), test: navigation links render, Account ID and Agent ID input fields, session state updates on input change. For providers.tsx, test: QueryClient configuration (staleTime, retry), provider nesting. For router.tsx, test: route definitions exist for /markets, /markets/new, /markets/:marketId, /portfolio, /system, root redirect to /markets. For SessionContext (frontend/src/features/session/context.tsx), test: default session values, setSession updates, localStorage persistence, JSON parse error recovery. Use jsdom localStorage and renderWithProviders()."
+    }
+  ]
+}
