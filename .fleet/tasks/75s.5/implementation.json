@@ -1,0 +1,90 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Add WS_EVENT_CONNECTIONS and WS_RISK_CONNECTIONS registries plus ws_register_events/ws_unregister_events and ws_register_risk/ws_unregister_risk helpers",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Add ws_broadcast_events(market_id) function that broadcasts latest event to WS_EVENT_CONNECTIONS subscribers",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Add ws_broadcast_risk(account_id) function that broadcasts current ACCOUNT_RISK and ACCOUNT_EXPOSURE state to WS_RISK_CONNECTIONS subscribers",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Insert ws_broadcast_events(market_id) call in emit_terminal_event() after event is appended to journal",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Insert ws_broadcast_risk(account_id) calls at mutation points: after sync_account_risk_state, after sync_account_exposure_state, and after settle_market_account_risk/exposure",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Add _handle_events_websocket(path) method matching /ws/markets/{id}/events with WS upgrade, initial snapshot, and read loop",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Add _handle_risk_websocket(path) method matching /ws/accounts/{id}/risk with WS upgrade, initial risk+exposure snapshot, and read loop",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 8,
+      "task": "Wire _handle_events_websocket and _handle_risk_websocket into do_GET before existing _handle_websocket call",
+      "files_created": [],
+      "files_modified": ["backend/server.py"],
+      "verified": true
+    },
+    {
+      "step": 9,
+      "task": "Add MarketEventMessage and AccountRiskMessage TypeScript interfaces to frontend/src/lib/api/types.ts",
+      "files_created": [],
+      "files_modified": ["frontend/src/lib/api/types.ts"],
+      "verified": true
+    },
+    {
+      "step": 10,
+      "task": "Add getMarketEventsWebSocketUrl(marketId) and getAccountRiskWebSocketUrl(accountId) URL helpers to frontend/src/lib/api/client.ts",
+      "files_created": [],
+      "files_modified": ["frontend/src/lib/api/client.ts"],
+      "verified": true
+    },
+    {
+      "step": 11,
+      "task": "Add useMarketEventSubscription(marketId) hook to frontend/src/lib/query/hooks.ts with WS lifecycle, reconnection, and query cache invalidation",
+      "files_created": [],
+      "files_modified": ["frontend/src/lib/query/hooks.ts"],
+      "verified": true
+    },
+    {
+      "step": 12,
+      "task": "Add useAccountRiskSubscription(accountId) hook to frontend/src/lib/query/hooks.ts with WS lifecycle, reconnection, and query cache invalidation for risk+exposure",
+      "files_created": [],
+      "files_modified": ["frontend/src/lib/query/hooks.ts"],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}

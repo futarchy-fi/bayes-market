@@ -157,6 +157,36 @@ export function getMarketPricesWebSocketUrl(marketId: string): string {
   return socketUrl.toString();
 }
 
+export function getMarketEventsWebSocketUrl(marketId: string): string {
+  const baseUrl = API_BASE
+    ? new URL(API_BASE, window.location.origin)
+    : new URL(window.location.origin);
+  const socketUrl = new URL(baseUrl.toString());
+  socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
+  socketUrl.pathname = joinUrlPath(
+    socketUrl.pathname,
+    `/ws/markets/${encodeURIComponent(marketId)}/events`,
+  );
+  socketUrl.search = "";
+  socketUrl.hash = "";
+  return socketUrl.toString();
+}
+
+export function getAccountRiskWebSocketUrl(accountId: string): string {
+  const baseUrl = API_BASE
+    ? new URL(API_BASE, window.location.origin)
+    : new URL(window.location.origin);
+  const socketUrl = new URL(baseUrl.toString());
+  socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
+  socketUrl.pathname = joinUrlPath(
+    socketUrl.pathname,
+    `/ws/accounts/${encodeURIComponent(accountId)}/risk`,
+  );
+  socketUrl.search = "";
+  socketUrl.hash = "";
+  return socketUrl.toString();
+}
+
 export function getMarketPreview(
   marketId: string,
 ): Promise<MarketPreviewResponse> {

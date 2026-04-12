@@ -271,6 +271,264 @@ export function useMarketPriceSubscription(marketId: string, opts?: { enabled?: 
   }, [enabled, marketId, qc]);
 }
 
+function parseMarketEventMessage(value: unknown): { type: string; marketId: string; seq: number; emittedAt: string } | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.type !== "string"
+    || (value.type !== "snapshot" && value.type !== "event")
+    || typeof value.marketId !== "string"
+    || typeof value.seq !== "number"
+    || !Number.isFinite(value.seq)
+    || typeof value.emittedAt !== "string"
+  ) {
+    return null;
+  }
+
+  return { type: value.type, marketId: value.marketId, seq: value.seq, emittedAt: value.emittedAt };
+}
+
+export function useMarketEventSubscription(marketId: string, opts?: { enabled?: boolean }) {
+  const qc = useQueryClient();
+  const enabled = opts?.enabled ?? true;
+  const lastSeqRef = useRef<number>(-1);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!enabled || marketId.length === 0) {
+      lastSeqRef.current = -1;
+      reconnectAttemptRef.current = 0;
+      if (reconnectTimerRef.current != null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      return;
+    }
+
+    lastSeqRef.current = -1;
+    reconnectAttemptRef.current = 0;
+
+    let socket: WebSocket | null = null;
+    let effectClosed = false;
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimerRef.current != null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
+
+    const scheduleReconnect = () => {
+      clearReconnectTimer();
+      const attempt = reconnectAttemptRef.current;
+      const delay = Math.min(
+        MAX_RECONNECT_DELAY_MS,
+        INITIAL_RECONNECT_DELAY_MS * (2 ** attempt),
+      );
+      reconnectAttemptRef.current += 1;
+      reconnectTimerRef.current = window.setTimeout(() => {
+        if (effectClosed) {
+          return;
+        }
+        connect();
+      }, delay);
+    };
+
+    const connect = () => {
+      if (effectClosed) {
+        return;
+      }
+
+      socket = new WebSocket(api.getMarketEventsWebSocketUrl(marketId));
+
+      socket.addEventListener("open", () => {
+        const reconnecting = reconnectAttemptRef.current > 0;
+        reconnectAttemptRef.current = 0;
+        clearReconnectTimer();
+        if (reconnecting) {
+          void qc.invalidateQueries({ queryKey: queryKeys.marketEvents(marketId) });
+        }
+      });
+
+      socket.addEventListener("message", (event) => {
+        if (typeof event.data !== "string") {
+          return;
+        }
+
+        let raw: unknown;
+        try {
+          raw = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+
+        const update = parseMarketEventMessage(raw);
+        if (!update || update.marketId !== marketId || update.seq <= lastSeqRef.current) {
+          return;
+        }
+
+        lastSeqRef.current = update.seq;
+        void qc.invalidateQueries({ queryKey: queryKeys.marketEvents(marketId) });
+      });
+
+      socket.addEventListener("error", () => {
+        socket?.close();
+      });
+
+      socket.addEventListener("close", () => {
+        socket = null;
+        if (effectClosed) {
+          return;
+        }
+        scheduleReconnect();
+      });
+    };
+
+    connect();
+
+    return () => {
+      effectClosed = true;
+      clearReconnectTimer();
+      reconnectAttemptRef.current = 0;
+      socket?.close();
+      socket = null;
+    };
+  }, [enabled, marketId, qc]);
+}
+
+function parseAccountRiskMessage(value: unknown): { type: string; accountId: string; seq: number; emittedAt: string } | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.type !== "string"
+    || (value.type !== "snapshot" && value.type !== "risk")
+    || typeof value.accountId !== "string"
+    || typeof value.seq !== "number"
+    || !Number.isFinite(value.seq)
+    || typeof value.emittedAt !== "string"
+  ) {
+    return null;
+  }
+
+  return { type: value.type, accountId: value.accountId, seq: value.seq, emittedAt: value.emittedAt };
+}
+
+export function useAccountRiskSubscription(accountId: string, opts?: { enabled?: boolean }) {
+  const qc = useQueryClient();
+  const enabled = opts?.enabled ?? true;
+  const lastSeqRef = useRef<number>(-1);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!enabled || accountId.length === 0) {
+      lastSeqRef.current = -1;
+      reconnectAttemptRef.current = 0;
+      if (reconnectTimerRef.current != null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      return;
+    }
+
+    lastSeqRef.current = -1;
+    reconnectAttemptRef.current = 0;
+
+    let socket: WebSocket | null = null;
+    let effectClosed = false;
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimerRef.current != null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
+
+    const scheduleReconnect = () => {
+      clearReconnectTimer();
+      const attempt = reconnectAttemptRef.current;
+      const delay = Math.min(
+        MAX_RECONNECT_DELAY_MS,
+        INITIAL_RECONNECT_DELAY_MS * (2 ** attempt),
+      );
+      reconnectAttemptRef.current += 1;
+      reconnectTimerRef.current = window.setTimeout(() => {
+        if (effectClosed) {
+          return;
+        }
+        connect();
+      }, delay);
+    };
+
+    const connect = () => {
+      if (effectClosed) {
+        return;
+      }
+
+      socket = new WebSocket(api.getAccountRiskWebSocketUrl(accountId));
+
+      socket.addEventListener("open", () => {
+        const reconnecting = reconnectAttemptRef.current > 0;
+        reconnectAttemptRef.current = 0;
+        clearReconnectTimer();
+        if (reconnecting) {
+          void qc.invalidateQueries({ queryKey: queryKeys.accountRisk(accountId) });
+          void qc.invalidateQueries({ queryKey: queryKeys.accountExposure(accountId) });
+        }
+      });
+
+      socket.addEventListener("message", (event) => {
+        if (typeof event.data !== "string") {
+          return;
+        }
+
+        let raw: unknown;
+        try {
+          raw = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+
+        const update = parseAccountRiskMessage(raw);
+        if (!update || update.accountId !== accountId || update.seq <= lastSeqRef.current) {
+          return;
+        }
+
+        lastSeqRef.current = update.seq;
+        void qc.invalidateQueries({ queryKey: queryKeys.accountRisk(accountId) });
+        void qc.invalidateQueries({ queryKey: queryKeys.accountExposure(accountId) });
+      });
+
+      socket.addEventListener("error", () => {
+        socket?.close();
+      });
+
+      socket.addEventListener("close", () => {
+        socket = null;
+        if (effectClosed) {
+          return;
+        }
+        scheduleReconnect();
+      });
+    };
+
+    connect();
+
+    return () => {
+      effectClosed = true;
+      clearReconnectTimer();
+      reconnectAttemptRef.current = 0;
+      socket?.close();
+      socket = null;
+    };
+  }, [enabled, accountId, qc]);
+}
+
 export function useMarkets(filters?: MarketListFilterInput) {
   return useQuery({
     queryKey: queryKeys.markets(filters),
