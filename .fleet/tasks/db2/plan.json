@@ -1,0 +1,95 @@
+{
+  "phase": "plan",
+  "decisions": [
+    {
+      "id": "d1",
+      "decision": "Enhance the existing create_market endpoint (server.py:2086-2173) rather than replacing it. The endpoint is functional; it needs validation hardening, event emission, and feature parity with order/resolution endpoints.",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Build a new endpoint from scratch", "Add a database persistence layer"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d2",
+      "decision": "Keep uniform priors (1/N) as the only initialization path. 'Dynamic' refers to runtime API-driven creation, not non-uniform priors or conditional markets.",
+      "based_on": ["q2"],
+      "alternatives_rejected": ["Add initialProbabilities field with sum-to-1 validation", "Support conditional/linked market creation"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d3",
+      "decision": "Keep in-memory dict persistence (MARKETS global). No database layer. Consistent with all other endpoints.",
+      "based_on": ["q3"],
+      "alternatives_rejected": ["Add SQLite persistence", "Add file-based storage"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d4",
+      "decision": "Emit a MarketCreated genesis event to the event journal on market creation, initializing the market's event sequence and hash chain. Use a dedicated emit_market_created_event function since create_market doesn't go through the command pipeline.",
+      "based_on": ["q4"],
+      "alternatives_rejected": ["Skip event emission", "Reuse emit_terminal_event with synthetic command dict"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d5",
+      "decision": "Skip idempotency key support for market creation. The existing variableId dedup is sufficient since market creation doesn't use the command/account model.",
+      "based_on": ["q5"],
+      "alternatives_rejected": ["Add idempotency key support adapted from order endpoints"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d6",
+      "decision": "Keep existing field set (title, description, outcomes, expires_at, liquidity, maxPositionSize). No new fields (tags, categories, etc.).",
+      "based_on": ["q6"],
+      "alternatives_rejected": ["Add tags/categories", "Add resolution criteria field", "Add creator attribution"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d7",
+      "decision": "Validate expires_at as a parseable ISO-8601 datetime that is in the future. Validate liquidity as a positive number. Validate outcome names as non-empty strings.",
+      "based_on": ["q7"],
+      "alternatives_rejected": ["Continue accepting any string for expires_at", "Allow zero or negative liquidity"],
+      "reversibility": "easy"
+    },
+    {
+      "id": "d8",
+      "decision": "Skip WebSocket market-list notifications. WebSocket is per-market price updates only (/ws/markets/{id}/prices). No list-level channel exists.",
+      "based_on": ["q1"],
+      "alternatives_rejected": ["Add a new /ws/markets/feed endpoint for market creation notifications"],
+      "reversibility": "easy"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "task": "Add input validation hardening to create_market in backend/server.py: (a) Parse expires_at with datetime.fromisoformat and reject past dates, (b) Validate liquidity is a positive number (isinstance check + >0), (c) Validate each outcome 'name' is a non-empty string after stripping whitespace.",
+      "depends_on": []
+    },
+    {
+      "step": 2,
+      "task": "Add emit_market_created_event function in backend/server.py near emit_terminal_event (~line 3473). It should: generate an eventId, set seq=1 for the market, use GENESIS_EVENT_HASH as prevEventHash, build event with eventType='MarketCreated' and payload containing market snapshot, compute eventHash, store in EVENTS dict, and initialize MARKET_EVENT_SEQUENCES and LAST_EVENT_HASHES for the new market.",
+      "depends_on": []
+    },
+    {
+      "step": 3,
+      "task": "Call emit_market_created_event from create_market (after MARKETS[market_id] = market and ensure_market_engine_state) and include the event in the response body alongside the market dict.",
+      "depends_on": [1, 2]
+    },
+    {
+      "step": 4,
+      "task": "Add tests for new validation rules: (a) test expires_at with invalid ISO string returns 400, (b) test expires_at with past date returns 400, (c) test liquidity with zero/negative/non-numeric returns 400, (d) test outcome with empty name returns 400. Extend existing test class in tests/test_bayes_market_api.py.",
+      "depends_on": [1]
+    },
+    {
+      "step": 5,
+      "task": "Add tests for genesis event: (a) test successful market creation includes a MarketCreated event in EVENTS with correct schema (schemaVersion, eventId, marketId, seq=1, eventType, eventHash, prevEventHash=GENESIS_EVENT_HASH), (b) test event hash chain is initialized (MARKET_EVENT_SEQUENCES[market_id]=1, LAST_EVENT_HASHES[market_id] set).",
+      "depends_on": [3]
+    },
+    {
+      "step": 6,
+      "task": "Run full test suite (pytest tests/test_bayes_market_api.py) and fix any regressions. Existing tests that pass valid payloads may need expires_at values that pass the new stricter validation (they already use '2026-12-31T23:59:59Z' which is valid future ISO-8601, so likely no changes needed).",
+      "depends_on": [4, 5]
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
