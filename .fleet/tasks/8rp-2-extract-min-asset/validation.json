@@ -1,0 +1,12 @@
+{
+  "phase": "validate",
+  "plan_adherence": 0.95,
+  "plan_adherence_notes": "All 7 planned steps completed. Helper function defined with correct signature, placement, and error contract. Status code changed 409→422, details dict trimmed to 5 asset_preview-only fields, boundary condition preserved (strict < 0). One justified deviation: call site uses try/except to clean up orphaned command from COMMANDS dict before re-raising ApiError (plan said '1 line added' but 4-line try/except is necessary since ApiError bypasses terminal rejection persistence). Test updates comprehensive across all 4 test classes (unit, property, integration, invariant) — 12 tests modified total. All 290 tests pass.",
+  "research_quality": 0.92,
+  "question_completeness": 0.85,
+  "missed_questions": [
+    "What happens to the already-created command in COMMANDS when ApiError is raised? The command is inserted into COMMANDS before the min_asset check runs. Since ApiError bypasses build_terminal_rejection_response (which persists the command), the orphaned command entry needs explicit cleanup. This was handled correctly in implementation but was not anticipated in questions or plan."
+  ],
+  "verdict": "approve",
+  "reason": "Implementation correctly extracts min_asset_check as a reusable guard function with ApiError(422) semantics, replacing the old build_terminal_rejection_response(409) flow. The semantic shift from terminal rejection (persisted event, idempotency replay) to transient validation error (no event, retries re-evaluate) is properly reflected in both server.py and all 12 affected tests. The command cleanup pattern is a correct adaptation not in the original plan. All 290 tests pass with zero failures."
+}

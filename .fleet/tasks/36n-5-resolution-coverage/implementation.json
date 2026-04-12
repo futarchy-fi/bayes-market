@@ -1,0 +1,27 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Expand test_market_resolve_http_settles_account_exposure with event payload assertions: eventType, resolution.outcomeId, resolution.finalProbabilities, effects.marginalDelta, pricing, and replayStateHash",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Add direct-layer test test_market_resolution_rejects_already_resolved for 409/market_already_resolved via route_request on pre-resolved m3",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Strengthen idempotent replay test to compare event payload fields (resolution, effects, pricing, replayStateHash) between first and replayed responses",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
