@@ -1,0 +1,82 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What CPT (conditional probability table) format should be used in BayesianNetworkGraph.cpts? The field is typed as dict[str, Any] with no schema. Should CPTs be flat dicts mapping parent-outcome tuples to child distributions, or nested dicts keyed by parent assignments?",
+      "category": "requirements",
+      "why_it_matters": "The CPT format determines how potential tables are initialized from the graph, which is the foundation of junction tree inference. The compiler currently ignores cpts entirely and sets potential_tables=None."
+    },
+    {
+      "id": "q2",
+      "question": "Should automatic triangulation (_triangulate) be implemented now, or is providing explicit elimination_ordering sufficient for MVP? The current stub raises InferenceUnsupportedQueryError.",
+      "category": "requirements",
+      "why_it_matters": "If callers must always provide elimination_ordering, implementation scope is smaller. If auto-triangulation is needed, a min-fill or min-degree heuristic adds significant complexity."
+    },
+    {
+      "id": "q3",
+      "question": "Should the JunctionTreeQueryBackend be wired into server.py read paths (like CurrentModelQueryBackend was in r5), or should it remain a standalone module for now?",
+      "category": "design",
+      "why_it_matters": "Wiring into the server would require adapting refresh_market_compile_snapshot and related functions to select between current-model and junction-tree backends, significantly expanding scope."
+    },
+    {
+      "id": "q4",
+      "question": "What message-passing algorithm should be used: Shafer-Shenoy (message-based) or Hugin (potential-update)? Both produce exact marginals on junction trees but differ in implementation complexity and caching properties.",
+      "category": "design",
+      "why_it_matters": "Shafer-Shenoy is simpler to implement from scratch with existing message_schedule. Hugin is more cache-friendly for incremental updates. The choice affects potential_tables representation."
+    },
+    {
+      "id": "q5",
+      "question": "Should query_marginals support conditional queries (evidence/context) in the junction tree backend, or only unconditional marginals for MVP?",
+      "category": "requirements",
+      "why_it_matters": "Evidence handling requires modifying potential tables before message passing, adding complexity. The CurrentModelQueryBackend supports context via pre-stored conditional slices, but junction tree would compute them dynamically."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "CPTs should be stored as dict[str, dict[str, float]] where keys are pipe-separated parent assignments (e.g., 'a0|b1') mapping to child outcome distributions, consistent with the conditional_marginals encoding pattern in current_model.py",
+      "confidence": 0.5,
+      "if_wrong": "Need to redesign potential table initialization from whatever CPT format is chosen"
+    },
+    {
+      "id": "a2",
+      "assumption": "Shafer-Shenoy message passing is the right algorithm choice since message_schedule is already computed as directed (src, dst) pairs matching Shafer-Shenoy's message-passing paradigm",
+      "confidence": 0.7,
+      "if_wrong": "Would need to restructure message_schedule or add Hugin-style potential update logic"
+    },
+    {
+      "id": "a3",
+      "assumption": "The existing test_junction_tree.py tests should continue to pass — the query backend tests currently assert 'not yet implemented' errors, so implementing the actual inference will require updating those test expectations",
+      "confidence": 0.95,
+      "if_wrong": "Test expectations are already aligned with working implementation (unlikely given current placeholder stubs)"
+    },
+    {
+      "id": "a4",
+      "assumption": "Server wiring is out of scope for this task — the description says 'compile artifact and query backend' which matches the r3/r4 subtask pattern, not the r5 server adapter pattern",
+      "confidence": 0.6,
+      "if_wrong": "Would need to also modify server.py to select junction tree backend when multi-variable markets are detected"
+    },
+    {
+      "id": "a5",
+      "assumption": "Explicit elimination_ordering is sufficient for MVP — auto-triangulation can be a follow-up task",
+      "confidence": 0.7,
+      "if_wrong": "Need to implement min-fill or min-degree heuristic in _triangulate, adding graph algorithm complexity"
+    }
+  ],
+  "decomposition_assessment": {
+    "complexity_score": 3,
+    "complexity_reason": "Core work is implementing belief propagation on an already-structured junction tree (potential table init + message passing + marginalization). ~200-400 LOC of algorithmic code in 2-3 files. The data structures, contracts, and test infrastructure already exist.",
+    "uncertainty_score": 3,
+    "uncertainty_reason": "CPT format is undefined (dict[str, Any]), and the exact scope boundary (server wiring? auto-triangulation? evidence handling?) is ambiguous. However, the contracts and compilation pipeline provide strong constraints on the implementation shape.",
+    "independent_subproblems": [
+      "Implement potential table initialization from CPTs in compiler",
+      "Implement Shafer-Shenoy message passing in query backend",
+      "Update existing junction tree tests and add inference correctness tests"
+    ],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "Complexity 3 and uncertainty 3 are below the SPAWN_CHILDREN threshold. The subproblems are sequential (message passing depends on potential tables, tests depend on both). Changes are concentrated in junction_tree.py and test_junction_tree.py — only 2 files."
+  },
+  "spawn_children": false,
+  "children": []
+}
