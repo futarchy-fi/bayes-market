@@ -1,0 +1,87 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "WebSocket endpoints should be excluded from this task's scope. There are 3 WebSocket handlers (_handle_risk_websocket at server.py:5278, _handle_events_websocket at server.py:5340, _handle_websocket at server.py:5410) with zero test coverage. However, they require a fundamentally different test harness: raw TCP sockets with RFC 6455 framing, binary frame parsing with masking, bidirectional async communication, and thread coordination for broadcast validation. The server uses a pure-Python WebSocket implementation (no external library), so tests would need either a raw socket client implementation or adding websocket-client as a test dependency. This is a separate effort from HTTP REST endpoint testing.",
+      "confidence": 0.95,
+      "evidence": [
+        "backend/server.py:5278 (_handle_risk_websocket)",
+        "backend/server.py:5340 (_handle_events_websocket)",
+        "backend/server.py:5410 (_handle_websocket)",
+        "backend/server.py:74-146 (ws_accept_key, ws_read_frame, ws_send_text, ws_send_close utilities)",
+        "tests/test_bayes_market_api.py: 325 tests, all HTTP-only, zero WebSocket tests"
+      ],
+      "uncertainty": "The task description says 'untested endpoints' which technically includes WebSocket handlers, but the complexity difference strongly suggests they warrant a separate task."
+    },
+    {
+      "question_id": "q2",
+      "answer": "New tests should be added to the existing test_bayes_market_api.py file. While it is 9,903 lines with 325 tests across 11 classes, all helper functions (data builders at lines 39-120, state management at 122-150, probability utilities at 152-214, risk/LMSR utilities at 280-430) are defined in this file with no conftest.py or shared utilities module. Creating a new file would require either duplicating these helpers or extracting them first, which is scope creep. The file is already organized by feature into 11 test classes (BayesMarketApiUnitTests, BayesMarketEventTradeTests, BayesMarketAnalyticsTests, BayesMarketPnlTests, etc.), so adding tests to the appropriate existing class or creating a focused new class within the same file follows the established pattern.",
+      "confidence": 0.90,
+      "evidence": [
+        "tests/test_bayes_market_api.py: 9,903 lines, 11 test classes, 325 tests",
+        "tests/test_bayes_market_api.py:39-120 (data builder helpers)",
+        "tests/test_bayes_market_api.py:122-150 (state management helpers)",
+        "tests/test_bayes_market_api.py:280-430 (risk/LMSR utilities)",
+        "No conftest.py exists in the project"
+      ],
+      "uncertainty": "The file is already very large, but extracting helpers into a shared module is a separate refactoring task."
+    },
+    {
+      "question_id": "q3",
+      "answer": "No production error data is available, but code analysis reveals these priority gaps: (1) Zero tests for 500 Internal Server Error handling - no test verifies what happens when a handler raises an unexpected exception through the HTTP layer. The test suite covers 400, 404, 405, and 409 but not 500. (2) GET /v1/accounts/{id}/pnl has a 'double-404' edge case at server.py:2356-2361 where orders exist but compute_market_pnl() returns None for all markets, producing a 404 that is never tested. (3) Analytics date parsing failures at server.py:2814-2819 are silently skipped via try/except when events have malformed ISO timestamps. Notably, the analytics endpoint already has 7 tests and the resolve endpoint has 10+ tests, so these are NOT the primary gaps. The real gaps are in global 500 error handling and PnL edge cases.",
+      "confidence": 0.80,
+      "evidence": [
+        "tests/test_bayes_market_api.py: no test asserts status 500 anywhere in 9,903 lines",
+        "backend/server.py:2323-2376 (get_account_pnl with two separate 404 paths)",
+        "backend/server.py:2331-2336 (first 404: no orders for account)",
+        "backend/server.py:2356-2361 (second 404: orders exist but all P&L computations return None)",
+        "backend/server.py:2814-2819 (analytics silent try/except on date parsing)",
+        "tests/test_bayes_market_api.py:9576-9661 (7 existing analytics tests)",
+        "tests/test_bayes_market_api.py:8406-8573 (10+ existing resolve tests)"
+      ],
+      "uncertainty": "Without production error logs, prioritization is based on code analysis only. Real production failures may be in areas that appear well-tested but have subtle edge cases."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "WebSocket endpoints are correctly excluded. They require raw TCP socket connections with RFC 6455 handshake framing, binary frame parsing, and async thread coordination - fundamentally different from the existing unittest HTTP patterns. A separate task with its own test harness would be appropriate."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.90,
+      "impact": "Adding to existing file is the right choice. All 11 test classes and helper functions (data builders, state management, probability/LMSR utilities) live in test_bayes_market_api.py with no conftest.py. New tests should be added to existing classes (BayesMarketPnlTests for PnL edge cases) or as a new focused class within the same file (e.g., for 500 error handling tests)."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "WRONG",
+      "confidence": 0.85,
+      "impact": "The assumed best candidates are partially incorrect. Analytics already has 7 tests covering 404, 405, 400, empty market, volume/trade count, price history buckets, and top traders. Market resolve has 10+ tests covering method validation, idempotency, unknown outcomes, already-resolved markets, and settlement. The actual best candidates for new coverage are: (1) 500 error handling for unexpected exceptions (zero tests exist), (2) GET /v1/accounts/{id}/pnl edge cases (double-404 path untested), (3) error paths in event-trade that test concurrent position/exposure edge cases."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.90,
+      "impact": "Most test classes use server.route_request() directly (BayesMarketApiUnitTests, BayesMarketEventTradeTests, ExposureProjectionTests). This is the simplest pattern: returns (payload, status) tuple, raises ApiError for error responses. HTTP server-based tests (BayesMarketApiIntegrationTests, AuthRateLimitTests, ConcurrencyTests) are only needed for testing actual HTTP behavior like headers, rate limiting, and thread safety. For error path and edge case testing, route_request() is appropriate."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "WRONG",
+      "confidence": 0.85,
+      "impact": "The target endpoints need revision. GET /v1/markets/{id}/analytics is already well-covered with 7 tests including empty markets, invalid intervals, 404/405, volume, price history, and top traders. POST /v1/markets/{id}/resolve has 10+ tests covering all major error paths. The corrected targets should be: (1) Global 500 error handling via HTTP (no tests exist for unhandled exceptions), (2) GET /v1/accounts/{id}/pnl edge cases (the second 404 path where orders exist but P&L computation fails for all markets), (3) Boundary/edge cases in event-trade order processing (position limit boundaries, exposure projection edge cases with pruned accounts)."
+    }
+  ],
+  "decomposition_assessment": {
+    "lowest_confidence_answer": 0.80,
+    "num_uncertain_answers": 0,
+    "research_gaps": [],
+    "decision": "PROCEED_ALONE",
+    "decision_reason": "All three questions are answered with confidence >= 0.80. The codebase is well-understood: test patterns are clear (route_request for unit tests, HTTPConnection for integration), existing coverage is mapped (325 tests across 11 classes), and the real gaps are identified (500 error handling, PnL edge cases, event-trade boundaries). Two assumptions were corrected (a3, a5) - analytics and resolve already have good coverage, so the implementation should focus on 500 error handling, PnL edge cases, and event-trade boundary tests instead. No blocking research gaps remain."
+  },
+  "spawn_children": false,
+  "children": []
+}
