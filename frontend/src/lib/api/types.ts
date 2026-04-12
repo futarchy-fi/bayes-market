@@ -380,6 +380,52 @@ export interface CommentResponse {
   meta: CommandResponseMeta;
 }
 
+export interface OutcomePnl {
+  outcomeId: string;
+  netSize: number;
+  costBasis: number;
+  currentValue: number;
+  unrealizedPnl: number;
+  realizedPnl: number;
+  totalPnl: number;
+}
+
+export interface MarketPnlSummary {
+  totalCostBasis: number;
+  totalCurrentValue: number;
+  totalUnrealizedPnl: number;
+  totalRealizedPnl: number;
+  totalPnl: number;
+}
+
+export interface MarketPnlResponse {
+  pnl: {
+    marketId: string;
+    outcomes: Record<string, OutcomePnl>;
+    summary: MarketPnlSummary;
+  };
+  meta: {
+    timestamp: string;
+  };
+}
+
+export interface AccountPnlMarket {
+  marketId: string;
+  outcomes: Record<string, OutcomePnl>;
+  summary: MarketPnlSummary;
+}
+
+export interface AccountPnlResponse {
+  pnl: {
+    accountId: string;
+    markets: AccountPnlMarket[];
+    summary: MarketPnlSummary;
+  };
+  meta: {
+    timestamp: string;
+  };
+}
+
 export interface Session {
   accountId: string;
   agentId: string;

@@ -1,0 +1,75 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Should the analytics dashboard be a new dedicated route (e.g. /analytics or /markets/:id/analytics) or integrated into existing pages (MarketDetail, Portfolio)?",
+      "category": "design",
+      "why_it_matters": "The frontend currently has 4 routes (markets, market detail, portfolio, system). A new route requires router changes, nav updates, and a new page component. Embedding into existing pages is simpler but may clutter them."
+    },
+    {
+      "id": "q2",
+      "question": "How should P&L be calculated? Positions track netSize and lastTradePrice but not cost basis. Should we derive cost basis by aggregating ORDERS (impactScore/notional sums) or add a cost_basis field to the position projection?",
+      "category": "design",
+      "why_it_matters": "P&L = current_value - cost_basis. The backend has no cost basis tracking today. We need to decide between computing it on-the-fly from order history (accurate but O(n) per request) or maintaining it as a running total in the position state (fast reads, requires migration of existing position update logic)."
+    },
+    {
+      "id": "q3",
+      "question": "Should P&L be per-account, per-market, or both? Should it include unrealized P&L (open positions at current prices) and realized P&L (from resolved markets)?",
+      "category": "requirements",
+      "why_it_matters": "The task says 'P&L endpoints' (plural) which suggests multiple granularities. Resolved market m3 exists as a test case for realized P&L. The scope of the endpoint(s) affects the data model and computation complexity significantly."
+    },
+    {
+      "id": "q4",
+      "question": "Should the frontend use a charting library (recharts, chart.js, lightweight alternatives) for price history visualization, or render with plain HTML/CSS?",
+      "category": "design",
+      "why_it_matters": "The existing frontend uses zero charting libraries. Adding one means a new dependency in package.json. Price history data (bucketed marginals over time) maps naturally to a line chart but could also be rendered as a simple table."
+    },
+    {
+      "id": "q5",
+      "question": "The existing GET /v1/markets/{id}/analytics already returns price_history, total_volume, trade_count, and top_traders. Are these endpoints sufficient, or do we need additional/global analytics endpoints (e.g. cross-market volume, platform-wide top traders)?",
+      "category": "requirements",
+      "why_it_matters": "If the existing per-market analytics endpoint already covers price history, trade volume, and top traders, the backend work is primarily the new P&L endpoint(s). But if cross-market aggregation is needed, that's a different scope entirely."
+    },
+    {
+      "id": "q6",
+      "question": "Should the analytics dashboard support real-time updates via the existing WebSocket infrastructure, or is polling/manual refresh acceptable?",
+      "category": "requirements",
+      "why_it_matters": "A WebSocket channel already exists for /ws/markets/{id}/prices. Extending it for analytics would add complexity but provide live updates. Polling is simpler and may be sufficient for analytics that don't change every second."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The analytics dashboard will be a new frontend route (/markets/:id/analytics) showing per-market analytics, plus a P&L section in the Portfolio page for account-level P&L.",
+      "confidence": 0.6,
+      "if_wrong": "If it should be a global dashboard, we'd need new cross-market aggregation endpoints and a top-level /analytics route instead."
+    },
+    {
+      "id": "a2",
+      "assumption": "P&L should be computed by aggregating order costs from ORDERS as cost basis, compared against current position value (netSize * current marginal probability). Realized P&L comes from resolved markets.",
+      "confidence": 0.75,
+      "if_wrong": "If a running cost_basis field is preferred, we need to modify the position update path in update_account_exposure_projection and backfill existing positions."
+    },
+    {
+      "id": "a3",
+      "assumption": "No external charting library — price history and volume will be rendered with simple HTML/CSS (bars, sparklines) to match the existing minimal dependency approach.",
+      "confidence": 0.5,
+      "if_wrong": "If rich charts are expected, we'd add a lightweight library like recharts or lightweight-charts as a new frontend dependency."
+    },
+    {
+      "id": "a4",
+      "assumption": "The existing per-market analytics endpoint is sufficient for price history, volume, and top traders. We only need to add P&L endpoint(s).",
+      "confidence": 0.8,
+      "if_wrong": "If cross-market analytics are needed, we'd need a new GET /v1/analytics endpoint aggregating across all markets."
+    },
+    {
+      "id": "a5",
+      "assumption": "Static/polling refresh is acceptable for the analytics dashboard — no WebSocket integration needed.",
+      "confidence": 0.7,
+      "if_wrong": "Would need to extend the WebSocket handler to emit analytics update events."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

@@ -13,6 +13,7 @@ import { JunctionTreePanel } from "@/features/graph/JunctionTreePanel";
 import { DiscussionThread } from "@/features/market/DiscussionThread";
 import { ResolveMarketPanel } from "@/features/market/ResolveMarketPanel";
 import { EventTradePanel } from "@/features/trading/EventTradePanel";
+import { MarketAnalytics, PnLSummary } from "@/features/analytics";
 import type { MarketEvent } from "@/lib/api/types";
 
 export default function MarketDetail() {
@@ -50,7 +51,11 @@ export default function MarketDetail() {
 
       <ProbabilityBar outcomes={m.outcomes} marginals={m.marginals} />
 
+      <MarketAnalytics marketId={m.id} />
+
       <PositionCard marketId={m.id} accountRisk={accountRisk.data} isConfigured={isConfigured} />
+
+      <PnLSummary marketId={m.id} accountId={session.accountId} />
 
       <ResolveMarketPanel market={m} />
 
