@@ -1,0 +1,69 @@
+{
+  "phase": "implement",
+  "steps_completed": [
+    {
+      "step": 1,
+      "task": "Extend comment_post and comment_post_with_headers helpers to accept optional idempotency_key parameter",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 2,
+      "task": "Add POST validation error tests: missing accountId, missing body, empty body, body exceeding max length, empty idempotencyKey",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 3,
+      "task": "Add POST market-not-active rejection test with status='closed' and finally block reset",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 4,
+      "task": "Add POST idempotency replay test: same key+body returns 201 with meta.replayed=True",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 5,
+      "task": "Add POST idempotency conflict test: same key but different body returns 409 idempotency_conflict",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 6,
+      "task": "Add GET /v1/markets/{id}/comments basic test: post 3 comments, verify sorted by seq, correct pagination",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 7,
+      "task": "Add GET comments pagination tests: limit=2, fromSeq=2, fromSeq=2&limit=1 with nextFromSeq assertions",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 8,
+      "task": "Add GET comments edge case tests: non-existent market returns 404, empty market returns 200 with empty array",
+      "files_created": [],
+      "files_modified": ["tests/test_bayes_market_api.py"],
+      "verified": true
+    },
+    {
+      "step": 9,
+      "task": "Run full test suite: 283 passed (269 existing + 14 new), no regressions",
+      "files_created": [],
+      "files_modified": [],
+      "verified": true
+    }
+  ],
+  "all_steps_done": true
+}
