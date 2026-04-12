@@ -1,0 +1,110 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Yes, include marginals in the /v1/markets/{id}/meta response. The previous task (bayes-market-0e6, decision d2) explicitly decided NOT to inject probabilities, but this task's description overrides that by requesting 'current probabilities'. Use an array of {id, name, probability} objects as a top-level 'outcomes' field in the preview payload. This format is more self-descriptive than a flat map because it includes the human-readable outcome name alongside the ID and probability. The source is market['marginals'] (dict of outcome_id → float) combined with market['outcomes'] (list of {id, name} dicts). Example: \"outcomes\": [{\"id\": \"yes\", \"name\": \"Yes\", \"probability\": 0.65}, {\"id\": \"no\", \"name\": \"No\", \"probability\": 0.35}].",
+      "confidence": 0.9,
+      "evidence": [
+        "backend/server.py:781-791 (build_market_preview returns title/description/url/siteName/type only)",
+        "backend/server.py:148-200 (INITIAL_MARKETS: marginals is {outcome_id: float}, outcomes is [{id, name}])",
+        ".fleet/tasks/bayes-market-0e6/research.json (decision d2: explicitly chose NOT to inject probabilities)"
+      ],
+      "uncertainty": "Whether the task owner wants just the flat marginals map or a richer structure with outcome names. Array of {id, name, probability} is more useful but changes the contract more."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Use a static placeholder image (option b). Dynamic image generation (option c) is a large scope increase requiring an image rendering pipeline that doesn't exist. Skipping og:image entirely (option a) means social previews lack a visual element, which significantly reduces engagement. A simple static branded image (e.g. a Bayes Market logo/banner) at a stable path is trivial to implement and materially improves social sharing. Create frontend/public/og-image.png (Vite copies public/ to dist/ at build time) and reference it at the stable path /og-image.png.",
+      "confidence": 0.85,
+      "evidence": [
+        "No image assets or image generation pipeline exists in the codebase",
+        "backend/server.py:846-880 (render_frontend_index_html has no og:image injection)",
+        ".fleet/tasks/bayes-market-0e6/research.json (decision d3: skipped og:image)",
+        "frontend/vite.config.ts (default Vite config, public/ directory supported)"
+      ],
+      "uncertainty": "Whether the task owner considers a static placeholder sufficient or expects per-market dynamic images. Static is the pragmatic choice but per-market images would be ideal for social engagement."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes, include live probability data in og:description. Format: '{outcome1}: {prob1}% | {outcome2}: {prob2}% — {market description}'. This makes shared links immediately informative. The previous task decided against volatile text, but this task explicitly requests 'current probabilities' which implies dynamic content in the preview. Social crawlers re-fetch periodically, and the server already injects dynamic OG tags per-request via render_frontend_index_html(), so staleness is bounded by crawler cache TTL (typically 1-7 days for major platforms). The og:description will be built from market['marginals'] and market['outcomes'] in build_market_preview() and injected into the HTML head.",
+      "confidence": 0.8,
+      "evidence": [
+        "backend/server.py:846-880 (render_frontend_index_html already does per-request OG tag injection)",
+        "backend/server.py:781-791 (build_market_preview currently uses static description)",
+        "backend/server.py:826-833 (preview_for_frontend_path routes to market-specific preview)"
+      ],
+      "uncertainty": "Whether stale cached previews showing outdated probabilities is acceptable. The task says 'current probabilities' which implies dynamic, but the staleness tradeoff is a product decision."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Yes, add Twitter Card meta tags. This is low effort since we're already touching the tag injection code in render_frontend_index_html(). Add: twitter:card (value: 'summary' or 'summary_large_image' if we have og:image), twitter:title, twitter:description, and twitter:image. Twitter/X uses its own card tags and only partially falls back to OG tags — without explicit twitter:card, the preview may not render correctly on that platform. The implementation follows the exact same pattern as existing OG tags: add regex patterns, add injection calls in render_frontend_index_html().",
+      "confidence": 0.9,
+      "evidence": [
+        "No twitter:* tags exist anywhere in the codebase",
+        "backend/server.py:249-254 (existing OG tag regex patterns — same pattern for twitter)",
+        "backend/server.py:846-880 (render_frontend_index_html — add twitter tags in same function)",
+        "frontend/index.html (base template — add default twitter tags alongside OG defaults)"
+      ],
+      "uncertainty": "Whether 'summary' or 'summary_large_image' is the right card type. 'summary_large_image' is better if we have a good og:image; 'summary' is safer with a placeholder."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Minimal frontend changes needed. (1) Update the MarketPreview TypeScript interface to include the new 'outcomes' field for type safety. (2) Deep linking already works — /markets/{id} routes correctly via SPA fallback + React Router. (3) A share button UI component would be nice but is likely out of scope unless explicitly requested — the task description focuses on OG meta tags and deep linking, not UI components. (4) No useMarketPreview hook is needed unless a share button or preview component is added. The getMarketPreview() API client function already exists and would work with the updated contract.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/lib/api/types.ts:74-81 (MarketPreview interface — needs outcomes field)",
+        "frontend/src/lib/api/client.ts:160-164 (getMarketPreview already exists)",
+        "frontend/src/app/router.tsx:14-16 (routes already defined for /markets/:marketId)",
+        "backend/server.py:4535-4542 (SPA fallback already works for extensionless paths)"
+      ],
+      "uncertainty": "Whether the task owner expects a visible share button in the MarketDetail UI. The task title says 'shareable market links' which could imply a share UI, but the description focuses on OG meta tags and deep linking infrastructure."
+    },
+    {
+      "question_id": "q6",
+      "answer": "Use /og-image.png at a stable, non-hashed path. Place the source file at frontend/public/og-image.png — Vite copies the public/ directory contents to dist/ verbatim at build time without hashing. The backend already serves .png files with the correct MIME type (image/png in MIME_TYPES dict) and applies immutable caching for .png extensions in the assets path. For root-level files like /og-image.png, the static serving code at _serve_static() will find it at dist/og-image.png. The cache behavior for root-level non-asset files defaults to no explicit Cache-Control header (browser defaults apply), which is fine since social crawlers don't respect cache headers anyway. The absolute URL will be constructed using resolve_public_origin() + '/og-image.png'.",
+      "confidence": 0.85,
+      "evidence": [
+        "backend/server.py:4521-4532 (MIME_TYPES includes .png → image/png)",
+        "backend/server.py:4629-4675 (_serve_static serves from frontend/dist/)",
+        "backend/server.py:4669-4672 (cache control: immutable for /assets/*.png, no explicit header for root-level)",
+        "frontend/vite.config.ts (default Vite config — public/ dir auto-copied to dist/)",
+        "No frontend/public/ directory exists yet — needs to be created"
+      ],
+      "uncertainty": "Whether the static serving fallback logic correctly serves root-level files like /og-image.png (it should since _serve_static checks dist_root / clean_path). Also whether we need a real branded image or a minimal placeholder for now."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "The existing /v1/markets/{id}/meta endpoint, OG tag injection via render_frontend_index_html(), and SPA fallback routing are well-structured and should be extended. The previous task's validation noted a quoting bug in og:title escaping (quote=False for title reused in attribute context) but this has been addressed. The infrastructure is solid."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "market['marginals'] is a dict of {outcome_id: float} and is the canonical source for unconditional probabilities. Combined with market['outcomes'] (list of {id, name} dicts), this provides all data needed for the preview. No need to use the LMSR engine or inference system — those compute/update marginals, but the stored values are the source of truth for display."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Static placeholder is the right approach. Dynamic image generation would require a rendering pipeline (SVG→PNG, canvas, or external service) that doesn't exist. A branded static image is trivial to add and meaningfully improves social previews."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.98,
+      "impact": "Deep linking works correctly. The backend's should_fallback_to_frontend_index() returns true for extensionless paths like /markets/{id}, serves index.html with OG tags injected via render_frontend_index_html(), and React Router handles client-side rendering at /markets/:marketId. No changes needed for deep linking itself."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.95,
+      "impact": "Tests use unittest.TestCase subclasses calling server.route_request() directly for API tests. Frontend HTML tests use a pattern that reads the rendered HTML and checks for tag content. Both patterns should be followed for new test cases covering probabilities in the preview and twitter card tags."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}

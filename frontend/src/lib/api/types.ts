@@ -78,6 +78,7 @@ export interface MarketPreview {
   url: string;
   siteName: string;
   type: string;
+  outcomes?: Array<{ id: string; name: string; probability: number }>;
 }
 
 export interface MarketPreviewResponse {

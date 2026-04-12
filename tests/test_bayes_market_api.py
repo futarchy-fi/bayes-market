@@ -775,16 +775,22 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         payload, status = server.route_request("GET", "/v1/markets/m1/meta")
 
         self.assertEqual(status, 200)
+        preview = payload["preview"]
+        self.assertEqual(preview["marketId"], "m1")
+        self.assertEqual(preview["title"], "ETH Price > $3000 on March 15")
+        self.assertEqual(preview["description"], "Will ETH trade above $3000 at any point on March 15, 2026?")
+        self.assertEqual(preview["url"], f"{server.DEFAULT_PUBLIC_ORIGIN}/markets/m1")
+        self.assertEqual(preview["siteName"], server.SITE_NAME)
+        self.assertEqual(preview["type"], server.OPEN_GRAPH_TYPE)
+        self.assertEqual(preview["image"], f"{server.DEFAULT_PUBLIC_ORIGIN}/og-image.png")
+        self.assertIn("Yes: 65%", preview["og_description"])
+        self.assertIn("No: 35%", preview["og_description"])
         self.assertEqual(
-            payload["preview"],
-            {
-                "marketId": "m1",
-                "title": "ETH Price > $3000 on March 15",
-                "description": "Will ETH trade above $3000 at any point on March 15, 2026?",
-                "url": f"{server.DEFAULT_PUBLIC_ORIGIN}/markets/m1",
-                "siteName": server.SITE_NAME,
-                "type": server.OPEN_GRAPH_TYPE,
-            },
+            preview["outcomes"],
+            [
+                {"id": "yes", "name": "Yes", "probability": 0.65},
+                {"id": "no", "name": "No", "probability": 0.35},
+            ],
         )
 
     def test_market_meta_prefers_configured_public_origin(self):
@@ -793,6 +799,43 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         self.assertEqual(status, 200)
         self.assertEqual(payload["preview"]["url"], "https://bayes.futarchy.ai/markets/m1")
+
+    def test_market_meta_includes_outcomes_with_probabilities(self):
+        payload, status = server.route_request("GET", "/v1/markets/m1/meta")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            payload["preview"]["outcomes"],
+            [
+                {"id": "yes", "name": "Yes", "probability": 0.65},
+                {"id": "no", "name": "No", "probability": 0.35},
+            ],
+        )
+
+    def test_market_meta_includes_og_description_with_probabilities(self):
+        payload, status = server.route_request("GET", "/v1/markets/m1/meta")
+
+        self.assertEqual(status, 200)
+        self.assertIn("Yes: 65%", payload["preview"]["og_description"])
+        self.assertIn("No: 35%", payload["preview"]["og_description"])
+        self.assertIn(server.MARKETS["m1"]["description"], payload["preview"]["og_description"])
+
+    def test_market_meta_includes_image_url(self):
+        payload, status = server.route_request("GET", "/v1/markets/m1/meta")
+
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["preview"]["image"].endswith("/og-image.png"))
+
+    def test_build_market_preview_three_outcome_market(self):
+        preview = server.build_market_preview(server.MARKETS["m2"])
+
+        self.assertEqual(len(preview["outcomes"]), 3)
+        self.assertEqual(preview["outcomes"][0], {"id": "yes", "name": "Yes", "probability": 0.25})
+        self.assertEqual(preview["outcomes"][1], {"id": "no", "name": "No", "probability": 0.60})
+        self.assertEqual(preview["outcomes"][2], {"id": "delayed", "name": "Delayed", "probability": 0.15})
+        self.assertIn("Yes: 25%", preview["og_description"])
+        self.assertIn("No: 60%", preview["og_description"])
+        self.assertIn("Delayed: 15%", preview["og_description"])
 
     def test_market_events_returns_genesis_chain_for_existing_market_without_events(self):
         payload, status = server.route_request("GET", "/v1/markets/m1/events")
@@ -7713,6 +7756,52 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             '<meta property="og:url" content="https://share.example/markets/m1" />',
             html,
         )
+
+    def test_frontend_market_routes_emit_og_image_meta_tag(self):
+        status, body, _ = self.request_raw(
+            "GET",
+            "/markets/m1",
+            headers={"Host": "share.example", "X-Forwarded-Proto": "https"},
+        )
+        html = body.decode("utf-8")
+
+        self.assertEqual(status, 200)
+        self.assertIn(
+            '<meta property="og:image" content="https://share.example/og-image.png" />',
+            html,
+        )
+
+    def test_frontend_market_routes_emit_twitter_card_tags(self):
+        status, body, _ = self.request_raw(
+            "GET",
+            "/markets/m1",
+            headers={"Host": "share.example", "X-Forwarded-Proto": "https"},
+        )
+        html = body.decode("utf-8")
+
+        self.assertEqual(status, 200)
+        self.assertIn('<meta name="twitter:card" content="summary" />', html)
+        self.assertIn(
+            '<meta name="twitter:title" content="ETH Price &gt; $3000 on March 15" />',
+            html,
+        )
+        self.assertIn('<meta name="twitter:description" content="Yes: 65% | No: 35%', html)
+        self.assertIn(
+            '<meta name="twitter:image" content="https://share.example/og-image.png" />',
+            html,
+        )
+
+    def test_frontend_market_routes_emit_og_description_with_probabilities(self):
+        status, body, _ = self.request_raw(
+            "GET",
+            "/markets/m1",
+            headers={"Host": "share.example", "X-Forwarded-Proto": "https"},
+        )
+        html = body.decode("utf-8")
+
+        self.assertEqual(status, 200)
+        self.assertIn('Yes: 65% | No: 35%', html)
+        self.assertIn('Will ETH trade above $3000', html)
 
     def test_missing_market_frontend_route_keeps_generic_meta_tags(self):
         status, body, _ = self.request_raw(
