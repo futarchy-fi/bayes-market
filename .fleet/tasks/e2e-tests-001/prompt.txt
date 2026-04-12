@@ -1,26 +1,30 @@
-[Task e2e-tests-001] PHASE 3a: PLAN
+[Task e2e-tests-001] PHASE 3b: IMPLEMENT
 Title: Add Playwright end-to-end tests for critical user flows
 
-Read .fleet/tasks/e2e-tests-001/questions.json and .fleet/tasks/e2e-tests-001/research.json
-for context on what was asked and answered.
+Read your plan at .fleet/tasks/e2e-tests-001/plan.json.
 
-YOU MUST create .fleet/tasks/e2e-tests-001/plan.json with this structure:
+YOU MUST IMPLEMENT the plan completely. This is the critical execution phase.
+
+For EACH step in plan.json, you MUST:
+1. Announce: "=== Step N: {task description} ==="
+2. Execute the step — create/modify the actual source files
+3. Verify it worked (check file exists, run code, test passes)
+4. Announce: "=== Step N complete ===" before moving to next
+
+DO NOT STOP until ALL steps are executed and verified.
+DO NOT just read the plan — you must CREATE the files it specifies.
+
+DEPENDENCIES: Fresh worktree — install before testing:
+  - Node: pnpm install or npm install
+  - Python: pip install -r requirements.txt
+
+After all steps are complete, write .fleet/tasks/e2e-tests-001/implementation.json:
 {
-  "phase": "plan",
-  "decisions": [
-    { "id": "d1", "decision": "...", "based_on": ["q1"], "alternatives_rejected": ["..."], "reversibility": "easy|medium|hard" }
+  "phase": "implement",
+  "steps_completed": [
+    { "step": 1, "task": "...", "files_created": ["..."], "files_modified": ["..."], "verified": true }
   ],
-  "steps": [
-    { "step": 1, "task": "...", "depends_on": [] }
-  ],
-  "spawn_children": false,
-  "children": []
+  "all_steps_done": true
 }
 
-DO NOT STOP until plan.json exists and contains at least one step.
-Verify: ls -la .fleet/tasks/e2e-tests-001/ to confirm the file was written.
-
-DECOMPOSITION: Set spawn_children=true for independent sub-tasks that warrant
-their own 4-phase workflow. Format: { "id": "...", "title": "...", "description": "..." }
-
-BEFORE YOU STOP: git add -A && git commit --no-verify -m "plan: e2e-tests-001"
+BEFORE YOU STOP: git add -A && git commit --no-verify -m "execute: e2e-tests-001"
