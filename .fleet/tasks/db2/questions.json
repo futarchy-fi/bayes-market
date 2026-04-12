@@ -1,0 +1,87 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The POST /v1/markets endpoint already exists with validation and in-memory persistence (backend/server.py:2121-2208). What specifically needs to change or be added? Is this about enhancing the existing endpoint or replacing it entirely?",
+      "category": "requirements",
+      "why_it_matters": "The create_market function is already implemented with title/description/outcomes/expires_at/liquidity/maxPositionSize fields, duplicate detection via variableId, uniform prior initialization, and engine state setup. Without clarity on what 'dynamic' means here, work could duplicate what exists."
+    },
+    {
+      "id": "q2",
+      "question": "Does 'dynamic market creation' mean supporting initial probability distributions (non-uniform priors), conditional/linked markets, or configurable market types beyond the current binary/multi-outcome structure?",
+      "category": "requirements",
+      "why_it_matters": "The current endpoint only supports uniform priors (1/N per outcome). If users need to specify initial probabilities, that changes validation logic (must sum to 1.0) and the LMSR initialization path. Conditional markets would require referencing existing market variableIds."
+    },
+    {
+      "id": "q3",
+      "question": "Does 'proper persistence' mean adding durable storage (SQLite, file-based), or is the current in-memory dict (MARKETS global) with event journal sufficient?",
+      "category": "design",
+      "why_it_matters": "The entire backend uses in-memory dicts (MARKETS, ORDERS, EVENTS, etc.) with no disk persistence. Adding a database layer would be a significant architectural change affecting all endpoints, not just market creation. If in-memory is fine, the current approach already qualifies."
+    },
+    {
+      "id": "q4",
+      "question": "Should market creation emit a genesis event to the event journal (EVENTS dict)? Currently create_market does not record an event, while orders and resolutions do.",
+      "category": "design",
+      "why_it_matters": "The event journal provides an audit trail with hash-chained integrity. Orders emit events (evt_* IDs with prevEventHash linking), but market creation silently adds to MARKETS without a journal entry. This is a gap if auditability is a goal."
+    },
+    {
+      "id": "q5",
+      "question": "Should market creation support idempotency keys like the order endpoints do (IDEMPOTENCY_KEYS dict)?",
+      "category": "design",
+      "why_it_matters": "Order endpoints use idempotency keys to prevent duplicate submissions. The current create_market deduplicates via variableId (title-derived), but this prevents creating two markets with similar titles rather than protecting against network retries."
+    },
+    {
+      "id": "q6",
+      "question": "Are there additional fields the frontend or consumers need beyond what's currently supported (title, description, outcomes, expires_at, liquidity, maxPositionSize)? For example: tags, categories, resolution criteria, or creator attribution.",
+      "category": "requirements",
+      "why_it_matters": "The frontend CreateMarketPayload (frontend/src/lib/api/client.ts:129-135) matches the backend fields minus maxPositionSize. If new fields are needed, both frontend types and backend validation must be updated in sync."
+    },
+    {
+      "id": "q7",
+      "question": "Should the endpoint validate expires_at as a valid future ISO-8601 date, or continue accepting any string? Currently it only checks isinstance(str).",
+      "category": "requirements",
+      "why_it_matters": "The current validation accepts any string for expires_at, meaning past dates or malformed timestamps are silently accepted. Stricter validation would prevent markets that expire immediately or have unparseable dates."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The task is about enhancing the existing create_market endpoint rather than building it from scratch, since it already exists at backend/server.py:2121 with basic validation and in-memory storage.",
+      "confidence": 0.85,
+      "if_wrong": "Would need to understand what replacement architecture is desired and whether the existing tests should be preserved or rewritten."
+    },
+    {
+      "id": "a2",
+      "assumption": "Persistence means the current in-memory dict pattern (consistent with all other endpoints), not introducing a database layer.",
+      "confidence": 0.8,
+      "if_wrong": "Adding a database would be a project-wide architectural change requiring migration of all data stores, not just the market creation endpoint."
+    },
+    {
+      "id": "a3",
+      "assumption": "The validation improvements needed are: stricter expires_at parsing (valid ISO-8601, future date), liquidity bounds validation (positive number), and outcome name validation (non-empty strings).",
+      "confidence": 0.7,
+      "if_wrong": "May need different or additional validation rules depending on requirements."
+    },
+    {
+      "id": "a4",
+      "assumption": "Market creation should emit a genesis event to the event journal for consistency with the audit trail pattern used by orders and resolutions.",
+      "confidence": 0.65,
+      "if_wrong": "If events are only for state-changing trade operations, adding a genesis event would be unnecessary overhead."
+    },
+    {
+      "id": "a5",
+      "assumption": "The existing test suite (test_bayes_market_api.py) covers the happy path and basic validation errors, and new tests should extend rather than replace existing ones.",
+      "confidence": 0.9,
+      "if_wrong": "If the test approach needs to change fundamentally, the existing test helpers (build_create_market_body, etc.) may need rework."
+    },
+    {
+      "id": "a6",
+      "assumption": "WebSocket price broadcast should be triggered on market creation so that clients listening to the market list are notified of new markets.",
+      "confidence": 0.5,
+      "if_wrong": "If WebSocket is only for per-market price updates (current pattern: /ws/markets/{id}/prices), list-level notifications may not be in scope."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
