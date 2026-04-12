@@ -1,0 +1,140 @@
+{
+  "phase": "research",
+  "answers": [
+    {
+      "question_id": "q1",
+      "answer": "Use Playwright route interception (mocking) for the initial happy-path scope. The backend IS simple enough for real integration (single-file Python, stdlib-only, in-memory state, starts in <1s), but mocking gives faster, deterministic tests without orchestration overhead. Key detail: the Vite dev server (port 3000) proxies /v1/* to http://127.0.0.1:8080, but with route interception, requests never reach the proxy—Playwright intercepts them at the browser network layer. This means tests don't need the backend running at all. Real backend integration can be added as a follow-up layer once happy-path coverage is solid.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/vite.config.ts:14-22 (proxy config: /v1 and /healthz → 127.0.0.1:8080)",
+        "backend/server.py:5513 (default port 3205, env var BAYES_MARKET_PORT)",
+        "backend/server.py:264-281 (in-memory state: MARKETS, ORDERS, COMMANDS, ACCOUNT_RISK, etc.)"
+      ],
+      "uncertainty": "Whether the team eventually wants real integration tests too. Mocking means backend regressions won't be caught by E2E tests."
+    },
+    {
+      "question_id": "q2",
+      "answer": "Since Q1 recommends mocking, this question is secondary. However, IF real backend is used later: create data via existing POST endpoints in test setup (beforeAll/beforeEach). The backend has no seed endpoint and state lives in global dicts (MARKETS, ORDERS, etc.). Restarting the server between test suites gives clean isolation. Adding a test-only POST /v1/test/reset endpoint would be cleaner but adds non-production code. The POST endpoints are well-defined: POST /v1/markets (create market), POST /v1/markets/{id}/orders/probability-edit (place order), POST /v1/markets/{id}/orders/event-trade (event trade).",
+      "confidence": 0.8,
+      "evidence": [
+        "backend/server.py:264-267 (global state dicts: MARKETS, ORDERS, COMMANDS)",
+        "backend/server.py:4931-5051 (API endpoint routing)",
+        "tests/test_bayes_market_api.py (backend tests create data via API calls)"
+      ],
+      "uncertainty": "Whether adding a test-only reset endpoint is acceptable to the team. Server restart cost is unknown but likely trivial for a stdlib server."
+    },
+    {
+      "question_id": "q3",
+      "answer": "Yes, add E2E tests to the CI pipeline. The current CI already runs backend pytest, frontend vitest, and a build step in a single job on ubuntu-latest. Adding Playwright requires: (1) npx playwright install --with-deps chromium (~15-20s), (2) starting the Vite dev server via Playwright's webServer config (automatic). With mocked APIs, the Python backend is NOT needed in CI. Total added CI time: ~1-2 minutes for Chromium-only. The playwright.config.ts webServer block handles starting/stopping the dev server automatically.",
+      "confidence": 0.85,
+      "evidence": [
+        ".github/workflows/ci.yml:1-48 (current CI: pytest, vitest, build on ubuntu-latest)",
+        ".github/workflows/ci.yml:30-32 (Node 22 already set up)",
+        ".github/workflows/ci.yml:35-36 (pnpm already installed)"
+      ],
+      "uncertainty": "Exact CI time impact. Playwright browser install can be cached with actions/cache but adds config complexity."
+    },
+    {
+      "question_id": "q4",
+      "answer": "Chromium only for the initial scope. This is the standard Playwright default for speed. The app uses standard React with no browser-specific APIs (no WebRTC, no canvas-heavy rendering). Cross-browser issues are unlikely for a data-driven SPA. Firefox and WebKit can be added later with a one-line config change in playwright.config.ts projects array. Each additional browser adds ~30-60s of install + run time to CI.",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/package.json:14-19 (standard React + React Router + TanStack Query + Recharts)",
+        "frontend/src/app/App.tsx:1-63 (standard inline styles, no browser-specific CSS)"
+      ],
+      "uncertainty": "Recharts (SVG-based charting library) could have minor cross-browser rendering differences, but these wouldn't affect happy-path functional tests."
+    },
+    {
+      "question_id": "q5",
+      "answer": "Use localStorage injection for most tests, with one dedicated test verifying the header input flow. The localStorage format is simple JSON under key 'bayes-session': {\"accountId\": \"...\", \"agentId\": \"...\"}. Injection via page.addInitScript() before navigation is the standard Playwright pattern. The header inputs are plain <input> elements with placeholder text 'Account ID' and 'Agent ID (optional)' — no data-testid attributes, but placeholders work as Playwright locators via page.getByPlaceholder().",
+      "confidence": 0.9,
+      "evidence": [
+        "frontend/src/features/session/context.tsx:4 (STORAGE_KEY = 'bayes-session')",
+        "frontend/src/features/session/context.tsx:6-17 (loadSession reads/parses localStorage)",
+        "frontend/src/features/session/context.tsx:19-21 (saveSession writes JSON to localStorage)",
+        "frontend/src/app/App.tsx:25-36 (header inputs with placeholder text, no data-testid)"
+      ],
+      "uncertainty": "None significant. localStorage injection is a well-established Playwright pattern."
+    },
+    {
+      "question_id": "q6",
+      "answer": "Focus on core trading-relevant sections for the initial happy path. Recommended scope per view: (1) MarketList: page loads with market cards, search filters results, sort changes order, click navigates to detail — ~3-4 tests. (2) MarketDetail: header/title loads, probability bar displays outcomes, trading panel interaction works — ~4-5 tests. (3) Trade execution: select outcome, enter size, submit order, verify receipt/confirmation — ~2-3 tests. (4) Portfolio: loads with account configured, shows risk metrics (limit, available, utilization, health), shows positions table — ~3-4 tests. Total: ~12-16 tests across 4 spec files. Sections like BayesNetGraph, JunctionTreePanel, and detailed analytics charts can be deferred.",
+      "confidence": 0.75,
+      "evidence": [
+        "frontend/src/routes/MarketList.tsx (search bar, sort dropdown, status filter, market cards)",
+        "frontend/src/routes/MarketDetail.tsx (ProbabilityBar, EventTradePanel, AssumptionPanel, DiscussionThread, BayesNetGraph, JunctionTreePanel, etc.)",
+        "frontend/src/routes/Portfolio.tsx (capacity indicators, position table, AccountPnL)",
+        "frontend/src/features/trading/EventTradePanel.tsx:152,179 (aria-labels for trade outcome and position size inputs)"
+      ],
+      "uncertainty": "Whether the team considers some deferred sections (e.g., discussion thread, analytics) as 'critical' for the happy path."
+    },
+    {
+      "question_id": "q7",
+      "answer": "WebSocket real-time update testing should be OUT OF SCOPE for the initial happy path. The app has three WS endpoints (market prices, market events, account risk), each with auto-reconnect logic and cache invalidation. Testing these requires either a real backend pushing updates or mock WebSocket servers — both add significant complexity. For the happy path, verify that pages load correctly with initial HTTP-fetched data. The WebSocket subscriptions are additive (they update already-loaded data), so initial render testing captures the core UX.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/src/lib/api/client.ts:161-204 (three WS connection functions: market prices, events, account risk)",
+        "frontend/src/lib/query/hooks.ts:135-274 (useMarketPriceSubscription with reconnect logic)",
+        "backend/server.py:5279-5470 (WS handlers for risk, events, prices)"
+      ],
+      "uncertainty": "If the team considers real-time price updates a critical user flow, WS testing might need to be in scope. Playwright does support WebSocket interception but it's more complex."
+    },
+    {
+      "question_id": "q8",
+      "answer": "Place E2E tests in frontend/e2e/ with playwright.config.ts in the frontend/ directory. Since we're using API route interception (no backend orchestration), tests are purely frontend-scoped. This is consistent with the existing frontend test structure (vitest.config.ts and src/__tests__/ already in frontend/). The Playwright config will use webServer to start the Vite dev server on port 3000. Scripts: add 'test:e2e' to frontend/package.json. If real backend integration is added later, the config can be extended with a second webServer entry or moved to the project root.",
+      "confidence": 0.85,
+      "evidence": [
+        "frontend/package.json:6-12 (existing scripts: dev, build, test, lint)",
+        "frontend/vitest.config.ts (existing test config in frontend/)",
+        "frontend/vite.config.ts:12-13 (dev server port 3000)"
+      ],
+      "uncertainty": "If the team prefers a top-level e2e/ directory for future cross-cutting tests. The frontend/ location is more conventional for mock-based E2E."
+    }
+  ],
+  "assumption_checks": [
+    {
+      "assumption_id": "a1",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "Playwright as a devDependency in frontend/package.json with playwright.config.ts in frontend/ is the right approach for mock-based E2E tests. No backend orchestration needed with route interception."
+    },
+    {
+      "assumption_id": "a2",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "API route interception is pragmatic for the initial scope. The backend is simple enough for real integration later, but mocking avoids orchestration complexity and gives deterministic, fast tests. Backend port discrepancy (default 3205 vs proxy target 8080) is irrelevant with mocking."
+    },
+    {
+      "assumption_id": "a3",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Chromium-only is the right initial target. The app uses standard React patterns with no browser-specific features. Multi-browser support is a one-line config change later."
+    },
+    {
+      "assumption_id": "a4",
+      "verdict": "CORRECT",
+      "confidence": 0.8,
+      "impact": "Four test suites mapping to the main views is the right structure. Consider adding a fifth lightweight spec for session/navigation (testing header inputs, nav links, route transitions). The existing unit test structure (MarketList.test.tsx, MarketDetail.test.tsx, Portfolio.test.tsx) validates this organization."
+    },
+    {
+      "assumption_id": "a5",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "localStorage injection is the right approach. The storage format is confirmed: key='bayes-session', value={\"accountId\":\"...\",\"agentId\":\"...\"}. One dedicated test should verify the header input flow using page.getByPlaceholder('Account ID') and page.getByPlaceholder('Agent ID (optional)')."
+    },
+    {
+      "assumption_id": "a6",
+      "verdict": "CORRECT",
+      "confidence": 0.85,
+      "impact": "WebSocket testing is correctly deferred. Three WS endpoints exist with complex reconnection logic. Initial HTTP data provides sufficient happy-path coverage. WebSocket testing can be a Phase 2 effort."
+    },
+    {
+      "assumption_id": "a7",
+      "verdict": "CORRECT",
+      "confidence": 0.9,
+      "impact": "Vite dev server on port 3000 via Playwright's webServer config is correct. The 'pnpm preview' alternative would require a build step first, adding ~30s to each test run. Dev server is faster for development iteration. Note: existing 'preview' script exists in package.json but dev server is preferred."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
