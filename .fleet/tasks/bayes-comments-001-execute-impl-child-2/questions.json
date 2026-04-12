@@ -1,0 +1,39 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The task asks to create tests at frontend/src/features/market/DiscussionThread.test.tsx (co-located), but comprehensive tests already exist at frontend/src/__tests__/DiscussionThread.test.tsx covering all 16 scenarios. Should we move/copy the existing tests to the co-located path, or does the existing test file already satisfy this task?",
+      "category": "requirements",
+      "why_it_matters": "All requested test scenarios (rendering comment list, empty state, loading state, error state, comment submission, disabled composer for non-active markets, character count display, disabled when no session) are already implemented and passing in the existing test file. Creating a duplicate at a different path would cause redundancy."
+    },
+    {
+      "id": "q2",
+      "question": "The existing project convention places ALL test files in frontend/src/__tests__/ (41 test files). The task description specifies frontend/src/features/market/DiscussionThread.test.tsx which breaks this convention. Should we follow the existing convention or the task description path?",
+      "category": "codebase",
+      "why_it_matters": "Consistency with the codebase convention matters for maintainability. All other tests follow the centralized __tests__/ pattern. Moving just one test to co-located would create an inconsistency."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "The existing test file at frontend/src/__tests__/DiscussionThread.test.tsx already fully satisfies the task requirements since it covers all 8 specified scenarios with 16 tests total.",
+      "confidence": 0.95,
+      "if_wrong": "We would need to identify missing test scenarios and add them, or create a separate co-located test file."
+    },
+    {
+      "id": "a2",
+      "assumption": "The task was written before the tests were implemented in the prior child task (bayes-comments-001-execute-impl-child-1), so this is effectively already done.",
+      "confidence": 0.9,
+      "if_wrong": "There may be additional test scenarios beyond what was implemented that need to be added."
+    },
+    {
+      "id": "a3",
+      "assumption": "The tests currently pass with vitest since they were committed in the prior child task.",
+      "confidence": 0.85,
+      "if_wrong": "We would need to fix any failing tests before marking this task complete."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
