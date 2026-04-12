@@ -6,6 +6,8 @@ import type {
   MarketCommentsResponse,
   EngineStatsResponse,
   MarketAnalyticsResponse,
+  MarketPnlResponse,
+  AccountPnlResponse,
   AccountRiskResponse,
   AccountExposureResponse,
   OrderResponse,
@@ -35,6 +37,8 @@ export class BayesApiError extends Error {
 export interface NormalizedMarketListFilters {
   status?: string;
   includeResolved?: true;
+  sort?: string;
+  q?: string;
 }
 
 async function request<T>(
@@ -83,10 +87,14 @@ export function normalizeMarketListFilters(
     typeof filters !== "string"
     && filters?.includeResolved === true
   ) || status === "resolved";
+  const sort = typeof filters !== "string" ? filters?.sort : undefined;
+  const q = typeof filters !== "string" ? filters?.q?.trim() || undefined : undefined;
 
   return {
     ...(status ? { status } : {}),
     ...(includeResolved ? { includeResolved: true } : {}),
+    ...(sort ? { sort } : {}),
+    ...(q ? { q } : {}),
   };
 }
 
@@ -100,6 +108,14 @@ function serializeMarketListFilters(filters?: MarketListFilterInput): string {
 
   if (normalizedFilters.includeResolved) {
     params.set("include_resolved", "true");
+  }
+
+  if (normalizedFilters.sort) {
+    params.set("sort", normalizedFilters.sort);
+  }
+
+  if (normalizedFilters.q) {
+    params.set("q", normalizedFilters.q);
   }
 
   const queryString = params.toString();
@@ -353,5 +369,22 @@ export function submitMarketComment(
       body: JSON.stringify(payload),
     },
     session,
+  );
+}
+
+export function getMarketPnl(
+  marketId: string,
+  accountId: string,
+): Promise<MarketPnlResponse> {
+  return request<MarketPnlResponse>(
+    `/v1/markets/${encodeURIComponent(marketId)}/accounts/${encodeURIComponent(accountId)}/pnl`,
+  );
+}
+
+export function getAccountPnl(
+  accountId: string,
+): Promise<AccountPnlResponse> {
+  return request<AccountPnlResponse>(
+    `/v1/accounts/${encodeURIComponent(accountId)}/pnl`,
   );
 }

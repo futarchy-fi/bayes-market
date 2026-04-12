@@ -1,0 +1,117 @@
+{
+  "phase": "question",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Does the MarketAnalyticsResponse TypeScript type (flat, snake_case fields like market_id, total_volume, price_history) accurately match the actual backend JSON response? Other endpoints use nested wrappers (e.g. { pnl: {...}, meta: {...} }) and camelCase. If mismatched, the existing useMarketAnalytics hook silently returns wrong data.",
+      "category": "codebase",
+      "why_it_matters": "If the type is wrong, the price history chart and volume chart will render with undefined data. Must verify before building components that consume this hook."
+    },
+    {
+      "id": "q2",
+      "question": "What is the exact JSON shape of the two P&L endpoints (GET /v1/markets/{marketId}/accounts/{accountId}/pnl and GET /v1/accounts/{accountId}/pnl)? Specifically: wrapper key name ('pnl'), field casing (camelCase), and whether per-outcome data is an object keyed by outcomeId or an array.",
+      "category": "codebase",
+      "why_it_matters": "Need pixel-accurate TypeScript types for the API client and React Query hooks. The backend uses camelCase for P&L fields (costBasis, unrealizedPnl) but the analytics endpoint uses snake_case (total_volume). Getting this wrong means broken deserialization."
+    },
+    {
+      "id": "q3",
+      "question": "Where in the MarketDetail page layout should the MarketAnalytics and PnLSummary sections be placed? The plan says 'collapsible section' for analytics and 'alongside the analytics section' for P&L. Should they go between ProbabilityBar and the trading panels, or after the trading section before the Event Journal?",
+      "category": "design",
+      "why_it_matters": "MarketDetail already has 8+ sections. Placing analytics/PnL in the wrong spot disrupts the user flow — analytics data should be visible before trading decisions, not buried below."
+    },
+    {
+      "id": "q4",
+      "question": "Should PnLSummary gracefully hide when the account has never traded in a market (backend returns 404), or show a 'No trades yet' placeholder? Similarly, should it render at all when no accountId is configured?",
+      "category": "requirements",
+      "why_it_matters": "The P&L endpoint returns 404 for 'never traded' vs 200 with zero values for 'traded but net-zero'. The component needs distinct handling for: no account configured, never traded (404), and zero P&L (200)."
+    },
+    {
+      "id": "q5",
+      "question": "Should the price history LineChart show one line per outcome (multi-line chart from marginals object) or a single aggregated line? The analytics endpoint returns marginals: Record<string, number> per timestamp with all outcomes.",
+      "category": "design",
+      "why_it_matters": "Multi-line chart requires dynamic color assignment per outcome and a legend. Single-line requires choosing which outcome to show. This significantly affects the recharts configuration and component complexity."
+    },
+    {
+      "id": "q6",
+      "question": "What polling interval should the new P&L hooks use? The parent plan says '10-30s' for analytics polling. Existing hooks vary: useMarkets uses 5s, useMarket uses 5s, useMarketAnalytics has no polling. Should useMarketPnl and useAccountPnl poll, and at what rate?",
+      "category": "design",
+      "why_it_matters": "P&L data changes only when trades execute. Aggressive polling wastes bandwidth; no polling means stale data after trades. The right interval affects perceived responsiveness of the analytics dashboard."
+    },
+    {
+      "id": "q7",
+      "question": "How should recharts charts be themed to match the existing dark-themed inline-style UI? The codebase uses CSS variables (--color-primary, --color-success, etc.) but recharts accepts hex/rgb strings as props, not CSS variable references.",
+      "category": "design",
+      "why_it_matters": "If charts use hardcoded colors that don't match the CSS variable palette, the analytics section will look visually disconnected from the rest of the app."
+    },
+    {
+      "id": "q8",
+      "question": "Are there existing frontend tests (vitest + React Testing Library) for the hooks and route components that I should follow as patterns? If so, should new analytics components have test coverage, or is that deferred to step 9 of the plan?",
+      "category": "codebase",
+      "why_it_matters": "Step 9 of the parent plan covers 'integration tests' but doesn't specify frontend vs backend. If frontend component tests are expected, they need to be written alongside the components, not bolted on later."
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "a1",
+      "assumption": "recharts is the correct charting library as specified in the parent plan. It will be installed as a production dependency via npm.",
+      "confidence": 0.99,
+      "if_wrong": "Would need to use a different library (d3, chart.js, visx) which have very different APIs and integration patterns."
+    },
+    {
+      "id": "a2",
+      "assumption": "New components should use inline React.CSSProperties with CSS variables, matching the existing codebase pattern. No CSS modules, Tailwind, or styled-components.",
+      "confidence": 0.97,
+      "if_wrong": "Would need to adopt a different styling approach, potentially requiring build config changes."
+    },
+    {
+      "id": "a3",
+      "assumption": "New feature components go in frontend/src/features/analytics/ directory, following the existing domain-based organization (features/market/, features/trading/, features/graph/).",
+      "confidence": 0.90,
+      "if_wrong": "Components might belong in features/market/ or features/trading/ if analytics is not considered a separate domain."
+    },
+    {
+      "id": "a4",
+      "assumption": "The existing useMarketAnalytics hook and getMarketAnalytics client function are correctly wired and working. No changes needed to these — only new P&L hooks/client functions are required.",
+      "confidence": 0.88,
+      "if_wrong": "May need to fix the analytics hook before building the MarketAnalytics chart component, adding unexpected scope."
+    },
+    {
+      "id": "a5",
+      "assumption": "No new routes are needed. MarketAnalytics and PnLSummary embed in MarketDetail; AccountPnL embeds in Portfolio. This is explicitly stated in the parent plan.",
+      "confidence": 0.98,
+      "if_wrong": "Would need router changes and new page components, significantly expanding scope."
+    },
+    {
+      "id": "a6",
+      "assumption": "The P&L backend endpoints (merged in ff/Tuy1-execute-uy1-backend-pnl) are available on the current branch and return the documented response shapes with camelCase keys and { pnl: {...}, meta: {...} } wrapper.",
+      "confidence": 0.92,
+      "if_wrong": "Types would be wrong and hooks would fail. Would need to read the actual backend handler code to verify."
+    },
+    {
+      "id": "a7",
+      "assumption": "The price history chart should show multi-line (one line per outcome) since the analytics endpoint returns marginals with all outcome probabilities per timestamp.",
+      "confidence": 0.75,
+      "if_wrong": "Would need a simpler single-outcome chart or an outcome selector dropdown, changing the component design."
+    },
+    {
+      "id": "a8",
+      "assumption": "The interval selector for price history (1h, 6h, 1d, 7d) should be a simple button group using the existing inline-style pattern, with useState to track selection.",
+      "confidence": 0.85,
+      "if_wrong": "Might need a dropdown or more complex selector pattern if the design calls for it."
+    },
+    {
+      "id": "a9",
+      "assumption": "Frontend component tests are deferred to step 9 of the plan and are out of scope for this task (steps 4-8 and 10). Step 10 is end-to-end verification, not unit tests.",
+      "confidence": 0.70,
+      "if_wrong": "Would need to write vitest + RTL tests for each new component alongside implementation, adding significant scope."
+    },
+    {
+      "id": "a10",
+      "assumption": "P&L hooks should use a 30s refetchInterval — frequent enough for post-trade updates but not wasteful. Analytics hook (useMarketAnalytics) should add a 30s refetchInterval too.",
+      "confidence": 0.75,
+      "if_wrong": "Different polling rates could cause data inconsistency between analytics and P&L displays, or unnecessarily hammer the backend."
+    }
+  ],
+  "spawn_children": false,
+  "children": []
+}
