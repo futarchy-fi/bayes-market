@@ -252,6 +252,11 @@ OG_TITLE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:title[\"'][^>
 OG_DESCRIPTION_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:description[\"'][^>]*>", re.IGNORECASE)
 OG_TYPE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:type[\"'][^>]*>", re.IGNORECASE)
 OG_URL_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:url[\"'][^>]*>", re.IGNORECASE)
+OG_IMAGE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bproperty=[\"']og:image[\"'][^>]*>", re.IGNORECASE)
+TWITTER_CARD_META_TAG_RE = re.compile(r"<meta\b[^>]*\bname=[\"']twitter:card[\"'][^>]*>", re.IGNORECASE)
+TWITTER_TITLE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bname=[\"']twitter:title[\"'][^>]*>", re.IGNORECASE)
+TWITTER_DESCRIPTION_META_TAG_RE = re.compile(r"<meta\b[^>]*\bname=[\"']twitter:description[\"'][^>]*>", re.IGNORECASE)
+TWITTER_IMAGE_META_TAG_RE = re.compile(r"<meta\b[^>]*\bname=[\"']twitter:image[\"'][^>]*>", re.IGNORECASE)
 PROCESS_START_MONOTONIC = time.monotonic()
 
 MARKETS: dict[str, dict[str, Any]] = deepcopy(INITIAL_MARKETS)
@@ -778,16 +783,27 @@ def absolute_public_url(path: str, *, headers: Any | None = None) -> str:
     return f"{resolve_public_origin(headers)}{normalized_path}"
 
 
-def build_market_preview(market: dict[str, Any], *, headers: Any | None = None) -> dict[str, str]:
+def build_market_preview(market: dict[str, Any], *, headers: Any | None = None) -> dict[str, Any]:
     """Build the normalized share-preview payload for one market."""
     market_id = str(market["id"])
+    marginals = market.get("marginals", {})
+    outcomes = [
+        {"id": str(o["id"]), "name": str(o["name"]), "probability": marginals.get(str(o["id"]), 0.0)}
+        for o in market.get("outcomes", [])
+    ]
+    prob_parts = " | ".join(f"{o['name']}: {round(o['probability'] * 100)}%" for o in outcomes)
+    description = str(market["description"])
+    og_description = f"{prob_parts} \u2014 {description}" if prob_parts else description
     return {
         "marketId": market_id,
         "title": str(market["title"]),
-        "description": str(market["description"]),
+        "description": description,
+        "og_description": og_description,
         "url": absolute_public_url(f"/markets/{quote(market_id, safe='')}", headers=headers),
+        "image": absolute_public_url("/og-image.png", headers=headers),
         "siteName": SITE_NAME,
         "type": OPEN_GRAPH_TYPE,
+        "outcomes": outcomes,
     }
 
 
@@ -811,19 +827,20 @@ def frontend_market_id(url_path: str) -> str | None:
     return market_id
 
 
-def build_default_preview(url_path: str, *, headers: Any | None = None) -> dict[str, str]:
+def build_default_preview(url_path: str, *, headers: Any | None = None) -> dict[str, Any]:
     """Build the generic SPA preview payload for non-market pages."""
     normalized_path = normalize_frontend_page_path(url_path)
     return {
         "title": SITE_NAME,
         "description": SITE_DESCRIPTION,
         "url": absolute_public_url(normalized_path, headers=headers),
+        "image": absolute_public_url("/og-image.png", headers=headers),
         "siteName": SITE_NAME,
         "type": OPEN_GRAPH_TYPE,
     }
 
 
-def preview_for_frontend_path(url_path: str, *, headers: Any | None = None) -> dict[str, str]:
+def preview_for_frontend_path(url_path: str, *, headers: Any | None = None) -> dict[str, Any]:
     """Choose market-specific or generic preview metadata for one SPA route."""
     market_id = frontend_market_id(url_path)
     if market_id is not None:
@@ -876,6 +893,38 @@ def render_frontend_index_html(document: str, url_path: str, *, headers: Any | N
         rendered,
         OG_URL_META_TAG_RE,
         f'<meta property="og:url" content="{escaped_url}" />',
+    )
+    escaped_image = html.escape(preview.get("image", ""), quote=True)
+    escaped_og_description = html.escape(preview.get("og_description", preview["description"]), quote=True)
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        OG_IMAGE_META_TAG_RE,
+        f'<meta property="og:image" content="{escaped_image}" />',
+    )
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        OG_DESCRIPTION_META_TAG_RE,
+        f'<meta property="og:description" content="{escaped_og_description}" />',
+    )
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        TWITTER_CARD_META_TAG_RE,
+        '<meta name="twitter:card" content="summary" />',
+    )
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        TWITTER_TITLE_META_TAG_RE,
+        f'<meta name="twitter:title" content="{escaped_title}" />',
+    )
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        TWITTER_DESCRIPTION_META_TAG_RE,
+        f'<meta name="twitter:description" content="{escaped_og_description}" />',
+    )
+    rendered = replace_or_insert_head_tag(
+        rendered,
+        TWITTER_IMAGE_META_TAG_RE,
+        f'<meta name="twitter:image" content="{escaped_image}" />',
     )
     return rendered.encode("utf-8")
 
