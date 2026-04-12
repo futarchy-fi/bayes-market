@@ -2119,6 +2119,55 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.details["marketId"], "m2_non_finite")
         self.assertIn("finite numeric values", error.message)
 
+    # ------------------------------------------------------------------
+    # compute_conditional_admissible_range – unit tests
+    # ------------------------------------------------------------------
+
+    def test_compute_conditional_admissible_range_binary_market_normal(self):
+        market = server.MARKETS["m1"]
+        base_marginals = {"yes": 0.65, "no": 0.35}
+        lo, hi = server.compute_conditional_admissible_range(market, "yes", base_marginals)
+        self.assertAlmostEqual(lo, 1e-12, places=12)
+        self.assertAlmostEqual(hi, 1.0 - 1e-12, places=12)
+        self.assertGreater(lo, 0.0)
+        self.assertLess(hi, 1.0)
+
+    def test_compute_conditional_admissible_range_three_outcome_market(self):
+        market = server.MARKETS["m2"]
+        base_marginals = {"yes": 0.25, "no": 0.60, "delayed": 0.15}
+        lo, hi = server.compute_conditional_admissible_range(market, "no", base_marginals)
+        self.assertAlmostEqual(lo, 1e-12, places=12)
+        self.assertAlmostEqual(hi, 1.0 - 1e-12, places=12)
+
+    def test_compute_conditional_admissible_range_all_zero_non_target(self):
+        market = server.MARKETS["m1"]
+        base_marginals = {"yes": 1.0, "no": 0.0}
+        lo, hi = server.compute_conditional_admissible_range(market, "yes", base_marginals)
+        self.assertEqual(lo, 1.0)
+        self.assertEqual(hi, 1.0)
+
+    def test_compute_conditional_admissible_range_all_zero_non_target_three_outcome(self):
+        market = server.MARKETS["m2"]
+        base_marginals = {"yes": 1.0, "no": 0.0, "delayed": 0.0}
+        lo, hi = server.compute_conditional_admissible_range(market, "yes", base_marginals)
+        self.assertEqual(lo, 1.0)
+        self.assertEqual(hi, 1.0)
+
+    def test_compute_conditional_admissible_range_near_zero_non_target(self):
+        market = server.MARKETS["m1"]
+        base_marginals = {"yes": 1.0 - 1e-15, "no": 1e-15}
+        lo, hi = server.compute_conditional_admissible_range(market, "yes", base_marginals)
+        # non-target sum rounds to 0 at 12 decimals → locked to 1.0
+        self.assertEqual(lo, 1.0)
+        self.assertEqual(hi, 1.0)
+
+    def test_compute_conditional_admissible_range_near_one_non_target(self):
+        market = server.MARKETS["m1"]
+        base_marginals = {"yes": 0.01, "no": 0.99}
+        lo, hi = server.compute_conditional_admissible_range(market, "yes", base_marginals)
+        self.assertAlmostEqual(lo, 1e-12, places=12)
+        self.assertAlmostEqual(hi, 1.0 - 1e-12, places=12)
+
     def test_normalize_probability_edit_payload_uses_existing_conditional_slice_for_validation(self):
         context = [{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m2"] = {
@@ -2138,7 +2187,10 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         error = ctx.exception
         self.assertEqual(error.status, 400)
-        self.assertEqual(error.code, "invalid_structure_preserving_edit")
+        # Conditional range bounds check fires before structure-preserving
+        # validation because the non-target marginals sum to zero, locking
+        # the admissible range to [1.0, 1.0].
+        self.assertEqual(error.code, "conditional_range_violation")
         self.assertEqual(error.details["marketId"], "m2")
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(server.EVENTS, {})
@@ -2242,6 +2294,85 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertIn("sum to 1.0", error.message)
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(server.EVENTS, {})
+
+    # ------------------------------------------------------------------
+    # validate_conditional_range_bounds – integration tests via
+    # normalize_probability_edit_payload
+    # ------------------------------------------------------------------
+
+    def test_conditional_edit_within_range_succeeds(self):
+        """A conditional edit with a probability inside (epsilon, 1-epsilon) is accepted."""
+        context = [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}]
+        server.CONDITIONAL_MARGINALS["m1"] = {
+            server.context_state_key(context): {"yes": 0.65, "no": 0.35},
+        }
+        result = server.normalize_probability_edit_payload(
+            "m1",
+            {
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": deepcopy(context),
+            },
+        )
+        self.assertEqual(result["target"]["probability"], 0.8)
+        self.assertEqual(result["context"], context)
+
+    def test_conditional_edit_outside_range_returns_conditional_range_violation(self):
+        """A conditional edit requesting p=0.5 when all non-target marginals are zero is rejected."""
+        context = [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}]
+        server.CONDITIONAL_MARGINALS["m1"] = {
+            server.context_state_key(context): {"yes": 1.0, "no": 0.0},
+        }
+        with self.assertRaises(server.ApiError) as ctx:
+            server.normalize_probability_edit_payload(
+                "m1",
+                {
+                    "variableId": "eth_price_gt_3000_mar15",
+                    "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.5},
+                    "context": deepcopy(context),
+                },
+            )
+        error = ctx.exception
+        self.assertEqual(error.status, 400)
+        self.assertEqual(error.code, "conditional_range_violation")
+        self.assertEqual(error.details["min"], 1.0)
+        self.assertEqual(error.details["max"], 1.0)
+        self.assertEqual(error.details["marketId"], "m1")
+        self.assertEqual(error.details["outcomeId"], "yes")
+        self.assertEqual(error.details["requestedProbability"], 0.5)
+
+    def test_conditional_range_violation_includes_admissible_range_in_details(self):
+        """Error details contain min/max so downstream consumers can display the range."""
+        context = [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}]
+        server.CONDITIONAL_MARGINALS["m1"] = {
+            server.context_state_key(context): {"yes": 1.0, "no": 0.0},
+        }
+        with self.assertRaises(server.ApiError) as ctx:
+            server.normalize_probability_edit_payload(
+                "m1",
+                {
+                    "variableId": "eth_price_gt_3000_mar15",
+                    "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.3},
+                    "context": deepcopy(context),
+                },
+            )
+        error = ctx.exception
+        self.assertIn("min", error.details)
+        self.assertIn("max", error.details)
+        self.assertIn("admissible range", error.message)
+
+    def test_unconditional_edit_bypasses_conditional_range_check(self):
+        """An unconditional edit (empty context) never triggers conditional_range_violation."""
+        result = server.normalize_probability_edit_payload(
+            "m1",
+            {
+                "variableId": "eth_price_gt_3000_mar15",
+                "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
+                "context": [],
+            },
+        )
+        self.assertEqual(result["target"]["probability"], 0.8)
+        self.assertEqual(result["context"], [])
 
     def test_probability_edit_rejects_wrong_variable_id(self):
         with self.assertRaises(server.ApiError) as ctx:
@@ -8578,7 +8709,10 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         )
 
         self.assertEqual(status, 400)
-        self.assertEqual(payload["error"]["code"], "invalid_structure_preserving_edit")
+        # Conditional range bounds check fires before structure-preserving
+        # validation because the non-target marginals sum to zero, locking
+        # the admissible range to [1.0, 1.0].
+        self.assertEqual(payload["error"]["code"], "conditional_range_violation")
         self.assertEqual(payload["error"]["details"]["marketId"], "m2")
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(server.EVENTS, {})
