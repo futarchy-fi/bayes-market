@@ -257,6 +257,26 @@ INITIAL_MARKETS: dict[str, dict[str, Any]] = {
         "created_at": "2026-06-04T00:00:00Z",
         "expires_at": "2028-12-31T23:59:59Z",
     },
+    "m10": {
+        "id": "m10",
+        "title": "AI raises G7 labor productivity growth by 1 point by 2032",
+        "description": (
+            "Will at least four G7 economies report that AI adoption raised annual labor productivity growth by "
+            "1 percentage point or more relative to their 2015-2025 trend for two consecutive years by "
+            "December 31, 2032?"
+        ),
+        "variableId": "ai_productivity_acceleration_g7_2032",
+        "status": "active",
+        "outcomes": [
+            {"id": "yes", "name": "Yes"},
+            {"id": "no", "name": "No"},
+        ],
+        "marginals": {"yes": 0.38, "no": 0.62},
+        "liquidity": 142000.0,
+        "volume": 36000.0,
+        "created_at": "2026-06-09T00:00:00Z",
+        "expires_at": "2032-12-31T23:59:59Z",
+    },
 }
 
 CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {
@@ -394,6 +414,24 @@ CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {
         "frontier_ai_governance_regime_2030=no|robust_agent_evals_standard_2027=no": {
             "yes": 0.19,
             "no": 0.81,
+        },
+    },
+    "m10": {
+        "ai_knowledge_work_displacement_2030=yes|frontier_ai_governance_regime_2030=yes": {
+            "yes": 0.58,
+            "no": 0.42,
+        },
+        "ai_knowledge_work_displacement_2030=yes|frontier_ai_governance_regime_2030=no": {
+            "yes": 0.50,
+            "no": 0.50,
+        },
+        "ai_knowledge_work_displacement_2030=no|frontier_ai_governance_regime_2030=yes": {
+            "yes": 0.29,
+            "no": 0.71,
+        },
+        "ai_knowledge_work_displacement_2030=no|frontier_ai_governance_regime_2030=no": {
+            "yes": 0.18,
+            "no": 0.82,
         },
     },
 }

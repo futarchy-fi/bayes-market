@@ -499,6 +499,96 @@ class BayesMarketApiUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         server.reset_state()
 
+    def test_initial_ai_futures_seed_is_connected_conditional_network(self):
+        markets = server.INITIAL_MARKETS
+        conditionals = server.INITIAL_CONDITIONAL_MARGINALS
+        variable_to_market_id = {
+            str(market["variableId"]): market_id
+            for market_id, market in markets.items()
+        }
+        adjacency = {market_id: set() for market_id in markets}
+
+        self.assertGreaterEqual(len(markets), 10)
+        self.assertGreaterEqual(len(conditionals), 8)
+        self.assertEqual(set(markets), {str(market["id"]) for market in markets.values()})
+        self.assertNotRegex(
+            " ".join(str(market["title"]).casefold() for market in markets.values()),
+            r"\b(eth|btc|bitcoin|federal reserve|fed rate)\b",
+        )
+
+        for market in markets.values():
+            outcome_ids = {str(outcome["id"]) for outcome in market["outcomes"]}
+            marginals = market["marginals"]
+            self.assertEqual(market["status"], "active")
+            self.assertGreaterEqual(server.parse_iso_timestamp(str(market["expires_at"])).year, 2027)
+            self.assertEqual(set(marginals), outcome_ids)
+            self.assertTrue(all(0.0 <= float(probability) <= 1.0 for probability in marginals.values()))
+            self.assertAlmostEqual(sum(float(probability) for probability in marginals.values()), 1.0)
+
+        for market_id, context_rows in conditionals.items():
+            self.assertIn(market_id, markets)
+            market_outcomes = {str(outcome["id"]) for outcome in markets[market_id]["outcomes"]}
+            seen_context_keys: set[str] = set()
+            parent_order_by_row: list[tuple[str, ...]] = []
+
+            for context_key, marginals in context_rows.items():
+                self.assertNotIn(context_key, seen_context_keys)
+                seen_context_keys.add(context_key)
+                self.assertEqual(set(marginals), market_outcomes)
+                self.assertTrue(all(0.0 <= float(probability) <= 1.0 for probability in marginals.values()))
+                self.assertAlmostEqual(sum(float(probability) for probability in marginals.values()), 1.0)
+
+                parent_order = []
+                for assignment in context_key.split("|"):
+                    variable_id, separator, outcome_id = assignment.partition("=")
+                    self.assertEqual(separator, "=")
+                    self.assertIn(variable_id, variable_to_market_id)
+                    parent_market_id = variable_to_market_id[variable_id]
+                    self.assertNotEqual(parent_market_id, market_id)
+                    self.assertIn(
+                        outcome_id,
+                        {str(outcome["id"]) for outcome in markets[parent_market_id]["outcomes"]},
+                    )
+                    adjacency[market_id].add(parent_market_id)
+                    adjacency[parent_market_id].add(market_id)
+                    parent_order.append(variable_id)
+                parent_order_by_row.append(tuple(parent_order))
+
+            parent_order = parent_order_by_row[0]
+            self.assertTrue(all(row_parent_order == parent_order for row_parent_order in parent_order_by_row))
+            expected_context_keys = {
+                "|".join(
+                    f"{variable_id}={outcome_id}"
+                    for variable_id, outcome_id in zip(parent_order, outcome_combo)
+                )
+                for outcome_combo in itertools.product(
+                    *[
+                        [str(outcome["id"]) for outcome in markets[variable_to_market_id[variable_id]]["outcomes"]]
+                        for variable_id in parent_order
+                    ]
+                )
+            }
+            self.assertEqual(set(context_rows), expected_context_keys)
+
+        reachable = {next(iter(markets))}
+        frontier = list(reachable)
+        while frontier:
+            current = frontier.pop()
+            for neighbor in adjacency[current]:
+                if neighbor not in reachable:
+                    reachable.add(neighbor)
+                    frontier.append(neighbor)
+        self.assertEqual(reachable, set(markets))
+
+        server.CONDITIONAL_MARGINALS.update(deepcopy(server.INITIAL_CONDITIONAL_MARGINALS))
+        cpt_payload, cpt_status = server.get_market_cpt("m10")
+        self.assertEqual(cpt_status, 200)
+        self.assertEqual(
+            [parent["variableId"] for parent in cpt_payload["parents"]],
+            ["ai_knowledge_work_displacement_2030", "frontier_ai_governance_regime_2030"],
+        )
+        self.assertEqual(len(cpt_payload["entries"]), 4)
+
     def test_get_market_write_lock_returns_stable_lock_per_market(self):
         first = server.get_market_write_lock("m1")
         second = server.get_market_write_lock("m1")
