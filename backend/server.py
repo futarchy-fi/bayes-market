@@ -394,6 +394,45 @@ INITIAL_MARKETS: dict[str, dict[str, Any]] = {
         "created_at": "2026-06-15T00:00:00Z",
         "expires_at": "2030-12-31T23:59:59Z",
     },
+    "m17": {
+        "id": "m17",
+        "title": "Frontier-agent inference costs fall 100x by 2029",
+        "description": (
+            "Will the end-to-end cost of running a frontier-quality autonomous agent for a standardized hour of "
+            "tool-using work fall by at least 100 times from early-2026 levels by December 31, 2029?"
+        ),
+        "variableId": "frontier_agent_inference_cost_100x_drop_2029",
+        "status": "active",
+        "outcomes": [
+            {"id": "yes", "name": "Yes"},
+            {"id": "no", "name": "No"},
+        ],
+        "marginals": {"yes": 0.48, "no": 0.52},
+        "liquidity": 146000.0,
+        "volume": 37000.0,
+        "created_at": "2026-06-16T00:00:00Z",
+        "expires_at": "2029-12-31T23:59:59Z",
+    },
+    "m18": {
+        "id": "m18",
+        "title": "Month-long autonomous AI business workflows by 2030",
+        "description": (
+            "Will at least ten large enterprises publicly report AI agents reliably completing month-long, "
+            "multi-step business workflows with fewer than one material human correction per week by "
+            "December 31, 2030?"
+        ),
+        "variableId": "month_long_autonomous_agent_workflows_2030",
+        "status": "active",
+        "outcomes": [
+            {"id": "yes", "name": "Yes"},
+            {"id": "no", "name": "No"},
+        ],
+        "marginals": {"yes": 0.35, "no": 0.65},
+        "liquidity": 136000.0,
+        "volume": 33000.0,
+        "created_at": "2026-06-17T00:00:00Z",
+        "expires_at": "2030-12-31T23:59:59Z",
+    },
 }
 
 CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {
@@ -538,21 +577,37 @@ CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {
         },
     },
     "m10": {
-        "ai_knowledge_work_displacement_2030=yes|frontier_ai_governance_regime_2030=yes": {
-            "yes": 0.58,
-            "no": 0.42,
+        "ai_knowledge_work_displacement_2030=yes|frontier_ai_governance_regime_2030=yes|month_long_autonomous_agent_workflows_2030=yes": {
+            "yes": 0.69,
+            "no": 0.31,
         },
-        "ai_knowledge_work_displacement_2030=yes|frontier_ai_governance_regime_2030=no": {
+        "ai_knowledge_work_displacement_2030=yes|frontier_ai_governance_regime_2030=yes|month_long_autonomous_agent_workflows_2030=no": {
             "yes": 0.50,
             "no": 0.50,
         },
-        "ai_knowledge_work_displacement_2030=no|frontier_ai_governance_regime_2030=yes": {
-            "yes": 0.29,
-            "no": 0.71,
+        "ai_knowledge_work_displacement_2030=yes|frontier_ai_governance_regime_2030=no|month_long_autonomous_agent_workflows_2030=yes": {
+            "yes": 0.61,
+            "no": 0.39,
         },
-        "ai_knowledge_work_displacement_2030=no|frontier_ai_governance_regime_2030=no": {
-            "yes": 0.18,
-            "no": 0.82,
+        "ai_knowledge_work_displacement_2030=yes|frontier_ai_governance_regime_2030=no|month_long_autonomous_agent_workflows_2030=no": {
+            "yes": 0.42,
+            "no": 0.58,
+        },
+        "ai_knowledge_work_displacement_2030=no|frontier_ai_governance_regime_2030=yes|month_long_autonomous_agent_workflows_2030=yes": {
+            "yes": 0.43,
+            "no": 0.57,
+        },
+        "ai_knowledge_work_displacement_2030=no|frontier_ai_governance_regime_2030=yes|month_long_autonomous_agent_workflows_2030=no": {
+            "yes": 0.22,
+            "no": 0.78,
+        },
+        "ai_knowledge_work_displacement_2030=no|frontier_ai_governance_regime_2030=no|month_long_autonomous_agent_workflows_2030=yes": {
+            "yes": 0.31,
+            "no": 0.69,
+        },
+        "ai_knowledge_work_displacement_2030=no|frontier_ai_governance_regime_2030=no|month_long_autonomous_agent_workflows_2030=no": {
+            "yes": 0.12,
+            "no": 0.88,
         },
     },
     "m11": {
@@ -651,6 +706,50 @@ CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {
         "ai_productivity_acceleration_g7_2032=no|compressed_ai_takeoff_2032=no": {
             "yes": 0.12,
             "no": 0.88,
+        },
+    },
+    "m17": {
+        "frontier_training_compute_100x_2029=yes|ai_datacenter_power_buildout_50gw_2030=yes": {
+            "yes": 0.66,
+            "no": 0.34,
+        },
+        "frontier_training_compute_100x_2029=yes|ai_datacenter_power_buildout_50gw_2030=no": {
+            "yes": 0.42,
+            "no": 0.58,
+        },
+        "frontier_training_compute_100x_2029=no|ai_datacenter_power_buildout_50gw_2030=yes": {
+            "yes": 0.49,
+            "no": 0.51,
+        },
+        "frontier_training_compute_100x_2029=no|ai_datacenter_power_buildout_50gw_2030=no": {
+            "yes": 0.24,
+            "no": 0.76,
+        },
+    },
+    "m18": {
+        "autonomous_ai_coding_deployment_2028=yes|frontier_agent_inference_cost_100x_drop_2029=yes": {
+            "yes": 0.64,
+            "no": 0.36,
+        },
+        "autonomous_ai_coding_deployment_2028=yes|frontier_agent_inference_cost_100x_drop_2029=no": {
+            "yes": 0.47,
+            "no": 0.53,
+        },
+        "autonomous_ai_coding_deployment_2028=delayed|frontier_agent_inference_cost_100x_drop_2029=yes": {
+            "yes": 0.39,
+            "no": 0.61,
+        },
+        "autonomous_ai_coding_deployment_2028=delayed|frontier_agent_inference_cost_100x_drop_2029=no": {
+            "yes": 0.24,
+            "no": 0.76,
+        },
+        "autonomous_ai_coding_deployment_2028=no|frontier_agent_inference_cost_100x_drop_2029=yes": {
+            "yes": 0.22,
+            "no": 0.78,
+        },
+        "autonomous_ai_coding_deployment_2028=no|frontier_agent_inference_cost_100x_drop_2029=no": {
+            "yes": 0.09,
+            "no": 0.91,
         },
     },
 }

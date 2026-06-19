@@ -25,7 +25,11 @@ spec.loader.exec_module(server)
 
 
 PROPERTY_PROBABILITIES = (0.05, 0.1, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95)
-REFERENCE_NET_MARKET_IDS = tuple(server.INITIAL_MARKETS)
+# Keep brute-force invariant tests intentionally small. These tests enumerate
+# every joint state, so tying them to the full demo seed makes verification
+# exponential in the number of display markets. The subset still covers binary
+# and three-outcome markets plus the explicit m2/governance context scenarios.
+REFERENCE_NET_MARKET_IDS = ("m1", "m2", "m3", "m4", "m5")
 VARIABLE_ID_TO_MARKET_ID = {
     market["variableId"]: market_id for market_id, market in server.INITIAL_MARKETS.items()
 }
@@ -508,8 +512,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         }
         adjacency = {market_id: set() for market_id in markets}
 
-        self.assertGreaterEqual(len(markets), 16)
-        self.assertGreaterEqual(len(conditionals), 14)
+        self.assertGreaterEqual(len(markets), 18)
+        self.assertGreaterEqual(len(conditionals), 17)
         self.assertEqual(set(markets), {str(market["id"]) for market in markets.values()})
         self.assertNotRegex(
             " ".join(str(market["title"]).casefold() for market in markets.values()),
@@ -593,9 +597,22 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(cpt_status, 200)
         self.assertEqual(
             [parent["variableId"] for parent in cpt_payload["parents"]],
-            ["ai_knowledge_work_displacement_2030", "frontier_ai_governance_regime_2030"],
+            [
+                "ai_knowledge_work_displacement_2030",
+                "frontier_ai_governance_regime_2030",
+                "month_long_autonomous_agent_workflows_2030",
+            ],
         )
-        self.assertEqual(len(cpt_payload["entries"]), 4)
+        self.assertEqual(len(cpt_payload["entries"]), 8)
+        cpt_by_context = {entry["contextKey"]: entry["marginals"] for entry in cpt_payload["entries"]}
+        self.assertGreater(
+            cpt_by_context[
+                "ai_knowledge_work_displacement_2030=yes|frontier_ai_governance_regime_2030=yes|month_long_autonomous_agent_workflows_2030=yes"
+            ]["yes"],
+            cpt_by_context[
+                "ai_knowledge_work_displacement_2030=no|frontier_ai_governance_regime_2030=no|month_long_autonomous_agent_workflows_2030=no"
+            ]["yes"],
+        )
 
         cpt_payload, cpt_status = server.get_market_cpt("m11")
         self.assertEqual(cpt_status, 200)
@@ -612,6 +629,40 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             ["ai_productivity_acceleration_g7_2032", "compressed_ai_takeoff_2032"],
         )
         self.assertEqual(len(cpt_payload["entries"]), 4)
+
+        cpt_payload, cpt_status = server.get_market_cpt("m17")
+        self.assertEqual(cpt_status, 200)
+        self.assertEqual(
+            [parent["variableId"] for parent in cpt_payload["parents"]],
+            ["frontier_training_compute_100x_2029", "ai_datacenter_power_buildout_50gw_2030"],
+        )
+        self.assertEqual(len(cpt_payload["entries"]), 4)
+        cpt_by_context = {entry["contextKey"]: entry["marginals"] for entry in cpt_payload["entries"]}
+        self.assertGreater(
+            cpt_by_context[
+                "frontier_training_compute_100x_2029=yes|ai_datacenter_power_buildout_50gw_2030=yes"
+            ]["yes"],
+            cpt_by_context[
+                "frontier_training_compute_100x_2029=no|ai_datacenter_power_buildout_50gw_2030=no"
+            ]["yes"],
+        )
+
+        cpt_payload, cpt_status = server.get_market_cpt("m18")
+        self.assertEqual(cpt_status, 200)
+        self.assertEqual(
+            [parent["variableId"] for parent in cpt_payload["parents"]],
+            ["autonomous_ai_coding_deployment_2028", "frontier_agent_inference_cost_100x_drop_2029"],
+        )
+        self.assertEqual(len(cpt_payload["entries"]), 6)
+        cpt_by_context = {entry["contextKey"]: entry["marginals"] for entry in cpt_payload["entries"]}
+        self.assertGreater(
+            cpt_by_context[
+                "autonomous_ai_coding_deployment_2028=yes|frontier_agent_inference_cost_100x_drop_2029=yes"
+            ]["yes"],
+            cpt_by_context[
+                "autonomous_ai_coding_deployment_2028=no|frontier_agent_inference_cost_100x_drop_2029=no"
+            ]["yes"],
+        )
 
     def test_get_market_write_lock_returns_stable_lock_per_market(self):
         first = server.get_market_write_lock("m1")
@@ -7821,9 +7872,7 @@ class BayesMarketApiInferenceInvariantTests(unittest.TestCase):
 
     def test_invariant_probability_edit_matches_bruteforce_reference_on_tiny_nets(self):
         rng = random.Random(584007)
-        active_market_ids = tuple(
-            market_id for market_id, market in server.MARKETS.items() if market["status"] == "active"
-        )
+        active_market_ids = REFERENCE_NET_MARKET_IDS
 
         for case_index in range(36):
             server.reset_state()
