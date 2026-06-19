@@ -508,8 +508,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         }
         adjacency = {market_id: set() for market_id in markets}
 
-        self.assertGreaterEqual(len(markets), 10)
-        self.assertGreaterEqual(len(conditionals), 8)
+        self.assertGreaterEqual(len(markets), 15)
+        self.assertGreaterEqual(len(conditionals), 13)
         self.assertEqual(set(markets), {str(market["id"]) for market in markets.values()})
         self.assertNotRegex(
             " ".join(str(market["title"]).casefold() for market in markets.values()),
@@ -586,6 +586,22 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(
             [parent["variableId"] for parent in cpt_payload["parents"]],
             ["ai_knowledge_work_displacement_2030", "frontier_ai_governance_regime_2030"],
+        )
+        self.assertEqual(len(cpt_payload["entries"]), 4)
+
+        cpt_payload, cpt_status = server.get_market_cpt("m11")
+        self.assertEqual(cpt_status, 200)
+        self.assertEqual(
+            [parent["variableId"] for parent in cpt_payload["parents"]],
+            ["frontier_capability_breakthrough_2028", "autonomous_ai_coding_deployment_2028"],
+        )
+        self.assertEqual(len(cpt_payload["entries"]), 6)
+
+        cpt_payload, cpt_status = server.get_market_cpt("m15")
+        self.assertEqual(cpt_status, 200)
+        self.assertEqual(
+            [parent["variableId"] for parent in cpt_payload["parents"]],
+            ["ai_productivity_acceleration_g7_2032", "compressed_ai_takeoff_2032"],
         )
         self.assertEqual(len(cpt_payload["entries"]), 4)
 
