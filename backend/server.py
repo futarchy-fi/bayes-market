@@ -374,9 +374,33 @@ INITIAL_MARKETS: dict[str, dict[str, Any]] = {
         "created_at": "2026-06-14T00:00:00Z",
         "expires_at": "2035-12-31T23:59:59Z",
     },
+    "m16": {
+        "id": "m16",
+        "title": "AI data-center power buildout reaches 50 GW by 2030",
+        "description": (
+            "Will dedicated electric capacity that is online, contracted, or under binding utility approval for "
+            "AI data centers across the US, EU, UK, and major hyperscaler regions reach at least 50 gigawatts "
+            "by December 31, 2030?"
+        ),
+        "variableId": "ai_datacenter_power_buildout_50gw_2030",
+        "status": "active",
+        "outcomes": [
+            {"id": "yes", "name": "Yes"},
+            {"id": "no", "name": "No"},
+        ],
+        "marginals": {"yes": 0.46, "no": 0.54},
+        "liquidity": 158000.0,
+        "volume": 38000.0,
+        "created_at": "2026-06-15T00:00:00Z",
+        "expires_at": "2030-12-31T23:59:59Z",
+    },
 }
 
 CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {
+    "m4": {
+        "ai_datacenter_power_buildout_50gw_2030=yes": {"yes": 0.71, "no": 0.29},
+        "ai_datacenter_power_buildout_50gw_2030=no": {"yes": 0.45, "no": 0.55},
+    },
     "m5": {
         "frontier_training_compute_100x_2029=yes": {"yes": 0.63, "no": 0.37},
         "frontier_training_compute_100x_2029=no": {"yes": 0.42, "no": 0.58},

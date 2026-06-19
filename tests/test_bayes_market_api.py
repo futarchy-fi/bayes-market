@@ -508,8 +508,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         }
         adjacency = {market_id: set() for market_id in markets}
 
-        self.assertGreaterEqual(len(markets), 15)
-        self.assertGreaterEqual(len(conditionals), 13)
+        self.assertGreaterEqual(len(markets), 16)
+        self.assertGreaterEqual(len(conditionals), 14)
         self.assertEqual(set(markets), {str(market["id"]) for market in markets.values()})
         self.assertNotRegex(
             " ".join(str(market["title"]).casefold() for market in markets.values()),
@@ -581,6 +581,14 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(reachable, set(markets))
 
         server.CONDITIONAL_MARGINALS.update(deepcopy(server.INITIAL_CONDITIONAL_MARGINALS))
+        cpt_payload, cpt_status = server.get_market_cpt("m4")
+        self.assertEqual(cpt_status, 200)
+        self.assertEqual(
+            [parent["variableId"] for parent in cpt_payload["parents"]],
+            ["ai_datacenter_power_buildout_50gw_2030"],
+        )
+        self.assertEqual(len(cpt_payload["entries"]), 2)
+
         cpt_payload, cpt_status = server.get_market_cpt("m10")
         self.assertEqual(cpt_status, 200)
         self.assertEqual(
