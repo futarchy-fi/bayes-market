@@ -86,9 +86,12 @@ _LMSR_SPEC.loader.exec_module(lmsr)
 INITIAL_MARKETS: dict[str, dict[str, Any]] = {
     "m1": {
         "id": "m1",
-        "title": "ETH Price > $3000 on March 15",
-        "description": "Will ETH trade above $3000 at any point on March 15, 2026?",
-        "variableId": "eth_price_gt_3000_mar15",
+        "title": "Frontier AI clears a hard science autonomy benchmark by 2028",
+        "description": (
+            "Will a frontier AI system autonomously complete at least 50% of a held-out suite of expert-level "
+            "scientific research tasks by December 31, 2028?"
+        ),
+        "variableId": "frontier_capability_breakthrough_2028",
         "status": "active",
         "outcomes": [
             {"id": "yes", "name": "Yes"},
@@ -97,45 +100,304 @@ INITIAL_MARKETS: dict[str, dict[str, Any]] = {
         "marginals": {"yes": 0.65, "no": 0.35},
         "liquidity": 150000.0,
         "volume": 45000.0,
-        "created_at": "2026-03-01T00:00:00Z",
-        "expires_at": "2026-03-15T23:59:59Z",
+        "created_at": "2026-06-01T00:00:00Z",
+        "expires_at": "2028-12-31T23:59:59Z",
     },
     "m2": {
         "id": "m2",
-        "title": "BTC ETF Approval This Week",
-        "description": "Will a new BTC ETF be approved this week?",
-        "variableId": "btc_etf_approval_week",
+        "title": "Agentic AI handles 25% of enterprise software tasks by 2028",
+        "description": (
+            "Will at least three Fortune 500 companies report production AI agents completing 25% or more of "
+            "software engineering tickets with human review by December 31, 2028?"
+        ),
+        "variableId": "autonomous_ai_coding_deployment_2028",
         "status": "active",
         "outcomes": [
             {"id": "yes", "name": "Yes"},
             {"id": "no", "name": "No"},
-            {"id": "delayed", "name": "Delayed"},
+            {"id": "delayed", "name": "Partial or delayed"},
         ],
         "marginals": {"yes": 0.25, "no": 0.60, "delayed": 0.15},
         "liquidity": 89000.0,
         "volume": 23000.0,
-        "created_at": "2026-03-08T00:00:00Z",
-        "expires_at": "2026-03-14T23:59:59Z",
+        "created_at": "2026-06-03T00:00:00Z",
+        "expires_at": "2028-12-31T23:59:59Z",
     },
     "m3": {
         "id": "m3",
-        "title": "Fed Rate Cut in March",
-        "description": "Will the Fed announce a rate cut in March 2026?",
-        "variableId": "fed_rate_cut_mar_2026",
-        "status": "resolved",
-        "resolution": "no",
-        "resolutionProbabilities": {"yes": 0.0, "no": 1.0},
+        "title": "Binding frontier AI compute-governance regime by 2030",
+        "description": (
+            "Will the US, EU, UK, or China have an enforceable licensing, reporting, or audit regime for "
+            "frontier AI training runs above a published compute threshold by December 31, 2030?"
+        ),
+        "variableId": "frontier_ai_governance_regime_2030",
+        "status": "active",
         "outcomes": [
             {"id": "yes", "name": "Yes"},
             {"id": "no", "name": "No"},
         ],
-        "marginals": {"yes": 0.0, "no": 1.0},
+        "marginals": {"yes": 0.42, "no": 0.58},
         "liquidity": 200000.0,
         "volume": 120000.0,
-        "created_at": "2026-02-15T00:00:00Z",
-        "expires_at": "2026-03-10T00:00:00Z",
+        "created_at": "2026-06-05T00:00:00Z",
+        "expires_at": "2030-12-31T23:59:59Z",
+    },
+    "m4": {
+        "id": "m4",
+        "title": "Frontier training compute grows 100x by 2029",
+        "description": (
+            "Will the largest publicly reported frontier AI training run use at least 100 times the estimated "
+            "compute of leading 2025 systems by December 31, 2029?"
+        ),
+        "variableId": "frontier_training_compute_100x_2029",
+        "status": "active",
+        "outcomes": [
+            {"id": "yes", "name": "Yes"},
+            {"id": "no", "name": "No"},
+        ],
+        "marginals": {"yes": 0.57, "no": 0.43},
+        "liquidity": 176000.0,
+        "volume": 39000.0,
+        "created_at": "2026-05-28T00:00:00Z",
+        "expires_at": "2029-12-31T23:59:59Z",
+    },
+    "m5": {
+        "id": "m5",
+        "title": "Robust autonomous-agent evaluations become standard by 2027",
+        "description": (
+            "Will at least two major AI labs publish and use third-party autonomous-agent evaluations covering "
+            "cyber, science, and long-horizon task performance before December 31, 2027?"
+        ),
+        "variableId": "robust_agent_evals_standard_2027",
+        "status": "active",
+        "outcomes": [
+            {"id": "yes", "name": "Yes"},
+            {"id": "no", "name": "No"},
+        ],
+        "marginals": {"yes": 0.54, "no": 0.46},
+        "liquidity": 124000.0,
+        "volume": 28000.0,
+        "created_at": "2026-06-02T00:00:00Z",
+        "expires_at": "2027-12-31T23:59:59Z",
+    },
+    "m6": {
+        "id": "m6",
+        "title": "Major AI misuse or autonomy incident before 2029",
+        "description": (
+            "Will a frontier AI system be credibly linked to a major cyber, biosecurity, financial, or autonomous "
+            "operation incident causing at least $1 billion in losses or triggering emergency regulation by "
+            "December 31, 2028?"
+        ),
+        "variableId": "major_ai_incident_before_2029",
+        "status": "active",
+        "outcomes": [
+            {"id": "yes", "name": "Yes"},
+            {"id": "no", "name": "No"},
+        ],
+        "marginals": {"yes": 0.31, "no": 0.69},
+        "liquidity": 132000.0,
+        "volume": 34000.0,
+        "created_at": "2026-06-06T00:00:00Z",
+        "expires_at": "2028-12-31T23:59:59Z",
+    },
+    "m7": {
+        "id": "m7",
+        "title": "Auditable alignment assurance for frontier deployments by 2030",
+        "description": (
+            "Will at least three leading AI developers require independent alignment assurance cases before "
+            "deploying their most capable models by December 31, 2030?"
+        ),
+        "variableId": "alignment_assurance_standard_2030",
+        "status": "active",
+        "outcomes": [
+            {"id": "yes", "name": "Yes"},
+            {"id": "no", "name": "No"},
+        ],
+        "marginals": {"yes": 0.34, "no": 0.66},
+        "liquidity": 98000.0,
+        "volume": 21000.0,
+        "created_at": "2026-06-07T00:00:00Z",
+        "expires_at": "2030-12-31T23:59:59Z",
+    },
+    "m8": {
+        "id": "m8",
+        "title": "AI displaces 10% of US knowledge-work hours by 2030",
+        "description": (
+            "Will official labor statistics or a consensus of major economic studies indicate AI systems have "
+            "automated at least 10% of US knowledge-work hours by December 31, 2030?"
+        ),
+        "variableId": "ai_knowledge_work_displacement_2030",
+        "status": "active",
+        "outcomes": [
+            {"id": "yes", "name": "Yes"},
+            {"id": "no", "name": "No"},
+        ],
+        "marginals": {"yes": 0.44, "no": 0.56},
+        "liquidity": 118000.0,
+        "volume": 31000.0,
+        "created_at": "2026-06-08T00:00:00Z",
+        "expires_at": "2030-12-31T23:59:59Z",
+    },
+    "m9": {
+        "id": "m9",
+        "title": "Open-weight model within 18 months of frontier capability by 2028",
+        "description": (
+            "Will an openly downloadable model be assessed as within 18 months of the best closed frontier model "
+            "on broad capability evaluations by December 31, 2028?"
+        ),
+        "variableId": "open_weight_near_frontier_2028",
+        "status": "active",
+        "outcomes": [
+            {"id": "yes", "name": "Yes"},
+            {"id": "no", "name": "No"},
+        ],
+        "marginals": {"yes": 0.36, "no": 0.64},
+        "liquidity": 104000.0,
+        "volume": 26000.0,
+        "created_at": "2026-06-04T00:00:00Z",
+        "expires_at": "2028-12-31T23:59:59Z",
     },
 }
+
+CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {
+    "m5": {
+        "frontier_training_compute_100x_2029=yes": {"yes": 0.63, "no": 0.37},
+        "frontier_training_compute_100x_2029=no": {"yes": 0.42, "no": 0.58},
+    },
+    "m1": {
+        "frontier_training_compute_100x_2029=yes|robust_agent_evals_standard_2027=yes": {
+            "yes": 0.79,
+            "no": 0.21,
+        },
+        "frontier_training_compute_100x_2029=yes|robust_agent_evals_standard_2027=no": {
+            "yes": 0.67,
+            "no": 0.33,
+        },
+        "frontier_training_compute_100x_2029=no|robust_agent_evals_standard_2027=yes": {
+            "yes": 0.56,
+            "no": 0.44,
+        },
+        "frontier_training_compute_100x_2029=no|robust_agent_evals_standard_2027=no": {
+            "yes": 0.41,
+            "no": 0.59,
+        },
+    },
+    "m2": {
+        "frontier_capability_breakthrough_2028=yes|frontier_training_compute_100x_2029=yes": {
+            "yes": 0.43,
+            "no": 0.39,
+            "delayed": 0.18,
+        },
+        "frontier_capability_breakthrough_2028=yes|frontier_training_compute_100x_2029=no": {
+            "yes": 0.31,
+            "no": 0.48,
+            "delayed": 0.21,
+        },
+        "frontier_capability_breakthrough_2028=no|frontier_training_compute_100x_2029=yes": {
+            "yes": 0.22,
+            "no": 0.59,
+            "delayed": 0.19,
+        },
+        "frontier_capability_breakthrough_2028=no|frontier_training_compute_100x_2029=no": {
+            "yes": 0.13,
+            "no": 0.72,
+            "delayed": 0.15,
+        },
+    },
+    "m9": {
+        "frontier_training_compute_100x_2029=yes": {"yes": 0.43, "no": 0.57},
+        "frontier_training_compute_100x_2029=no": {"yes": 0.27, "no": 0.73},
+    },
+    "m6": {
+        "autonomous_ai_coding_deployment_2028=yes|open_weight_near_frontier_2028=yes": {
+            "yes": 0.56,
+            "no": 0.44,
+        },
+        "autonomous_ai_coding_deployment_2028=yes|open_weight_near_frontier_2028=no": {
+            "yes": 0.38,
+            "no": 0.62,
+        },
+        "autonomous_ai_coding_deployment_2028=delayed|open_weight_near_frontier_2028=yes": {
+            "yes": 0.41,
+            "no": 0.59,
+        },
+        "autonomous_ai_coding_deployment_2028=delayed|open_weight_near_frontier_2028=no": {
+            "yes": 0.27,
+            "no": 0.73,
+        },
+        "autonomous_ai_coding_deployment_2028=no|open_weight_near_frontier_2028=yes": {
+            "yes": 0.24,
+            "no": 0.76,
+        },
+        "autonomous_ai_coding_deployment_2028=no|open_weight_near_frontier_2028=no": {
+            "yes": 0.14,
+            "no": 0.86,
+        },
+    },
+    "m8": {
+        "autonomous_ai_coding_deployment_2028=yes|frontier_capability_breakthrough_2028=yes": {
+            "yes": 0.68,
+            "no": 0.32,
+        },
+        "autonomous_ai_coding_deployment_2028=delayed|frontier_capability_breakthrough_2028=yes": {
+            "yes": 0.51,
+            "no": 0.49,
+        },
+        "autonomous_ai_coding_deployment_2028=no|frontier_capability_breakthrough_2028=yes": {
+            "yes": 0.33,
+            "no": 0.67,
+        },
+        "autonomous_ai_coding_deployment_2028=yes|frontier_capability_breakthrough_2028=no": {
+            "yes": 0.47,
+            "no": 0.53,
+        },
+        "autonomous_ai_coding_deployment_2028=delayed|frontier_capability_breakthrough_2028=no": {
+            "yes": 0.31,
+            "no": 0.69,
+        },
+        "autonomous_ai_coding_deployment_2028=no|frontier_capability_breakthrough_2028=no": {
+            "yes": 0.16,
+            "no": 0.84,
+        },
+    },
+    "m3": {
+        "ai_knowledge_work_displacement_2030=yes|major_ai_incident_before_2029=yes": {
+            "yes": 0.69,
+            "no": 0.31,
+        },
+        "ai_knowledge_work_displacement_2030=no|major_ai_incident_before_2029=yes": {
+            "yes": 0.56,
+            "no": 0.44,
+        },
+        "ai_knowledge_work_displacement_2030=yes|major_ai_incident_before_2029=no": {
+            "yes": 0.47,
+            "no": 0.53,
+        },
+        "ai_knowledge_work_displacement_2030=no|major_ai_incident_before_2029=no": {
+            "yes": 0.25,
+            "no": 0.75,
+        },
+    },
+    "m7": {
+        "frontier_ai_governance_regime_2030=yes|robust_agent_evals_standard_2027=yes": {
+            "yes": 0.64,
+            "no": 0.36,
+        },
+        "frontier_ai_governance_regime_2030=yes|robust_agent_evals_standard_2027=no": {
+            "yes": 0.46,
+            "no": 0.54,
+        },
+        "frontier_ai_governance_regime_2030=no|robust_agent_evals_standard_2027=yes": {
+            "yes": 0.36,
+            "no": 0.64,
+        },
+        "frontier_ai_governance_regime_2030=no|robust_agent_evals_standard_2027=no": {
+            "yes": 0.19,
+            "no": 0.81,
+        },
+    },
+}
+INITIAL_CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = deepcopy(CONDITIONAL_MARGINALS)
 
 ALLOWED_MARKET_STATUSES = frozenset({"active", "resolved", "closed", "draft"})
 ALLOWED_MARKET_SORTS = frozenset({"volume", "liquidity", "created"})
@@ -222,7 +484,6 @@ BUILD_GIT_SHA = _resolve_build_git_sha()
 BUILD_TIMESTAMP = _utc_now_timestamp()
 
 MARKETS: dict[str, dict[str, Any]] = deepcopy(INITIAL_MARKETS)
-CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {}
 ORDERS: dict[str, dict[str, Any]] = {}
 COMMANDS: dict[str, dict[str, Any]] = {}
 EVENTS: dict[str, dict[str, Any]] = {}

@@ -63,8 +63,8 @@ class BayesMarketFormulaSchemaTests(unittest.TestCase):
                         {
                             "op": "NOT",
                             "conditions": [
-                                {"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"},
-                                {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
+                                {"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes"},
+                                {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"},
                             ],
                         }
                     ]
@@ -82,7 +82,7 @@ class BayesMarketFormulaSchemaTests(unittest.TestCase):
                 [
                     [
                         {
-                            "variableId": "eth_price_gt_3000_mar15",
+                            "variableId": "frontier_capability_breakthrough_2028",
                             "outcomeId": "yes",
                             "negated": False,
                             "kind": "legacy",
@@ -103,8 +103,8 @@ class BayesMarketFormulaSchemaTests(unittest.TestCase):
         normalized = formula_schema.normalize_event_formula(
             [
                 [
-                    {"variableId": " fed_rate_cut_mar_2026 ", "outcomeId": " no "},
-                    {"variableId": "btc_etf_approval_week", "outcomeId": " delayed ", "negated": True},
+                    {"variableId": " frontier_ai_governance_regime_2030 ", "outcomeId": " no "},
+                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": " delayed ", "negated": True},
                 ]
             ],
             lookup_market_by_variable_id=self.lookup_market_by_variable_id,
@@ -114,8 +114,8 @@ class BayesMarketFormulaSchemaTests(unittest.TestCase):
             normalized,
             [
                 [
-                    {"variableId": "btc_etf_approval_week", "outcomeId": "delayed", "negated": True},
-                    {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no", "negated": False},
+                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "delayed", "negated": True},
+                    {"variableId": "frontier_ai_governance_regime_2030", "outcomeId": "no", "negated": False},
                 ]
             ],
         )
@@ -159,13 +159,13 @@ class BayesMarketFormulaSchemaTests(unittest.TestCase):
 
         with self.assertRaises(formula_schema.FormulaSchemaError) as ctx:
             adapter.normalize(
-                [[{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes", "negated": False}]]
+                [[{"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes", "negated": False}]]
             )
 
         error = ctx.exception
         self.assertEqual(error.code, "invalid_event_formula")
         self.assertEqual(error.details["field"], "formula[0][0].variableId")
-        self.assertEqual(error.details["received"], "eth_price_gt_3000_mar15")
+        self.assertEqual(error.details["received"], "frontier_capability_breakthrough_2028")
 
     def test_event_trade_adapter_rejects_literals_with_unexpected_fields(self):
         adapter = self.build_adapter()

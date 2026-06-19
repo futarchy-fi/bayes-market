@@ -31,6 +31,42 @@ VARIABLE_ID_TO_MARKET_ID = {
 }
 
 
+def expected_seed_market_ids(
+    *,
+    status: str | None = None,
+    include_resolved: bool = False,
+    q: str | None = None,
+    sort: str | None = None,
+) -> list[str]:
+    markets = list(server.INITIAL_MARKETS.values())
+    if not include_resolved:
+        markets = [market for market in markets if market["status"] != "resolved"]
+    if status is not None:
+        markets = [market for market in markets if market["status"] == status]
+    if q is not None:
+        needle = q.casefold()
+        markets = [market for market in markets if needle in str(market["title"]).casefold()]
+    if sort == "volume":
+        markets = sorted(markets, key=lambda market: float(market["volume"]), reverse=True)
+    elif sort == "liquidity":
+        markets = sorted(markets, key=lambda market: float(market["liquidity"]), reverse=True)
+    elif sort == "created":
+        markets = sorted(
+            markets,
+            key=lambda market: server.parse_iso_timestamp(str(market["created_at"])),
+            reverse=True,
+        )
+    return [str(market["id"]) for market in markets]
+
+
+def resolve_seed_market(market_id: str = "m3", outcome_id: str = "no") -> None:
+    market = server.MARKETS[market_id]
+    market["status"] = "resolved"
+    market["resolution"] = outcome_id
+    market["resolutionProbabilities"] = server.build_market_resolution_marginals(market, outcome_id)
+    market["marginals"] = deepcopy(market["resolutionProbabilities"])
+
+
 def build_unconditional_probability_edit_body(
     account_id: str,
     market_id: str,
@@ -517,10 +553,14 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         )
 
     def test_aggregate_platform_stats_filters_trade_orders_and_rounds_total_volume_once(self):
-        custom_markets = deepcopy(server.INITIAL_MARKETS)
+        custom_markets = {
+            market_id: deepcopy(server.INITIAL_MARKETS[market_id])
+            for market_id in ("m1", "m2", "m3")
+        }
         custom_markets["m1"]["volume"] = 0.1234564
         custom_markets["m2"]["status"] = "draft"
         custom_markets["m2"]["volume"] = 0.0000004
+        custom_markets["m3"]["status"] = "resolved"
         custom_markets["m3"]["volume"] = 2.0
 
         server.MARKETS.clear()
@@ -823,15 +863,16 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_v1_stats_route_returns_seeded_snapshot_without_mocks(self):
         payload, status = server.route_request("GET", "/v1/stats")
+        markets = list(server.INITIAL_MARKETS.values())
 
         self.assertEqual(status, 200)
         self.assertEqual(
             {key: value for key, value in payload.items() if key != "meta"},
             {
-                "total_markets": 3,
-                "active_markets": 2,
-                "resolved_markets": 1,
-                "total_volume": 188000.0,
+                "total_markets": len(markets),
+                "active_markets": sum(1 for market in markets if market["status"] == "active"),
+                "resolved_markets": sum(1 for market in markets if market["status"] == "resolved"),
+                "total_volume": server.round_risk_value(sum(float(market["volume"]) for market in markets)),
                 "total_trades": 0,
                 "total_accounts": 0,
             },
@@ -1457,10 +1498,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_list_markets_returns_summary_shape(self):
         payload, status = server.route_request("GET", "/v1/markets")
+        expected_ids = expected_seed_market_ids()
 
         self.assertEqual(status, 200)
-        self.assertEqual(payload["count"], 2)
-        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2"])
+        self.assertEqual(payload["count"], len(expected_ids))
+        self.assertEqual([market["id"] for market in payload["markets"]], expected_ids)
         self.assertEqual(
             payload["meta"]["filters"],
             {"status": None, "sort": None, "q": None, "include_resolved": False},
@@ -1474,10 +1516,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_list_markets_accepts_status_all_alias(self):
         payload, status = server.route_request("GET", "/v1/markets?status=all")
+        expected_ids = expected_seed_market_ids(include_resolved=True)
 
         self.assertEqual(status, 200)
-        self.assertEqual(payload["count"], 3)
-        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2", "m3"])
+        self.assertEqual(payload["count"], len(expected_ids))
+        self.assertEqual([market["id"] for market in payload["markets"]], expected_ids)
         self.assertEqual(
             payload["meta"]["filters"],
             {"status": None, "sort": None, "q": None, "include_resolved": True},
@@ -1485,10 +1528,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_list_markets_filters_by_status(self):
         payload, status = server.route_request("GET", "/v1/markets?status=resolved")
+        expected_ids = expected_seed_market_ids(status="resolved", include_resolved=True)
 
         self.assertEqual(status, 200)
-        self.assertEqual(payload["count"], 1)
-        self.assertEqual([market["id"] for market in payload["markets"]], ["m3"])
+        self.assertEqual(payload["count"], len(expected_ids))
+        self.assertEqual([market["id"] for market in payload["markets"]], expected_ids)
         self.assertEqual(
             payload["meta"]["filters"],
             {"status": "resolved", "sort": None, "q": None, "include_resolved": True},
@@ -1508,22 +1552,24 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 )
 
     def test_list_markets_filters_by_trimmed_case_insensitive_title_search(self):
-        payload, status = server.route_request("GET", "/v1/markets?q=%20ETH%20")
+        payload, status = server.route_request("GET", "/v1/markets?q=%20frontier%20")
+        expected_ids = expected_seed_market_ids(q="frontier")
 
         self.assertEqual(status, 200)
-        self.assertEqual(payload["count"], 1)
-        self.assertEqual([market["id"] for market in payload["markets"]], ["m1"])
+        self.assertEqual(payload["count"], len(expected_ids))
+        self.assertEqual([market["id"] for market in payload["markets"]], expected_ids)
         self.assertEqual(
             payload["meta"]["filters"],
-            {"status": None, "sort": None, "q": "ETH", "include_resolved": False},
+            {"status": None, "sort": None, "q": "frontier", "include_resolved": False},
         )
 
     def test_list_markets_treats_blank_search_like_no_filter(self):
         payload, status = server.route_request("GET", "/v1/markets?q=%20%20")
+        expected_ids = expected_seed_market_ids()
 
         self.assertEqual(status, 200)
-        self.assertEqual(payload["count"], 2)
-        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2"])
+        self.assertEqual(payload["count"], len(expected_ids))
+        self.assertEqual([market["id"] for market in payload["markets"]], expected_ids)
         self.assertEqual(
             payload["meta"]["filters"],
             {"status": None, "sort": None, "q": None, "include_resolved": False},
@@ -1531,9 +1577,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_list_markets_applies_supported_sorts_descending(self):
         expectations = {
-            "volume": ["m1", "m2"],
-            "liquidity": ["m1", "m2"],
-            "created": ["m2", "m1"],
+            "volume": expected_seed_market_ids(sort="volume"),
+            "liquidity": expected_seed_market_ids(sort="liquidity"),
+            "created": expected_seed_market_ids(sort="created"),
         }
 
         for sort, expected_ids in expectations.items():
@@ -1549,10 +1595,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_list_markets_combines_status_search_and_sort_filters(self):
         payload, status = server.route_request("GET", "/v1/markets?status=active&q=t&sort=liquidity")
+        expected_ids = expected_seed_market_ids(status="active", q="t", sort="liquidity")
 
         self.assertEqual(status, 200)
-        self.assertEqual(payload["count"], 2)
-        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2"])
+        self.assertEqual(payload["count"], len(expected_ids))
+        self.assertEqual([market["id"] for market in payload["markets"]], expected_ids)
         self.assertEqual(
             payload["meta"]["filters"],
             {"status": "active", "sort": "liquidity", "q": "t", "include_resolved": False},
@@ -1560,10 +1607,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_list_markets_excludes_resolved_by_default(self):
         payload, status = server.route_request("GET", "/v1/markets")
+        expected_ids = expected_seed_market_ids()
 
         self.assertEqual(status, 200)
-        self.assertEqual(payload["count"], 2)
-        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2"])
+        self.assertEqual(payload["count"], len(expected_ids))
+        self.assertEqual([market["id"] for market in payload["markets"]], expected_ids)
         self.assertEqual(
             payload["meta"]["filters"],
             {"status": None, "sort": None, "q": None, "include_resolved": False},
@@ -1571,10 +1619,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_list_markets_include_resolved_true_returns_all_markets(self):
         payload, status = server.route_request("GET", "/v1/markets?include_resolved=true")
+        expected_ids = expected_seed_market_ids(include_resolved=True)
 
         self.assertEqual(status, 200)
-        self.assertEqual(payload["count"], 3)
-        self.assertEqual([market["id"] for market in payload["markets"]], ["m1", "m2", "m3"])
+        self.assertEqual(payload["count"], len(expected_ids))
+        self.assertEqual([market["id"] for market in payload["markets"]], expected_ids)
         self.assertEqual(
             payload["meta"]["filters"],
             {"status": None, "sort": None, "q": None, "include_resolved": True},
@@ -1584,10 +1633,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         payload, status = server.route_request(
             "GET", "/v1/markets?status=resolved&include_resolved=false",
         )
+        expected_ids = expected_seed_market_ids(status="resolved", include_resolved=True)
 
         self.assertEqual(status, 200)
-        self.assertEqual(payload["count"], 1)
-        self.assertEqual([market["id"] for market in payload["markets"]], ["m3"])
+        self.assertEqual(payload["count"], len(expected_ids))
+        self.assertEqual([market["id"] for market in payload["markets"]], expected_ids)
         self.assertEqual(
             payload["meta"]["filters"],
             {"status": "resolved", "sort": None, "q": None, "include_resolved": True},
@@ -1669,19 +1719,20 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         self.assertEqual(status, 200)
         self.assertEqual(payload["market"]["id"], "m1")
-        self.assertEqual(payload["market"]["variableId"], "eth_price_gt_3000_mar15")
+        self.assertEqual(payload["market"]["variableId"], "frontier_capability_breakthrough_2028")
         self.assertEqual(payload["market"]["marginals"], {"yes": 0.65, "no": 0.35})
 
     def test_market_meta_returns_normalized_preview(self):
         payload, status = server.route_request("GET", "/v1/markets/m1/meta")
+        market = server.MARKETS["m1"]
 
         self.assertEqual(status, 200)
         self.assertEqual(
             payload["preview"],
             {
                 "marketId": "m1",
-                "title": "ETH Price > $3000 on March 15",
-                "description": "Will ETH trade above $3000 at any point on March 15, 2026?",
+                "title": market["title"],
+                "description": market["description"],
                 "url": f"{server.DEFAULT_PUBLIC_ORIGIN}/markets/m1",
                 "siteName": server.SITE_NAME,
                 "type": server.OPEN_GRAPH_TYPE,
@@ -1726,7 +1777,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_events",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -1736,7 +1787,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_events",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.7},
                 "context": [],
             },
@@ -1777,7 +1828,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "/v1/markets/m1/orders/probability-edit",
                 {
                     "accountId": "acct_events",
-                    "variableId": "eth_price_gt_3000_mar15",
+                    "variableId": "frontier_capability_breakthrough_2028",
                     "target": {"kind": "marginal", "outcomeId": "yes", "probability": probability},
                     "context": [],
                 },
@@ -1849,6 +1900,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m2/orders/event-trade",
             build_event_trade_body("acct_trade_history", "m2", "delayed", size=4.0, side="buy"),
         )
+        resolve_seed_market("m3", "no")
         rejected_trade_payload, rejected_trade_status = server.route_request(
             "POST",
             "/v1/markets/m3/orders/event-trade",
@@ -2210,7 +2262,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_engine_stats",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -2259,7 +2311,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertTrue(payload["diagnostics"]["last_updated"].endswith("Z"))
 
     def test_market_engine_stats_materializes_compile_snapshot_after_resolution(self):
-        context = [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}]
+        context = [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m1"] = {
             server.context_state_key(context): {"yes": 0.7, "no": 0.3},
         }
@@ -2324,7 +2376,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     compile_id="comp-adapter-test",
                     compile_type="junction_tree",
                     source_state_hash="sha256:adapter",
-                    cliques=(StubClique("adapter-c1", ("eth_price_gt_3000_mar15",), 1, 2),),
+                    cliques=(StubClique("adapter-c1", ("frontier_capability_breakthrough_2028",), 1, 2),),
                     compile_time_ms=round(float(compile_time_ms), 3),
                     memory_bytes=512,
                     last_updated=last_updated,
@@ -2336,7 +2388,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         try:
             server.CONDITIONAL_MARGINALS["m1"] = {
-                "btc_etf_approval_week=yes": {"yes": 0.8, "no": 0.2}
+                "autonomous_ai_coding_deployment_2028=yes": {"yes": 0.8, "no": 0.2}
             }
             server.refresh_market_compile_snapshot("m1", compile_time_ms=12.345)
         finally:
@@ -2361,16 +2413,17 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(state["memory_bytes"], 512)
         self.assertEqual(
             state["cliques"],
-            [{"id": "adapter-c1", "nodes": ["eth_price_gt_3000_mar15"], "size": 1, "states": 2}],
+            [{"id": "adapter-c1", "nodes": ["frontier_capability_breakthrough_2028"], "size": 1, "states": 2}],
         )
 
     def test_market_engine_stats_tracks_market_rejections_without_compile_snapshot(self):
+        resolve_seed_market("m3", "no")
         payload, status = server.route_request(
             "POST",
             "/v1/markets/m3/orders/probability-edit",
             {
                 "accountId": "acct_engine_stats_rejection",
-                "variableId": "fed_rate_cut_mar_2026",
+                "variableId": "frontier_ai_governance_regime_2030",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.2},
                 "context": [],
             },
@@ -2599,7 +2652,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -2637,7 +2690,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -2657,7 +2710,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -2704,7 +2757,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -2721,7 +2774,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "slices": {
                     slice_key: {
                         "marketId": "m1",
-                        "variableId": "eth_price_gt_3000_mar15",
+                        "variableId": "frontier_capability_breakthrough_2028",
                         "context": [],
                         "contextKey": "",
                         "liquidity": 150000.0,
@@ -2745,7 +2798,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -2763,7 +2816,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "effects": {
                     "marginalDelta": [
                         {
-                            "variableId": "eth_price_gt_3000_mar15",
+                            "variableId": "frontier_capability_breakthrough_2028",
                             "outcomeId": "yes",
                             "before": 0.65,
                             "after": 0.8,
@@ -2807,7 +2860,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     {
                         slice_key: {
                             "marketId": "m1",
-                            "variableId": "eth_price_gt_3000_mar15",
+                            "variableId": "frontier_capability_breakthrough_2028",
                             "context": [],
                             "contextKey": "",
                             "liquidity": 150000.0,
@@ -2832,7 +2885,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -2842,9 +2895,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.7},
-                "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+                "context": [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}],
             },
         )
 
@@ -2870,9 +2923,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             slices[server.account_lmsr_slice_key("m1", second_payload["order"]["payload"]["context"])],
             {
                 "marketId": "m1",
-                "variableId": "eth_price_gt_3000_mar15",
-                "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
-                "contextKey": "btc_etf_approval_week=yes",
+                "variableId": "frontier_capability_breakthrough_2028",
+                "context": [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}],
+                "contextKey": "autonomous_ai_coding_deployment_2028=yes",
                 "liquidity": 150000.0,
                 "scoreByOutcome": rounded_score_delta(
                     second_payload["order"]["previousMarginals"],
@@ -2890,7 +2943,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         body = {
             "accountId": "acct_test",
             "idempotencyKey": "idem-lmsr-ledger",
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
             "context": [],
         }
@@ -2923,7 +2976,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -2933,7 +2986,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.7},
                 "context": [],
             },
@@ -2955,7 +3008,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             server.ACCOUNT_RISK["acct_test"]["lmsrState"]["slices"][server.account_lmsr_slice_key("m1", [])],
             {
                 "marketId": "m1",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "context": [],
                 "contextKey": "",
                 "liquidity": 150000.0,
@@ -2976,7 +3029,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -2986,7 +3039,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m2/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "btc_etf_approval_week",
+                "variableId": "autonomous_ai_coding_deployment_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
                 "context": [],
             },
@@ -3019,7 +3072,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -3030,7 +3083,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.7},
                 "context": [],
             },
@@ -3059,11 +3112,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             {
                 "accountId": "acct_test",
                 "idempotencyKey": "idem-123",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [
-                    {"variableId": " fed_rate_cut_mar_2026 ", "outcomeId": " no "},
-                    {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
+                    {"variableId": " frontier_ai_governance_regime_2030 ", "outcomeId": " no "},
+                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"},
                 ],
             },
         )
@@ -3079,11 +3132,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(
             command["payload"],
             {
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [
-                    {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
-                    {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no"},
+                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"},
+                    {"variableId": "frontier_ai_governance_regime_2030", "outcomeId": "no"},
                 ],
             },
         )
@@ -3094,7 +3147,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "m1",
             {
                 "accountId": "acct_preview",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -3116,7 +3169,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m2/orders/probability-edit",
             {
                 "accountId": "acct_multi",
-                "variableId": "btc_etf_approval_week",
+                "variableId": "autonomous_ai_coding_deployment_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
                 "context": [],
             },
@@ -3129,7 +3182,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_validate_structure_preserving_edit_accepts_binary_market_payload(self):
         normalized_payload = {
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
             "context": [],
         }
@@ -3138,7 +3191,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_validate_structure_preserving_edit_accepts_three_outcome_market_payload(self):
         normalized_payload = {
-            "variableId": "btc_etf_approval_week",
+            "variableId": "autonomous_ai_coding_deployment_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
             "context": [],
         }
@@ -3147,7 +3200,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_validate_structure_preserving_edit_accepts_high_probability_three_outcome_payload(self):
         normalized_payload = {
-            "variableId": "btc_etf_approval_week",
+            "variableId": "autonomous_ai_coding_deployment_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.99},
             "context": [],
         }
@@ -3156,7 +3209,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_validate_structure_preserving_edit_rejects_unknown_target_outcome(self):
         normalized_payload = {
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "unknown", "probability": 0.8},
             "context": [],
         }
@@ -3171,7 +3224,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_validate_structure_preserving_edit_rejects_unknown_context_assignment(self):
         normalized_payload = {
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
             "context": [{"variableId": "unknown_variable", "outcomeId": "yes"}],
         }
@@ -3186,9 +3239,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
     def test_validate_structure_preserving_edit_rejects_invalid_known_context_outcome(self):
         normalized_payload = {
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
-            "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "invalid"}],
+            "context": [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "invalid"}],
         }
 
         with self.assertRaises(server.ApiError) as ctx:
@@ -3198,7 +3251,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_structure_preserving_edit")
         self.assertEqual(error.details["field"], "context[0].outcomeId")
-        self.assertEqual(error.details["variableId"], "btc_etf_approval_week")
+        self.assertEqual(error.details["variableId"], "autonomous_ai_coding_deployment_2028")
         self.assertEqual(error.details["received"], "invalid")
 
     def test_validate_structure_preserving_edit_rejects_impossible_renormalization_fixture(self):
@@ -3206,7 +3259,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         malformed_market["id"] = "m2_malformed"
         malformed_market["marginals"] = {"yes": 1.0, "no": -0.2, "delayed": 0.2}
         normalized_payload = {
-            "variableId": "btc_etf_approval_week",
+            "variableId": "autonomous_ai_coding_deployment_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
             "context": [],
         }
@@ -3225,7 +3278,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         malformed_market["id"] = "m2_missing_outcome"
         malformed_market["marginals"] = {"no": 0.8, "delayed": 0.2}
         normalized_payload = {
-            "variableId": "btc_etf_approval_week",
+            "variableId": "autonomous_ai_coding_deployment_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
             "context": [],
         }
@@ -3244,7 +3297,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         malformed_market["id"] = "m2_extra_outcome"
         malformed_market["marginals"] = {"yes": 0.25, "no": 0.45, "delayed": 0.15, "later": 0.15}
         normalized_payload = {
-            "variableId": "btc_etf_approval_week",
+            "variableId": "autonomous_ai_coding_deployment_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
             "context": [],
         }
@@ -3263,7 +3316,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         malformed_market["id"] = "m2_non_unit"
         malformed_market["marginals"] = {"yes": 0.25, "no": 0.7, "delayed": 0.25}
         normalized_payload = {
-            "variableId": "btc_etf_approval_week",
+            "variableId": "autonomous_ai_coding_deployment_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
             "context": [],
         }
@@ -3282,7 +3335,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         malformed_market["id"] = "m2_non_finite"
         malformed_market["marginals"] = {"yes": math.nan, "no": 0.6, "delayed": 0.4}
         normalized_payload = {
-            "variableId": "btc_etf_approval_week",
+            "variableId": "autonomous_ai_coding_deployment_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
             "context": [],
         }
@@ -3297,7 +3350,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertIn("finite numeric values", error.message)
 
     def test_normalize_probability_edit_payload_uses_existing_conditional_slice_for_validation(self):
-        context = [{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"}]
+        context = [{"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m2"] = {
             server.context_state_key(context): {"yes": 1.0, "no": -0.2, "delayed": 0.2}
         }
@@ -3307,7 +3360,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "m2",
                 {
                     "accountId": "acct_conditional_validator",
-                    "variableId": "btc_etf_approval_week",
+                    "variableId": "autonomous_ai_coding_deployment_2028",
                     "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
                     "context": deepcopy(context),
                 },
@@ -3321,7 +3374,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.EVENTS, {})
 
     def test_normalize_probability_edit_payload_rejects_conditional_slice_missing_market_outcome_mass(self):
-        context = [{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"}]
+        context = [{"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m2"] = {
             server.context_state_key(context): {"no": 0.8, "delayed": 0.2}
         }
@@ -3331,7 +3384,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "m2",
                 {
                     "accountId": "acct_conditional_validator",
-                    "variableId": "btc_etf_approval_week",
+                    "variableId": "autonomous_ai_coding_deployment_2028",
                     "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
                     "context": deepcopy(context),
                 },
@@ -3346,7 +3399,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.EVENTS, {})
 
     def test_normalize_probability_edit_payload_rejects_non_finite_conditional_slice_mass(self):
-        context = [{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"}]
+        context = [{"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m2"] = {
             server.context_state_key(context): {"yes": 0.25, "no": math.inf, "delayed": 0.15}
         }
@@ -3356,7 +3409,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "m2",
                 {
                     "accountId": "acct_conditional_validator",
-                    "variableId": "btc_etf_approval_week",
+                    "variableId": "autonomous_ai_coding_deployment_2028",
                     "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
                     "context": deepcopy(context),
                 },
@@ -3371,7 +3424,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.EVENTS, {})
 
     def test_normalize_probability_edit_payload_rejects_conditional_slice_with_extra_outcome_mass(self):
-        context = [{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"}]
+        context = [{"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m2"] = {
             server.context_state_key(context): {"yes": 0.25, "no": 0.45, "delayed": 0.15, "later": 0.15}
         }
@@ -3381,7 +3434,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "m2",
                 {
                     "accountId": "acct_conditional_validator",
-                    "variableId": "btc_etf_approval_week",
+                    "variableId": "autonomous_ai_coding_deployment_2028",
                     "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
                     "context": deepcopy(context),
                 },
@@ -3396,7 +3449,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.EVENTS, {})
 
     def test_normalize_probability_edit_payload_rejects_conditional_slice_with_non_unit_mass(self):
-        context = [{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"}]
+        context = [{"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m2"] = {
             server.context_state_key(context): {"yes": 0.25, "no": 0.6, "delayed": 0.2}
         }
@@ -3406,7 +3459,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "m2",
                 {
                     "accountId": "acct_conditional_validator",
-                    "variableId": "btc_etf_approval_week",
+                    "variableId": "autonomous_ai_coding_deployment_2028",
                     "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
                     "context": deepcopy(context),
                 },
@@ -3436,7 +3489,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         error = ctx.exception
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_probability_edit")
-        self.assertEqual(error.details["expected"], "eth_price_gt_3000_mar15")
+        self.assertEqual(error.details["expected"], "frontier_capability_breakthrough_2028")
 
     def test_probability_edit_with_context_tracks_conditional_distribution(self):
         payload, status = server.route_request(
@@ -3444,21 +3497,21 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
-                "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+                "context": [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}],
             },
         )
 
         self.assertEqual(status, 201)
         self.assertEqual(
             payload["order"]["payload"]["context"],
-            [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+            [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}],
         )
         self.assertEqual(payload["order"]["previousMarginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(payload["order"]["newMarginals"], {"yes": 0.8, "no": 0.2})
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
-        self.assertEqual(server.CONDITIONAL_MARGINALS["m1"]["btc_etf_approval_week=yes"], {"yes": 0.8, "no": 0.2})
+        self.assertEqual(server.CONDITIONAL_MARGINALS["m1"]["autonomous_ai_coding_deployment_2028=yes"], {"yes": 0.8, "no": 0.2})
 
     def test_probability_edit_with_context_reads_base_slice_via_query_backend_adapter(self):
         class StubQueryBackend:
@@ -3484,9 +3537,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "/v1/markets/m1/orders/probability-edit",
                 {
                     "accountId": "acct_adapter_context",
-                    "variableId": "eth_price_gt_3000_mar15",
+                    "variableId": "frontier_capability_breakthrough_2028",
                     "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.5},
-                    "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+                    "context": [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}],
                 },
             )
         finally:
@@ -3498,8 +3551,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(
             stub_backend.contexts,
             [
-                {"btc_etf_approval_week": "yes"},
-                {"btc_etf_approval_week": "yes"},
+                {"autonomous_ai_coding_deployment_2028": "yes"},
+                {"autonomous_ai_coding_deployment_2028": "yes"},
             ],
         )
 
@@ -3526,7 +3579,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "m2",
                 {
                     "accountId": "acct_adapter_preview",
-                    "variableId": "btc_etf_approval_week",
+                    "variableId": "autonomous_ai_coding_deployment_2028",
                     "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
                     "context": [],
                 },
@@ -3570,7 +3623,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "/v1/markets/m2/orders/probability-edit",
                 {
                     "accountId": "acct_adapter_unconditional",
-                    "variableId": "btc_etf_approval_week",
+                    "variableId": "autonomous_ai_coding_deployment_2028",
                     "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
                     "context": [],
                 },
@@ -3611,7 +3664,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         try:
             body = {
                 "accountId": "acct_adapter_reuse",
-                "variableId": "btc_etf_approval_week",
+                "variableId": "autonomous_ai_coding_deployment_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
                 "context": [],
             }
@@ -3664,7 +3717,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         try:
             unconditional_body = {
                 "accountId": "acct_contextual_preview_guard",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             }
@@ -3679,9 +3732,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "m1",
                 {
                     "accountId": "acct_contextual_preview_guard",
-                    "variableId": "eth_price_gt_3000_mar15",
+                    "variableId": "frontier_capability_breakthrough_2028",
                     "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.5},
-                    "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+                    "context": [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}],
                 },
             )
             command = server.materialize_probability_edit_command(
@@ -3700,19 +3753,19 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         expected_impact = server.kl_divergence(expected_previous, expected_new)
 
         self.assertNotEqual(unconditional_preview["impactScore"], expected_impact)
-        self.assertEqual(order["payload"]["context"], [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}])
+        self.assertEqual(order["payload"]["context"], [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}])
         self.assertEqual(order["previousMarginals"], expected_previous)
         self.assertEqual(order["newMarginals"], expected_new)
         self.assertEqual(order["impactScore"], expected_impact)
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
-        self.assertEqual(server.CONDITIONAL_MARGINALS["m1"]["btc_etf_approval_week=yes"], expected_new)
+        self.assertEqual(server.CONDITIONAL_MARGINALS["m1"]["autonomous_ai_coding_deployment_2028=yes"], expected_new)
         self.assertEqual(
             stub_backend.contexts,
             [
                 None,
                 None,
-                {"btc_etf_approval_week": "yes"},
-                {"btc_etf_approval_week": "yes"},
+                {"autonomous_ai_coding_deployment_2028": "yes"},
+                {"autonomous_ai_coding_deployment_2028": "yes"},
             ],
         )
 
@@ -3722,9 +3775,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
-                "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+                "context": [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}],
             },
         )
         risk_payload, risk_status = server.route_request("GET", "/v1/accounts/acct_test/risk")
@@ -3749,12 +3802,12 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_test",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [
-                    {"variableId": " fed_rate_cut_mar_2026 ", "outcomeId": " no "},
-                    {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
-                    {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
+                    {"variableId": " frontier_ai_governance_regime_2030 ", "outcomeId": " no "},
+                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"},
+                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"},
                 ],
             },
         )
@@ -3763,31 +3816,31 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(
             payload["order"]["payload"]["context"],
             [
-                {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
-                {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no"},
+                {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"},
+                {"variableId": "frontier_ai_governance_regime_2030", "outcomeId": "no"},
             ],
         )
 
     def test_context_state_key_canonicalizes_assignment_order(self):
         normalized_context = [
-            {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
-            {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no"},
+            {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"},
+            {"variableId": "frontier_ai_governance_regime_2030", "outcomeId": "no"},
         ]
         reversed_context = list(reversed(normalized_context))
 
         self.assertEqual(
             server.context_state_key(normalized_context),
-            "btc_etf_approval_week=yes|fed_rate_cut_mar_2026=no",
+            "autonomous_ai_coding_deployment_2028=yes|frontier_ai_governance_regime_2030=no",
         )
         self.assertEqual(
             server.context_state_key(reversed_context),
-            "btc_etf_approval_week=yes|fed_rate_cut_mar_2026=no",
+            "autonomous_ai_coding_deployment_2028=yes|frontier_ai_governance_regime_2030=no",
         )
 
     def test_resolve_probability_edit_base_marginals_reuses_existing_conditional_slice_for_unordered_context(self):
         canonical_context = [
-            {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
-            {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no"},
+            {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"},
+            {"variableId": "frontier_ai_governance_regime_2030", "outcomeId": "no"},
         ]
         expected_slice = {"yes": 0.8, "no": 0.2}
         server.CONDITIONAL_MARGINALS["m1"] = {
@@ -3809,11 +3862,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "/v1/markets/m1/orders/probability-edit",
                 {
                     "accountId": "acct_test",
-                    "variableId": "eth_price_gt_3000_mar15",
+                    "variableId": "frontier_capability_breakthrough_2028",
                     "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                     "context": [
-                        {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
-                        {"variableId": "btc_etf_approval_week", "outcomeId": "no"},
+                        {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"},
+                        {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "no"},
                     ],
                 },
             )
@@ -3831,7 +3884,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "/v1/markets/m1/orders/probability-edit",
                 {
                     "accountId": "acct_test",
-                    "variableId": "eth_price_gt_3000_mar15",
+                    "variableId": "frontier_capability_breakthrough_2028",
                     "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                     "context": [{"variableId": "unknown_variable", "outcomeId": "yes"}],
                 },
@@ -3848,7 +3901,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "POST",
                 "/v1/markets/m1/orders/probability-edit",
                 {
-                    "variableId": "eth_price_gt_3000_mar15",
+                    "variableId": "frontier_capability_breakthrough_2028",
                     "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                     "context": [],
                 },
@@ -3866,7 +3919,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "/v1/markets/m1/orders/probability-edit",
                 {
                     "accountId": "acct_test",
-                    "variableId": "eth_price_gt_3000_mar15",
+                    "variableId": "frontier_capability_breakthrough_2028",
                     "target": {"kind": "marginal", "outcomeId": "yes", "probability": "0.8"},
                     "context": [],
                 },
@@ -3887,7 +3940,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             {
                 "accountId": "acct_test",
                 "idempotencyKey": "idem-123",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -3901,7 +3954,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         body = {
             "accountId": "acct_test",
             "idempotencyKey": "idem-123",
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
             "context": [],
         }
@@ -3932,7 +3985,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         body = {
             "accountId": "acct_test",
             "idempotencyKey": "idem-preview-gate",
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
             "context": [],
         }
@@ -3961,7 +4014,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         body = {
             "accountId": "acct_test",
             "idempotencyKey": "idem-123",
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
             "context": [],
         }
@@ -3998,7 +4051,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                         "/v1/markets/m1/orders/probability-edit",
                         {
                             "accountId": "acct_low",
-                            "variableId": "eth_price_gt_3000_mar15",
+                            "variableId": "frontier_capability_breakthrough_2028",
                             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                             "context": [],
                         },
@@ -4030,7 +4083,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_edge",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -4057,7 +4110,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         body = {
             "accountId": "acct_low",
             "idempotencyKey": "idem-low-headroom",
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
             "context": [],
         }
@@ -4105,7 +4158,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         body = {
             "accountId": "acct_low_replay_contract",
             "idempotencyKey": "idem-low-replay-contract",
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
             "context": [],
         }
@@ -4149,10 +4202,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.TERMINAL_OUTCOMES, {})
 
     def test_probability_edit_replays_rejected_idempotent_submission(self):
+        resolve_seed_market("m3", "no")
         body = {
             "accountId": "acct_test",
             "idempotencyKey": "idem-resolved",
-            "variableId": "fed_rate_cut_mar_2026",
+            "variableId": "frontier_ai_governance_regime_2030",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.2},
             "context": [],
         }
@@ -4180,13 +4234,14 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(len(server.ORDERS), 0)
 
     def test_account_risk_rejected_submission_does_not_create_account_state(self):
+        resolve_seed_market("m3", "no")
         payload, status = server.route_request(
             "POST",
             "/v1/markets/m3/orders/probability-edit",
             {
                 "accountId": "acct_test",
                 "idempotencyKey": "idem-resolved",
-                "variableId": "fed_rate_cut_mar_2026",
+                "variableId": "frontier_ai_governance_regime_2030",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.2},
                 "context": [],
             },
@@ -4205,7 +4260,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         body = {
             "accountId": "acct_test",
             "idempotencyKey": "idem-123",
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
             "context": [],
         }
@@ -4234,13 +4289,14 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.8, "no": 0.2})
 
     def test_probability_edit_rejects_non_active_market_with_terminal_result(self):
+        resolve_seed_market("m3", "no")
         payload, status = server.route_request(
             "POST",
             "/v1/markets/m3/orders/probability-edit",
             {
                 "accountId": "acct_test",
                 "idempotencyKey": "idem-resolved",
-                "variableId": "fed_rate_cut_mar_2026",
+                "variableId": "frontier_ai_governance_regime_2030",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.2},
                 "context": [],
             },
@@ -4259,6 +4315,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(len(server.ORDERS), 0)
 
     def test_probability_edit_non_active_market_skips_unconditional_preview(self):
+        resolve_seed_market("m3", "no")
         with patch.object(server, "preview_unconditional_probability_edit", autospec=True) as preview_mock:
             payload, status = server.route_request(
                 "POST",
@@ -4266,7 +4323,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 {
                     "accountId": "acct_test",
                     "idempotencyKey": "idem-resolved-preview-gate",
-                    "variableId": "fed_rate_cut_mar_2026",
+                    "variableId": "frontier_ai_governance_regime_2030",
                     "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.2},
                     "context": [],
                 },
@@ -4289,7 +4346,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 **build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.7),
-                "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+                "context": [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}],
             },
         )
         retained_order, retained_status = server.route_request(
@@ -4423,13 +4480,13 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             event["payload"]["effects"]["marginalDelta"],
             [
                 {
-                    "variableId": "eth_price_gt_3000_mar15",
+                    "variableId": "frontier_capability_breakthrough_2028",
                     "outcomeId": "yes",
                     "before": 0.8,
                     "after": 1.0,
                 },
                 {
-                    "variableId": "eth_price_gt_3000_mar15",
+                    "variableId": "frontier_capability_breakthrough_2028",
                     "outcomeId": "no",
                     "before": 0.2,
                     "after": 0.0,
@@ -5528,6 +5585,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 server.reset_state()
                 if overridden_status is not None:
                     server.MARKETS[market_id]["status"] = overridden_status
+                elif status_label == "resolved":
+                    resolve_seed_market(market_id, "no")
 
                 self.assertEqual(server.MARKETS[market_id]["status"], status_label)
                 idempotency_key = f"idem-{status_label}-reopen"
@@ -5913,11 +5972,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         normalized = server.normalize_event_formula(
             [
                 [
-                    {"variableId": " fed_rate_cut_mar_2026 ", "outcomeId": " no "},
-                    {"variableId": "btc_etf_approval_week", "outcomeId": " delayed ", "negated": True},
+                    {"variableId": " frontier_ai_governance_regime_2030 ", "outcomeId": " no "},
+                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": " delayed ", "negated": True},
                 ],
                 [
-                    {"variableId": " eth_price_gt_3000_mar15 ", "outcomeId": " yes "},
+                    {"variableId": " frontier_capability_breakthrough_2028 ", "outcomeId": " yes "},
                 ],
             ]
         )
@@ -5926,11 +5985,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             normalized,
             [
                 [
-                    {"variableId": "btc_etf_approval_week", "outcomeId": "delayed", "negated": True},
-                    {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no", "negated": False},
+                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "delayed", "negated": True},
+                    {"variableId": "frontier_ai_governance_regime_2030", "outcomeId": "no", "negated": False},
                 ],
                 [
-                    {"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes", "negated": False},
+                    {"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes", "negated": False},
                 ],
             ],
         )
@@ -5940,8 +5999,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             server.normalize_event_formula(
                 [
                     [
-                        {"variableId": " eth_price_gt_3000_mar15 ", "outcomeId": " yes "},
-                        {"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes", "negated": False},
+                        {"variableId": " frontier_capability_breakthrough_2028 ", "outcomeId": " yes "},
+                        {"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes", "negated": False},
                     ]
                 ]
             )
@@ -5950,7 +6009,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_event_formula")
         self.assertEqual(error.details["field"], "formula[0][1]")
-        self.assertEqual(error.details["variableId"], "eth_price_gt_3000_mar15")
+        self.assertEqual(error.details["variableId"], "frontier_capability_breakthrough_2028")
         self.assertEqual(error.details["outcomeId"], "yes")
         self.assertFalse(error.details["negated"])
 
@@ -5959,7 +6018,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             server.normalize_event_formula(
                 [
                     [
-                        {"variableId": "eth_price_gt_3000_mar15", "outcomeId": "delayed"},
+                        {"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "delayed"},
                     ]
                 ]
             )
@@ -5968,7 +6027,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_event_formula")
         self.assertEqual(error.details["field"], "formula[0][0].outcomeId")
-        self.assertEqual(error.details["variableId"], "eth_price_gt_3000_mar15")
+        self.assertEqual(error.details["variableId"], "frontier_capability_breakthrough_2028")
         self.assertEqual(error.details["received"], "delayed")
 
     def test_event_formula_rejects_non_boolean_negated(self):
@@ -5976,7 +6035,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             server.normalize_event_formula(
                 [
                     [
-                        {"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes", "negated": "true"},
+                        {"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes", "negated": "true"},
                     ]
                 ]
             )
@@ -5991,7 +6050,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         with self.assertRaises(server.ApiError) as ctx:
             server.normalize_event_formula(
                 [
-                    [{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"}]
+                    [{"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes"}]
                     for _ in range(server.MAX_EVENT_FORMULA_CLAUSES + 1)
                 ]
             )
@@ -6019,7 +6078,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             ),
             (
                 "missing outcomeId",
-                [[{"variableId": "eth_price_gt_3000_mar15"}]],
+                [[{"variableId": "frontier_capability_breakthrough_2028"}]],
                 "formula[0][0].outcomeId",
                 {},
             ),
@@ -6043,7 +6102,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 [
                     [
                         {
-                            "variableId": "eth_price_gt_3000_mar15",
+                            "variableId": "frontier_capability_breakthrough_2028",
                             "outcomeId": "yes",
                             "negated": False,
                             "kind": "legacy",
@@ -6083,7 +6142,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 server.normalize_event_formula(
                     [
                         [
-                            {"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"}
+                            {"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes"}
                             for _ in range(server.MAX_EVENT_FORMULA_CLAUSE_LITERALS + 1)
                         ]
                     ]
@@ -6102,9 +6161,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_formula",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
-                "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+                "context": [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}],
             },
         )
         self.assertEqual(status, 201)
@@ -6121,8 +6180,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         normalized = server.normalize_event_formula(
             [
                 [
-                    {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
-                    {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no", "negated": True},
+                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"},
+                    {"variableId": "frontier_ai_governance_regime_2030", "outcomeId": "no", "negated": True},
                 ]
             ]
         )
@@ -6131,8 +6190,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             normalized,
             [
                 [
-                    {"variableId": "btc_etf_approval_week", "outcomeId": "yes", "negated": False},
-                    {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no", "negated": True},
+                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes", "negated": False},
+                    {"variableId": "frontier_ai_governance_regime_2030", "outcomeId": "no", "negated": True},
                 ]
             ],
         )
@@ -6358,7 +6417,7 @@ class BayesMarketEventTradeTests(unittest.TestCase):
                     "/v1/markets/m1/orders/event-trade",
                     {
                         "accountId": "acct_event_trade",
-                        "formula": [[{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes", "negated": False}]],
+                        "formula": [[{"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes", "negated": False}]],
                         "size": 12.5,
                         "side": "buy",
                     },
@@ -6368,7 +6427,7 @@ class BayesMarketEventTradeTests(unittest.TestCase):
             self.assertEqual(error.status, 400)
             self.assertEqual(error.code, "invalid_event_formula")
             self.assertEqual(error.details["field"], "formula[0][0].variableId")
-            self.assertEqual(error.details["received"], "eth_price_gt_3000_mar15")
+            self.assertEqual(error.details["received"], "frontier_capability_breakthrough_2028")
 
     def test_event_trade_rejects_outcome_not_in_target_market(self):
         with self.assertRaises(server.ApiError) as ctx:
@@ -6737,6 +6796,7 @@ class BayesMarketEventTradeTests(unittest.TestCase):
         self.assertEqual(len(server.EVENTS), 1)
 
     def test_event_trade_rejection_appends_once_and_replays_without_double_append(self):
+        resolve_seed_market("m3", "no")
         body = build_event_trade_body(
             "acct_event_trade_reject",
             "m3",
@@ -7713,12 +7773,12 @@ class BayesMarketApiInferenceInvariantTests(unittest.TestCase):
         rng = random.Random(584008)
         scenarios = (
             ("m1", []),
-            ("m1", [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}]),
+            ("m1", [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}]),
             (
                 "m2",
                 [
-                    {"variableId": "eth_price_gt_3000_mar15", "outcomeId": "no"},
-                    {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no"},
+                    {"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "no"},
+                    {"variableId": "frontier_ai_governance_regime_2030", "outcomeId": "no"},
                 ],
             ),
         )
@@ -8004,7 +8064,7 @@ class BayesMarketApiMarketInvariantTests(unittest.TestCase):
                 ],
                 "marginalDelta": [
                     {
-                        "variableId": "eth_price_gt_3000_mar15",
+                        "variableId": "frontier_capability_breakthrough_2028",
                         "outcomeId": "yes",
                         "before": 0.65,
                         "after": 0.8,
@@ -8027,7 +8087,7 @@ class BayesMarketApiMarketInvariantTests(unittest.TestCase):
                         "after": 0.8,
                         "before": 0.65,
                         "outcomeId": "yes",
-                        "variableId": "eth_price_gt_3000_mar15",
+                        "variableId": "frontier_capability_breakthrough_2028",
                     }
                 ],
                 "assetDelta": [
@@ -9567,9 +9627,11 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             self.assertRegex(payload["git_sha"], r"^[0-9a-f]{40}$")
 
     def test_create_market_http_returns_created_market_and_collection_entry(self):
+        expected_market_id = f"m{len(server.INITIAL_MARKETS) + 1}"
         body = build_create_market_body(
-            title="Solana ETF Approval in April",
-            description="Will a new Solana ETF be approved in April 2026?",
+            title="AI Evaluation Mandate in April",
+            description="Will a major AI lab adopt a new safety evaluation mandate in April 2027?",
+            expires_at="2027-04-30T23:59:59Z",
             liquidity=42000.0,
         )
 
@@ -9580,17 +9642,17 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(detail_status, 200)
         self.assertEqual(list_status, 200)
-        self.assertEqual(payload["market"]["id"], "m4")
+        self.assertEqual(payload["market"]["id"], expected_market_id)
         self.assertEqual(payload["market"]["title"], body["title"])
         self.assertEqual(payload["market"]["description"], body["description"])
-        self.assertEqual(payload["market"]["variableId"], "solana_etf_approval_in_april")
+        self.assertEqual(payload["market"]["variableId"], "ai_evaluation_mandate_in_april")
         self.assertEqual(payload["market"]["status"], "active")
         self.assertEqual(payload["market"]["marginals"], {"yes": 0.5, "no": 0.5})
         self.assertEqual(payload["market"]["liquidity"], 42000.0)
         self.assertEqual(payload["market"]["volume"], 0.0)
         self.assertEqual(detail_payload["market"], payload["market"])
         self.assertEqual(list_payload["count"], len(server.INITIAL_MARKETS) + 1)
-        self.assertIn("m4", {market["id"] for market in list_payload["markets"]})
+        self.assertIn(expected_market_id, {market["id"] for market in list_payload["markets"]})
 
     def test_create_market_http_rejects_invalid_payloads_without_side_effects(self):
         cases = (
@@ -9670,16 +9732,19 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             headers={"Host": "share.example", "X-Forwarded-Proto": "https"},
         )
         html = body.decode("utf-8")
+        market = server.MARKETS["m1"]
+        escaped_title = server.html.escape(str(market["title"]), quote=True)
+        escaped_description = server.html.escape(str(market["description"]), quote=True)
 
         self.assertEqual(status, 200)
         self.assertEqual(headers["Content-Type"], "text/html")
-        self.assertIn("<title>ETH Price &gt; $3000 on March 15</title>", html)
+        self.assertIn(f"<title>{escaped_title}</title>", html)
         self.assertIn(
-            '<meta name="description" content="Will ETH trade above $3000 at any point on March 15, 2026?" />',
+            f'<meta name="description" content="{escaped_description}" />',
             html,
         )
         self.assertIn(
-            '<meta property="og:title" content="ETH Price &gt; $3000 on March 15" />',
+            f'<meta property="og:title" content="{escaped_title}" />',
             html,
         )
         self.assertIn(
@@ -9749,13 +9814,13 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertNotIn(b"static-traversal-probe", body)
 
     def test_market_detail_http_returns_conditional_marginals_for_context_query(self):
-        context = [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}]
+        context = [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}]
         post_status, post_payload = self.request(
             "POST",
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_http_conditional_market_read",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": deepcopy(context),
             },
@@ -9779,8 +9844,8 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
 
     def test_market_detail_http_canonicalizes_context_query_order(self):
         canonical_context = [
-            {"variableId": "btc_etf_approval_week", "outcomeId": "yes"},
-            {"variableId": "fed_rate_cut_mar_2026", "outcomeId": "no"},
+            {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"},
+            {"variableId": "frontier_ai_governance_regime_2030", "outcomeId": "no"},
         ]
         server.CONDITIONAL_MARGINALS["m1"] = {
             server.context_state_key(canonical_context): {"yes": 0.91, "no": 0.09}
@@ -9797,13 +9862,13 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
 
     def test_market_detail_http_rejects_malformed_context_query(self):
-        status, payload = self.request("GET", "/v1/markets/m1?context=btc_etf_approval_week")
+        status, payload = self.request("GET", "/v1/markets/m1?context=autonomous_ai_coding_deployment_2028")
 
         self.assertEqual(status, 400)
         self.assertEqual(payload["error"]["code"], "invalid_query")
         self.assertEqual(payload["error"]["details"]["parameter"], "context")
         self.assertEqual(payload["error"]["details"]["index"], 0)
-        self.assertEqual(payload["error"]["details"]["received"], "btc_etf_approval_week")
+        self.assertEqual(payload["error"]["details"]["received"], "autonomous_ai_coding_deployment_2028")
 
     def test_probability_edit_route_uses_market_scoped_path(self):
         status, payload = self.request(
@@ -9811,7 +9876,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_http",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -10010,6 +10075,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(events_payload["chain"]["headSeq"], 1)
 
     def test_market_resolve_http_rejects_already_resolved_market(self):
+        resolve_seed_market("m3", "no")
         body = build_market_resolution_body("ops_http", "no", idempotency_key="idem-http-resolved")
 
         first_status, first_payload = self.request("POST", "/v1/markets/m3/resolve", body)
@@ -10173,7 +10239,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_http",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes"},
                 "context": [],
             },
@@ -10187,7 +10253,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         malformed_market_id = "m2_http_malformed"
         server.MARKETS[malformed_market_id] = deepcopy(server.MARKETS["m2"])
         server.MARKETS[malformed_market_id]["id"] = malformed_market_id
-        server.MARKETS[malformed_market_id]["variableId"] = "btc_etf_approval_week_http_malformed"
+        server.MARKETS[malformed_market_id]["variableId"] = "autonomous_ai_coding_deployment_2028_http_malformed"
         server.MARKETS[malformed_market_id]["marginals"] = {"yes": 1.0, "no": -0.2, "delayed": 0.2}
 
         status, payload = self.request(
@@ -10203,7 +10269,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(server.EVENTS, {})
 
     def test_probability_edit_http_surfaces_structure_preserving_failure_for_existing_conditional_slice(self):
-        context = [{"variableId": "eth_price_gt_3000_mar15", "outcomeId": "yes"}]
+        context = [{"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m2"] = {
             server.context_state_key(context): {"yes": 1.0, "no": -0.2, "delayed": 0.2}
         }
@@ -10213,7 +10279,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             "/v1/markets/m2/orders/probability-edit",
             {
                 "accountId": "acct_http",
-                "variableId": "btc_etf_approval_week",
+                "variableId": "autonomous_ai_coding_deployment_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
                 "context": deepcopy(context),
             },
@@ -10230,7 +10296,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             "POST",
             "/v1/markets/m1/orders/probability-edit",
             {
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -10246,7 +10312,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_http",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": "0.8"},
                 "context": [],
             },
@@ -10263,7 +10329,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             {
                 "accountId": "acct_http",
                 "idempotencyKey": "idem-http",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -10277,7 +10343,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         body = {
             "accountId": "acct_http",
             "idempotencyKey": "idem-http",
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
             "context": [],
         }
@@ -10304,7 +10370,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         body = {
             "accountId": account_id,
             "idempotencyKey": "idem-http-full-chain",
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
             "context": [],
         }
@@ -10343,13 +10409,14 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(first_events_payload["chain"]["headHash"], first_events_payload["events"][0]["eventHash"])
 
     def test_probability_edit_http_rejects_non_active_market(self):
+        resolve_seed_market("m3", "no")
         status, payload = self.request(
             "POST",
             "/v1/markets/m3/orders/probability-edit",
             {
                 "accountId": "acct_http",
                 "idempotencyKey": "idem-resolved",
-                "variableId": "fed_rate_cut_mar_2026",
+                "variableId": "frontier_ai_governance_regime_2030",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.2},
                 "context": [],
             },
@@ -10366,7 +10433,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         body = {
             "accountId": "acct_http_low",
             "idempotencyKey": "idem-http-low-headroom",
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
             "context": [],
         }
@@ -10413,7 +10480,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         body = {
             "accountId": "acct_http_low_replay_contract",
             "idempotencyKey": "idem-http-low-replay-contract",
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
             "context": [],
         }
@@ -10445,10 +10512,11 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(server.TERMINAL_OUTCOMES, {})
 
     def test_probability_edit_http_replays_rejected_idempotency_key(self):
+        resolve_seed_market("m3", "no")
         body = {
             "accountId": "acct_http",
             "idempotencyKey": "idem-resolved",
-            "variableId": "fed_rate_cut_mar_2026",
+            "variableId": "frontier_ai_governance_regime_2030",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.2},
             "context": [],
         }
@@ -10491,7 +10559,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             body = {
                 "accountId": account_id,
                 "idempotencyKey": f"idem-http-deplete-{index}",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": target_probability},
                 "context": [],
             }
@@ -10578,7 +10646,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_http_edge",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -10608,7 +10676,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             "/v1/markets/m2/orders/probability-edit",
             {
                 "accountId": account_id,
-                "variableId": "btc_etf_approval_week",
+                "variableId": "autonomous_ai_coding_deployment_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
                 "context": [],
             },
@@ -10618,7 +10686,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         counterfactual_body = build_unconditional_probability_edit_body(account_id, "m1", "yes", 0.8)
         counterfactual_normalized = server.normalize_probability_edit_payload("m1", counterfactual_body)
         counterfactual_preview = server.preview_unconditional_probability_edit("m1", counterfactual_normalized, account_id)
-        conditional_context = [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}]
+        conditional_context = [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}]
         conditional_status, conditional_payload = self.request(
             "POST",
             "/v1/markets/m1/orders/probability-edit",
@@ -10691,21 +10759,21 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_http",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
-                "context": [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+                "context": [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}],
             },
         )
 
         self.assertEqual(status, 201)
         self.assertEqual(
             payload["order"]["payload"]["context"],
-            [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+            [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}],
         )
         self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(
             server.COMMANDS[payload["order"]["commandId"]]["payload"]["context"],
-            [{"variableId": "btc_etf_approval_week", "outcomeId": "yes"}],
+            [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}],
         )
 
     def test_probability_edit_http_happy_path_updates_market_events_and_account_risk(self):
@@ -10714,7 +10782,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_http_chain",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -10729,7 +10797,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(risk_status, 200)
         self.assertEqual(post_payload["result"]["status"], "accepted")
         self.assertEqual(market_payload["market"]["id"], "m1")
-        self.assertEqual(market_payload["market"]["variableId"], "eth_price_gt_3000_mar15")
+        self.assertEqual(market_payload["market"]["variableId"], "frontier_capability_breakthrough_2028")
         self.assertEqual(market_payload["market"]["marginals"], post_payload["order"]["newMarginals"])
         self.assertEqual(events_payload["marketId"], "m1")
         self.assertEqual(events_payload["pagination"], {"fromSeq": 1, "limit": 100, "returned": 1, "nextFromSeq": None})
@@ -10746,7 +10814,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             event["payload"]["effects"]["marginalDelta"],
             [
                 {
-                    "variableId": "eth_price_gt_3000_mar15",
+                    "variableId": "frontier_capability_breakthrough_2028",
                     "outcomeId": "yes",
                     "before": 0.65,
                     "after": 0.8,
@@ -10797,7 +10865,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_http_chain",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -10807,7 +10875,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_http_chain",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.7},
                 "context": [],
             },
@@ -10875,7 +10943,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             "/v1/markets/m1/orders/probability-edit",
             {
                 "accountId": "acct_http",
-                "variableId": "eth_price_gt_3000_mar15",
+                "variableId": "frontier_capability_breakthrough_2028",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
                 "context": [],
             },
@@ -10900,7 +10968,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         body = {
             "accountId": "acct_http",
             "idempotencyKey": "idem-http-risk",
-            "variableId": "eth_price_gt_3000_mar15",
+            "variableId": "frontier_capability_breakthrough_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.8},
             "context": [],
         }
@@ -10936,13 +11004,14 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         )
 
     def test_account_risk_http_rejected_write_does_not_create_account_state(self):
+        resolve_seed_market("m3", "no")
         post_status, post_payload = self.request(
             "POST",
             "/v1/markets/m3/orders/probability-edit",
             {
                 "accountId": "acct_http",
                 "idempotencyKey": "idem-http-rejected",
-                "variableId": "fed_rate_cut_mar_2026",
+                "variableId": "frontier_ai_governance_regime_2030",
                 "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.2},
                 "context": [],
             },
