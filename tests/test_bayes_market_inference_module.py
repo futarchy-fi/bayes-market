@@ -151,7 +151,7 @@ class BayesMarketInferenceModuleTests(unittest.TestCase):
     def test_current_model_compiler_builds_truthful_singleton_artifact(self):
         market_snapshot = deepcopy(server.MARKETS["m1"])
         conditional_marginals = {
-            "btc_etf_approval_week=yes": {
+            "autonomous_ai_coding_deployment_2028=yes": {
                 "yes": 0.7,
                 "no": 0.3,
             }
@@ -193,14 +193,14 @@ class BayesMarketInferenceModuleTests(unittest.TestCase):
         self.assertEqual(artifact.memory_bytes, 128)
         self.assertEqual(artifact.source_state_payload()["conditionalMarginals"], conditional_marginals)
         self.assertEqual(
-            dict(artifact.conditional_marginals["btc_etf_approval_week=yes"]),
+            dict(artifact.conditional_marginals["autonomous_ai_coding_deployment_2028=yes"]),
             {"yes": 0.7, "no": 0.3},
         )
 
     def test_current_model_compiler_is_deterministic_for_equal_snapshots(self):
         market_snapshot = deepcopy(server.MARKETS["m2"])
         conditional_marginals = {
-            "eth_price_gt_3000_mar15=yes": {
+            "frontier_capability_breakthrough_2028=yes": {
                 "yes": 0.2,
                 "no": 0.7,
                 "delayed": 0.1,
@@ -276,7 +276,7 @@ class BayesMarketInferenceModuleTests(unittest.TestCase):
 
     def test_current_model_query_backend_canonicalizes_context_keys_for_conditionals(self):
         conditional_marginals = {
-            "btc_etf_approval_week=yes|fed_rate_cut_mar_2026=no": {
+            "autonomous_ai_coding_deployment_2028=yes|frontier_ai_governance_regime_2030=no": {
                 "yes": 0.7,
                 "no": 0.3,
             }
@@ -286,21 +286,21 @@ class BayesMarketInferenceModuleTests(unittest.TestCase):
         result = CURRENT_MODEL_QUERY_BACKEND.query_marginals(
             compile_result,
             context={
-                "fed_rate_cut_mar_2026": "no",
-                "btc_etf_approval_week": "yes",
+                "frontier_ai_governance_regime_2030": "no",
+                "autonomous_ai_coding_deployment_2028": "yes",
             },
         )
 
         self.assertEqual(
             result.marginals,
-            conditional_marginals["btc_etf_approval_week=yes|fed_rate_cut_mar_2026=no"],
+            conditional_marginals["autonomous_ai_coding_deployment_2028=yes|frontier_ai_governance_regime_2030=no"],
         )
-        self.assertEqual(result.metadata["contextKey"], "btc_etf_approval_week=yes|fed_rate_cut_mar_2026=no")
+        self.assertEqual(result.metadata["contextKey"], "autonomous_ai_coding_deployment_2028=yes|frontier_ai_governance_regime_2030=no")
         self.assertEqual(result.metadata["resolutionSource"], "conditional")
 
     def test_current_model_query_backend_falls_back_to_unconditional_marginals_for_unknown_context(self):
         conditional_marginals = {
-            "btc_etf_approval_week=yes": {
+            "autonomous_ai_coding_deployment_2028=yes": {
                 "yes": 0.7,
                 "no": 0.3,
             }
@@ -309,11 +309,11 @@ class BayesMarketInferenceModuleTests(unittest.TestCase):
 
         result = CURRENT_MODEL_QUERY_BACKEND.query_marginals(
             compile_result,
-            context={"btc_etf_approval_week": "no"},
+            context={"autonomous_ai_coding_deployment_2028": "no"},
         )
 
         self.assertEqual(result.marginals, dict(server.MARKETS["m1"]["marginals"]))
-        self.assertEqual(result.metadata["contextKey"], "btc_etf_approval_week=no")
+        self.assertEqual(result.metadata["contextKey"], "autonomous_ai_coding_deployment_2028=no")
         self.assertEqual(result.metadata["resolutionSource"], "unconditional")
 
     def test_current_model_query_backend_returns_atomic_event_probability(self):
