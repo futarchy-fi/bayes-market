@@ -86,54 +86,159 @@ _LMSR_SPEC.loader.exec_module(lmsr)
 INITIAL_MARKETS: dict[str, dict[str, Any]] = {
     "m1": {
         "id": "m1",
-        "title": "ETH Price > $3000 on March 15",
-        "description": "Will ETH trade above $3000 at any point on March 15, 2026?",
-        "variableId": "eth_price_gt_3000_mar15",
+        "title": "Frontier model exceeds expert forecaster benchmark before 2028",
+        "description": (
+            "Will an audited general AI system beat the median expert forecaster on "
+            "a broad 12-month forecasting benchmark before January 1, 2028?"
+        ),
+        "variableId": "frontier_forecaster_benchmark_2028",
         "status": "active",
         "outcomes": [
             {"id": "yes", "name": "Yes"},
             {"id": "no", "name": "No"},
         ],
-        "marginals": {"yes": 0.65, "no": 0.35},
-        "liquidity": 150000.0,
-        "volume": 45000.0,
-        "created_at": "2026-03-01T00:00:00Z",
-        "expires_at": "2026-03-15T23:59:59Z",
+        "marginals": {"yes": 0.54, "no": 0.46},
+        "liquidity": 260000.0,
+        "volume": 81000.0,
+        "created_at": "2026-06-22T00:00:00Z",
+        "expires_at": "2028-01-01T00:00:00Z",
     },
     "m2": {
         "id": "m2",
-        "title": "BTC ETF Approval This Week",
-        "description": "Will a new BTC ETF be approved this week?",
-        "variableId": "btc_etf_approval_week",
+        "title": "Autonomous agent completes a week-long software task by 2027",
+        "description": (
+            "Will a deployed AI agent independently complete and merge a nontrivial "
+            "week-long software engineering task in a monitored production repo by "
+            "December 31, 2027?"
+        ),
+        "variableId": "autonomous_agent_weeklong_task_2027",
         "status": "active",
         "outcomes": [
             {"id": "yes", "name": "Yes"},
             {"id": "no", "name": "No"},
-            {"id": "delayed", "name": "Delayed"},
         ],
-        "marginals": {"yes": 0.25, "no": 0.60, "delayed": 0.15},
-        "liquidity": 89000.0,
-        "volume": 23000.0,
-        "created_at": "2026-03-08T00:00:00Z",
-        "expires_at": "2026-03-14T23:59:59Z",
+        "marginals": {"yes": 0.61, "no": 0.39},
+        "liquidity": 310000.0,
+        "volume": 124000.0,
+        "created_at": "2026-06-22T00:00:00Z",
+        "expires_at": "2027-12-31T23:59:59Z",
     },
     "m3": {
         "id": "m3",
-        "title": "Fed Rate Cut in March",
-        "description": "Will the Fed announce a rate cut in March 2026?",
-        "variableId": "fed_rate_cut_mar_2026",
-        "status": "resolved",
-        "resolution": "no",
-        "resolutionProbabilities": {"yes": 0.0, "no": 1.0},
+        "title": "Inference cost for GPT-4-class reasoning falls 10x by 2029",
+        "description": (
+            "Will the public marginal cost of GPT-4-class reasoning fall by at least "
+            "10x from the 2026 baseline before January 1, 2029?"
+        ),
+        "variableId": "reasoning_inference_cost_10x_drop_2029",
+        "status": "active",
         "outcomes": [
             {"id": "yes", "name": "Yes"},
             {"id": "no", "name": "No"},
         ],
-        "marginals": {"yes": 0.0, "no": 1.0},
-        "liquidity": 200000.0,
-        "volume": 120000.0,
-        "created_at": "2026-02-15T00:00:00Z",
-        "expires_at": "2026-03-10T00:00:00Z",
+        "marginals": {"yes": 0.58, "no": 0.42},
+        "liquidity": 220000.0,
+        "volume": 69000.0,
+        "created_at": "2026-06-22T00:00:00Z",
+        "expires_at": "2029-01-01T00:00:00Z",
+    },
+    "m4": {
+        "id": "m4",
+        "title": "AI system produces a peer-reviewed research result by 2030",
+        "description": (
+            "Will an AI-led project produce a peer-reviewed result that domain experts "
+            "judge as a material advance in mathematics, biology, or computer science "
+            "before January 1, 2030?"
+        ),
+        "variableId": "ai_led_research_breakthrough_2030",
+        "status": "active",
+        "outcomes": [
+            {"id": "yes", "name": "Yes"},
+            {"id": "no", "name": "No"},
+        ],
+        "marginals": {"yes": 0.39, "no": 0.61},
+        "liquidity": 285000.0,
+        "volume": 73000.0,
+        "created_at": "2026-06-22T00:00:00Z",
+        "expires_at": "2030-01-01T00:00:00Z",
+    },
+    "m5": {
+        "id": "m5",
+        "title": "Major AI safety incident triggers public investigation by 2029",
+        "description": (
+            "Will a frontier AI deployment cause a publicly documented safety incident "
+            "that triggers a government, regulator, or board-level investigation before "
+            "January 1, 2029?"
+        ),
+        "variableId": "major_ai_safety_incident_2029",
+        "status": "active",
+        "outcomes": [
+            {"id": "yes", "name": "Yes"},
+            {"id": "no", "name": "No"},
+        ],
+        "marginals": {"yes": 0.29, "no": 0.71},
+        "liquidity": 240000.0,
+        "volume": 66000.0,
+        "created_at": "2026-06-22T00:00:00Z",
+        "expires_at": "2029-01-01T00:00:00Z",
+    },
+    "m6": {
+        "id": "m6",
+        "title": "AI agents automate 20 percent of software tasks by 2030",
+        "description": (
+            "Will at least 20 percent of professional software engineering work hours "
+            "at large technology firms be delegated to AI agents before January 1, 2030?"
+        ),
+        "variableId": "ai_agents_software_labor_20pct_2030",
+        "status": "active",
+        "outcomes": [
+            {"id": "yes", "name": "Yes"},
+            {"id": "no", "name": "No"},
+        ],
+        "marginals": {"yes": 0.47, "no": 0.53},
+        "liquidity": 330000.0,
+        "volume": 118000.0,
+        "created_at": "2026-06-22T00:00:00Z",
+        "expires_at": "2030-01-01T00:00:00Z",
+    },
+    "m7": {
+        "id": "m7",
+        "title": "Binding international AI governance treaty by 2031",
+        "description": (
+            "Will at least three major jurisdictions ratify a binding treaty or "
+            "equivalent compact governing frontier AI development before January 1, 2031?"
+        ),
+        "variableId": "binding_ai_governance_treaty_2031",
+        "status": "active",
+        "outcomes": [
+            {"id": "yes", "name": "Yes"},
+            {"id": "no", "name": "No"},
+        ],
+        "marginals": {"yes": 0.33, "no": 0.67},
+        "liquidity": 205000.0,
+        "volume": 51000.0,
+        "created_at": "2026-06-22T00:00:00Z",
+        "expires_at": "2031-01-01T00:00:00Z",
+    },
+    "m8": {
+        "id": "m8",
+        "title": "Frontier labs adopt third-party alignment eval gates by 2028",
+        "description": (
+            "Will a majority of leading frontier AI labs publicly require independent "
+            "third-party alignment and misuse evaluations before deploying flagship "
+            "models by December 31, 2028?"
+        ),
+        "variableId": "third_party_alignment_eval_gates_2028",
+        "status": "active",
+        "outcomes": [
+            {"id": "yes", "name": "Yes"},
+            {"id": "no", "name": "No"},
+        ],
+        "marginals": {"yes": 0.57, "no": 0.43},
+        "liquidity": 255000.0,
+        "volume": 77000.0,
+        "created_at": "2026-06-22T00:00:00Z",
+        "expires_at": "2028-12-31T23:59:59Z",
     },
 }
 
@@ -222,7 +327,102 @@ BUILD_GIT_SHA = _resolve_build_git_sha()
 BUILD_TIMESTAMP = _utc_now_timestamp()
 
 MARKETS: dict[str, dict[str, Any]] = deepcopy(INITIAL_MARKETS)
-CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {}
+CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {
+    "m8": {
+        "frontier_forecaster_benchmark_2028=yes": {"yes": 0.69, "no": 0.31},
+        "frontier_forecaster_benchmark_2028=no": {"yes": 0.44, "no": 0.56},
+    },
+    "m2": {
+        "frontier_forecaster_benchmark_2028=yes|third_party_alignment_eval_gates_2028=yes": {
+            "yes": 0.78,
+            "no": 0.22,
+        },
+        "frontier_forecaster_benchmark_2028=yes|third_party_alignment_eval_gates_2028=no": {
+            "yes": 0.68,
+            "no": 0.32,
+        },
+        "frontier_forecaster_benchmark_2028=no|third_party_alignment_eval_gates_2028=yes": {
+            "yes": 0.49,
+            "no": 0.51,
+        },
+        "frontier_forecaster_benchmark_2028=no|third_party_alignment_eval_gates_2028=no": {
+            "yes": 0.34,
+            "no": 0.66,
+        },
+    },
+    "m4": {
+        "frontier_forecaster_benchmark_2028=yes|autonomous_agent_weeklong_task_2027=yes": {
+            "yes": 0.61,
+            "no": 0.39,
+        },
+        "frontier_forecaster_benchmark_2028=yes|autonomous_agent_weeklong_task_2027=no": {
+            "yes": 0.38,
+            "no": 0.62,
+        },
+        "frontier_forecaster_benchmark_2028=no|autonomous_agent_weeklong_task_2027=yes": {
+            "yes": 0.42,
+            "no": 0.58,
+        },
+        "frontier_forecaster_benchmark_2028=no|autonomous_agent_weeklong_task_2027=no": {
+            "yes": 0.18,
+            "no": 0.82,
+        },
+    },
+    "m6": {
+        "autonomous_agent_weeklong_task_2027=yes|reasoning_inference_cost_10x_drop_2029=yes": {
+            "yes": 0.72,
+            "no": 0.28,
+        },
+        "autonomous_agent_weeklong_task_2027=yes|reasoning_inference_cost_10x_drop_2029=no": {
+            "yes": 0.56,
+            "no": 0.44,
+        },
+        "autonomous_agent_weeklong_task_2027=no|reasoning_inference_cost_10x_drop_2029=yes": {
+            "yes": 0.44,
+            "no": 0.56,
+        },
+        "autonomous_agent_weeklong_task_2027=no|reasoning_inference_cost_10x_drop_2029=no": {
+            "yes": 0.27,
+            "no": 0.73,
+        },
+    },
+    "m5": {
+        "autonomous_agent_weeklong_task_2027=yes|ai_agents_software_labor_20pct_2030=yes": {
+            "yes": 0.45,
+            "no": 0.55,
+        },
+        "autonomous_agent_weeklong_task_2027=yes|ai_agents_software_labor_20pct_2030=no": {
+            "yes": 0.28,
+            "no": 0.72,
+        },
+        "autonomous_agent_weeklong_task_2027=no|ai_agents_software_labor_20pct_2030=yes": {
+            "yes": 0.25,
+            "no": 0.75,
+        },
+        "autonomous_agent_weeklong_task_2027=no|ai_agents_software_labor_20pct_2030=no": {
+            "yes": 0.13,
+            "no": 0.87,
+        },
+    },
+    "m7": {
+        "major_ai_safety_incident_2029=yes|third_party_alignment_eval_gates_2028=yes": {
+            "yes": 0.63,
+            "no": 0.37,
+        },
+        "major_ai_safety_incident_2029=yes|third_party_alignment_eval_gates_2028=no": {
+            "yes": 0.48,
+            "no": 0.52,
+        },
+        "major_ai_safety_incident_2029=no|third_party_alignment_eval_gates_2028=yes": {
+            "yes": 0.37,
+            "no": 0.63,
+        },
+        "major_ai_safety_incident_2029=no|third_party_alignment_eval_gates_2028=no": {
+            "yes": 0.22,
+            "no": 0.78,
+        },
+    },
+}
 ORDERS: dict[str, dict[str, Any]] = {}
 COMMANDS: dict[str, dict[str, Any]] = {}
 EVENTS: dict[str, dict[str, Any]] = {}
@@ -1112,6 +1312,10 @@ def get_market_engine_stats(market_id: str) -> tuple[dict[str, Any], int]:
         raise ApiError(404, "market_not_found", "Market not found", {"market_id": market_id})
 
     state = MARKET_ENGINE_STATS.get(market_id)
+    if (state is None or not state["compile_id"]) and CONDITIONAL_MARGINALS.get(market_id):
+        refresh_market_compile_snapshot(market_id)
+        state = MARKET_ENGINE_STATS.get(market_id)
+
     samples_ms = list(state["inference_samples_ms"]) if state else []
     total_cache = (int(state["cache_hits"]) + int(state["cache_misses"])) if state else 0
     cliques = list(state["cliques"]) if state and state["compile_id"] else []
