@@ -33,6 +33,37 @@ export function deriveEdgesFromCliques(cliques: CliqueSummary[]): GraphEdge[] {
 }
 
 /**
+ * Remap edge endpoints from engine variableIds to market ids.
+ * Endpoints already in market-id space pass through unchanged; edges with
+ * an endpoint in neither space are dropped so downstream consumers
+ * (d3 forceLink in particular) never see an unknown node id.
+ */
+export function remapEdgesToMarketIds(
+  edges: GraphEdge[],
+  markets: Array<{ id: string; variableId?: string }>,
+): GraphEdge[] {
+  const byVariableId = new Map<string, string>();
+  const marketIds = new Set<string>();
+  for (const m of markets) {
+    marketIds.add(m.id);
+    if (m.variableId) byVariableId.set(m.variableId, m.id);
+  }
+
+  const seen = new Set<string>();
+  const remapped: GraphEdge[] = [];
+  for (const e of edges) {
+    const source = byVariableId.get(e.source) ?? e.source;
+    const target = byVariableId.get(e.target) ?? e.target;
+    if (source === target || !marketIds.has(source) || !marketIds.has(target)) continue;
+    const key = source < target ? `${source}::${target}` : `${target}::${source}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    remapped.push({ source, target });
+  }
+  return remapped;
+}
+
+/**
  * Merge clique-derived edges with optional conditional edges.
  * Conditional edges are directional (from -> to) but stored in the same format.
  */

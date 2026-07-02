@@ -273,6 +273,80 @@ def _require_current_model_artifact(compile_result: CompileResult) -> CurrentMod
     return artifact
 
 
+def _parse_context_key_assignments(context_key: str) -> dict[str, str] | None:
+    """Parse a serialized context key ("a=1|b=2") into an assignment map."""
+    if not context_key:
+        return None
+    assignments: dict[str, str] = {}
+    for part in context_key.split("|"):
+        variable_id, separator, outcome_id = part.partition("=")
+        if not separator or not variable_id or not outcome_id:
+            return None
+        assignments[variable_id] = outcome_id
+    return assignments
+
+
+def _marginalize_partial_context(
+    artifact: "CurrentModelCompileArtifact",
+    context: Mapping[str, str],
+) -> dict[str, float] | None:
+    """Marginalize the CPT over parents not fixed by the context.
+
+    P(X | e) = sum_u P(X | e, u) * P(u), mixing full-assignment CPT rows
+    weighted by the priors of the unassigned parents. Parents are treated
+    as independent (the current-model baseline). Returns None when the
+    context cannot be covered by any CPT scope or a needed prior is
+    missing, in which case the caller falls back to unconditional
+    marginals — the correct answer for evidence on unrelated variables.
+    """
+    if not artifact.conditional_marginals or not context:
+        return None
+
+    # Group CPT rows by their variable scope; choose the smallest scope
+    # that covers every context variable.
+    scopes: dict[frozenset[str], list[tuple[dict[str, str], Mapping[str, float]]]] = {}
+    for key, row in artifact.conditional_marginals.items():
+        assignment = _parse_context_key_assignments(key)
+        if assignment is None:
+            continue
+        scopes.setdefault(frozenset(assignment), []).append((assignment, row))
+
+    # Evidence on variables outside every CPT scope cannot move this market
+    # under the independent-parent model — drop it rather than falling back
+    # and discarding the relevant evidence with it.
+    scope_union: set[str] = set().union(*scopes)
+    relevant_context = {var: out for var, out in context.items() if var in scope_union}
+    if not relevant_context:
+        return None
+
+    context_vars = set(relevant_context)
+    covering = [scope for scope in scopes if context_vars <= scope]
+    if not covering:
+        return None
+    scope = min(covering, key=len)
+
+    accumulated = {str(outcome_id): 0.0 for outcome_id in artifact.marginals}
+    total_weight = 0.0
+    for assignment, row in scopes[scope]:
+        if any(assignment[var] != outcome for var, outcome in relevant_context.items()):
+            continue
+        weight = 1.0
+        for var, outcome in assignment.items():
+            if var in context_vars:
+                continue
+            prior = artifact.parent_marginals.get(var, {}).get(outcome)
+            if prior is None:
+                return None
+            weight *= float(prior)
+        total_weight += weight
+        for outcome_id, probability in row.items():
+            accumulated[str(outcome_id)] += weight * float(probability)
+
+    if total_weight <= 0.0:
+        return None
+    return {outcome_id: value / total_weight for outcome_id, value in accumulated.items()}
+
+
 def _context_mapping_key(context: Mapping[str, str] | None) -> str:
     if not context:
         return ""
@@ -313,6 +387,9 @@ class CurrentModelCompileArtifact:
     exact_eligible: bool
     eligibility_reason: str
     memory_bytes: int
+    # Priors of the context (parent) variables referenced by
+    # conditional_marginals keys; used to marginalize partial contexts.
+    parent_marginals: Mapping[str, Mapping[str, float]] = MappingProxyType({})
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "outcomes", tuple(self.outcomes))
@@ -367,6 +444,7 @@ class CurrentModelCompiler:
         market_snapshot: Mapping[str, Any],
         conditional_marginals: Mapping[str, Mapping[str, float]] | None = None,
         market_outcomes_by_variable: Mapping[str, int] | None = None,
+        parent_marginals: Mapping[str, Mapping[str, float]] | None = None,
     ) -> CurrentModelCompileArtifact:
         """Normalize a market snapshot into a frozen current-model artifact."""
         normalized_market = _require_mapping(market_snapshot, field="market")
@@ -380,6 +458,12 @@ class CurrentModelCompiler:
             "market": deepcopy(dict(normalized_market)),
             "conditionalMarginals": deepcopy(dict(conditional_marginals or {})),
         }
+        # Only added when present so artifacts without parent priors keep
+        # their historical source_state_hash.
+        if parent_marginals:
+            source_state_inputs_plain["parentMarginals"] = deepcopy(
+                {str(var): dict(slice_) for var, slice_ in parent_marginals.items()}
+            )
 
         try:
             source_state_hash = canonical_json_hash(source_state_inputs_plain)
@@ -410,6 +494,14 @@ class CurrentModelCompiler:
             exact_eligible = True
             eligibility_reason = self.eligibility_reason
 
+        try:
+            frozen_parent_marginals = _freeze_json_value(
+                {str(var): dict(slice_) for var, slice_ in (parent_marginals or {}).items()},
+                path="parentMarginals",
+            )
+        except (TypeError, ValueError) as exc:
+            raise _compile_error("Unable to freeze parent marginals", field="parentMarginals") from exc
+
         return CurrentModelCompileArtifact(
             market_id=market_id,
             variable_id=variable_id,
@@ -425,6 +517,7 @@ class CurrentModelCompiler:
             exact_eligible=exact_eligible,
             eligibility_reason=eligibility_reason,
             memory_bytes=memory_bytes,
+            parent_marginals=frozen_parent_marginals,
         )
 
     def compile_result(
@@ -433,6 +526,7 @@ class CurrentModelCompiler:
         market_snapshot: Mapping[str, Any],
         conditional_marginals: Mapping[str, Mapping[str, float]] | None = None,
         market_outcomes_by_variable: Mapping[str, int] | None = None,
+        parent_marginals: Mapping[str, Mapping[str, float]] | None = None,
         compile_time_ms: float = 0.0,
         last_updated: str,
     ) -> CompileResult:
@@ -441,6 +535,7 @@ class CurrentModelCompiler:
             market_snapshot=market_snapshot,
             conditional_marginals=conditional_marginals,
             market_outcomes_by_variable=market_outcomes_by_variable,
+            parent_marginals=parent_marginals,
         )
         return artifact.to_compile_result(
             compile_time_ms=round(float(compile_time_ms), 3),
@@ -473,6 +568,13 @@ class CurrentModelQueryBackend(InferenceQueryBackend):
             if conditional_marginals is not None:
                 resolution_source = "conditional"
                 marginals = conditional_marginals
+            else:
+                # Partial parent assignment: marginalize the CPT over the
+                # unassigned parents using their priors.
+                marginalized = _marginalize_partial_context(artifact, dict(context or {}))
+                if marginalized is not None:
+                    resolution_source = "conditional_marginalized"
+                    marginals = marginalized
 
         return MarginalQueryResult(
             marginals=marginals,

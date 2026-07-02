@@ -1624,7 +1624,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertTrue(payload["meta"]["timestamp"].endswith("Z"))
         self.assertEqual(
             set(payload["markets"][0].keys()),
-            {"id", "title", "status", "liquidity", "volume", "expires_at"},
+            {"id", "title", "variableId", "status", "liquidity", "volume", "expires_at"},
         )
         self.assertNotIn("description", payload["markets"][0])
 
@@ -2474,6 +2474,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 market_snapshot: dict[str, object],
                 conditional_marginals: dict[str, dict[str, float]] | None = None,
                 market_outcomes_by_variable: dict[str, int] | None = None,
+                parent_marginals: dict[str, dict[str, float]] | None = None,
                 compile_time_ms: float = 0.0,
                 last_updated: str,
             ) -> server.CompileResult:
@@ -2482,6 +2483,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                         "market_snapshot": market_snapshot,
                         "conditional_marginals": conditional_marginals or {},
                         "market_outcomes_by_variable": market_outcomes_by_variable,
+                        "parent_marginals": parent_marginals or {},
                         "compile_time_ms": compile_time_ms,
                         "last_updated": last_updated,
                     }

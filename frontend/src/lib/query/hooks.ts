@@ -54,10 +54,18 @@ export function useMarkets(filters: MarketListFilters = {}) {
   });
 }
 
-export function useMarket(marketId: string, opts?: { enabled?: boolean }) {
+export function useMarket(
+  marketId: string,
+  opts?: { enabled?: boolean; context?: api.MarketContextEntry[] },
+) {
+  const context = opts?.context ?? [];
   return useQuery({
-    queryKey: queryKeys.market(marketId),
-    queryFn: () => api.getMarket(marketId),
+    // Context-conditioned marginals get their own cache entry; the plain
+    // key stays a prefix so invalidations on queryKeys.market(id) still hit.
+    queryKey: context.length
+      ? ([...queryKeys.market(marketId), { context }] as const)
+      : queryKeys.market(marketId),
+    queryFn: () => api.getMarket(marketId, context),
     refetchInterval: 5000,
     enabled: opts?.enabled ?? true,
   });

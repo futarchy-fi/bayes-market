@@ -16,9 +16,11 @@ export function AssumptionPanel({ market }: AssumptionPanelProps) {
   const activeMarkets = allMarkets.filter((m) => m.status === "active");
 
   // Show current market first, then others
-  const sortedIds = [
-    market.id,
-    ...activeMarkets.filter((m) => m.id !== market.id).map((m) => m.id),
+  const sortedRows = [
+    { id: market.id, variableId: market.variableId },
+    ...activeMarkets
+      .filter((m) => m.id !== market.id)
+      .map((m) => ({ id: m.id, variableId: m.variableId })),
   ];
 
   return (
@@ -37,8 +39,8 @@ export function AssumptionPanel({ market }: AssumptionPanelProps) {
       <AssumptionBar />
 
       <div style={{ display: "grid", gap: "var(--space-sm)", marginTop: "var(--space-sm)" }}>
-        {sortedIds.map((id) => (
-          <VariableRow key={id} marketId={id} targetMarket={market} />
+        {sortedRows.map((row) => (
+          <VariableRow key={row.id} marketId={row.id} variableId={row.variableId} targetMarket={market} />
         ))}
       </div>
 

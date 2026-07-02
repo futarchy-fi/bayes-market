@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveEdgesFromCliques, mergeEdges } from "@/features/graph/deriveEdges";
+import { deriveEdgesFromCliques, mergeEdges, remapEdgesToMarketIds } from "@/features/graph/deriveEdges";
 
 describe("deriveEdgesFromCliques", () => {
   it("returns empty array for empty cliques", () => {
@@ -55,5 +55,61 @@ describe("mergeEdges", () => {
     const cliqueEdges = [{ source: "a", target: "b" }];
     const result = mergeEdges(cliqueEdges);
     expect(result).toHaveLength(1);
+  });
+});
+
+describe("remapEdgesToMarketIds", () => {
+  const markets = [
+    { id: "m1", variableId: "var_alpha" },
+    { id: "m2", variableId: "var_beta" },
+    { id: "m3", variableId: "var_gamma" },
+  ];
+
+  it("maps variableId endpoints to market ids", () => {
+    const result = remapEdgesToMarketIds(
+      [{ source: "var_alpha", target: "var_beta" }],
+      markets,
+    );
+    expect(result).toEqual([{ source: "m1", target: "m2" }]);
+  });
+
+  it("passes through endpoints already in market-id space", () => {
+    const result = remapEdgesToMarketIds([{ source: "m1", target: "m3" }], markets);
+    expect(result).toEqual([{ source: "m1", target: "m3" }]);
+  });
+
+  it("handles mixed id spaces on one edge", () => {
+    const result = remapEdgesToMarketIds([{ source: "var_alpha", target: "m2" }], markets);
+    expect(result).toEqual([{ source: "m1", target: "m2" }]);
+  });
+
+  it("drops edges with endpoints in neither id space", () => {
+    const result = remapEdgesToMarketIds(
+      [
+        { source: "var_alpha", target: "unknown_variable" },
+        { source: "var_beta", target: "var_gamma" },
+      ],
+      markets,
+    );
+    expect(result).toEqual([{ source: "m2", target: "m3" }]);
+  });
+
+  it("deduplicates edges that collapse to the same market pair", () => {
+    const result = remapEdgesToMarketIds(
+      [
+        { source: "var_alpha", target: "var_beta" },
+        { source: "m2", target: "m1" },
+      ],
+      markets,
+    );
+    expect(result).toHaveLength(1);
+  });
+
+  it("works without variableId metadata (snapshot markets)", () => {
+    const result = remapEdgesToMarketIds(
+      [{ source: "m1", target: "m2" }],
+      [{ id: "m1" }, { id: "m2" }],
+    );
+    expect(result).toEqual([{ source: "m1", target: "m2" }]);
   });
 });

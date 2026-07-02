@@ -633,6 +633,7 @@ ALLOWED_ANALYTICS_INTERVALS = frozenset({"hour", "day"})
 MARKET_SUMMARY_FIELDS = (
     "id",
     "title",
+    "variableId",
     "status",
     "liquidity",
     "volume",
@@ -1399,7 +1400,7 @@ def service_index_payload() -> dict[str, Any]:
 
 def market_summary(market: dict[str, Any]) -> dict[str, Any]:
     """Project a market record down to the list response fields."""
-    return {field: market[field] for field in MARKET_SUMMARY_FIELDS}
+    return {field: market.get(field) for field in MARKET_SUMMARY_FIELDS}
 
 
 def percentile_ms(values: list[float], ratio: float) -> float:
@@ -1486,11 +1487,22 @@ def compile_market_for_inference(
                 ref_market = find_market_by_variable_id(variable_id)
                 market_outcomes_by_variable[variable_id] = len(ref_market["outcomes"]) if ref_market else 0
 
+    # Parent priors let the query backend marginalize partial contexts.
+    parent_marginals: dict[str, dict[str, float]] = {}
+    for context_variable_id in market_outcomes_by_variable:
+        ref_market = find_market_by_variable_id(context_variable_id)
+        if ref_market:
+            parent_marginals[context_variable_id] = {
+                str(outcome_id): float(probability)
+                for outcome_id, probability in ref_market["marginals"].items()
+            }
+
     try:
         return CURRENT_MODEL_COMPILER.compile_result(
             market_snapshot=deepcopy(market),
             conditional_marginals=deepcopy(conditional_marginals),
             market_outcomes_by_variable=market_outcomes_by_variable or None,
+            parent_marginals=parent_marginals or None,
             compile_time_ms=round(float(compile_time_ms), 3),
             last_updated=last_updated or utc_timestamp(),
         )

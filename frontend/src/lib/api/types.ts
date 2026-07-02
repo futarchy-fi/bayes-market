@@ -20,6 +20,8 @@ export interface MarketSummary {
   liquidity: number;
   volume: number;
   expires_at: string;
+  /** Engine variable id backing this market; used to map clique/graph node ids. */
+  variableId?: string;
 }
 
 export interface Market {

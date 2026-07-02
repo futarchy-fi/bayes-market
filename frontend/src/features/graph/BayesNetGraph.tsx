@@ -1,9 +1,9 @@
 import { useMemo, useEffect, useRef, useState, useCallback } from "react";
 import { useMarkets, useMarket, useEngineStats } from "@/lib/query/hooks";
 import { formatProbability } from "@/lib/utils/format";
-import { useAssumptions } from "@/features/assumptions/AssumptionContext";
+import { useOptionalAssumptions, type Assumption } from "@/features/assumptions/AssumptionContext";
 import { useAnimationPropagation } from "./useAnimationPropagation";
-import { deriveEdgesFromCliques, mergeEdges } from "./deriveEdges";
+import { deriveEdgesFromCliques, mergeEdges, remapEdgesToMarketIds } from "./deriveEdges";
 import { buildNetworkExport, downloadJson } from "./networkExport";
 import { readAndValidateFile } from "./networkImport";
 import type { NetworkExportSchema } from "./networkExportSchema";
@@ -35,6 +35,8 @@ interface BayesNetGraphProps {
 const NODE_W = 160;
 const NODE_H = 72;
 const PADDING = 60;
+
+const EMPTY_ASSUMPTIONS: Assumption[] = [];
 
 function layoutNodes(markets: MarketSummary[]): GraphNode[] {
   // Arrange in a circle for small N, grid for larger
@@ -226,12 +228,14 @@ function NodeWithDetail({
   node,
   isFocus,
   animationClass,
+  context,
 }: {
   node: GraphNode;
   isFocus: boolean;
   animationClass?: string;
+  context?: Array<{ variableId: string; outcomeId: string }>;
 }) {
-  const { data } = useMarket(node.id);
+  const { data } = useMarket(node.id, { context });
   const detail = data
     ? { marginals: data.market.marginals, outcomes: data.market.outcomes }
     : undefined;
@@ -280,15 +284,45 @@ export function BayesNetGraph({
   const cliques = snapshot ? snapshot.cliques : (engineStats?.cliques.cliques ?? []);
 
   // --- Animation: detect assumption changes and trigger propagation ---
-  const { assumptions } = useAssumptions();
+  // Optional: this graph also renders outside an AssumptionProvider
+  // (resolved/closed markets), where assumptions simply don't apply.
+  const assumptionState = useOptionalAssumptions();
+  const assumptions = assumptionState?.assumptions ?? EMPTY_ASSUMPTIONS;
   const { animatingNodes, animatingEdges, evidenceNodeId, triggerAnimation, cancelAnimation } =
     useAnimationPropagation();
   const prevAssumptionsRef = useRef(assumptions);
 
+  // Clique members and clique-derived edges arrive keyed by engine variableId
+  // while graph nodes are keyed by market id, so translate before rendering.
+  const variableIdToMarketId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of markets as Array<{ id: string; variableId?: string }>) {
+      if (m.variableId) map.set(m.variableId, m.id);
+    }
+    return map;
+  }, [markets]);
+
+  const marketIdToVariableId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of markets as Array<{ id: string; variableId?: string }>) {
+      if (m.variableId) map.set(m.id, m.variableId);
+    }
+    return map;
+  }, [markets]);
+
+  const displayCliques = useMemo(
+    () =>
+      cliques.map((c) => ({
+        ...c,
+        nodes: c.nodes.map((n) => variableIdToMarketId.get(n) ?? n),
+      })),
+    [cliques, variableIdToMarketId],
+  );
+
   // Derive all edges for BFS traversal (clique-derived + conditional)
   const allEdges = useMemo(
-    () => mergeEdges(deriveEdgesFromCliques(cliques), conditionalEdges),
-    [cliques, conditionalEdges],
+    () => remapEdgesToMarketIds(mergeEdges(deriveEdgesFromCliques(cliques), conditionalEdges), markets),
+    [cliques, conditionalEdges, markets],
   );
 
   useEffect(() => {
@@ -309,8 +343,12 @@ export function BayesNetGraph({
     if (!changedVariableId) return;
 
     // Find the node (market) that corresponds to the changed variable.
-    // Assumption variableId may match market id (MarketSummary only has id).
-    const evidenceNode = markets.find((m) => m.id === changedVariableId);
+    // Assumptions are keyed by engine variableId; fall back to market id.
+    const evidenceNode = markets.find(
+      (m) =>
+        m.id === changedVariableId ||
+        (m as { variableId?: string }).variableId === changedVariableId,
+    );
     if (evidenceNode && allEdges.length > 0) {
       triggerAnimation(evidenceNode.id, allEdges);
     }
@@ -471,7 +509,7 @@ export function BayesNetGraph({
         `}</style>
 
         {/* Clique overlays (behind edges/nodes) */}
-        {cliques.map((c) => (
+        {displayCliques.map((c) => (
           <CliqueOverlay key={c.id} clique={c} nodes={nodes} />
         ))}
 
@@ -519,12 +557,19 @@ export function BayesNetGraph({
             : isAnimating
               ? "propagation-node"
               : undefined;
+          // Marginals conditioned on assumptions, excluding this node's own
+          // variable (backend rejects self-referential context).
+          const nodeVariableId = marketIdToVariableId.get(node.id);
+          const nodeContext = assumptions
+            .filter((a) => a.variableId !== nodeVariableId)
+            .map((a) => ({ variableId: a.variableId, outcomeId: a.outcomeId }));
           return (
             <NodeWithDetail
               key={node.id}
               node={node}
               isFocus={node.id === focusMarketId}
               animationClass={animClass}
+              context={nodeContext}
             />
           );
         })}

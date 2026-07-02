@@ -7,14 +7,19 @@ import type { Market } from "@/lib/api/types";
 
 interface VariableRowProps {
   marketId: string;
+  /** Engine variable id for this row's market (from the market summary) */
+  variableId?: string;
   /** The market being viewed — edits go through this market's endpoint */
   targetMarket: Market;
 }
 
-export function VariableRow({ marketId, targetMarket }: VariableRowProps) {
-  const { data } = useMarket(marketId);
+export function VariableRow({ marketId, variableId, targetMarket }: VariableRowProps) {
   const { session, isConfigured } = useSession();
   const { addAssumption, removeAssumption, hasAssumption, getAssumption, contextPayload } = useAssumptions();
+  // Condition this row's marginals on the active assumptions, excluding the
+  // row's own variable (the backend rejects self-referential context).
+  const rowContext = contextPayload.filter((c) => c.variableId !== variableId);
+  const { data } = useMarket(marketId, { context: rowContext });
   const mutation = useProbabilityEdit(targetMarket.id);
 
   const [editingOutcomeId, setEditingOutcomeId] = useState<string | null>(null);
@@ -23,13 +28,14 @@ export function VariableRow({ marketId, targetMarket }: VariableRowProps) {
   if (!data) return null;
 
   const m = data.market;
-  const isAssumed = hasAssumption(m.id);
-  const assumption = getAssumption(m.id);
+  // Assumptions are keyed by engine variableId, not market id.
+  const isAssumed = hasAssumption(m.variableId);
+  const assumption = getAssumption(m.variableId);
   const isTargetMarket = m.id === targetMarket.id;
 
   const handleAssume = (outcomeId: string) => {
     if (isAssumed && assumption?.outcomeId === outcomeId) {
-      removeAssumption(m.id);
+      removeAssumption(m.variableId);
     } else {
       addAssumption({
         variableId: m.variableId,

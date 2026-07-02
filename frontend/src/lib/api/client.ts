@@ -110,10 +110,21 @@ export function createMarket(
   }, session);
 }
 
+export interface MarketContextEntry {
+  variableId: string;
+  outcomeId: string;
+}
+
 export function getMarket(
   marketId: string,
+  context?: MarketContextEntry[],
 ): Promise<MarketDetailResponse> {
-  return request<MarketDetailResponse>(`/v1/markets/${encodeURIComponent(marketId)}`);
+  const qs = (context ?? [])
+    .map((c) => `context=${encodeURIComponent(`${c.variableId}=${c.outcomeId}`)}`)
+    .join("&");
+  return request<MarketDetailResponse>(
+    `/v1/markets/${encodeURIComponent(marketId)}${qs ? `?${qs}` : ""}`,
+  );
 }
 
 export function getMarketPreview(

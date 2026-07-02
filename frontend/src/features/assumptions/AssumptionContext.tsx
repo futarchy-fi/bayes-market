@@ -69,3 +69,11 @@ export function useAssumptions() {
   if (!ctx) throw new Error("useAssumptions must be used within AssumptionProvider");
   return ctx;
 }
+
+/**
+ * Like useAssumptions, but safe to call outside an AssumptionProvider
+ * (e.g. graphs rendered for resolved markets). Returns null when absent.
+ */
+export function useOptionalAssumptions() {
+  return useContext(AssumptionCtx);
+}

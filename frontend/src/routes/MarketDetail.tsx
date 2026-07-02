@@ -30,16 +30,16 @@ export default function MarketDetail() {
   const events = useMarketEvents(marketId!);
   const accountRisk = useAccountRisk(session.accountId);
 
-  if (isLoading) return <LoadingPage />;
-  if (error) return <ErrorMessage message={error instanceof Error ? error.message : "Market not found"} />;
-  if (!data) return null;
+  // All hooks must run unconditionally (before the loading/error returns
+  // below) so their order is stable across renders — see React error #310.
 
-  const m = data.market;
-
-  // Track which market's CPT to display when a graph node is clicked
-  const [selectedMarketId, setSelectedMarketId] = useState<string>(m.id);
-  const selectedMarketQuery = useMarket(selectedMarketId, { enabled: selectedMarketId !== m.id });
-  const selectedMarket = selectedMarketId === m.id ? m : selectedMarketQuery.data?.market ?? m;
+  // Track which market's CPT to display when a graph node is clicked.
+  // null means "the market on this page".
+  const [selectedMarketId, setSelectedMarketId] = useState<string | null>(null);
+  const effectiveSelectedId = selectedMarketId ?? marketId!;
+  const selectedMarketQuery = useMarket(effectiveSelectedId, {
+    enabled: effectiveSelectedId !== marketId,
+  });
 
   const handleNodeClick = useCallback((nodeId: string) => {
     setSelectedMarketId(nodeId);
@@ -49,7 +49,7 @@ export default function MarketDetail() {
   const [graphView, setGraphView] = useState<GraphView>("force");
   const queryClient = useQueryClient();
   const marketsQuery = useMarkets();
-  const engineStatsQuery = useEngineStats(m.id, { enabled: true });
+  const engineStatsQuery = useEngineStats(marketId!, { enabled: true });
   const allMarkets = marketsQuery.data?.markets ?? [];
   const cliques = engineStatsQuery.data?.cliques.cliques ?? [];
 
@@ -64,6 +64,14 @@ export default function MarketDetail() {
   const handleImportSuccess = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.marketLists() });
   }, [queryClient]);
+
+  if (isLoading) return <LoadingPage />;
+  if (error) return <ErrorMessage message={error instanceof Error ? error.message : "Market not found"} />;
+  if (!data) return null;
+
+  const m = data.market;
+  const selectedMarket =
+    effectiveSelectedId === m.id ? m : selectedMarketQuery.data?.market ?? m;
 
   return (
     <div style={{ display: "grid", gap: "var(--space-lg)" }}>

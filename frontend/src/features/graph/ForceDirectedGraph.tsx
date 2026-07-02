@@ -3,7 +3,7 @@ import { useMarkets, useMarket, useEngineStats } from "@/lib/query/hooks";
 import { formatProbability } from "@/lib/utils/format";
 import { useForceGraph } from "./useForceGraph";
 import { useAnimationPropagation } from "./useAnimationPropagation";
-import { deriveEdgesFromCliques, mergeEdges } from "./deriveEdges";
+import { deriveEdgesFromCliques, mergeEdges, remapEdgesToMarketIds } from "./deriveEdges";
 import { select } from "d3-selection";
 import { zoom as d3Zoom, zoomIdentity } from "d3-zoom";
 import { drag as d3Drag } from "d3-drag";
@@ -209,6 +209,7 @@ function NodeWithDetail({
   isDimmed,
   onClick,
   animationClass,
+  context,
 }: {
   x: number;
   y: number;
@@ -217,8 +218,9 @@ function NodeWithDetail({
   isDimmed: boolean;
   onClick?: () => void;
   animationClass?: string;
+  context?: Array<{ variableId: string; outcomeId: string }>;
 }) {
-  const { data } = useMarket(node.id);
+  const { data } = useMarket(node.id, { context });
   const detail = data
     ? { marginals: data.market.marginals, outcomes: data.market.outcomes }
     : undefined;
@@ -259,17 +261,25 @@ export function ForceDirectedGraph({
   // Cancel animation on unmount
   useEffect(() => cancelAnimation, [cancelAnimation]);
 
-  // Derive force graph input nodes
+  // Derive force graph input nodes (variableId rides along for context filtering)
   const forceInputNodes = useMemo(
-    () => markets.map((m: MarketSummary) => ({ id: m.id, title: m.title, status: m.status })),
+    () =>
+      markets.map((m: MarketSummary) => ({
+        id: m.id,
+        title: m.title,
+        status: m.status,
+        variableId: m.variableId,
+      })),
     [markets],
   );
 
-  // Derive edges from cliques + conditional edges (also used for animation BFS)
+  // Derive edges from cliques + conditional edges (also used for animation BFS).
+  // Clique edges arrive keyed by engine variableId while force nodes are keyed
+  // by market id, so remap before handing them to d3.
   const allEdges = useMemo(() => {
     const cliqueEdges = deriveEdgesFromCliques(cliques);
-    return mergeEdges(cliqueEdges, conditionalEdges);
-  }, [cliques, conditionalEdges]);
+    return remapEdgesToMarketIds(mergeEdges(cliqueEdges, conditionalEdges), markets);
+  }, [cliques, conditionalEdges, markets]);
   const forceInputLinks = allEdges;
 
   // Detect assumption changes and trigger propagation animation
@@ -289,7 +299,9 @@ export function ForceDirectedGraph({
     const changedVariableId = added?.variableId ?? removed?.variableId;
     if (!changedVariableId) return;
 
-    const evidenceNode = markets.find((mk) => mk.id === changedVariableId);
+    const evidenceNode = markets.find(
+      (mk) => mk.id === changedVariableId || mk.variableId === changedVariableId,
+    );
     if (evidenceNode && allEdges.length > 0) {
       triggerAnimation(evidenceNode.id, allEdges);
     }
@@ -543,6 +555,11 @@ export function ForceDirectedGraph({
               : isAnimating
                 ? "fdg-propagation-node"
                 : undefined;
+            // Show marginals conditioned on the active assumptions,
+            // excluding this node's own variable (backend rejects self-context).
+            const nodeContext = (assumptions ?? [])
+              .filter((a) => a.variableId !== node.variableId)
+              .map((a) => ({ variableId: a.variableId, outcomeId: a.outcomeId }));
             return (
               <NodeWithDetail
                 key={node.id}
@@ -553,6 +570,7 @@ export function ForceDirectedGraph({
                 isDimmed={isDimmed}
                 onClick={onNodeClick ? () => onNodeClick(node.id) : undefined}
                 animationClass={animClass}
+                context={nodeContext}
               />
             );
           })}
