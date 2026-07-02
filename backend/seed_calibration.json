@@ -1,0 +1,266 @@
+{
+ "attribution": {
+  "m12": "Prior calibrated Jul 2026 to Manifold 'ASI before 2033' (~27%).",
+  "m13": "Prior calibrated Jul 2026 to Metaculus US-China AI-treaty forecasts (#39149, #38418, ~4%) and a Manifold moratorium analog (~22%).",
+  "m16": "Prior calibrated Jul 2026 to industry buildout baselines (Goldman Sachs ~134 GW US data-center demand by 2030; McKinsey ~156 GW AI capacity).",
+  "m4": "Prior informed Jul 2026 by Metaculus #30336 (~77%) and a Manifold 10^27-FLOP-by-2030 analog (~93%), both weaker thresholds than 100x.",
+  "m6": "Prior calibrated Jul 2026 to the Metaculus AI-incident ladder (#7814 ~76% and #21553 ~40%, both by 2032).",
+  "m9": "Prior calibrated Jul 2026 to open-weight frontier-gap analogs (Manifold ~86%; Metaculus #19300 resolved YES for Jan 2025)."
+ },
+ "conditionalMarginals": {
+  "m1": {
+   "frontier_training_compute_100x_2029=no|robust_agent_evals_standard_2027=no": {
+    "no": 0.5985,
+    "yes": 0.4015
+   },
+   "frontier_training_compute_100x_2029=no|robust_agent_evals_standard_2027=yes": {
+    "no": 0.4487,
+    "yes": 0.5513
+   },
+   "frontier_training_compute_100x_2029=yes|robust_agent_evals_standard_2027=no": {
+    "no": 0.3379,
+    "yes": 0.6621
+   },
+   "frontier_training_compute_100x_2029=yes|robust_agent_evals_standard_2027=yes": {
+    "no": 0.2159,
+    "yes": 0.7841
+   }
+  },
+  "m10": {
+   "ai_knowledge_work_displacement_2030=no|frontier_ai_governance_regime_2030=no": {
+    "no": 0.8201,
+    "yes": 0.1799
+   },
+   "ai_knowledge_work_displacement_2030=no|frontier_ai_governance_regime_2030=yes": {
+    "no": 0.7101,
+    "yes": 0.2899
+   },
+   "ai_knowledge_work_displacement_2030=yes|frontier_ai_governance_regime_2030=no": {
+    "no": 0.5002,
+    "yes": 0.4998
+   },
+   "ai_knowledge_work_displacement_2030=yes|frontier_ai_governance_regime_2030=yes": {
+    "no": 0.4202,
+    "yes": 0.5798
+   }
+  },
+  "m11": {
+   "frontier_capability_breakthrough_2028=no|autonomous_ai_coding_deployment_2028=no": {
+    "no": 0.83,
+    "yes": 0.17
+   },
+   "frontier_capability_breakthrough_2028=no|autonomous_ai_coding_deployment_2028=yes": {
+    "no": 0.52,
+    "yes": 0.48
+   },
+   "frontier_capability_breakthrough_2028=yes|autonomous_ai_coding_deployment_2028=no": {
+    "no": 0.57,
+    "yes": 0.43
+   },
+   "frontier_capability_breakthrough_2028=yes|autonomous_ai_coding_deployment_2028=yes": {
+    "no": 0.26,
+    "yes": 0.74
+   }
+  },
+  "m12": {
+   "ai_r_and_d_automation_2030=no|frontier_training_compute_100x_2029=no": {
+    "no": 0.9132,
+    "yes": 0.0868
+   },
+   "ai_r_and_d_automation_2030=no|frontier_training_compute_100x_2029=yes": {
+    "no": 0.8056,
+    "yes": 0.1944
+   },
+   "ai_r_and_d_automation_2030=yes|frontier_training_compute_100x_2029=no": {
+    "no": 0.656,
+    "yes": 0.344
+   },
+   "ai_r_and_d_automation_2030=yes|frontier_training_compute_100x_2029=yes": {
+    "no": 0.519,
+    "yes": 0.481
+   }
+  },
+  "m13": {
+   "major_ai_incident_before_2029=no|compressed_ai_takeoff_2032=no": {
+    "no": 0.973,
+    "yes": 0.027
+   },
+   "major_ai_incident_before_2029=no|compressed_ai_takeoff_2032=yes": {
+    "no": 0.9012,
+    "yes": 0.0988
+   },
+   "major_ai_incident_before_2029=yes|compressed_ai_takeoff_2032=no": {
+    "no": 0.8668,
+    "yes": 0.1332
+   },
+   "major_ai_incident_before_2029=yes|compressed_ai_takeoff_2032=yes": {
+    "no": 0.7506,
+    "yes": 0.2494
+   }
+  },
+  "m14": {
+   "alignment_assurance_standard_2030=no|robust_agent_evals_standard_2027=no": {
+    "no": 0.86,
+    "yes": 0.14
+   },
+   "alignment_assurance_standard_2030=no|robust_agent_evals_standard_2027=yes": {
+    "no": 0.71,
+    "yes": 0.29
+   },
+   "alignment_assurance_standard_2030=yes|robust_agent_evals_standard_2027=no": {
+    "no": 0.58,
+    "yes": 0.42
+   },
+   "alignment_assurance_standard_2030=yes|robust_agent_evals_standard_2027=yes": {
+    "no": 0.45,
+    "yes": 0.55
+   }
+  },
+  "m15": {
+   "ai_productivity_acceleration_g7_2032=no|compressed_ai_takeoff_2032=no": {
+    "no": 0.8778,
+    "yes": 0.1222
+   },
+   "ai_productivity_acceleration_g7_2032=no|compressed_ai_takeoff_2032=yes": {
+    "no": 0.7359,
+    "yes": 0.2641
+   },
+   "ai_productivity_acceleration_g7_2032=yes|compressed_ai_takeoff_2032=no": {
+    "no": 0.4748,
+    "yes": 0.5252
+   },
+   "ai_productivity_acceleration_g7_2032=yes|compressed_ai_takeoff_2032=yes": {
+    "no": 0.3154,
+    "yes": 0.6846
+   }
+  },
+  "m2": {
+   "frontier_capability_breakthrough_2028=no|frontier_training_compute_100x_2029=no": {
+    "no": 0.8719,
+    "yes": 0.1281
+   },
+   "frontier_capability_breakthrough_2028=no|frontier_training_compute_100x_2029=yes": {
+    "no": 0.7828,
+    "yes": 0.2172
+   },
+   "frontier_capability_breakthrough_2028=yes|frontier_training_compute_100x_2029=no": {
+    "no": 0.6935,
+    "yes": 0.3065
+   },
+   "frontier_capability_breakthrough_2028=yes|frontier_training_compute_100x_2029=yes": {
+    "no": 0.574,
+    "yes": 0.426
+   }
+  },
+  "m3": {
+   "ai_knowledge_work_displacement_2030=no|major_ai_incident_before_2029=no": {
+    "no": 0.7926,
+    "yes": 0.2074
+   },
+   "ai_knowledge_work_displacement_2030=no|major_ai_incident_before_2029=yes": {
+    "no": 0.5002,
+    "yes": 0.4998
+   },
+   "ai_knowledge_work_displacement_2030=yes|major_ai_incident_before_2029=no": {
+    "no": 0.5896,
+    "yes": 0.4104
+   },
+   "ai_knowledge_work_displacement_2030=yes|major_ai_incident_before_2029=yes": {
+    "no": 0.364,
+    "yes": 0.636
+   }
+  },
+  "m4": {
+   "ai_datacenter_power_buildout_50gw_2030=no": {
+    "no": 0.619,
+    "yes": 0.381
+   },
+   "ai_datacenter_power_buildout_50gw_2030=yes": {
+    "no": 0.3519,
+    "yes": 0.6481
+   }
+  },
+  "m5": {
+   "frontier_training_compute_100x_2029=no": {
+    "no": 0.5865,
+    "yes": 0.4135
+   },
+   "frontier_training_compute_100x_2029=yes": {
+    "no": 0.3763,
+    "yes": 0.6237
+   }
+  },
+  "m6": {
+   "autonomous_ai_coding_deployment_2028=no|open_weight_near_frontier_2028=no": {
+    "no": 0.7594,
+    "yes": 0.2406
+   },
+   "autonomous_ai_coding_deployment_2028=no|open_weight_near_frontier_2028=yes": {
+    "no": 0.6193,
+    "yes": 0.3807
+   },
+   "autonomous_ai_coding_deployment_2028=yes|open_weight_near_frontier_2028=no": {
+    "no": 0.456,
+    "yes": 0.544
+   },
+   "autonomous_ai_coding_deployment_2028=yes|open_weight_near_frontier_2028=yes": {
+    "no": 0.2876,
+    "yes": 0.7124
+   }
+  },
+  "m7": {
+   "frontier_ai_governance_regime_2030=no|robust_agent_evals_standard_2027=no": {
+    "no": 0.81,
+    "yes": 0.19
+   },
+   "frontier_ai_governance_regime_2030=no|robust_agent_evals_standard_2027=yes": {
+    "no": 0.64,
+    "yes": 0.36
+   },
+   "frontier_ai_governance_regime_2030=yes|robust_agent_evals_standard_2027=no": {
+    "no": 0.54,
+    "yes": 0.46
+   },
+   "frontier_ai_governance_regime_2030=yes|robust_agent_evals_standard_2027=yes": {
+    "no": 0.36,
+    "yes": 0.64
+   }
+  },
+  "m8": {
+   "autonomous_ai_coding_deployment_2028=no|frontier_capability_breakthrough_2028=no": {
+    "no": 0.84,
+    "yes": 0.16
+   },
+   "autonomous_ai_coding_deployment_2028=no|frontier_capability_breakthrough_2028=yes": {
+    "no": 0.67,
+    "yes": 0.33
+   },
+   "autonomous_ai_coding_deployment_2028=yes|frontier_capability_breakthrough_2028=no": {
+    "no": 0.53,
+    "yes": 0.47
+   },
+   "autonomous_ai_coding_deployment_2028=yes|frontier_capability_breakthrough_2028=yes": {
+    "no": 0.32,
+    "yes": 0.68
+   }
+  },
+  "m9": {
+   "frontier_training_compute_100x_2029=no": {
+    "no": 0.2948,
+    "yes": 0.7052
+   },
+   "frontier_training_compute_100x_2029=yes": {
+    "no": 0.1701,
+    "yes": 0.8299
+   }
+  }
+ },
+ "generated": "2026-07-02",
+ "method": "log-odds shift per CPT family, fitted in topological order",
+ "rootMarginals": {
+  "m16": {
+   "no": 0.18,
+   "yes": 0.82
+  }
+ }
+}

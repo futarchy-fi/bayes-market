@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { useMarkets, useMarket, useNetwork } from "@/lib/query/hooks";
 import { useOptionalAssumptions } from "@/features/assumptions/AssumptionContext";
 import { computeFlowLayout, wrapTitle, DEFAULT_FLOW_OPTIONS, type PositionedNode } from "./flowLayout";
@@ -218,6 +219,7 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
     (info: { id: string; x: number; y: number } | null) => setHover(info),
     [],
   );
+  const [selected, setSelected] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -258,6 +260,7 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
           style={{ width: "100%", maxWidth: 860, height: "auto", display: "block", margin: "0 auto" }}
           role="img"
           aria-label="Causal belief network of all markets"
+          onClick={() => setSelected(null)}
         >
           <defs>
             <marker id="bf-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -308,15 +311,32 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
                 context={context}
                 isFocus={n.id === focusMarketId}
                 assumedOutcome={assumedByMarketId.get(n.id)}
-                onClick={onNodeClick ? () => onNodeClick(n.id) : undefined}
+                onClick={() => {
+                  setSelected((prev) => (prev === n.id ? null : n.id));
+                  onNodeClick?.(n.id);
+                }}
                 onHover={handleHover}
               />
             );
           })}
         </svg>
 
+        {/* Pinned popover for the selected node */}
+        {selected && positionById.has(selected) && marketById.has(selected) && (
+          <NodePopover
+            market={marketById.get(selected)!}
+            node={positionById.get(selected)!}
+            layoutWidth={layout.width}
+            layoutHeight={layout.height}
+            context={assumptions
+              .filter((a) => a.variableId !== marketById.get(selected)!.variableId)
+              .map((a) => ({ variableId: a.variableId, outcomeId: a.outcomeId }))}
+            onClose={() => setSelected(null)}
+          />
+        )}
+
         {/* Hover tooltip */}
-        {hover && hoveredMarket && (
+        {hover && hover.id !== selected && hoveredMarket && (
           <div
             style={{
               position: "absolute",
@@ -350,6 +370,143 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
       <div style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", marginTop: "var(--space-sm)" }}>
         Bars show the probability of Yes on a shared 0–100% scale. Arrows point cause → effect.
         {assumptions.length > 0 && " Deltas (▲▼) are the shift from each market's unconditional price."}
+      </div>
+    </div>
+  );
+}
+
+function NodePopover({
+  market,
+  node,
+  layoutWidth,
+  layoutHeight,
+  context,
+  onClose,
+}: {
+  market: FlowMarket;
+  node: PositionedNode;
+  layoutWidth: number;
+  layoutHeight: number;
+  context: Array<{ variableId: string; outcomeId: string }>;
+  onClose: () => void;
+}) {
+  const conditioned = useMarket(market.id, { context });
+  const base = useMarket(market.id);
+  const assumptionState = useOptionalAssumptions();
+
+  const detail = conditioned.data?.market ?? base.data?.market;
+  const condP = firstOutcomeProbability(conditioned.data?.market);
+  const baseP = firstOutcomeProbability(base.data?.market);
+  const shown = condP ?? baseP;
+  const deltaPts = context.length > 0 && condP && baseP ? (condP.p - baseP.p) * 100 : 0;
+  const assumed = market.variableId ? assumptionState?.getAssumption(market.variableId) : undefined;
+
+  const leftPct = Math.min(88, Math.max(12, ((node.x + 96) / layoutWidth) * 100));
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: `${leftPct}%`,
+        top: `${((node.y + 66) / layoutHeight) * 100}%`,
+        transform: "translateX(-50%)",
+        width: 300,
+        padding: "10px 12px",
+        borderRadius: 8,
+        border: "1px solid var(--color-primary)",
+        background: "var(--color-bg)",
+        fontSize: "0.75rem",
+        color: "var(--color-text)",
+        zIndex: 6,
+        boxShadow: "0 6px 20px rgba(0,0,0,0.5)",
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ fontWeight: 700, lineHeight: 1.3 }}>{market.title}</div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          style={{ background: "transparent", border: "none", color: "var(--color-text-muted)", cursor: "pointer", fontSize: "0.9rem", lineHeight: 1 }}
+        >
+          ×
+        </button>
+      </div>
+
+      {detail?.description && (
+        <div style={{ color: "var(--color-text-muted)", margin: "6px 0", lineHeight: 1.4 }}>
+          {detail.description}
+        </div>
+      )}
+
+      {shown && (
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "6px 0" }}>
+          <span style={{ fontSize: "1.15rem", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+            {(shown.p * 100).toFixed(1)}%
+          </span>
+          <span style={{ color: "var(--color-text-muted)" }}>P(yes{context.length > 0 ? " | assumptions" : ""})</span>
+          {Math.abs(deltaPts) >= 0.05 && (
+            <span
+              style={{
+                fontWeight: 700,
+                fontVariantNumeric: "tabular-nums",
+                color: deltaPts > 0 ? "var(--color-success)" : "var(--color-danger)",
+              }}
+            >
+              {deltaPts > 0 ? "▲" : "▼"}{Math.abs(deltaPts).toFixed(1)}
+            </span>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+        {assumptionState && market.variableId && market.status === "active" &&
+          (detail?.outcomes ?? []).slice(0, 3).map((o) => {
+            const isThis = assumed?.outcomeId === o.id;
+            return (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => {
+                  if (isThis) {
+                    assumptionState.removeAssumption(market.variableId!);
+                  } else {
+                    assumptionState.addAssumption({
+                      variableId: market.variableId!,
+                      outcomeId: o.id,
+                      label: market.title,
+                    });
+                  }
+                }}
+                style={{
+                  padding: "3px 10px",
+                  borderRadius: 4,
+                  fontSize: "0.7rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  border: `1px solid ${isThis ? "var(--color-primary)" : "var(--color-border)"}`,
+                  background: isThis ? "var(--color-primary)" : "transparent",
+                  color: isThis ? "#fff" : "var(--color-text)",
+                }}
+              >
+                {isThis ? `✓ Assumed ${o.name}` : `Assume ${o.name}`}
+              </button>
+            );
+          })}
+        <Link
+          to={`/markets/${market.id}`}
+          style={{
+            marginLeft: "auto",
+            alignSelf: "center",
+            fontSize: "0.7rem",
+            fontWeight: 600,
+            color: "var(--color-primary)",
+            textDecoration: "none",
+          }}
+        >
+          Open market →
+        </Link>
       </div>
     </div>
   );
