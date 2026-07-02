@@ -1,9 +1,10 @@
-__pycache__/
-node_modules/
-dist/
-!frontend/dist/
 
-# Beads / Dolt files (added by bd init)
-.dolt/
-*.db
 .beads-credential-key
+# Beads / Dolt files (added by bd init)
+*.db
+dist/
+.dolt/
+!frontend/dist/
+joint_state.json
+node_modules/
+__pycache__/

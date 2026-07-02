@@ -1511,14 +1511,59 @@ JOINT_MARKET_LIQUIDITY = float(os.environ.get("BAYES_JOINT_LIQUIDITY", "300"))
 _JOINT_MARKET_STATE: dict[str, Any] = {"market": None}
 
 
+JOINT_STATE_PATH = os.environ.get("BAYES_JOINT_STATE_PATH") or ""
+
+
+def _load_joint_snapshot() -> JointMarket | None:
+    """Restore a persisted joint if it matches the current variable space."""
+    if not JOINT_STATE_PATH:
+        return None
+    path = Path(JOINT_STATE_PATH)
+    if not path.exists():
+        return None
+    try:
+        market = JointMarket.from_snapshot(json.loads(path.read_text()))
+    except (OSError, ValueError, KeyError, TypeError, JointMarketError):
+        return None
+    live_variables = {
+        str(m.get("variableId")) for m in MARKETS.values() if m.get("variableId")
+    }
+    if set(market.variables()) != live_variables:
+        return None
+    return market
+
+
+def persist_joint_market() -> None:
+    """Write the maker's state atomically; no-op when persistence is off."""
+    if not JOINT_STATE_PATH:
+        return
+    market = _JOINT_MARKET_STATE["market"]
+    if market is None:
+        return
+    try:
+        path = Path(JOINT_STATE_PATH)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(market.snapshot()))
+        tmp.replace(path)
+    except OSError:
+        pass
+
+
 def get_joint_market() -> JointMarket | None:
     """Return the combinatorial LMSR market maker over the network joint.
 
-    Built once from the compiled network; thereafter the joint IS the market
-    state — trades and resolutions mutate it and it is never rebuilt except
-    via reset_joint_market() (used by state resets).
+    Restored from BAYES_JOINT_STATE_PATH when a compatible snapshot exists
+    (so traded prices survive restarts), else built from the compiled
+    network. Thereafter the joint IS the market state — trades and
+    resolutions mutate it and it is never rebuilt except via
+    reset_joint_market() (used by state resets).
     """
     if _JOINT_MARKET_STATE["market"] is None:
+        restored = _load_joint_snapshot()
+        if restored is not None:
+            _JOINT_MARKET_STATE["market"] = restored
+            resync_marginals_from_joint()
+            return restored
         network = get_market_network()
         if network is None:
             return None
@@ -1534,6 +1579,11 @@ def get_joint_market() -> JointMarket | None:
 def reset_joint_market() -> None:
     """Drop the market maker so it rebuilds from the (restored) seeds."""
     _JOINT_MARKET_STATE["market"] = None
+    if JOINT_STATE_PATH:
+        try:
+            Path(JOINT_STATE_PATH).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def resync_marginals_from_joint() -> list[str]:
@@ -1596,7 +1646,9 @@ def apply_probability_edit_to_joint(
         )
     except JointMarketError:
         return None
-    return {**fill, "marketsRepriced": resync_marginals_from_joint()}
+    repriced = resync_marginals_from_joint()
+    persist_joint_market()
+    return {**fill, "marketsRepriced": repriced}
 
 
 def apply_share_trade_to_joint(
@@ -1627,7 +1679,9 @@ def apply_share_trade_to_joint(
         fill = joint.trade_to_probability(variable_id, str(outcome_id), target)
     except JointMarketError:
         return None
-    return {**fill, "marketsRepriced": resync_marginals_from_joint()}
+    repriced = resync_marginals_from_joint()
+    persist_joint_market()
+    return {**fill, "marketsRepriced": repriced}
 
 
 def apply_resolution_to_joint(market: dict[str, Any], outcome_id: str) -> dict[str, Any] | None:
@@ -1642,7 +1696,9 @@ def apply_resolution_to_joint(market: dict[str, Any], outcome_id: str) -> dict[s
         joint.condition(variable_id, str(outcome_id))
     except JointMarketError:
         return None
-    return {"marketsRepriced": resync_marginals_from_joint()}
+    repriced = resync_marginals_from_joint()
+    persist_joint_market()
+    return {"marketsRepriced": repriced}
 
 
 def sync_seed_marginals_with_network() -> None:

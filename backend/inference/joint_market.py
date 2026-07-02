@@ -229,6 +229,26 @@ class JointMarket:
         self._cache.clear()
         return True
 
+    # -- persistence ----------------------------------------------------------
+
+    def snapshot(self) -> dict[str, Any]:
+        """Serializable state: variable space, joint, liquidity."""
+        return {
+            "order": list(self._order),
+            "outcomes": {v: list(self._outcomes[v]) for v in self._order},
+            "probabilities": list(self._probs),
+            "liquidity": self.liquidity,
+        }
+
+    @classmethod
+    def from_snapshot(cls, data: Mapping[str, Any]) -> "JointMarket":
+        return cls(
+            tuple(str(v) for v in data["order"]),
+            {str(v): tuple(str(o) for o in outs) for v, outs in data["outcomes"].items()},
+            [float(p) for p in data["probabilities"]],
+            float(data["liquidity"]),
+        )
+
     # -- diagnostics ----------------------------------------------------------
 
     def stats(self) -> dict[str, float]:
