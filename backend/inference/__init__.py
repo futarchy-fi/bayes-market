@@ -22,15 +22,23 @@ from .current_model import (
     compile_current_model_result,
 )
 from .cache_invalidation import CacheInvalidationManager, InvalidationResult
+from .current_model import canonical_json_hash
 from .errors import (
     InferenceCompileError,
     InferenceError,
     InferenceQueryError,
     InferenceUnsupportedQueryError,
 )
+from .network_model import (
+    BayesNetworkModel,
+    NetworkModelError,
+    build_market_network,
+    parse_cpt_key,
+)
 
 __all__ = [
     "AtomicEventQueryResult",
+    "BayesNetworkModel",
     "CacheInvalidationManager",
     "CURRENT_MODEL_COMPILER",
     "CURRENT_MODEL_QUERY_BACKEND",
@@ -50,6 +58,10 @@ __all__ = [
     "InferenceUnsupportedQueryError",
     "InvalidationResult",
     "MarginalQueryResult",
+    "NetworkModelError",
+    "build_market_network",
+    "canonical_json_hash",
+    "parse_cpt_key",
     "compile_current_market_artifact",
     "compile_current_market_result",
     "compile_current_model_artifact",

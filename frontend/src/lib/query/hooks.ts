@@ -71,6 +71,15 @@ export function useMarket(
   });
 }
 
+export function useNetwork() {
+  return useQuery({
+    queryKey: ["network"] as const,
+    queryFn: () => api.getNetwork(),
+    refetchInterval: 30000,
+    staleTime: 15000,
+  });
+}
+
 export function useMarketEvents(marketId: string) {
   return useQuery({
     queryKey: queryKeys.marketEvents(marketId),

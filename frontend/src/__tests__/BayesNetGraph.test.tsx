@@ -19,6 +19,7 @@ function WrappedBayesNetGraph(props: React.ComponentProps<typeof BayesNetGraph>)
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/query/hooks", () => ({
+  useNetwork: vi.fn(() => ({ data: undefined })),
   useMarkets: vi.fn(),
   useMarket: vi.fn(),
   useEngineStats: vi.fn(),

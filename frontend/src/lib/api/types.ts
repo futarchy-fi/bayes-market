@@ -51,6 +51,26 @@ export interface MarketDetailResponse {
   meta: Meta;
 }
 
+export interface NetworkNodeSummary {
+  marketId: string;
+  variableId: string;
+  title: string;
+  status: MarketStatus;
+}
+
+export interface NetworkEdgeSummary {
+  from: string;
+  to: string;
+  fromVariableId: string;
+  toVariableId: string;
+}
+
+export interface NetworkResponse {
+  nodes: NetworkNodeSummary[];
+  edges: NetworkEdgeSummary[];
+  meta: Meta;
+}
+
 export interface MarketPreview {
   marketId: string;
   title: string;

@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useRef, useState, useCallback } from "react";
-import { useMarkets, useMarket, useEngineStats } from "@/lib/query/hooks";
+import { useMarkets, useMarket, useEngineStats, useNetwork } from "@/lib/query/hooks";
 import { formatProbability } from "@/lib/utils/format";
 import { useOptionalAssumptions, type Assumption } from "@/features/assumptions/AssumptionContext";
 import { useAnimationPropagation } from "./useAnimationPropagation";
@@ -248,6 +248,7 @@ export function BayesNetGraph({
 }: BayesNetGraphProps) {
   const { data: marketsData, isLoading } = useMarkets();
   const { data: engineStats } = useEngineStats(focusMarketId ?? "", { enabled: !!focusMarketId });
+  const { data: networkData } = useNetwork();
 
   // --- Snapshot state for imported networks ---
   const [snapshot, setSnapshot] = useState<NetworkExportSchema | null>(null);
@@ -319,11 +320,13 @@ export function BayesNetGraph({
     [cliques, variableIdToMarketId],
   );
 
-  // Derive all edges for BFS traversal (clique-derived + conditional)
-  const allEdges = useMemo(
-    () => remapEdgesToMarketIds(mergeEdges(deriveEdgesFromCliques(cliques), conditionalEdges), markets),
-    [cliques, conditionalEdges, markets],
-  );
+  // Edge base: the full network DAG when available, else clique edges.
+  // Used for both rendering and animation BFS traversal.
+  const allEdges = useMemo(() => {
+    const networkEdges = (networkData?.edges ?? []).map((e) => ({ source: e.from, target: e.to }));
+    const base = networkEdges.length > 0 ? networkEdges : deriveEdgesFromCliques(cliques);
+    return remapEdgesToMarketIds(mergeEdges(base, conditionalEdges), markets);
+  }, [networkData, cliques, conditionalEdges, markets]);
 
   useEffect(() => {
     const prev = prevAssumptionsRef.current;
@@ -513,9 +516,9 @@ export function BayesNetGraph({
           <CliqueOverlay key={c.id} clique={c} nodes={nodes} />
         ))}
 
-        {/* Conditional edges */}
-        {conditionalEdges.map((e, i) => (
-          <EdgeLine key={`${e.from}-${e.to}-${i}`} from={e.from} to={e.to} nodes={nodes} />
+        {/* Network + conditional edges */}
+        {allEdges.map((e, i) => (
+          <EdgeLine key={`${e.source}-${e.target}-${i}`} from={e.source} to={e.target} nodes={nodes} />
         ))}
 
         {/* Animated propagation edges */}

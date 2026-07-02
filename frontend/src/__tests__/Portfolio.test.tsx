@@ -18,6 +18,7 @@ vi.mock("@/features/session/context", async () => {
 });
 
 vi.mock("@/lib/query/hooks", () => ({
+  useNetwork: vi.fn(() => ({ data: undefined })),
   useAccountRisk: vi.fn(),
   useMarkets: vi.fn(),
 }));

@@ -209,6 +209,7 @@ const actionBtnStyle: React.CSSProperties = {
   padding: "2px 8px",
   borderRadius: 3,
   background: "transparent",
+  color: "var(--color-text)",
   fontSize: "0.7rem",
   fontWeight: 500,
   cursor: "pointer",

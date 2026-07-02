@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ProbabilityBar } from "@/components/ui/ProbabilityBar";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { formatCurrency, timeUntil, truncateHash, formatRelativeTime } from "@/lib/utils/format";
-import { AssumptionProvider, useAssumptions } from "@/features/assumptions/AssumptionContext";
+import { AssumptionProvider, useAssumptions, useOptionalAssumptions } from "@/features/assumptions/AssumptionContext";
 import { AssumptionPanel } from "@/features/assumptions/AssumptionPanel";
 import { HistoryProvider } from "@/features/history/HistoryContext";
 import { UndoRedoToolbar } from "@/features/history/UndoRedoToolbar";
@@ -74,6 +74,8 @@ export default function MarketDetail() {
     effectiveSelectedId === m.id ? m : selectedMarketQuery.data?.market ?? m;
 
   return (
+    <HistoryProvider>
+    <AssumptionProvider>
     <div style={{ display: "grid", gap: "var(--space-lg)" }}>
       <div>
         <div style={{ display: "flex", gap: "var(--space-md)", alignItems: "center", marginBottom: "var(--space-sm)" }}>
@@ -88,33 +90,31 @@ export default function MarketDetail() {
         </div>
       </div>
 
-      <ProbabilityBar outcomes={m.outcomes} marginals={m.marginals} />
+      <ConditionedProbabilityBar market={m} />
 
       <PositionCard marketId={m.id} accountRisk={accountRisk.data} isConfigured={isConfigured} />
 
       <ResolveMarketPanel market={m} />
 
       {m.status === "active" ? (
-        <HistoryProvider>
-          <AssumptionProvider>
-            <UndoRedoToolbar />
-            <AssumptionPanel market={m} />
-            <CptPanel market={selectedMarket} />
-            <EventTradePanel market={m} />
-            <DiscussionThread market={m} />
-            <GraphToolbar
-              view={graphView}
-              onViewChange={setGraphView}
-              onExport={handleExport}
-              onImportSuccess={handleImportSuccess}
-            />
-            {graphView === "force" ? (
-              <ConnectedForceGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
-            ) : (
-              <BayesNetGraph focusMarketId={m.id} />
-            )}
-          </AssumptionProvider>
-        </HistoryProvider>
+        <>
+          <UndoRedoToolbar />
+          <AssumptionPanel market={m} />
+          <CptPanel market={selectedMarket} />
+          <EventTradePanel market={m} />
+          <DiscussionThread market={m} />
+          <GraphToolbar
+            view={graphView}
+            onViewChange={setGraphView}
+            onExport={handleExport}
+            onImportSuccess={handleImportSuccess}
+          />
+          {graphView === "force" ? (
+            <ConnectedForceGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
+          ) : (
+            <BayesNetGraph focusMarketId={m.id} />
+          )}
+        </>
       ) : (
         <>
           <CptPanel market={selectedMarket} />
@@ -164,7 +164,20 @@ export default function MarketDetail() {
 
       <JunctionTreePanel marketId={m.id} />
     </div>
+    </AssumptionProvider>
+    </HistoryProvider>
   );
+}
+
+/** Probability bar reflecting the active assumptions (excluding this market's own variable). */
+function ConditionedProbabilityBar({ market }: { market: import("@/lib/api/types").Market }) {
+  const assumptionState = useOptionalAssumptions();
+  const context = (assumptionState?.contextPayload ?? []).filter(
+    (c) => c.variableId !== market.variableId,
+  );
+  const { data } = useMarket(market.id, { context });
+  const marginals = context.length > 0 && data ? data.market.marginals : market.marginals;
+  return <ProbabilityBar outcomes={market.outcomes} marginals={marginals} />;
 }
 
 function PositionCard({

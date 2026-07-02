@@ -127,6 +127,10 @@ export function getMarket(
   );
 }
 
+export function getNetwork(): Promise<import("./types").NetworkResponse> {
+  return request<import("./types").NetworkResponse>(`/v1/network`);
+}
+
 export function getMarketPreview(
   marketId: string,
 ): Promise<MarketPreviewResponse> {

@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useRef } from "react";
-import { useMarkets, useMarket, useEngineStats } from "@/lib/query/hooks";
+import { useMarkets, useMarket, useEngineStats, useNetwork } from "@/lib/query/hooks";
 import { formatProbability } from "@/lib/utils/format";
 import { useForceGraph } from "./useForceGraph";
 import { useAnimationPropagation } from "./useAnimationPropagation";
@@ -250,6 +250,7 @@ export function ForceDirectedGraph({
 }: ForceDirectedGraphProps) {
   const { data: marketsData, isLoading } = useMarkets();
   const { data: engineStats } = useEngineStats(focusMarketId ?? "", { enabled: !!focusMarketId });
+  const { data: networkData } = useNetwork();
 
   const markets = marketsData?.markets ?? [];
   const cliques = engineStats?.cliques.cliques ?? [];
@@ -273,13 +274,14 @@ export function ForceDirectedGraph({
     [markets],
   );
 
-  // Derive edges from cliques + conditional edges (also used for animation BFS).
-  // Clique edges arrive keyed by engine variableId while force nodes are keyed
-  // by market id, so remap before handing them to d3.
+  // Edge base: the full network DAG when available (market-id space), else
+  // the focused market's clique edges (variableId space). Either way they
+  // are remapped/filtered against the visible market nodes before d3.
   const allEdges = useMemo(() => {
-    const cliqueEdges = deriveEdgesFromCliques(cliques);
-    return remapEdgesToMarketIds(mergeEdges(cliqueEdges, conditionalEdges), markets);
-  }, [cliques, conditionalEdges, markets]);
+    const networkEdges = (networkData?.edges ?? []).map((e) => ({ source: e.from, target: e.to }));
+    const base = networkEdges.length > 0 ? networkEdges : deriveEdgesFromCliques(cliques);
+    return remapEdgesToMarketIds(mergeEdges(base, conditionalEdges), markets);
+  }, [networkData, cliques, conditionalEdges, markets]);
   const forceInputLinks = allEdges;
 
   // Detect assumption changes and trigger propagation animation

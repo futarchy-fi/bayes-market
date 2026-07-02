@@ -18,6 +18,7 @@ vi.mock("@/features/assumptions/VariableRow", () => ({
 }));
 
 vi.mock("@/lib/query/hooks", () => ({
+  useNetwork: vi.fn(() => ({ data: undefined })),
   useMarkets: vi.fn(),
 }));
 

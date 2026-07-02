@@ -9,6 +9,7 @@ import type { EngineStatsResponse } from "@/lib/api/types";
 // ---------------------------------------------------------------------------
 
 vi.mock("@/lib/query/hooks", () => ({
+  useNetwork: vi.fn(() => ({ data: undefined })),
   useEngineStats: vi.fn(),
 }));
 

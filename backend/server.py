@@ -52,6 +52,7 @@ def _resolve_build_git_sha() -> str:
     return git_sha or "unknown"
 
 from backend.inference import (
+    BayesNetworkModel,
     CURRENT_MODEL_COMPILER,
     CURRENT_MODEL_QUERY_BACKEND,
     CacheInvalidationManager,
@@ -61,6 +62,10 @@ from backend.inference import (
     InferenceCompileError,
     InferenceQueryError,
     InferenceUnsupportedQueryError,
+    NetworkModelError,
+    build_market_network,
+    canonical_json_hash,
+    parse_cpt_key,
 )
 
 FORMULA_SCHEMA_MODULE_PATH = Path(__file__).with_name("formula_schema.py")
@@ -1463,6 +1468,63 @@ def raise_inference_adapter_error(market_id: str, operation: str, exc: Exception
         "Internal server error",
         {"marketId": market_id, "operation": operation},
     ) from exc
+
+
+# --- Global network model: exact joint inference over the seeded CPT DAG ---
+
+_NETWORK_MODEL_CACHE: dict[str, Any] = {"state_hash": None, "model": None}
+
+
+def _network_state_snapshot() -> dict[str, Any]:
+    """State fingerprint for the network model cache."""
+    return {
+        "markets": {
+            market_id: {
+                "variableId": str(market.get("variableId")),
+                "outcomes": [str(o["id"]) for o in market.get("outcomes", [])],
+                "marginals": market.get("marginals", {}),
+            }
+            for market_id, market in MARKETS.items()
+        },
+        "cpts": CONDITIONAL_MARGINALS,
+    }
+
+
+def get_market_network() -> BayesNetworkModel | None:
+    """Return the cached joint network model, rebuilding when state changed."""
+    state_hash = canonical_json_hash(_network_state_snapshot())
+    if _NETWORK_MODEL_CACHE["state_hash"] != state_hash:
+        try:
+            model: BayesNetworkModel | None = build_market_network(MARKETS, CONDITIONAL_MARGINALS)
+        except NetworkModelError:
+            model = None
+        _NETWORK_MODEL_CACHE["state_hash"] = state_hash
+        _NETWORK_MODEL_CACHE["model"] = model
+    return _NETWORK_MODEL_CACHE["model"]
+
+
+def sync_seed_marginals_with_network() -> None:
+    """Align stored market marginals with the joint implied by the CPTs.
+
+    Keeps displayed priors, CPT rows, and conditional queries mutually
+    consistent. Last outcome takes the complement so slices sum to 1.
+    """
+    try:
+        model = build_market_network(MARKETS, CONDITIONAL_MARGINALS)
+    except NetworkModelError:
+        return
+    for market in MARKETS.values():
+        implied = model.marginal(str(market.get("variableId")), {})
+        if not implied:
+            continue
+        outcome_ids = [str(o["id"]) for o in market.get("outcomes", [])]
+        if not outcome_ids:
+            continue
+        rounded: dict[str, float] = {}
+        for outcome_id in outcome_ids[:-1]:
+            rounded[outcome_id] = round(float(implied.get(outcome_id, 0.0)), 6)
+        rounded[outcome_ids[-1]] = round(1.0 - sum(rounded.values()), 6)
+        market["marginals"] = rounded
 
 
 def compile_market_for_inference(
@@ -3269,12 +3331,76 @@ def get_market_detail(
     market_payload = deepcopy(market)
     context = parse_market_context_query(query or {}, target_variable_id=str(market["variableId"]))
     if context:
-        market_payload["marginals"] = query_market_marginals_for_inference(market_id, context)
+        # Display precedence: an exactly-matching stored conditional slice is
+        # a traded market price and wins; otherwise the exact joint over the
+        # whole network (handles partial and diagnostic evidence); otherwise
+        # the per-market artifact fallback.
+        stored_slices = CONDITIONAL_MARGINALS.get(market_id) or {}
+        stored_slice = stored_slices.get(context_state_key(context))
+        if stored_slice is not None:
+            market_payload["marginals"] = deepcopy(stored_slice)
+            return {
+                "market": market_payload,
+                "meta": make_meta(),
+            }, 200
+        network = get_market_network()
+        network_marginals = (
+            network.marginal(
+                str(market["variableId"]),
+                context_mapping_from_assignments(context),
+            )
+            if network is not None
+            else None
+        )
+        if network_marginals is not None:
+            market_payload["marginals"] = {
+                outcome_id: round(float(probability), 6)
+                for outcome_id, probability in network_marginals.items()
+            }
+        else:
+            market_payload["marginals"] = query_market_marginals_for_inference(market_id, context)
 
     return {
         "market": market_payload,
         "meta": make_meta(),
     }, 200
+
+
+def get_network_overview() -> tuple[dict[str, Any], int]:
+    """Return the full market network: nodes and directed parent->child edges."""
+    nodes = [
+        {
+            "marketId": str(market_id),
+            "variableId": str(market.get("variableId")),
+            "title": str(market.get("title")),
+            "status": str(market.get("status")),
+        }
+        for market_id, market in MARKETS.items()
+    ]
+
+    edges: list[dict[str, str]] = []
+    for market_id, rows in CONDITIONAL_MARGINALS.items():
+        child = MARKETS.get(market_id)
+        if not child:
+            continue
+        parent_variable_ids: set[str] = set()
+        for key in rows:
+            pairs = parse_cpt_key(str(key))
+            if pairs:
+                parent_variable_ids.update(variable_id for variable_id, _ in pairs)
+        for variable_id in sorted(parent_variable_ids):
+            parent = find_market_by_variable_id(variable_id)
+            if parent is not None:
+                edges.append(
+                    {
+                        "from": str(parent["id"]),
+                        "to": str(market_id),
+                        "fromVariableId": variable_id,
+                        "toVariableId": str(child["variableId"]),
+                    }
+                )
+
+    return {"nodes": nodes, "edges": edges, "meta": make_meta()}, 200
 
 
 def get_market_preview_response(
@@ -5853,6 +5979,16 @@ def route_request(
             return get_account_positions(account_id)
         return get_account_exposure(account_id)
 
+    if parts == ["v1", "network"]:
+        if method != "GET":
+            raise ApiError(
+                405,
+                "method_not_allowed",
+                f"{method} is not allowed for this resource",
+                {"method": method, "path": path},
+            )
+        return get_network_overview()
+
     if len(parts) >= 3 and parts[:2] == ["v1", "markets"]:
         market_id = parts[2]
         if len(parts) == 3:
@@ -6072,6 +6208,9 @@ def route_request(
 
     raise ApiError(404, "not_found", "Not found", {"path": path})
 
+
+# Align seeded prices with the joint implied by the CPT network.
+sync_seed_marginals_with_network()
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
