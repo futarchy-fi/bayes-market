@@ -2,7 +2,7 @@ import { useRef, useCallback, useState } from "react";
 import { readAndValidateFile } from "./networkImport";
 import type { NetworkExportSchema } from "./networkExportSchema";
 
-export type GraphView = "force" | "circular";
+export type GraphView = "flow" | "force";
 
 interface GraphToolbarProps {
   view: GraphView;
@@ -40,17 +40,17 @@ export function GraphToolbar({
         <div style={toggleGroupStyle}>
           <button
             type="button"
+            onClick={() => onViewChange("flow")}
+            style={view === "flow" ? toggleActiveStyle : toggleStyle}
+          >
+            Flow
+          </button>
+          <button
+            type="button"
             onClick={() => onViewChange("force")}
             style={view === "force" ? toggleActiveStyle : toggleStyle}
           >
             Force
-          </button>
-          <button
-            type="button"
-            onClick={() => onViewChange("circular")}
-            style={view === "circular" ? toggleActiveStyle : toggleStyle}
-          >
-            Circular
           </button>
         </div>
 

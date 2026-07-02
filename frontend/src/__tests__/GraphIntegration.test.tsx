@@ -296,12 +296,12 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("Graph Integration", () => {
-  it("renders the graph toolbar with Force/Circular toggle", async () => {
+  it("renders the graph toolbar with Flow/Force toggle", async () => {
     renderWithProviders(<MarketDetail />);
     await waitFor(() => {
-      expect(screen.getByText("Force")).toBeInTheDocument();
+      expect(screen.getByText("Flow")).toBeInTheDocument();
     });
-    expect(screen.getByText("Circular")).toBeInTheDocument();
+    expect(screen.getByText("Force")).toBeInTheDocument();
   });
 
   it("renders export and import buttons in the toolbar", async () => {
@@ -312,22 +312,21 @@ describe("Graph Integration", () => {
     expect(screen.getByTitle("Import network from JSON")).toBeInTheDocument();
   });
 
-  it("defaults to force-directed view showing 'Bayesian Network' heading", async () => {
+  it("defaults to the flow view showing the 'Belief network' heading", async () => {
     renderWithProviders(<MarketDetail />);
     await waitFor(() => {
-      expect(screen.getByText("Bayesian Network")).toBeInTheDocument();
+      expect(screen.getByText("Belief network")).toBeInTheDocument();
     });
   });
 
-  it("switches to circular view when Circular button is clicked", async () => {
+  it("switches to the force view when Force button is clicked", async () => {
     renderWithProviders(<MarketDetail />);
     await waitFor(() => {
-      expect(screen.getByText("Circular")).toBeInTheDocument();
+      expect(screen.getByText("Force")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("Circular"));
+    fireEvent.click(screen.getByText("Force"));
 
-    // BayesNetGraph also renders "Bayesian Network" heading
     await waitFor(() => {
       expect(screen.getByText("Bayesian Network")).toBeInTheDocument();
     });
@@ -352,7 +351,7 @@ describe("Graph Integration", () => {
   it("renders graph with multiple market nodes", async () => {
     renderWithProviders(<MarketDetail />);
     await waitFor(() => {
-      expect(screen.getByText(/2 variables/)).toBeInTheDocument();
+      expect(screen.getByText(/2 markets/)).toBeInTheDocument();
     });
   });
 });

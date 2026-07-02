@@ -12,7 +12,7 @@ import { AssumptionPanel } from "@/features/assumptions/AssumptionPanel";
 import { HistoryProvider } from "@/features/history/HistoryContext";
 import { UndoRedoToolbar } from "@/features/history/UndoRedoToolbar";
 import { ForceDirectedGraph } from "@/features/graph/ForceDirectedGraph";
-import { BayesNetGraph } from "@/features/graph/BayesNetGraph";
+import { BeliefFlowGraph } from "@/features/graph/BeliefFlowGraph";
 import { GraphToolbar, type GraphView } from "@/features/graph/GraphToolbar";
 import { deriveEdgesFromCliques } from "@/features/graph/deriveEdges";
 import { buildNetworkExport, downloadJson } from "@/features/graph/networkExport";
@@ -46,7 +46,7 @@ export default function MarketDetail() {
   }, []);
 
   // Graph view toggle and toolbar state
-  const [graphView, setGraphView] = useState<GraphView>("force");
+  const [graphView, setGraphView] = useState<GraphView>("flow");
   const queryClient = useQueryClient();
   const marketsQuery = useMarkets();
   const engineStatsQuery = useEngineStats(marketId!, { enabled: true });
@@ -112,7 +112,7 @@ export default function MarketDetail() {
           {graphView === "force" ? (
             <ConnectedForceGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
           ) : (
-            <BayesNetGraph focusMarketId={m.id} />
+            <BeliefFlowGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
           )}
         </>
       ) : (
@@ -129,7 +129,7 @@ export default function MarketDetail() {
           {graphView === "force" ? (
             <ForceDirectedGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
           ) : (
-            <BayesNetGraph focusMarketId={m.id} />
+            <BeliefFlowGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
           )}
         </>
       )}
