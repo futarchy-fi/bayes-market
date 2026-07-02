@@ -83,7 +83,7 @@ function FlowNode({
   const deltaPts = delta * 100;
   const showDelta = hasDelta && Math.abs(deltaPts) >= 0.05;
 
-  const titleLines = wrapTitle(market.title, 30);
+  const titleLines = wrapTitle(market.title, 32);
   const isResolved = market.status !== "active";
 
   return (
@@ -290,7 +290,7 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
                 fill="none"
                 stroke={hot ? "var(--color-info)" : "var(--color-text-muted)"}
                 strokeWidth={hot ? 1.6 : 1}
-                opacity={dimmedByHover ? 0.25 : hot ? 1 : 0.5}
+                opacity={dimmedByHover ? 0.25 : hot ? 1 : 0.62}
                 markerEnd={hot ? "url(#bf-arrow-hot)" : "url(#bf-arrow)"}
               />
             );

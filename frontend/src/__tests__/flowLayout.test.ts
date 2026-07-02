@@ -106,10 +106,20 @@ describe("wrapTitle", () => {
     expect(lines.join(" ")).toContain("Frontier AI clears");
   });
 
-  it("ellipsizes only past two lines", () => {
+  it("uses a third line before ellipsizing", () => {
+    const lines = wrapTitle(
+      "Open-weight model within 18 months of frontier capability by 2028",
+      32,
+    );
+    expect(lines).toHaveLength(3);
+    expect(lines.every((l) => !l.endsWith("…"))).toBe(true);
+  });
+
+  it("ellipsizes only past the line limit", () => {
     const lines = wrapTitle(
       "An extremely long market title that cannot possibly fit into two narrow lines of text at all",
       20,
+      2,
     );
     expect(lines).toHaveLength(2);
     expect(lines[1]!.endsWith("…")).toBe(true);

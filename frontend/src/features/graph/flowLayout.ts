@@ -40,7 +40,7 @@ export interface FlowLayout {
 
 export const DEFAULT_FLOW_OPTIONS: FlowLayoutOptions = {
   nodeWidth: 192,
-  nodeHeight: 62,
+  nodeHeight: 76,
   columnGap: 56,
   rowGap: 26,
   padding: 12,
@@ -199,8 +199,8 @@ export function computeFlowLayout(
   return { nodes, width, height, layerCount };
 }
 
-/** Word-wrap a title into at most two lines; ellipsize only past that. */
-export function wrapTitle(title: string, maxCharsPerLine: number): string[] {
+/** Word-wrap a title into at most maxLines lines; ellipsize only past that. */
+export function wrapTitle(title: string, maxCharsPerLine: number, maxLines = 3): string[] {
   const words = title.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let current = "";
@@ -212,7 +212,7 @@ export function wrapTitle(title: string, maxCharsPerLine: number): string[] {
       current = candidate;
       continue;
     }
-    if (lines.length + 1 >= 2) {
+    if (lines.length + 1 >= maxLines) {
       overflow = true;
       break;
     }
@@ -224,5 +224,5 @@ export function wrapTitle(title: string, maxCharsPerLine: number): string[] {
     const last = lines[lines.length - 1]!;
     lines[lines.length - 1] = `${last.slice(0, Math.max(1, maxCharsPerLine - 1))}…`;
   }
-  return lines.slice(0, 2);
+  return lines.slice(0, maxLines);
 }
