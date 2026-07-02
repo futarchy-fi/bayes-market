@@ -22,6 +22,8 @@ export interface MarketSummary {
   expires_at: string;
   /** Engine variable id backing this market; used to map clique/graph node ids. */
   variableId?: string;
+  /** Current prices per outcome (kept in sync with the joint market maker). */
+  marginals?: Record<string, number>;
 }
 
 export interface Market {

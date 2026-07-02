@@ -29,6 +29,7 @@ from .errors import (
     InferenceQueryError,
     InferenceUnsupportedQueryError,
 )
+from .joint_market import JointMarket, JointMarketError
 from .network_model import (
     BayesNetworkModel,
     NetworkModelError,
@@ -57,6 +58,8 @@ __all__ = [
     "InferenceQueryError",
     "InferenceUnsupportedQueryError",
     "InvalidationResult",
+    "JointMarket",
+    "JointMarketError",
     "MarginalQueryResult",
     "NetworkModelError",
     "build_market_network",

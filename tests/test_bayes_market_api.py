@@ -395,6 +395,23 @@ def assert_marginals_close(
         test_case.assertAlmostEqual(actual[outcome_id], expected_probability, delta=delta)
 
 
+def assert_stored_marginals_match_joint(
+    test_case: unittest.TestCase,
+    market_id: str,
+) -> None:
+    # joint repricing: after every probability-edit order the server resyncs each
+    # unresolved market's stored marginals from the combinatorial LMSR joint
+    # (rounded to 6dp by resync_marginals_from_joint), so stored values must
+    # equal the live joint's unconditional marginal.
+    joint = server.get_joint_market()
+    test_case.assertIsNotNone(joint)
+    expected = joint.marginal(str(server.MARKETS[market_id]["variableId"]), {})
+    stored = server.MARKETS[market_id]["marginals"]
+    test_case.assertEqual(set(stored), set(expected))
+    for outcome_id, probability in expected.items():
+        test_case.assertAlmostEqual(stored[outcome_id], probability, delta=1e-6)
+
+
 def build_market_context_query_string(context: list[dict[str, str]]) -> str:
     return urlencode(
         [("context", f"{assignment['variableId']}={assignment['outcomeId']}") for assignment in context],
@@ -1624,7 +1641,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertTrue(payload["meta"]["timestamp"].endswith("Z"))
         self.assertEqual(
             set(payload["markets"][0].keys()),
-            {"id", "title", "variableId", "status", "liquidity", "volume", "expires_at"},
+            {"id", "title", "variableId", "status", "marginals", "liquidity", "volume", "expires_at"},
         )
         self.assertNotIn("description", payload["markets"][0])
 
@@ -3626,7 +3643,10 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         )
         self.assertEqual(payload["order"]["previousMarginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(payload["order"]["newMarginals"], {"yes": 0.8, "no": 0.2})
-        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
+        # joint repricing: the conditional edit also moves m1's stored unconditional
+        # marginal to the joint mixture over the context variable (above the 0.65 prior).
+        assert_stored_marginals_match_joint(self, "m1")
+        self.assertGreater(server.MARKETS["m1"]["marginals"]["yes"], 0.65)
         self.assertEqual(server.CONDITIONAL_MARGINALS["m1"]["autonomous_ai_coding_deployment_2028=yes"], {"yes": 0.8, "no": 0.2})
 
     def test_probability_edit_with_context_reads_base_slice_via_query_backend_adapter(self):
@@ -3873,7 +3893,11 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(order["previousMarginals"], expected_previous)
         self.assertEqual(order["newMarginals"], expected_new)
         self.assertEqual(order["impactScore"], expected_impact)
-        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
+        # joint repricing: the contextual trade (joint slice 0.65 -> 0.5; the stub
+        # backend only feeds the order preview) drags m1's stored unconditional
+        # marginal below the 0.65 prior.
+        assert_stored_marginals_match_joint(self, "m1")
+        self.assertLess(server.MARKETS["m1"]["marginals"]["yes"], 0.65)
         self.assertEqual(server.CONDITIONAL_MARGINALS["m1"]["autonomous_ai_coding_deployment_2028=yes"], expected_new)
         self.assertEqual(
             stub_backend.contexts,
@@ -3900,7 +3924,8 @@ class BayesMarketApiUnitTests(unittest.TestCase):
 
         self.assertEqual(status, 201)
         self.assertEqual(risk_status, 200)
-        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
+        # joint repricing: the conditional edit now reprices m1's stored unconditional marginals.
+        assert_stored_marginals_match_joint(self, "m1")
         self.assertEqual(
             risk_payload["account"]["risk"]["minAssets"]["overall"],
             round(100.0 - payload["order"]["impactScore"], 6),
@@ -4592,19 +4617,22 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             post_resolution_exposure["account"]["exposure"]["updatedAt"],
             event["payload"]["resolution"]["resolvedAt"],
         )
+        # joint repricing: pre-resolution stored m1 marginals reflect the earlier trades:
+        # uncond m1->0.8, then called-off bet m1|m2=yes->0.7 (P(m1=yes|m2!=yes) stays 0.8),
+        # then m2->0.4, so P(m1=yes) = 0.7*0.4 + 0.8*0.6 = 0.76.
         self.assertEqual(
             event["payload"]["effects"]["marginalDelta"],
             [
                 {
                     "variableId": "frontier_capability_breakthrough_2028",
                     "outcomeId": "yes",
-                    "before": 0.8,
+                    "before": 0.76,
                     "after": 1.0,
                 },
                 {
                     "variableId": "frontier_capability_breakthrough_2028",
                     "outcomeId": "no",
-                    "before": 0.2,
+                    "before": 0.24,
                     "after": 0.0,
                 },
             ],
@@ -7593,7 +7621,6 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
                 "context": [context_assignment],
             }
             expected_context = [context_assignment]
-            baseline_conditional_market = deepcopy(server.MARKETS[conditional_market_id]["marginals"])
 
             conditional_payload, conditional_status = server.route_request(
                 "POST",
@@ -7623,7 +7650,9 @@ class BayesMarketApiPropertyTests(unittest.TestCase):
                 self.assertEqual(conditional_status, 201)
                 self.assertEqual(conditional_payload["result"]["status"], "accepted")
                 self.assertEqual(conditional_payload["order"]["payload"]["context"], expected_context)
-                self.assertEqual(server.MARKETS[conditional_market_id]["marginals"], baseline_conditional_market)
+                # joint repricing: the conditional trade resyncs the stored unconditional
+                # marginal from the joint instead of leaving it at the pre-trade baseline.
+                assert_stored_marginals_match_joint(self, conditional_market_id)
                 self.assertEqual(
                     server.CONDITIONAL_MARGINALS[conditional_market_id][conditional_context_key],
                     conditional_payload["order"]["newMarginals"],
@@ -7832,7 +7861,6 @@ class BayesMarketApiInferenceInvariantTests(unittest.TestCase):
             reference_joint = build_reference_joint_distribution()
             target_market_id = rng.choice(active_market_ids)
             context = build_random_context(target_market_id, rng)
-            baseline_unconditional = brute_force_conditional_marginals(reference_joint, target_market_id, [])
             before_marginals = brute_force_conditional_marginals(reference_joint, target_market_id, context)
             outcome_id = rng.choice([outcome["id"] for outcome in server.MARKETS[target_market_id]["outcomes"]])
             probability = pick_probability_distinct_from_marginals(before_marginals, outcome_id, rng)
@@ -7881,9 +7909,23 @@ class BayesMarketApiInferenceInvariantTests(unittest.TestCase):
                         server.CONDITIONAL_MARGINALS[target_market_id][context_key],
                         expected_marginals,
                     )
-                    assert_marginals_close(self, server.MARKETS[target_market_id]["marginals"], baseline_unconditional)
+                    # joint repricing: stored unconditional marginals now track the traded
+                    # joint (resynced + rounded to 6dp), matching the brute-force reference.
+                    expected_unconditional = brute_force_conditional_marginals(expected_joint, target_market_id, [])
+                    assert_marginals_close(
+                        self,
+                        server.MARKETS[target_market_id]["marginals"],
+                        expected_unconditional,
+                        delta=1e-6,
+                    )
                 else:
-                    assert_marginals_close(self, server.MARKETS[target_market_id]["marginals"], expected_marginals)
+                    # joint repricing: stored values are rounded to 6dp by the resync pass.
+                    assert_marginals_close(
+                        self,
+                        server.MARKETS[target_market_id]["marginals"],
+                        expected_marginals,
+                        delta=1e-6,
+                    )
 
     def test_invariant_repeated_probability_edits_match_bruteforce_reference_on_same_slice(self):
         rng = random.Random(584008)
@@ -9950,9 +9992,12 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(post_status, 201)
         self.assertEqual(unconditional_status, 200)
         self.assertEqual(contextual_status, 200)
-        self.assertEqual(unconditional_payload["market"]["marginals"], {"yes": 0.65, "no": 0.35})
+        # joint repricing: the unconditional read now returns the joint-resynced
+        # marginals (mixture over the context variable), not the pre-trade seed values.
+        assert_stored_marginals_match_joint(self, "m1")
+        self.assertEqual(unconditional_payload["market"]["marginals"], server.MARKETS["m1"]["marginals"])
+        self.assertGreater(server.MARKETS["m1"]["marginals"]["yes"], 0.65)
         self.assertEqual(contextual_payload["market"]["marginals"], post_payload["order"]["newMarginals"])
-        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
         self.assertEqual(
             server.CONDITIONAL_MARGINALS["m1"][server.context_state_key(context)],
             post_payload["order"]["newMarginals"],
@@ -10828,7 +10873,9 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(conditional_payload["result"]["status"], "accepted")
         self.assertEqual(conditional_payload["order"]["payload"]["context"], conditional_context)
         self.assertEqual(conditional_payload["order"]["impactScore"], counterfactual_preview["assetDelta"]["impactScore"])
-        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
+        # joint repricing: stored m1 marginals now mix the traded slice with the joint:
+        # 0.8*P(m2=yes) + 0.65*P(m2!=yes) after the m2->0.4 setup edit.
+        assert_stored_marginals_match_joint(self, "m1")
         self.assertEqual(events_status, 200)
         self.assertEqual([event["seq"] for event in events_payload["events"]], [1])
         self.assertEqual(events_payload["events"][0], server.EVENTS[conditional_payload["result"]["eventId"]])
@@ -10886,7 +10933,8 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             payload["order"]["payload"]["context"],
             [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}],
         )
-        self.assertEqual(server.MARKETS["m1"]["marginals"], {"yes": 0.65, "no": 0.35})
+        # joint repricing: the conditional edit reprices m1's stored unconditional marginals.
+        assert_stored_marginals_match_joint(self, "m1")
         self.assertEqual(
             server.COMMANDS[payload["order"]["commandId"]]["payload"]["context"],
             [{"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "yes"}],

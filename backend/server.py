@@ -62,6 +62,8 @@ from backend.inference import (
     InferenceCompileError,
     InferenceQueryError,
     InferenceUnsupportedQueryError,
+    JointMarket,
+    JointMarketError,
     NetworkModelError,
     build_market_network,
     canonical_json_hash,
@@ -640,6 +642,7 @@ MARKET_SUMMARY_FIELDS = (
     "title",
     "variableId",
     "status",
+    "marginals",
     "liquidity",
     "volume",
     "expires_at",
@@ -813,6 +816,7 @@ def reset_state() -> None:
     ACCOUNT_EXPOSURE.clear()
     MARKET_ENGINE_STATS.clear()
     CACHE_INVALIDATION_MANAGER.reset()
+    reset_joint_market()
     reset_rate_limit_state()
     ORDER_COUNTER = 0
     COMMAND_COUNTER = 0
@@ -1501,6 +1505,144 @@ def get_market_network() -> BayesNetworkModel | None:
         _NETWORK_MODEL_CACHE["state_hash"] = state_hash
         _NETWORK_MODEL_CACHE["model"] = model
     return _NETWORK_MODEL_CACHE["model"]
+
+
+JOINT_MARKET_LIQUIDITY = float(os.environ.get("BAYES_JOINT_LIQUIDITY", "300"))
+_JOINT_MARKET_STATE: dict[str, Any] = {"market": None}
+
+
+def get_joint_market() -> JointMarket | None:
+    """Return the combinatorial LMSR market maker over the network joint.
+
+    Built once from the compiled network; thereafter the joint IS the market
+    state — trades and resolutions mutate it and it is never rebuilt except
+    via reset_joint_market() (used by state resets).
+    """
+    if _JOINT_MARKET_STATE["market"] is None:
+        network = get_market_network()
+        if network is None:
+            return None
+        try:
+            _JOINT_MARKET_STATE["market"] = JointMarket.from_network(
+                network, liquidity=JOINT_MARKET_LIQUIDITY
+            )
+        except JointMarketError:
+            return None
+    return _JOINT_MARKET_STATE["market"]
+
+
+def reset_joint_market() -> None:
+    """Drop the market maker so it rebuilds from the (restored) seeds."""
+    _JOINT_MARKET_STATE["market"] = None
+
+
+def resync_marginals_from_joint() -> list[str]:
+    """Reprice every unresolved market's stored marginals from the joint."""
+    joint = _JOINT_MARKET_STATE["market"]
+    if joint is None:
+        return []
+    changed: list[str] = []
+    for market_id, market in MARKETS.items():
+        if market.get("status") == "resolved":
+            continue
+        marginal = joint.marginal(str(market.get("variableId") or ""), {})
+        if not marginal:
+            continue
+        outcome_ids = [str(o["id"]) for o in market.get("outcomes", [])]
+        if not outcome_ids:
+            continue
+        rounded: dict[str, float] = {}
+        for outcome_id in outcome_ids[:-1]:
+            rounded[outcome_id] = round(float(marginal.get(outcome_id, 0.0)), 6)
+        rounded[outcome_ids[-1]] = round(1.0 - sum(rounded.values()), 6)
+        if rounded != market.get("marginals"):
+            market["marginals"] = rounded
+            changed.append(market_id)
+    return changed
+
+
+def apply_probability_edit_to_joint(
+    market: dict[str, Any], payload: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Execute a probability-edit against the joint market maker.
+
+    Marginal targets become LMSR trades on the joint (conditional targets are
+    called-off bets within the context slice); every other market's price then
+    reprices coherently. Returns the LMSR fill plus the repriced market ids,
+    or None when the market/target is outside the joint's scope.
+    """
+    joint = get_joint_market()
+    if joint is None:
+        return None
+    variable_id = str(market.get("variableId") or "")
+    if not joint.has_variable(variable_id):
+        return None
+    target = payload.get("target") or {}
+    if str(target.get("kind")) != "marginal":
+        return None
+    try:
+        probability = float(target["probability"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not 0.0 < probability < 1.0:
+        return None
+    context_mapping = {
+        str(entry["variableId"]): str(entry["outcomeId"])
+        for entry in payload.get("context") or []
+    }
+    try:
+        fill = joint.trade_to_probability(
+            variable_id, str(target.get("outcomeId")), probability, context=context_mapping
+        )
+    except JointMarketError:
+        return None
+    return {**fill, "marketsRepriced": resync_marginals_from_joint()}
+
+
+def apply_share_trade_to_joint(
+    market: dict[str, Any], outcome_id: str, signed_shares: float
+) -> dict[str, Any] | None:
+    """Execute a share-denominated event trade against the joint.
+
+    Buying s shares of an outcome at LMSR moves its price to
+    p' = p e^{s/b} / (p e^{s/b} + 1 - p); negative s sells.
+    """
+    joint = get_joint_market()
+    if joint is None or signed_shares == 0:
+        return None
+    variable_id = str(market.get("variableId") or "")
+    if not joint.has_variable(variable_id):
+        return None
+    current = joint.marginal(variable_id, {})
+    if not current:
+        return None
+    price = current.get(str(outcome_id))
+    if price is None or not 0.0 < price < 1.0:
+        return None
+    weight = math.exp(signed_shares / joint.liquidity)
+    target = price * weight / (price * weight + (1.0 - price))
+    if not 0.0 < target < 1.0:
+        return None
+    try:
+        fill = joint.trade_to_probability(variable_id, str(outcome_id), target)
+    except JointMarketError:
+        return None
+    return {**fill, "marketsRepriced": resync_marginals_from_joint()}
+
+
+def apply_resolution_to_joint(market: dict[str, Any], outcome_id: str) -> dict[str, Any] | None:
+    """Bayesian-condition the joint on a resolved market outcome."""
+    joint = get_joint_market()
+    if joint is None:
+        return None
+    variable_id = str(market.get("variableId") or "")
+    if not joint.has_variable(variable_id):
+        return None
+    try:
+        joint.condition(variable_id, str(outcome_id))
+    except JointMarketError:
+        return None
+    return {"marketsRepriced": resync_marginals_from_joint()}
 
 
 def sync_seed_marginals_with_network() -> None:
@@ -3343,7 +3485,7 @@ def get_market_detail(
                 "market": market_payload,
                 "meta": make_meta(),
             }, 200
-        network = get_market_network()
+        network = get_joint_market() or get_market_network()
         network_marginals = (
             network.marginal(
                 str(market["variableId"]),
@@ -3400,7 +3542,13 @@ def get_network_overview() -> tuple[dict[str, Any], int]:
                     }
                 )
 
-    return {"nodes": nodes, "edges": edges, "meta": make_meta()}, 200
+    joint = get_joint_market()
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "joint": joint.stats() if joint is not None else None,
+        "meta": make_meta(),
+    }, 200
 
 
 def get_market_preview_response(
@@ -4240,6 +4388,10 @@ def create_probability_edit_order(
     target = payload["target"]
     context = payload["context"]
 
+    # Warm the joint market maker BEFORE mutating stored prices, so the
+    # LMSR fill is computed against genuine pre-trade prices.
+    get_joint_market()
+
     if context:
         context_key = context_state_key(context)
         market_conditionals = CONDITIONAL_MARGINALS.setdefault(market_id, {})
@@ -4284,6 +4436,9 @@ def create_probability_edit_order(
     idempotency_key = command.get("idempotencyKey")
     if isinstance(idempotency_key, str):
         order["idempotencyKey"] = idempotency_key
+    joint_fill = apply_probability_edit_to_joint(market, payload)
+    if joint_fill is not None:
+        order["jointRepricing"] = joint_fill
     ORDERS[order["id"]] = deepcopy(order)
     return order
 
@@ -5017,6 +5172,7 @@ def transition_market_to_resolved(
     market["resolutionProbabilities"] = deepcopy(new_marginals)
     market["marginals"] = deepcopy(new_marginals)
     CONDITIONAL_MARGINALS.pop(market_id, None)
+    apply_resolution_to_joint(market, outcome_id)
 
     return {
         "market": deepcopy(market),
@@ -6240,6 +6396,8 @@ def apply_seed_calibration() -> None:
 apply_seed_calibration()
 # Align seeded prices with the joint implied by the CPT network.
 sync_seed_marginals_with_network()
+# Warm the combinatorial market maker so first-trade fills see real prices.
+get_joint_market()
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 

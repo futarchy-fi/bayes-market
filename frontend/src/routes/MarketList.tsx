@@ -216,6 +216,7 @@ export default function MarketList() {
                 <span style={{ fontWeight: 500, fontSize: "0.95rem" }}>{m.title}</span>
                 <StatusBadge status={m.status} />
               </div>
+              <PriceBar marginals={m.marginals} />
               <div style={{ display: "flex", gap: "var(--space-lg)", fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: "var(--space-sm)" }}>
                 <span>Vol {formatCurrency(m.volume)}</span>
                 <span>Liq {formatCurrency(m.liquidity)}</span>
@@ -231,6 +232,23 @@ export default function MarketList() {
           No markets found.
         </div>
       )}
+    </div>
+  );
+}
+
+/** One thin bar on a shared 0-100% scale: the market's P(yes). */
+function PriceBar({ marginals }: { marginals?: Record<string, number> }) {
+  if (!marginals) return null;
+  const p = marginals["yes"] ?? Object.values(marginals)[0];
+  if (typeof p !== "number") return null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: "var(--space-sm)" }}>
+      <div style={{ flex: 1, height: 5, borderRadius: 2.5, background: "var(--color-border)", overflow: "hidden" }}>
+        <div style={{ width: `${p * 100}%`, height: "100%", background: "var(--color-info)", borderRadius: "0 2.5px 2.5px 0" }} />
+      </div>
+      <span style={{ fontSize: "0.8rem", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+        {(p * 100).toFixed(1)}%
+      </span>
     </div>
   );
 }

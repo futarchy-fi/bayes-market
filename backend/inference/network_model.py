@@ -134,6 +134,16 @@ class BayesNetworkModel:
     def variables(self) -> tuple[str, ...]:
         return tuple(self._order)
 
+    def export_state(
+        self,
+    ) -> tuple[tuple[str, ...], dict[str, tuple[str, ...]], list[float]]:
+        """Expose (variable order, outcomes per variable, joint copy).
+
+        Used to seed mutable consumers (the combinatorial LMSR market maker)
+        from the compiled network without re-deriving the joint.
+        """
+        return tuple(self._order), dict(self._outcomes), list(self._joint)
+
     def has_variable(self, variable_id: str) -> bool:
         return variable_id in self._pos
 
