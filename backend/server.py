@@ -8,6 +8,7 @@ import hashlib
 import html
 import importlib.util
 import json
+import logging
 import math
 import os
 import re
@@ -91,6 +92,8 @@ if _LMSR_SPEC is None or _LMSR_SPEC.loader is None:
     raise RuntimeError(f"Unable to load LMSR module from {LMSR_MODULE_PATH}")
 lmsr = importlib.util.module_from_spec(_LMSR_SPEC)
 _LMSR_SPEC.loader.exec_module(lmsr)
+
+LOGGER = logging.getLogger(__name__)
 
 INITIAL_MARKETS: dict[str, dict[str, Any]] = {
     "m1": {
@@ -634,6 +637,286 @@ CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = {
         },
     },
 }
+
+
+BAYES_SEEDS_PATH = (os.environ.get("BAYES_SEEDS_PATH") or "").strip()
+EXTERNAL_SEEDS_LOADED = False
+_SEED_VARIABLE_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_SEED_MARKET_REQUIRED_FIELDS = frozenset(
+    {
+        "id",
+        "title",
+        "description",
+        "variableId",
+        "status",
+        "outcomes",
+        "marginals",
+        "liquidity",
+        "volume",
+        "created_at",
+        "expires_at",
+    }
+)
+_SEED_ALLOWED_MARKET_STATUSES = frozenset({"active", "resolved", "closed", "draft"})
+
+
+def _warn_seed_file(message: str, *args: object) -> None:
+    LOGGER.warning("BAYES_SEEDS_PATH: " + message, *args)
+
+
+def _normalize_seed_probability_row(
+    raw_row: object,
+    outcome_ids: list[str],
+    *,
+    field: str,
+) -> dict[str, float]:
+    if not isinstance(raw_row, dict):
+        raise ValueError(f"{field} must be an object")
+
+    raw_keys = {str(key) for key in raw_row.keys()}
+    expected_keys = set(outcome_ids)
+    missing = [outcome_id for outcome_id in outcome_ids if outcome_id not in raw_keys]
+    unexpected = sorted(raw_keys - expected_keys)
+    if missing or unexpected:
+        raise ValueError(f"{field} must contain exactly the market outcome ids")
+
+    values: dict[str, float] = {}
+    total = 0.0
+    for outcome_id in outcome_ids:
+        try:
+            value = float(raw_row[outcome_id])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{field}.{outcome_id} must be numeric") from exc
+        if not math.isfinite(value) or value < 0.0:
+            raise ValueError(f"{field}.{outcome_id} must be a finite non-negative number")
+        values[outcome_id] = value
+        total += value
+
+    if total <= 0.0:
+        raise ValueError(f"{field} must have positive probability mass")
+
+    normalized: dict[str, float] = {}
+    running = 0.0
+    for outcome_id in outcome_ids[:-1]:
+        probability = values[outcome_id] / total
+        normalized[outcome_id] = probability
+        running += probability
+    normalized[outcome_ids[-1]] = max(0.0, 1.0 - running)
+    return normalized
+
+
+def _validate_seed_market_record(market_id: str, raw_record: object) -> dict[str, Any]:
+    if not isinstance(raw_record, dict):
+        raise ValueError("market record must be an object")
+
+    missing = sorted(field for field in _SEED_MARKET_REQUIRED_FIELDS if field not in raw_record)
+    if missing:
+        raise ValueError("market record is missing required fields: " + ", ".join(missing))
+
+    record_id = str(raw_record.get("id") or "").strip()
+    if record_id != market_id:
+        raise ValueError("market record id must match its markets key")
+
+    variable_id = str(raw_record.get("variableId") or "").strip()
+    if not _SEED_VARIABLE_ID_RE.fullmatch(variable_id):
+        raise ValueError("variableId must be nonempty snake_case and at most 64 characters")
+
+    status = str(raw_record.get("status") or "").strip()
+    if status not in _SEED_ALLOWED_MARKET_STATUSES:
+        raise ValueError("status must be one of the supported market states")
+
+    raw_outcomes = raw_record.get("outcomes")
+    if not isinstance(raw_outcomes, list) or len(raw_outcomes) < 2:
+        raise ValueError("outcomes must contain at least two entries")
+
+    outcome_ids: list[str] = []
+    outcomes: list[dict[str, Any]] = []
+    for index, raw_outcome in enumerate(raw_outcomes):
+        if not isinstance(raw_outcome, dict):
+            raise ValueError(f"outcomes[{index}] must be an object")
+        outcome_id = str(raw_outcome.get("id") or "").strip()
+        if not outcome_id:
+            raise ValueError(f"outcomes[{index}].id must be nonempty")
+        if outcome_id in outcome_ids:
+            raise ValueError("outcome ids must be unique")
+        outcome = deepcopy(raw_outcome)
+        outcome["id"] = outcome_id
+        outcome.setdefault("name", outcome_id)
+        outcomes.append(outcome)
+        outcome_ids.append(outcome_id)
+
+    normalized_marginals = _normalize_seed_probability_row(
+        raw_record.get("marginals"),
+        outcome_ids,
+        field=f"markets.{market_id}.marginals",
+    )
+
+    normalized = deepcopy(raw_record)
+    normalized["id"] = market_id
+    normalized["variableId"] = variable_id
+    normalized["status"] = status
+    normalized["outcomes"] = outcomes
+    normalized["marginals"] = normalized_marginals
+
+    for numeric_field in ("liquidity", "volume"):
+        try:
+            value = float(raw_record[numeric_field])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{numeric_field} must be numeric") from exc
+        if not math.isfinite(value) or value < 0.0:
+            raise ValueError(f"{numeric_field} must be a finite non-negative number")
+        normalized[numeric_field] = value
+
+    for text_field in ("title", "description", "created_at", "expires_at"):
+        value = raw_record.get(text_field)
+        if not isinstance(value, str):
+            raise ValueError(f"{text_field} must be a string")
+        normalized[text_field] = value
+
+    for object_field in ("provenance", "anchor"):
+        if object_field in raw_record and not isinstance(raw_record[object_field], dict):
+            raise ValueError(f"{object_field} must be an object")
+
+    if "ftmImplied" in raw_record:
+        try:
+            ftm_implied = float(raw_record["ftmImplied"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("ftmImplied must be numeric") from exc
+        if not math.isfinite(ftm_implied):
+            raise ValueError("ftmImplied must be finite")
+        normalized["ftmImplied"] = ftm_implied
+
+    return normalized
+
+
+def _seed_market_outcome_ids(markets: dict[str, dict[str, Any]]) -> dict[str, set[str]]:
+    return {
+        str(market.get("variableId")): {str(outcome.get("id")) for outcome in market.get("outcomes", [])}
+        for market in markets.values()
+        if market.get("variableId")
+    }
+
+
+def _normalize_seed_conditional_rows(
+    raw_rows: object,
+    *,
+    market_id: str,
+    child_outcome_ids: list[str],
+    variable_outcome_ids: dict[str, set[str]],
+) -> dict[str, dict[str, float]]:
+    if not isinstance(raw_rows, dict):
+        raise ValueError("conditional marginal rows must be an object")
+
+    normalized_rows: dict[str, dict[str, float]] = {}
+    for raw_context_key, raw_row in raw_rows.items():
+        context_key = str(raw_context_key)
+        try:
+            pairs = parse_cpt_key(context_key)
+            if not pairs:
+                raise ValueError("context key must name at least one parent assignment")
+            for variable_id, outcome_id in pairs:
+                parent_outcomes = variable_outcome_ids.get(variable_id)
+                if parent_outcomes is None:
+                    raise ValueError(f"context references unknown variableId {variable_id}")
+                if outcome_id not in parent_outcomes:
+                    raise ValueError(f"context references unknown outcome {variable_id}={outcome_id}")
+            normalized_rows[context_key] = _normalize_seed_probability_row(
+                raw_row,
+                child_outcome_ids,
+                field=f"conditionalMarginals.{market_id}.{context_key}",
+            )
+        except ValueError as exc:
+            _warn_seed_file("skipping conditional row %s for %s: %s", context_key, market_id, exc)
+    return normalized_rows
+
+
+def _merge_external_seed_file() -> None:
+    global EXTERNAL_SEEDS_LOADED
+
+    if not BAYES_SEEDS_PATH:
+        return
+
+    seed_path = Path(BAYES_SEEDS_PATH).expanduser()
+    if not seed_path.exists():
+        return
+
+    try:
+        payload = json.loads(seed_path.read_text())
+        if not isinstance(payload, dict):
+            raise ValueError("seed file root must be an object")
+        if payload.get("version") != "seeds-v1":
+            raise ValueError("seed file version must be seeds-v1")
+        raw_markets = payload.get("markets")
+        raw_conditionals = payload.get("conditionalMarginals")
+        if not isinstance(raw_markets, dict):
+            raise ValueError("markets must be an object")
+        if not isinstance(raw_conditionals, dict):
+            raise ValueError("conditionalMarginals must be an object")
+    except (OSError, ValueError) as exc:
+        _warn_seed_file("unable to load %s: %s", seed_path, exc)
+        return
+
+    existing_market_ids = set(INITIAL_MARKETS)
+    existing_variable_ids = {
+        str(market.get("variableId")) for market in INITIAL_MARKETS.values() if market.get("variableId")
+    }
+    accepted_markets: dict[str, dict[str, Any]] = {}
+    accepted_variable_ids: set[str] = set()
+
+    for raw_market_id, raw_record in raw_markets.items():
+        market_id = str(raw_market_id)
+        try:
+            market = _validate_seed_market_record(market_id, raw_record)
+        except ValueError as exc:
+            _warn_seed_file("skipping market %s: %s", market_id, exc)
+            continue
+
+        variable_id = str(market["variableId"])
+        if market_id in existing_market_ids or market_id in accepted_markets:
+            _warn_seed_file("skipping market %s: market id collides with an existing seed", market_id)
+            continue
+        if variable_id in existing_variable_ids or variable_id in accepted_variable_ids:
+            _warn_seed_file("skipping market %s: variableId %s collides with an existing seed", market_id, variable_id)
+            continue
+
+        accepted_markets[market_id] = market
+        accepted_variable_ids.add(variable_id)
+
+    if not accepted_markets:
+        return
+
+    all_markets = {**INITIAL_MARKETS, **accepted_markets}
+    variable_outcome_ids = _seed_market_outcome_ids(all_markets)
+    accepted_conditionals: dict[str, dict[str, dict[str, float]]] = {}
+    for market_id, market in accepted_markets.items():
+        raw_rows = raw_conditionals.get(market_id, {})
+        child_outcome_ids = [str(outcome["id"]) for outcome in market["outcomes"]]
+        try:
+            rows = _normalize_seed_conditional_rows(
+                raw_rows,
+                market_id=market_id,
+                child_outcome_ids=child_outcome_ids,
+                variable_outcome_ids=variable_outcome_ids,
+            )
+        except ValueError as exc:
+            _warn_seed_file("skipping conditional rows for %s: %s", market_id, exc)
+            rows = {}
+        if rows:
+            accepted_conditionals[market_id] = rows
+
+    INITIAL_MARKETS.update(accepted_markets)
+    CONDITIONAL_MARGINALS.update(accepted_conditionals)
+    EXTERNAL_SEEDS_LOADED = True
+    LOGGER.info(
+        "Loaded %d external seed markets and %d CPT groups from %s",
+        len(accepted_markets),
+        len(accepted_conditionals),
+        seed_path,
+    )
+
+
+_merge_external_seed_file()
+
 INITIAL_CONDITIONAL_MARGINALS: dict[str, dict[str, dict[str, float]]] = deepcopy(CONDITIONAL_MARGINALS)
 
 ALLOWED_MARKET_STATUSES = frozenset({"active", "resolved", "closed", "draft"})
@@ -648,6 +931,17 @@ MARKET_SUMMARY_FIELDS = (
     "liquidity",
     "volume",
     "expires_at",
+    "anchor",
+    "ftmImplied",
+)
+GRAPH_MARKET_FIELDS = (
+    "id",
+    "variableId",
+    "title",
+    "marginals",
+    "status",
+    "anchor",
+    "ftmImplied",
 )
 
 ACCOUNT_RISK_LIMIT = 100.0
@@ -801,6 +1095,8 @@ def reset_state() -> None:
     MARKETS.clear()
     MARKETS.update(deepcopy(INITIAL_MARKETS))
     CONDITIONAL_MARGINALS.clear()
+    if EXTERNAL_SEEDS_LOADED:
+        CONDITIONAL_MARGINALS.update(deepcopy(INITIAL_CONDITIONAL_MARGINALS))
     ORDERS.clear()
     COMMANDS.clear()
     with _EVENTS_LOCK:
@@ -1411,7 +1707,12 @@ def service_index_payload() -> dict[str, Any]:
 
 def market_summary(market: dict[str, Any]) -> dict[str, Any]:
     """Project a market record down to the list response fields."""
-    return {field: market.get(field) for field in MARKET_SUMMARY_FIELDS}
+    return {field: market.get(field) for field in MARKET_SUMMARY_FIELDS if field in market}
+
+
+def graph_market_summary(market: dict[str, Any]) -> dict[str, Any]:
+    """Project a market record down to graph-list fields."""
+    return {field: market.get(field) for field in GRAPH_MARKET_FIELDS if field in market}
 
 
 def percentile_ms(values: list[float], ratio: float) -> float:
@@ -1775,6 +2076,10 @@ def sync_seed_marginals_with_network() -> None:
     try:
         model = build_market_network(MARKETS, CONDITIONAL_MARGINALS)
     except NetworkModelError:
+        # Too many variables for the explicit joint: sync through the
+        # factored maker instead, which scales with treewidth.
+        if get_joint_market() is not None:
+            resync_marginals_from_joint()
         return
     for market in MARKETS.values():
         implied = model.marginal(str(market.get("variableId")), {})
@@ -2790,6 +3095,33 @@ def parse_market_list_query(query: dict[str, list[str]]) -> dict[str, Any]:
             {"parameter": "q", "received": query_values},
         )
 
+    fields_values = query.get("fields", [])
+    if len(fields_values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "fields must be provided at most once",
+            {"parameter": "fields", "received": fields_values},
+        )
+
+    limit_values = query.get("limit", [])
+    if len(limit_values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "limit must be provided at most once",
+            {"parameter": "limit", "received": limit_values},
+        )
+
+    offset_values = query.get("offset", [])
+    if len(offset_values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "offset must be provided at most once",
+            {"parameter": "offset", "received": offset_values},
+        )
+
     raw_status = status_values[0] if status_values else None
     status: str | None = raw_status
     if status == "all":
@@ -2819,12 +3151,31 @@ def parse_market_list_query(query: dict[str, list[str]]) -> dict[str, Any]:
     # status=all and status=resolved both implicitly include resolved markets.
     effective_include_resolved = include_resolved or raw_status == "all" or status == "resolved"
 
-    return {
+    fields = fields_values[0] if fields_values else None
+    if fields is not None and fields != "graph":
+        raise ApiError(
+            400,
+            "invalid_query",
+            "fields must be one of the supported projections",
+            {"parameter": "fields", "received": fields, "allowed": ["graph"]},
+        )
+
+    limit = parse_integer_query_param(query, "limit", default=0, minimum=1) if limit_values else None
+    offset = parse_integer_query_param(query, "offset", default=0, minimum=0) if offset_values else 0
+
+    filters: dict[str, Any] = {
         "status": status,
         "sort": sort,
         "q": title_query,
         "include_resolved": effective_include_resolved,
     }
+    if fields is not None:
+        filters["fields"] = fields
+    if limit is not None:
+        filters["limit"] = limit
+    if limit is not None or offset_values:
+        filters["offset"] = offset
+    return filters
 
 
 def snapshot_market_analytics_state(market_id: str) -> dict[str, Any]:
@@ -3431,6 +3782,10 @@ def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
     sort = filters["sort"]
     title_query = filters["q"]
     include_resolved = filters["include_resolved"]
+    fields = filters.get("fields")
+    limit = filters.get("limit")
+    offset = int(filters.get("offset", 0)) if ("limit" in filters or "offset" in filters) else 0
+    pagination_requested = "limit" in filters or "offset" in filters
 
     if not include_resolved:
         markets = [market for market in markets if market["status"] != "resolved"]
@@ -3450,12 +3805,22 @@ def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
             reverse=True,
         )
 
-    summaries = [market_summary(market) for market in markets]
-    return {
+    total = len(markets)
+    if pagination_requested:
+        markets = markets[offset:]
+        if limit is not None:
+            markets = markets[: int(limit)]
+
+    project_market = graph_market_summary if fields == "graph" else market_summary
+    summaries = [project_market(market) for market in markets]
+    response = {
         "markets": summaries,
         "count": len(summaries),
         "meta": make_meta(filters=filters),
-    }, 200
+    }
+    if pagination_requested:
+        response["total"] = total
+    return response, 200
 
 
 def create_market(body: dict[str, Any] | None) -> tuple[dict[str, Any], int]:

@@ -1,0 +1,518 @@
+{
+ "harvestedAt": "2026-07-04T02:45:00Z",
+ "method": "browser-dom-feed-scrape",
+ "note": "Metaculus API is auth-gated; values are community CHANCE from feed cards. Refresh requires a browser session or METACULUS_TOKEN.",
+ "candidates": [
+  {
+   "qid": "41193",
+   "title": "\u0391I safety law enacted in the US in 2026?",
+   "pct": 24.0,
+   "forecasters": 817,
+   "url": "https://www.metaculus.com/questions/41193/"
+  },
+  {
+   "qid": "40972",
+   "title": "Will NVDA close below $100 in 2026?",
+   "pct": 5.0,
+   "forecasters": 790,
+   "url": "https://www.metaculus.com/questions/40972/"
+  },
+  {
+   "qid": "4118",
+   "title": "ASI Transition Beneficial for Humanity",
+   "pct": 50.0,
+   "forecasters": 469,
+   "url": "https://www.metaculus.com/questions/4118/"
+  },
+  {
+   "qid": "1495",
+   "title": "GC to be caused by AI, if it occurs?",
+   "pct": 25.0,
+   "forecasters": 468,
+   "url": "https://www.metaculus.com/questions/1495/"
+  },
+  {
+   "qid": "372",
+   "title": "Brain Emulation Produces First Human AI",
+   "pct": 1.0,
+   "forecasters": 437,
+   "url": "https://www.metaculus.com/questions/372/"
+  },
+  {
+   "qid": "1651",
+   "title": "Breakthrough in Protein Prediction by 2031",
+   "pct": 99.0,
+   "forecasters": 300,
+   "url": "https://www.metaculus.com/questions/1651/"
+  },
+  {
+   "qid": "4055",
+   "title": "First AGI based on deep learning?",
+   "pct": 95.0,
+   "forecasters": 279,
+   "url": "https://www.metaculus.com/questions/4055/"
+  },
+  {
+   "qid": "31711",
+   "title": "AI system beat human pros in forecasting tournament by 2030?",
+   "pct": 98.0,
+   "forecasters": 198,
+   "url": "https://www.metaculus.com/questions/31711/"
+  },
+  {
+   "qid": "43494",
+   "title": "US/EU restriction on data center grid before Sep 2026?",
+   "pct": 25.0,
+   "forecasters": 194,
+   "url": "https://www.metaculus.com/questions/43494/"
+  },
+  {
+   "qid": "19879",
+   "title": "Will Tesla mass produce humanoid robots",
+   "pct": 50.0,
+   "forecasters": 175,
+   "url": "https://www.metaculus.com/questions/19879/"
+  },
+  {
+   "qid": "26326",
+   "title": "5Y after AGI, universal basic income?",
+   "pct": 25.0,
+   "forecasters": 172,
+   "url": "https://www.metaculus.com/questions/26326/"
+  },
+  {
+   "qid": "38190",
+   "title": "AI safety checks mandated before Jan 20, 2029?",
+   "pct": 50.0,
+   "forecasters": 168,
+   "url": "https://www.metaculus.com/questions/38190/"
+  },
+  {
+   "qid": "4334",
+   "title": "If chess is solved before 2080, must perfect play result in a forced draw?",
+   "pct": 88.0,
+   "forecasters": 167,
+   "url": "https://www.metaculus.com/questions/4334/"
+  },
+  {
+   "qid": "7814",
+   "title": "AI incident causes $1bn damage before 2032",
+   "pct": 76.0,
+   "forecasters": 147,
+   "url": "https://www.metaculus.com/questions/7814/"
+  },
+  {
+   "qid": "16014",
+   "title": "AI Unauthorized Access Before 2033?",
+   "pct": 98.0,
+   "forecasters": 143,
+   "url": "https://www.metaculus.com/questions/16014/"
+  },
+  {
+   "qid": "38405",
+   "title": "Will OpenAI, DeepMind, or Anthropic have revenue of at least $100B in 2027?",
+   "pct": 70.0,
+   "forecasters": 141,
+   "url": "https://www.metaculus.com/questions/38405/"
+  },
+  {
+   "qid": "8404",
+   "title": "25% of NYT Best Sellers Written by AI by 2050",
+   "pct": 33.0,
+   "forecasters": 136,
+   "url": "https://www.metaculus.com/questions/8404/"
+  },
+  {
+   "qid": "38417",
+   "title": "Will the US government mandate security clearance for frontier AI R&D staff?",
+   "pct": 33.0,
+   "forecasters": 113,
+   "url": "https://www.metaculus.com/questions/38417/"
+  },
+  {
+   "qid": "39129",
+   "title": "By 2030, will general-purpose robot learning new tasks be >$20k?",
+   "pct": 70.0,
+   "forecasters": 113,
+   "url": "https://www.metaculus.com/questions/39129/"
+  },
+  {
+   "qid": "38596",
+   "title": "US government control of any US AI company or project before 2029?",
+   "pct": 19.0,
+   "forecasters": 112,
+   "url": "https://www.metaculus.com/questions/38596/"
+  },
+  {
+   "qid": "10965",
+   "title": "US Compute Capacity Restrictions before 2050?",
+   "pct": 40.0,
+   "forecasters": 104,
+   "url": "https://www.metaculus.com/questions/10965/"
+  },
+  {
+   "qid": "8403",
+   "title": "25% Top 100 Songs Made By AI by 2050",
+   "pct": 70.0,
+   "forecasters": 102,
+   "url": "https://www.metaculus.com/questions/8403/"
+  },
+  {
+   "qid": "43525",
+   "title": "Will Atlas browser be released for Windows before September 1, 2026?",
+   "pct": 4.0,
+   "forecasters": 100,
+   "url": "https://www.metaculus.com/questions/43525/"
+  },
+  {
+   "qid": "38597",
+   "title": "US gov veto on frontier AI deployment by 2028?",
+   "pct": 32.0,
+   "forecasters": 100,
+   "url": "https://www.metaculus.com/questions/38597/"
+  },
+  {
+   "qid": "39159",
+   "title": "Will OpenAI, Meta, or Alphabet CEO pledge AI autonomy limits before 2027?",
+   "pct": 10.0,
+   "forecasters": 96,
+   "url": "https://www.metaculus.com/questions/39159/"
+  },
+  {
+   "qid": "19298",
+   "title": "Int'l TAI oversight agency before 2030",
+   "pct": 42.0,
+   "forecasters": 85,
+   "url": "https://www.metaculus.com/questions/19298/"
+  },
+  {
+   "qid": "39136",
+   "title": "Will cyberattack targeting AI cause power blackout in the US before 2028?",
+   "pct": 11.0,
+   "forecasters": 80,
+   "url": "https://www.metaculus.com/questions/39136/"
+  },
+  {
+   "qid": "18265",
+   "title": "AI successfully making $1 million in retail",
+   "pct": 9.0,
+   "forecasters": 78,
+   "url": "https://www.metaculus.com/questions/18265/"
+  },
+  {
+   "qid": "4873",
+   "title": "OpenAI Reaches Profit Cap by 2035",
+   "pct": 50.0,
+   "forecasters": 78,
+   "url": "https://www.metaculus.com/questions/4873/"
+  },
+  {
+   "qid": "43900",
+   "title": "Bot superiority in summer 2026 metaculus cup?",
+   "pct": 14.0,
+   "forecasters": 77,
+   "url": "https://www.metaculus.com/questions/43900/"
+  },
+  {
+   "qid": "27034",
+   "title": "Open-source AI regulation 2028",
+   "pct": 25.0,
+   "forecasters": 72,
+   "url": "https://www.metaculus.com/questions/27034/"
+  },
+  {
+   "qid": "39166",
+   "title": "Before 2028, will a top-5 US insurer exclude AI lacking human override?",
+   "pct": 51.0,
+   "forecasters": 72,
+   "url": "https://www.metaculus.com/questions/39166/"
+  },
+  {
+   "qid": "26267",
+   "title": "5Y after AGI, nuclear fusion 10% world energy",
+   "pct": 20.0,
+   "forecasters": 72,
+   "url": "https://www.metaculus.com/questions/26267/"
+  },
+  {
+   "qid": "39135",
+   "title": "Before 2032 will central bank or finance ministry credit an ai forecast?",
+   "pct": 18.0,
+   "forecasters": 72,
+   "url": "https://www.metaculus.com/questions/39135/"
+  },
+  {
+   "qid": "16553",
+   "title": "AI Blackmail for Material Gain by EOY 2028",
+   "pct": 71.0,
+   "forecasters": 71,
+   "url": "https://www.metaculus.com/questions/16553/"
+  },
+  {
+   "qid": "22388",
+   "title": "Universal Basic Income by 2030",
+   "pct": 3.0,
+   "forecasters": 67,
+   "url": "https://www.metaculus.com/questions/22388/"
+  },
+  {
+   "qid": "20460",
+   "title": "Large Domestic Order Chinese AI Chips",
+   "pct": 94.0,
+   "forecasters": 67,
+   "url": "https://www.metaculus.com/questions/20460/"
+  },
+  {
+   "qid": "20157",
+   "title": "Chinese foundry with \u226520% of semi market?",
+   "pct": 53.0,
+   "forecasters": 66,
+   "url": "https://www.metaculus.com/questions/20157/"
+  },
+  {
+   "qid": "31688",
+   "title": "Frontier model released in 2029 without third-party evals?",
+   "pct": 77.0,
+   "forecasters": 62,
+   "url": "https://www.metaculus.com/questions/31688/"
+  },
+  {
+   "qid": "20136",
+   "title": "Chinese foundry with \u22650.2x of TSMC market cap",
+   "pct": 16.0,
+   "forecasters": 62,
+   "url": "https://www.metaculus.com/questions/20136/"
+  },
+  {
+   "qid": "17112",
+   "title": "Cybersecurity Laws for Powerful AI by 2030?",
+   "pct": 85.0,
+   "forecasters": 59,
+   "url": "https://www.metaculus.com/questions/17112/"
+  },
+  {
+   "qid": "20466",
+   "title": "Chinese Model Chinese Chips",
+   "pct": 71.0,
+   "forecasters": 56,
+   "url": "https://www.metaculus.com/questions/20466/"
+  },
+  {
+   "qid": "35600",
+   "title": "AI benefits redistribution mechanism?",
+   "pct": 3.0,
+   "forecasters": 55,
+   "url": "https://www.metaculus.com/questions/35600/"
+  },
+  {
+   "qid": "20135",
+   "title": "Chinese EUV machine marketed by 2033?",
+   "pct": 94.0,
+   "forecasters": 54,
+   "url": "https://www.metaculus.com/questions/20135/"
+  },
+  {
+   "qid": "19038",
+   "title": "AI: Best Practice in Psychology by 2028",
+   "pct": 50.0,
+   "forecasters": 52,
+   "url": "https://www.metaculus.com/questions/19038/"
+  },
+  {
+   "qid": "27063",
+   "title": "CTs Power-Seeking AI Shut Off",
+   "pct": 90.0,
+   "forecasters": 49,
+   "url": "https://www.metaculus.com/questions/27063/"
+  },
+  {
+   "qid": "26268",
+   "title": "5Y after AGI, AI philosophical competence?",
+   "pct": 10.0,
+   "forecasters": 49,
+   "url": "https://www.metaculus.com/questions/26268/"
+  },
+  {
+   "qid": "20146",
+   "title": "Chinese volume production using EUV by 2033?",
+   "pct": 98.0,
+   "forecasters": 49,
+   "url": "https://www.metaculus.com/questions/20146/"
+  },
+  {
+   "qid": "40552",
+   "title": "Will OpenAI file an S-1 before 2027?",
+   "pct": 70.0,
+   "forecasters": 43,
+   "url": "https://www.metaculus.com/questions/40552/"
+  },
+  {
+   "qid": "20169",
+   "title": "Chinese fab with >150 MTr/mm\u00b2 process by 2027",
+   "pct": 27.0,
+   "forecasters": 43,
+   "url": "https://www.metaculus.com/questions/20169/"
+  },
+  {
+   "qid": "15610",
+   "title": "Data centres >10% of global electricity",
+   "pct": 25.0,
+   "forecasters": 43,
+   "url": "https://www.metaculus.com/questions/15610/"
+  },
+  {
+   "qid": "27061",
+   "title": "CTs AI Admin Disempowerment Before 2030",
+   "pct": 55.0,
+   "forecasters": 42,
+   "url": "https://www.metaculus.com/questions/27061/"
+  },
+  {
+   "qid": "26289",
+   "title": "5Y after AGI, Windfall Clause activated?",
+   "pct": 1.0,
+   "forecasters": 40,
+   "url": "https://www.metaculus.com/questions/26289/"
+  },
+  {
+   "qid": "26286",
+   "title": "5Y after AGI, nuclear deterrence undermined?",
+   "pct": 40.0,
+   "forecasters": 37,
+   "url": "https://www.metaculus.com/questions/26286/"
+  },
+  {
+   "qid": "20134",
+   "title": "Chinese ArFi machine used at scale by 2026?",
+   "pct": 50.0,
+   "forecasters": 36,
+   "url": "https://www.metaculus.com/questions/20134/"
+  },
+  {
+   "qid": "15615",
+   "title": "Mandatory GCR-Focused Evals for AI Systems",
+   "pct": 33.3,
+   "forecasters": 32,
+   "url": "https://www.metaculus.com/questions/15615/"
+  },
+  {
+   "qid": "38852",
+   "title": "Will global corp spending on AI be \u2265$700B during the calendar year 2029?",
+   "pct": 68.0,
+   "forecasters": 31,
+   "url": "https://www.metaculus.com/questions/38852/"
+  },
+  {
+   "qid": "18365",
+   "title": "Rob Long Says AI Conscious By 2030?",
+   "pct": 63.0,
+   "forecasters": 29,
+   "url": "https://www.metaculus.com/questions/18365/"
+  },
+  {
+   "qid": "43314",
+   "title": "Claude Code with Claude Pro through 2026?",
+   "pct": 65.0,
+   "forecasters": 25,
+   "url": "https://www.metaculus.com/questions/43314/"
+  },
+  {
+   "qid": "14022",
+   "title": "Backpropagation taking a back seat by 2030",
+   "pct": 9.0,
+   "forecasters": 24,
+   "url": "https://www.metaculus.com/questions/14022/"
+  },
+  {
+   "qid": "20110",
+   "title": "Is krantz data critical to alignment?",
+   "pct": 1.0,
+   "forecasters": 22,
+   "url": "https://www.metaculus.com/questions/20110/"
+  },
+  {
+   "qid": "43267",
+   "title": "1,000,000 UGVs in Ukrainian war before 2031",
+   "pct": 27.0,
+   "forecasters": 21,
+   "url": "https://www.metaculus.com/questions/43267/"
+  },
+  {
+   "qid": "27761",
+   "title": "ai lab aluminum 2030",
+   "pct": 4.0,
+   "forecasters": 21,
+   "url": "https://www.metaculus.com/questions/27761/"
+  },
+  {
+   "qid": "10426",
+   "title": "Mochizuki Retracts Proof of abc conjecture",
+   "pct": 8.0,
+   "forecasters": 20,
+   "url": "https://www.metaculus.com/questions/10426/"
+  },
+  {
+   "qid": "11319",
+   "title": "Quantum Computing Tolerance at 5%",
+   "pct": 50.0,
+   "forecasters": 19,
+   "url": "https://www.metaculus.com/questions/11319/"
+  },
+  {
+   "qid": "43841",
+   "title": "Will OpenAI file an S-1 with the SEC to launch an IPO, before September 1, 2026?",
+   "pct": 52.0,
+   "forecasters": 14,
+   "url": "https://www.metaculus.com/questions/43841/"
+  },
+  {
+   "qid": "44163",
+   "title": "SpaceX make acquisition at >$100B before 2028?",
+   "pct": 52.0,
+   "forecasters": 13,
+   "url": "https://www.metaculus.com/questions/44163/"
+  },
+  {
+   "qid": "43511",
+   "title": "OpenAI bankruptcy risk before 2028?",
+   "pct": 1.6,
+   "forecasters": 11,
+   "url": "https://www.metaculus.com/questions/43511/"
+  },
+  {
+   "qid": "41141",
+   "title": "Will OpenAI file for an IPO during 2026?",
+   "pct": 33.0,
+   "forecasters": 788,
+   "url": "https://www.metaculus.com/questions/41141/"
+  },
+  {
+   "qid": "4409",
+   "title": "Will one of the first AGI claim to be conscious?",
+   "pct": 58.0,
+   "forecasters": 239,
+   "url": "https://www.metaculus.com/questions/4409/"
+  },
+  {
+   "qid": "39149",
+   "title": "US-China AGI-limiting treaty signed before 2030?",
+   "pct": 4.0,
+   "forecasters": 108,
+   "url": "https://www.metaculus.com/questions/39149/"
+  },
+  {
+   "qid": "26246",
+   "title": "Five years after AGI, will human mind uploading have happened?",
+   "pct": 5.0,
+   "forecasters": 84,
+   "url": "https://www.metaculus.com/questions/26246/"
+  },
+  {
+   "qid": "8325",
+   "title": "Will the group developing the first AGI be part of a national government?",
+   "pct": 15.0,
+   "forecasters": 76,
+   "url": "https://www.metaculus.com/questions/8325/"
+  }
+ ]
+}

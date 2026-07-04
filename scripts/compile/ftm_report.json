@@ -1,0 +1,17 @@
+{
+ "variables": 486,
+ "dropped": {
+  "degenerate": 144,
+  "duplicate": 35,
+  "missing": 0
+ },
+ "edges": 828,
+ "implicationEdges": 697,
+ "treewidth": 8.0,
+ "cliqueCount": 486.0,
+ "maxResidualLeak": 0.0,
+ "maxProjectionDelta": 0.0001521743800400599,
+ "meanProjectionDelta": 1.254655099926553e-06,
+ "lowSupportRows": 7,
+ "trials": 2000
+}

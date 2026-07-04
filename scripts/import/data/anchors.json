@@ -1,0 +1,3614 @@
+{
+ "builtAt": "2026-07-04T03:34:28Z",
+ "anchors": [
+  {
+   "marketId": "x0001",
+   "variableId": "x_i_safety_law_enacted_in_the_us_in_2026",
+   "source": "metaculus",
+   "ref": "41193",
+   "url": "https://www.metaculus.com/questions/41193/",
+   "value": 0.24,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0002",
+   "variableId": "x_asi_transition_beneficial_for_humanity",
+   "source": "metaculus",
+   "ref": "4118",
+   "url": "https://www.metaculus.com/questions/4118/",
+   "value": 0.5,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0003",
+   "variableId": "x_gc_to_be_caused_by_ai_if_it_occurs",
+   "source": "metaculus",
+   "ref": "1495",
+   "url": "https://www.metaculus.com/questions/1495/",
+   "value": 0.25,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0004",
+   "variableId": "x_brain_emulation_produces_first_human_ai",
+   "source": "metaculus",
+   "ref": "372",
+   "url": "https://www.metaculus.com/questions/372/",
+   "value": 0.01,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0005",
+   "variableId": "x_first_agi_based_on_deep_learning",
+   "source": "metaculus",
+   "ref": "4055",
+   "url": "https://www.metaculus.com/questions/4055/",
+   "value": 0.95,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0006",
+   "variableId": "x_ai_system_beat_human_pros_in_forecasting_tournament_by_203",
+   "source": "metaculus",
+   "ref": "31711",
+   "url": "https://www.metaculus.com/questions/31711/",
+   "value": 0.98,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0007",
+   "variableId": "x_us_eu_restriction_on_data_center_grid_before_sep_2026",
+   "source": "metaculus",
+   "ref": "43494",
+   "url": "https://www.metaculus.com/questions/43494/",
+   "value": 0.25,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0008",
+   "variableId": "x_will_tesla_mass_produce_humanoid_robots",
+   "source": "metaculus",
+   "ref": "19879",
+   "url": "https://www.metaculus.com/questions/19879/",
+   "value": 0.5,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0009",
+   "variableId": "x_5y_after_agi_universal_basic_income",
+   "source": "metaculus",
+   "ref": "26326",
+   "url": "https://www.metaculus.com/questions/26326/",
+   "value": 0.25,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0010",
+   "variableId": "x_ai_safety_checks_mandated_before_jan_20_2029",
+   "source": "metaculus",
+   "ref": "38190",
+   "url": "https://www.metaculus.com/questions/38190/",
+   "value": 0.5,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0011",
+   "variableId": "x_ai_incident_causes_1bn_damage_before_2032",
+   "source": "metaculus",
+   "ref": "7814",
+   "url": "https://www.metaculus.com/questions/7814/",
+   "value": 0.76,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0012",
+   "variableId": "x_ai_unauthorized_access_before_2033",
+   "source": "metaculus",
+   "ref": "16014",
+   "url": "https://www.metaculus.com/questions/16014/",
+   "value": 0.98,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0013",
+   "variableId": "x_will_openai_deepmind_or_anthropic_have_revenue_of_at_least",
+   "source": "metaculus",
+   "ref": "38405",
+   "url": "https://www.metaculus.com/questions/38405/",
+   "value": 0.7,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0014",
+   "variableId": "x_25_of_nyt_best_sellers_written_by_ai_by_2050",
+   "source": "metaculus",
+   "ref": "8404",
+   "url": "https://www.metaculus.com/questions/8404/",
+   "value": 0.33,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0015",
+   "variableId": "x_will_the_us_government_mandate_security_clearance_for_fron",
+   "source": "metaculus",
+   "ref": "38417",
+   "url": "https://www.metaculus.com/questions/38417/",
+   "value": 0.33,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0016",
+   "variableId": "x_by_2030_will_general_purpose_robot_learning_new_tasks_be_2",
+   "source": "metaculus",
+   "ref": "39129",
+   "url": "https://www.metaculus.com/questions/39129/",
+   "value": 0.7,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0017",
+   "variableId": "x_us_government_control_of_any_us_ai_company_or_project_befo",
+   "source": "metaculus",
+   "ref": "38596",
+   "url": "https://www.metaculus.com/questions/38596/",
+   "value": 0.19,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0018",
+   "variableId": "x_us_compute_capacity_restrictions_before_2050",
+   "source": "metaculus",
+   "ref": "10965",
+   "url": "https://www.metaculus.com/questions/10965/",
+   "value": 0.4,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0019",
+   "variableId": "x_25_top_100_songs_made_by_ai_by_2050",
+   "source": "metaculus",
+   "ref": "8403",
+   "url": "https://www.metaculus.com/questions/8403/",
+   "value": 0.7,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0020",
+   "variableId": "x_us_gov_veto_on_frontier_ai_deployment_by_2028",
+   "source": "metaculus",
+   "ref": "38597",
+   "url": "https://www.metaculus.com/questions/38597/",
+   "value": 0.32,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0021",
+   "variableId": "x_will_openai_meta_or_alphabet_ceo_pledge_ai_autonomy_limits",
+   "source": "metaculus",
+   "ref": "39159",
+   "url": "https://www.metaculus.com/questions/39159/",
+   "value": 0.1,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0022",
+   "variableId": "x_int_l_tai_oversight_agency_before_2030",
+   "source": "metaculus",
+   "ref": "19298",
+   "url": "https://www.metaculus.com/questions/19298/",
+   "value": 0.42,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0023",
+   "variableId": "x_will_cyberattack_targeting_ai_cause_power_blackout_in_the",
+   "source": "metaculus",
+   "ref": "39136",
+   "url": "https://www.metaculus.com/questions/39136/",
+   "value": 0.11,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0024",
+   "variableId": "x_ai_successfully_making_1_million_in_retail",
+   "source": "metaculus",
+   "ref": "18265",
+   "url": "https://www.metaculus.com/questions/18265/",
+   "value": 0.09,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0025",
+   "variableId": "x_openai_reaches_profit_cap_by_2035",
+   "source": "metaculus",
+   "ref": "4873",
+   "url": "https://www.metaculus.com/questions/4873/",
+   "value": 0.5,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0026",
+   "variableId": "x_open_source_ai_regulation_2028",
+   "source": "metaculus",
+   "ref": "27034",
+   "url": "https://www.metaculus.com/questions/27034/",
+   "value": 0.25,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0027",
+   "variableId": "x_before_2028_will_a_top_5_us_insurer_exclude_ai_lacking_hum",
+   "source": "metaculus",
+   "ref": "39166",
+   "url": "https://www.metaculus.com/questions/39166/",
+   "value": 0.51,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0028",
+   "variableId": "x_5y_after_agi_nuclear_fusion_10_world_energy",
+   "source": "metaculus",
+   "ref": "26267",
+   "url": "https://www.metaculus.com/questions/26267/",
+   "value": 0.2,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0029",
+   "variableId": "x_before_2032_will_central_bank_or_finance_ministry_credit_a",
+   "source": "metaculus",
+   "ref": "39135",
+   "url": "https://www.metaculus.com/questions/39135/",
+   "value": 0.18,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0030",
+   "variableId": "x_ai_blackmail_for_material_gain_by_eoy_2028",
+   "source": "metaculus",
+   "ref": "16553",
+   "url": "https://www.metaculus.com/questions/16553/",
+   "value": 0.71,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0031",
+   "variableId": "x_universal_basic_income_by_2030",
+   "source": "metaculus",
+   "ref": "22388",
+   "url": "https://www.metaculus.com/questions/22388/",
+   "value": 0.03,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0032",
+   "variableId": "x_large_domestic_order_chinese_ai_chips",
+   "source": "metaculus",
+   "ref": "20460",
+   "url": "https://www.metaculus.com/questions/20460/",
+   "value": 0.94,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0033",
+   "variableId": "x_chinese_foundry_with_20_of_semi_market",
+   "source": "metaculus",
+   "ref": "20157",
+   "url": "https://www.metaculus.com/questions/20157/",
+   "value": 0.53,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0034",
+   "variableId": "x_frontier_model_released_in_2029_without_third_party_evals",
+   "source": "metaculus",
+   "ref": "31688",
+   "url": "https://www.metaculus.com/questions/31688/",
+   "value": 0.77,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0035",
+   "variableId": "x_chinese_foundry_with_0_2x_of_tsmc_market_cap",
+   "source": "metaculus",
+   "ref": "20136",
+   "url": "https://www.metaculus.com/questions/20136/",
+   "value": 0.16,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0036",
+   "variableId": "x_cybersecurity_laws_for_powerful_ai_by_2030",
+   "source": "metaculus",
+   "ref": "17112",
+   "url": "https://www.metaculus.com/questions/17112/",
+   "value": 0.85,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0037",
+   "variableId": "x_chinese_model_chinese_chips",
+   "source": "metaculus",
+   "ref": "20466",
+   "url": "https://www.metaculus.com/questions/20466/",
+   "value": 0.71,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0038",
+   "variableId": "x_ai_benefits_redistribution_mechanism",
+   "source": "metaculus",
+   "ref": "35600",
+   "url": "https://www.metaculus.com/questions/35600/",
+   "value": 0.03,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0039",
+   "variableId": "x_chinese_euv_machine_marketed_by_2033",
+   "source": "metaculus",
+   "ref": "20135",
+   "url": "https://www.metaculus.com/questions/20135/",
+   "value": 0.94,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0040",
+   "variableId": "x_ai_best_practice_in_psychology_by_2028",
+   "source": "metaculus",
+   "ref": "19038",
+   "url": "https://www.metaculus.com/questions/19038/",
+   "value": 0.5,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0041",
+   "variableId": "x_cts_power_seeking_ai_shut_off",
+   "source": "metaculus",
+   "ref": "27063",
+   "url": "https://www.metaculus.com/questions/27063/",
+   "value": 0.9,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0042",
+   "variableId": "x_5y_after_agi_ai_philosophical_competence",
+   "source": "metaculus",
+   "ref": "26268",
+   "url": "https://www.metaculus.com/questions/26268/",
+   "value": 0.1,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0043",
+   "variableId": "x_chinese_volume_production_using_euv_by_2033",
+   "source": "metaculus",
+   "ref": "20146",
+   "url": "https://www.metaculus.com/questions/20146/",
+   "value": 0.98,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0044",
+   "variableId": "x_will_openai_file_an_s_1_before_2027",
+   "source": "metaculus",
+   "ref": "40552",
+   "url": "https://www.metaculus.com/questions/40552/",
+   "value": 0.7,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0045",
+   "variableId": "x_chinese_fab_with_150_mtr_mm2_process_by_2027",
+   "source": "metaculus",
+   "ref": "20169",
+   "url": "https://www.metaculus.com/questions/20169/",
+   "value": 0.27,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0046",
+   "variableId": "x_data_centres_10_of_global_electricity",
+   "source": "metaculus",
+   "ref": "15610",
+   "url": "https://www.metaculus.com/questions/15610/",
+   "value": 0.25,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0047",
+   "variableId": "x_cts_ai_admin_disempowerment_before_2030",
+   "source": "metaculus",
+   "ref": "27061",
+   "url": "https://www.metaculus.com/questions/27061/",
+   "value": 0.55,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0048",
+   "variableId": "x_5y_after_agi_windfall_clause_activated",
+   "source": "metaculus",
+   "ref": "26289",
+   "url": "https://www.metaculus.com/questions/26289/",
+   "value": 0.01,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0049",
+   "variableId": "x_5y_after_agi_nuclear_deterrence_undermined",
+   "source": "metaculus",
+   "ref": "26286",
+   "url": "https://www.metaculus.com/questions/26286/",
+   "value": 0.4,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0050",
+   "variableId": "x_chinese_arfi_machine_used_at_scale_by_2026",
+   "source": "metaculus",
+   "ref": "20134",
+   "url": "https://www.metaculus.com/questions/20134/",
+   "value": 0.5,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0051",
+   "variableId": "x_mandatory_gcr_focused_evals_for_ai_systems",
+   "source": "metaculus",
+   "ref": "15615",
+   "url": "https://www.metaculus.com/questions/15615/",
+   "value": 0.333,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0052",
+   "variableId": "x_will_global_corp_spending_on_ai_be_700b_during_the_calenda",
+   "source": "metaculus",
+   "ref": "38852",
+   "url": "https://www.metaculus.com/questions/38852/",
+   "value": 0.68,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0053",
+   "variableId": "x_rob_long_says_ai_conscious_by_2030",
+   "source": "metaculus",
+   "ref": "18365",
+   "url": "https://www.metaculus.com/questions/18365/",
+   "value": 0.63,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0054",
+   "variableId": "x_backpropagation_taking_a_back_seat_by_2030",
+   "source": "metaculus",
+   "ref": "14022",
+   "url": "https://www.metaculus.com/questions/14022/",
+   "value": 0.09,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0055",
+   "variableId": "x_1_000_000_ugvs_in_ukrainian_war_before_2031",
+   "source": "metaculus",
+   "ref": "43267",
+   "url": "https://www.metaculus.com/questions/43267/",
+   "value": 0.27,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0056",
+   "variableId": "x_ai_lab_aluminum_2030",
+   "source": "metaculus",
+   "ref": "27761",
+   "url": "https://www.metaculus.com/questions/27761/",
+   "value": 0.04,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0057",
+   "variableId": "x_will_openai_file_an_s_1_with_the_sec_to_launch_an_ipo_befo",
+   "source": "metaculus",
+   "ref": "43841",
+   "url": "https://www.metaculus.com/questions/43841/",
+   "value": 0.52,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0058",
+   "variableId": "x_openai_bankruptcy_risk_before_2028",
+   "source": "metaculus",
+   "ref": "43511",
+   "url": "https://www.metaculus.com/questions/43511/",
+   "value": 0.016,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0059",
+   "variableId": "x_will_openai_file_for_an_ipo_during_2026",
+   "source": "metaculus",
+   "ref": "41141",
+   "url": "https://www.metaculus.com/questions/41141/",
+   "value": 0.33,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0060",
+   "variableId": "x_will_one_of_the_first_agi_claim_to_be_conscious",
+   "source": "metaculus",
+   "ref": "4409",
+   "url": "https://www.metaculus.com/questions/4409/",
+   "value": 0.58,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "m13",
+   "variableId": null,
+   "source": "metaculus",
+   "ref": "39149",
+   "url": "https://www.metaculus.com/questions/39149/",
+   "value": 0.04,
+   "fetchedAt": "2026-07-04T02:45:00Z"
+  },
+  {
+   "marketId": "x0061",
+   "variableId": "x_five_years_after_agi_will_human_mind_uploading_have_happen",
+   "source": "metaculus",
+   "ref": "26246",
+   "url": "https://www.metaculus.com/questions/26246/",
+   "value": 0.05,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0062",
+   "variableId": "x_will_the_group_developing_the_first_agi_be_part_of_a_natio",
+   "source": "metaculus",
+   "ref": "8325",
+   "url": "https://www.metaculus.com/questions/8325/",
+   "value": 0.15,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0063",
+   "variableId": "x_by_the_end_of_2026_will_we_have_transparency_into_any_usef",
+   "source": "manifold",
+   "ref": "Hb1ObYB1ONHzFFNLacMR",
+   "url": "https://manifold.markets/EliezerYudkowsky/by-the-end-of-2026-will-we-have-tra",
+   "value": 0.098143,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0064",
+   "variableId": "x_will_artificial_superintelligence_exist_by_2030_resolves_n",
+   "source": "manifold",
+   "ref": "IzcdZu8uHQtzqNETcY6j",
+   "url": "https://manifold.markets/EliezerYudkowsky/will-artificial-superintelligence-e",
+   "value": 0.303467,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0065",
+   "variableId": "x_will_ai_be_capable_of_producing_an_annals_quality_math_pap",
+   "source": "manifold",
+   "ref": "2tEzuphRlP",
+   "url": "https://manifold.markets/TamayBesiroglu/will-ai-be-capable-of-producing-ann",
+   "value": 0.906498,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0066",
+   "variableId": "x_will_ai_wipe_out_humanity_by_2030_resolves_n_a_in_2027",
+   "source": "manifold",
+   "ref": "i95HLfK9N6hu5H7orfNj",
+   "url": "https://manifold.markets/EliezerYudkowsky/will-ai-wipe-out-humanity-by-2030-r",
+   "value": 0.119901,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0067",
+   "variableId": "x_will_we_get_agi_before_2028",
+   "source": "manifold",
+   "ref": "HQObM8ZeuU0YQ3HUdGZ2",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2028-ff560f9e9346",
+   "value": 0.166329,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0068",
+   "variableId": "x_will_we_get_agi_before_2027",
+   "source": "manifold",
+   "ref": "5WEpXLx31YdM11zOdo4h",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2027-d7b5f2b00ace",
+   "value": 0.031695,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0069",
+   "variableId": "x_will_we_get_agi_before_2030",
+   "source": "manifold",
+   "ref": "hh2bXhwKDTioZ7KtGKfC",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2030",
+   "value": 0.375416,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0070",
+   "variableId": "x_conditional_on_no_existential_catastrophe_will_there_be_a",
+   "source": "manifold",
+   "ref": "cSmn5bvykckNzpKJYz1a",
+   "url": "https://manifold.markets/IsaacKing/will-there-be-a-superintelligence-b-ebf6057128a0",
+   "value": 0.67839,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0071",
+   "variableId": "x_will_we_get_agi_before_2029",
+   "source": "manifold",
+   "ref": "vbFbnc7bl8Q6CTPtG3FG",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2029-ef1c187271ed",
+   "value": 0.300452,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0072",
+   "variableId": "x_will_we_have_at_least_one_more_ai_winter_before_agi_is_rea",
+   "source": "manifold",
+   "ref": "389HpvdvigElXaLZ6ZYH",
+   "url": "https://manifold.markets/komplexkonjugat/will-we-have-at-least-one-more-ai-w",
+   "value": 0.162517,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0073",
+   "variableId": "x_conditional_on_no_existential_catastrophe_will_there_be_2",
+   "source": "manifold",
+   "ref": "F3WW5VQthbykdojxr0Ef",
+   "url": "https://manifold.markets/IsaacKing/will-there-be-a-superintelligence-b-10fdd93e8092",
+   "value": 0.275199,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0074",
+   "variableId": "x_will_we_get_agi_before_2032",
+   "source": "manifold",
+   "ref": "YvayfreXRtBvubSPKgmm",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2032",
+   "value": 0.485368,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0075",
+   "variableId": "x_at_the_beginning_of_2035_will_eliezer_yudkowsky_still_beli",
+   "source": "manifold",
+   "ref": "IYz4t74NHr6Of4cIKZ6V",
+   "url": "https://manifold.markets/IsaacKing/at-the-beginning-of-2035-will-eliez",
+   "value": 0.566624,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0076",
+   "variableId": "x_we_will_see_a_100k_person_anti_ai_protest_before_2030",
+   "source": "manifold",
+   "ref": "RwF7zWPBVLYKlmTavXUh",
+   "url": "https://manifold.markets/AlexanderLeCampbell/we-will-see-a-100k-person-antiai-pr",
+   "value": 0.72394,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0077",
+   "variableId": "x_by_2029_will_an_ai_escape_containment",
+   "source": "manifold",
+   "ref": "4fehtquIkz1RxcbJejDq",
+   "url": "https://manifold.markets/vluzko/by-2029-will-an-ai-escape-containme",
+   "value": 0.58169,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0078",
+   "variableId": "x_will_we_get_agi_before_2031",
+   "source": "manifold",
+   "ref": "MeHUMy1sKoFiz1OHr1FU",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2031",
+   "value": 0.456569,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0079",
+   "variableId": "x_if_ai_wipes_out_humanity_will_everyone_on_earth_fall_over",
+   "source": "manifold",
+   "ref": "9cSfPM4Yg1vkpbSuAou4",
+   "url": "https://manifold.markets/Writer/if-ai-wipes-out-humanity-will-every",
+   "value": 0.086952,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0080",
+   "variableId": "x_will_ai_kill_20_of_the_human_population_before_2030",
+   "source": "manifold",
+   "ref": "3cBLGjcbZ2ElJkHCdDpm",
+   "url": "https://manifold.markets/JonathanRay/will-ai-kill-20-of-the-human-popula",
+   "value": 0.027947,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0081",
+   "variableId": "x_will_we_get_agi_before_2028_2",
+   "source": "manifold",
+   "ref": "ckEcKJJmfK6MunQmaSgc",
+   "url": "https://manifold.markets/MarioCannistra/will-we-get-agi-before-2028",
+   "value": 0.198979,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0082",
+   "variableId": "x_will_sam_altman_be_alive_on_the_day_strong_agi_is_publicly",
+   "source": "manifold",
+   "ref": "NENSOBPxPzyYTk92IlBT",
+   "url": "https://manifold.markets/strutheo/will-sam-altman-be-alive-on-the-day",
+   "value": 0.894148,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0083",
+   "variableId": "x_will_a_religion_that_has_some_ai_as_its_god_oracle_or_prie",
+   "source": "manifold",
+   "ref": "B67gCHE6N8L4WpxiSyTv",
+   "url": "https://manifold.markets/FranklinBaldo/will-a-religion-that-has-some-ai-as",
+   "value": 0.71,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0084",
+   "variableId": "x_are_llms_capable_of_reaching_agi",
+   "source": "manifold",
+   "ref": "ia45vPl7XunfCIclcIfY",
+   "url": "https://manifold.markets/IsaacKing/are-llms-capable-of-reaching-agi",
+   "value": 0.513583,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0085",
+   "variableId": "x_will_we_get_agi_before_2035",
+   "source": "manifold",
+   "ref": "5M7F5ApF8SH9osu8DGJb",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2033-34ec8e1d00fd",
+   "value": 0.644195,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0086",
+   "variableId": "x_will_we_get_agi_before_2033",
+   "source": "manifold",
+   "ref": "u0ZzZg3x5uD36Du0eDAZ",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2033",
+   "value": 0.517952,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0087",
+   "variableId": "x_will_ai_be_recursively_self_improving_by_mid_2026",
+   "source": "manifold",
+   "ref": "dtdu9gymzw",
+   "url": "https://manifold.markets/MaxHarms/will-ai-be-recursively-self-improvi",
+   "value": 0.069949,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0088",
+   "variableId": "x_will_we_get_agi_before_2034",
+   "source": "manifold",
+   "ref": "2g6qGs45XbbwbC0BJ1g8",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2034",
+   "value": 0.589429,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0089",
+   "variableId": "x_will_agi_be_achieved_in_the_next_5_years",
+   "source": "manifold",
+   "ref": "9PPRfBjwPlK7Qz8Oze1e",
+   "url": "https://manifold.markets/kalb/will-agi-be-achieved-in-the-next-5",
+   "value": 0.360704,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0090",
+   "variableId": "x_will_ai_be_life_changing_for_muggles_by_the_end_of_2029",
+   "source": "manifold",
+   "ref": "kyxxpr56vv",
+   "url": "https://manifold.markets/dreev/will-ai-be-lifechanging-for-muggles",
+   "value": 0.766906,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0091",
+   "variableId": "x_conditional_on_no_existential_catastrophe_will_there_be_3",
+   "source": "manifold",
+   "ref": "kRyHJpIcEOnokT5KnP0a",
+   "url": "https://manifold.markets/IsaacKing/will-there-be-a-superintelligence-b",
+   "value": 0.863451,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0092",
+   "variableId": "x_conditional_on_no_existential_catastrophe_will_there_be_4",
+   "source": "manifold",
+   "ref": "tvoPGB4JP7wbV0dN1iYq",
+   "url": "https://manifold.markets/IsaacKing/conditional-on-no-existential-catas",
+   "value": 0.715293,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0093",
+   "variableId": "x_superhuman_mathematical_problem_solving_before_2030_assumi",
+   "source": "manifold",
+   "ref": "OO8ROn5CIq",
+   "url": "https://manifold.markets/dreev/superhuman-mathematical-problem-sol",
+   "value": 0.310612,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0094",
+   "variableId": "x_before_2035_will_there_exist_any_ai_that_can_perform_arbit",
+   "source": "manifold",
+   "ref": "G0GmOyaD1Qx3LoXfP9N7",
+   "url": "https://manifold.markets/IsaacKing/before-2035-will-there-exist-any-ai",
+   "value": 0.851856,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0095",
+   "variableId": "x_will_we_get_agi_before_july_1st_2029",
+   "source": "manifold",
+   "ref": "onEFW9NnHqnDEfch9sDr",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-july-2029",
+   "value": 0.251736,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0096",
+   "variableId": "x_will_we_get_agi_before_2036",
+   "source": "manifold",
+   "ref": "phUWCiU3O3qaCmkMXb6y",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2036",
+   "value": 0.655518,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0097",
+   "variableId": "x_will_openai_be_in_the_lead_in_the_agi_race_end_of_2026",
+   "source": "manifold",
+   "ref": "FXFABUJcgZqdJjUV1jIJ",
+   "url": "https://manifold.markets/EliLifland/will-openai-be-in-the-lead-in-the-a",
+   "value": 0.305916,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0098",
+   "variableId": "x_will_the_united_states_ban_ai_research_by_the_end_of_2037",
+   "source": "manifold",
+   "ref": "nf4QhoSMOmoa9m5iLpDt",
+   "url": "https://manifold.markets/IsaacKing/will-the-united-states-ban-ai-resea",
+   "value": 0.23504,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0099",
+   "variableId": "x_will_we_get_asi_before_2030",
+   "source": "manifold",
+   "ref": "bef64nPBEaB8w2dZsdfH",
+   "url": "https://manifold.markets/RemNi/will-we-get-asi-before-2030",
+   "value": 0.15,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0100",
+   "variableId": "x_will_eliezer_yudkowsky_publicly_claim_to_have_a_p_doom_of",
+   "source": "manifold",
+   "ref": "tuVUq6qMhXZPfr9IARa5",
+   "url": "https://manifold.markets/Tripping/will-eliezer-yudkowsky-publicly-cla",
+   "value": 0.122616,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0101",
+   "variableId": "x_will_openai_hint_at_or_claim_to_have_agi_by_jan_1_2030_100",
+   "source": "manifold",
+   "ref": "KzJrgSi7lW5srLWT52Nn",
+   "url": "https://manifold.markets/_deleted_/will-openai-hint-at-or-claim-to-hav-0d635f105866",
+   "value": 0.713297,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0102",
+   "variableId": "x_will_agi_come_from_a_company_whose_primary_product_involve",
+   "source": "manifold",
+   "ref": "dq71tp00zu",
+   "url": "https://manifold.markets/iamgingertrash/will-agi-come-from-a-company-whos-p",
+   "value": 0.670152,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0103",
+   "variableId": "x_will_we_get_agi_before_2040",
+   "source": "manifold",
+   "ref": "srlaR1wDLUCU8lej269R",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2040",
+   "value": 0.72,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0104",
+   "variableId": "x_will_the_us_government_take_control_of_openai_or_its_major",
+   "source": "manifold",
+   "ref": "0YCYyjBNcZ2XW9Qer4sD",
+   "url": "https://manifold.markets/cash/will-the-us-government-take-control",
+   "value": 0.204655,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0105",
+   "variableId": "x_q_day_before_2030",
+   "source": "manifold",
+   "ref": "cNd05lL9SA",
+   "url": "https://manifold.markets/SG/qday-before-2030",
+   "value": 0.18216,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0106",
+   "variableId": "x_will_eliezer_yudkowsky_appear_on_sesame_street_by_2030",
+   "source": "manifold",
+   "ref": "SxITkheML0YNosIO5Q1h",
+   "url": "https://manifold.markets/FranklinBaldo/will-eliezer-yudkowsky-appear-on-se",
+   "value": 0.025663,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0107",
+   "variableId": "x_will_we_get_agi_before_2037",
+   "source": "manifold",
+   "ref": "S8Y8wDrpfxwriKZKvkTU",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2037",
+   "value": 0.675742,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0108",
+   "variableId": "x_will_ai_be_capable_of_superhuman_persuasion_well_before_1y",
+   "source": "manifold",
+   "ref": "gRkJsEFMbvzqpICdcJxP",
+   "url": "https://manifold.markets/ZviMowshowitz/will-ai-be-capable-of-superhuman-pe",
+   "value": 0.6413,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0109",
+   "variableId": "x_will_we_get_agi_before_a_human_walks_on_the_moon_again",
+   "source": "manifold",
+   "ref": "8JRog1RqkWVJ0FAWImay",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-a-human-vent",
+   "value": 0.318255,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0110",
+   "variableId": "x_before_2035_will_there_exist_any_ai_that_can_perform_ar_2",
+   "source": "manifold",
+   "ref": "zQfbBhmRX11VDdoF4sQl",
+   "url": "https://manifold.markets/Gabrielle/before-2035-will-there-exist-any-ai-a8ceb93e18fb",
+   "value": 0.74,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0111",
+   "variableId": "x_do_llms_experience_qualia",
+   "source": "manifold",
+   "ref": "0gQpnNhRQ2",
+   "url": "https://manifold.markets/SCS/do-todays-llms-experience-qualia",
+   "value": 0.322196,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0112",
+   "variableId": "x_will_the_arc_agi_grand_prize_be_claimed_before_january_202",
+   "source": "manifold",
+   "ref": "lta9luklpr",
+   "url": "https://manifold.markets/AlanTuring/will-the-arc-agi-grand-prize-be-cla-svtrhb42tx",
+   "value": 0.441065,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0113",
+   "variableId": "x_will_we_get_agi_before_we_get_fusion_reactors",
+   "source": "manifold",
+   "ref": "I9Wbcatmjk0W7SAxm5Qd",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-we-get-fusio",
+   "value": 0.583032,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0114",
+   "variableId": "x_will_we_get_agi_before_2048",
+   "source": "manifold",
+   "ref": "gydlA7gBnOlkzqYd67Wt",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2048",
+   "value": 0.834957,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0115",
+   "variableId": "x_will_we_fully_interpret_a_gpt_2_level_language_model_by_20",
+   "source": "manifold",
+   "ref": "q6s2ZQIIII",
+   "url": "https://manifold.markets/LeoGao/will-we-fully-interpret-a-gpt2-leve",
+   "value": 0.150648,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0116",
+   "variableId": "x_will_we_get_agi_before_2038",
+   "source": "manifold",
+   "ref": "WD1VD4NMaaRG1ouof9LP",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2038",
+   "value": 0.698398,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0117",
+   "variableId": "x_is_the_promethean_virus_in_large_language_models_real",
+   "source": "manifold",
+   "ref": "OiJ9KnW29ImsmlHrg4sO",
+   "url": "https://manifold.markets/JohnDavidPressman/is-the-promethean-virus-in-large-la",
+   "value": 0.07851,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0118",
+   "variableId": "x_above_human_scores_on_arc_agi_3_in_2026",
+   "source": "manifold",
+   "ref": "AIpzy9ZIp2",
+   "url": "https://manifold.markets/ZviMowshowitz/above-human-scores-on-arcagi3-in-20",
+   "value": 0.143385,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0119",
+   "variableId": "x_will_agi_be_achieved_before_ais_are_able_to_smell",
+   "source": "manifold",
+   "ref": "30B1VGn7QXnDSRKme3MR",
+   "url": "https://manifold.markets/Soli/will-agi-be-achieved-before-ais-are",
+   "value": 0.670309,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0120",
+   "variableId": "x_will_i_find_ai_to_negatively_impact_my_job_opportunities_a",
+   "source": "manifold",
+   "ref": "QqVCYCwBsPWaVuADWujx",
+   "url": "https://manifold.markets/tailcalled/will-i-find-ai-to-negatively-impact",
+   "value": 0.914436,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0121",
+   "variableId": "x_will_we_get_agi_before_july_1st_2028",
+   "source": "manifold",
+   "ref": "X3zlXDKlKNxi1LknVk5i",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-july-2028",
+   "value": 0.172483,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0122",
+   "variableId": "x_in_2050_will_the_general_consensus_among_experts_be_that_t",
+   "source": "manifold",
+   "ref": "Qb8IqDPqOzkaOpS7zW68",
+   "url": "https://manifold.markets/IsaacKing/in-2050-will-the-general-consensus",
+   "value": 0.718991,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0123",
+   "variableId": "x_i_am_an_ai_safety_researcher_with_a_background_in_machine",
+   "source": "manifold",
+   "ref": "R50MP4LWX4jfvYYoAUTN",
+   "url": "https://manifold.markets/NathanHelmBurger/i-am-an-ai-safety-researcher-with-a",
+   "value": 0.187614,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0124",
+   "variableId": "x_will_we_get_asi_before_2027",
+   "source": "manifold",
+   "ref": "Ka5wnoccEkA1TWRKcXgR",
+   "url": "https://manifold.markets/RemNi/will-we-get-asi-before-2027",
+   "value": 0.011367,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0125",
+   "variableId": "x_will_we_get_agi_before_2039",
+   "source": "manifold",
+   "ref": "d2myLmu7RT1AWci7KJJq",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2039",
+   "value": 0.7,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0126",
+   "variableId": "x_will_at_least_25_nations_collaborate_to_develop_and_enforc",
+   "source": "manifold",
+   "ref": "dFx5xg9c4mcYSblxazwA",
+   "url": "https://manifold.markets/CarsonGale/will-at-least-25-nations-collaborat",
+   "value": 0.78442,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0127",
+   "variableId": "x_will_polling_show_that_humans_perceive_ai_as_a_threat_befo",
+   "source": "manifold",
+   "ref": "ms8E3KTqmwBnhUcw0pva",
+   "url": "https://manifold.markets/LarsDoucet/will-polling-show-that-humans-perce",
+   "value": 0.760086,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0128",
+   "variableId": "x_will_ai_displace_social_drinking_within_5_years",
+   "source": "manifold",
+   "ref": "3lknqUQSl1Q7ILLcBuFP",
+   "url": "https://manifold.markets/regenerative_sportscare/will-ai-displace-social-drinking-wi",
+   "value": 0.15,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0129",
+   "variableId": "x_will_we_get_asi_before_2029",
+   "source": "manifold",
+   "ref": "A98kMucU2mO94nOyiLxN",
+   "url": "https://manifold.markets/RemNi/will-we-get-asi-before-2029",
+   "value": 0.1,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0130",
+   "variableId": "x_will_we_get_asi_before_2031",
+   "source": "manifold",
+   "ref": "1KoWa86chZ3kM95qYUwx",
+   "url": "https://manifold.markets/RemNi/will-we-get-asi-before-2031",
+   "value": 0.182329,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0131",
+   "variableId": "x_will_there_be_a_warning_shot_before_october_20_2026",
+   "source": "manifold",
+   "ref": "aAy2zrkjccTJ5YW982HQ",
+   "url": "https://manifold.markets/LeoGao/will-there-be-a-warning-shot-before",
+   "value": 0.062733,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0132",
+   "variableId": "x_will_there_be_an_airstrike_on_a_datacenter_before_2035",
+   "source": "manifold",
+   "ref": "r37ICWFzACaZlXIJCEpp",
+   "url": "https://manifold.markets/IsaacKing/will-there-be-an-airstrike-on-any-d",
+   "value": 0.688099,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0133",
+   "variableId": "x_will_we_get_asi_before_2032",
+   "source": "manifold",
+   "ref": "Sv27vdqyFogBh5ZVfucJ",
+   "url": "https://manifold.markets/RemNi/will-we-get-asi-before-2032",
+   "value": 0.246421,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0134",
+   "variableId": "x_greta_thunberg_joins_ai_safety_pause_movement_before_2035",
+   "source": "manifold",
+   "ref": "sd0POPLRRO",
+   "url": "https://manifold.markets/Simon74fe/greta-thunberg-joins-ai-safetypause",
+   "value": 0.546139,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0135",
+   "variableId": "x_conditional_on_no_existential_catastrophe_will_there_be_5",
+   "source": "manifold",
+   "ref": "G1wzNFX2rf3sfKW3AO7M",
+   "url": "https://manifold.markets/IsaacKing/conditional-on-no-existential-catas-e1f1f83ae48d",
+   "value": 0.85,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0136",
+   "variableId": "x_will_we_believe_that_ai_character_bots_make_it_harder_for",
+   "source": "manifold",
+   "ref": "C4Pseh4FrEXTxd08Ph10",
+   "url": "https://manifold.markets/ZviMowshowitz/will-we-believe-that-ai-character-b",
+   "value": 0.536997,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0137",
+   "variableId": "x_will_artificial_intelligence_pilot_an_aircraft_with_human",
+   "source": "manifold",
+   "ref": "wTnNfSRkPmKWmYSs1uND",
+   "url": "https://manifold.markets/Dustin/will-artificial-intelligence-pilot",
+   "value": 0.567217,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0138",
+   "variableId": "x_will_we_get_agi_before_2027_2",
+   "source": "manifold",
+   "ref": "K6a5FaIDE1jEwvLIBoiB",
+   "url": "https://manifold.markets/MarioCannistra/will-we-get-agi-before-2027",
+   "value": 0.081092,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0139",
+   "variableId": "x_will_the_first_agi_be_a_large_language_model",
+   "source": "manifold",
+   "ref": "MqHJpapTs2Mu1BvyLGiG",
+   "url": "https://manifold.markets/No_ones_ghost/will-the-first-agi-be-a-large-langu",
+   "value": 0.586657,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0140",
+   "variableId": "x_will_we_get_agi_before_vladimir_putin_stops_being_the_lead",
+   "source": "manifold",
+   "ref": "68SkXonvYdqefKM0hL8O",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-vladimir-put",
+   "value": 0.35,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0141",
+   "variableId": "x_will_we_get_agi_before_2041",
+   "source": "manifold",
+   "ref": "Aa0pU7r7U0IELF6iVIBq",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2041",
+   "value": 0.74,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0142",
+   "variableId": "x_will_we_get_asi_before_2028",
+   "source": "manifold",
+   "ref": "wscxt4zLBfJ3DWYzrPaU",
+   "url": "https://manifold.markets/RemNi/will-we-get-asi-before-2028",
+   "value": 0.036694,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0143",
+   "variableId": "x_will_eliezer_yudkowsky_publicly_claim_to_have_a_p_doom__2",
+   "source": "manifold",
+   "ref": "0pHv0N3QejuVUt5mgFBU",
+   "url": "https://manifold.markets/Bayesian/will-eliezer-yudkowsky-publicly-cla-7f519b61e8cf",
+   "value": 0.2532,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0144",
+   "variableId": "x_will_king_charles_iii_of_england_s_reign_be_long_enough_fo",
+   "source": "manifold",
+   "ref": "oam44yKIEsOf0M0cwdpP",
+   "url": "https://manifold.markets/AutopoieticErgodicity/will-king-charles-iii-of-englands-r",
+   "value": 0.122563,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0145",
+   "variableId": "x_will_we_get_agi_before_a_human_walks_on_mars",
+   "source": "manifold",
+   "ref": "ch7gMYm2CxIVRq4I35JI",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-a-human-vent-549ed4a31a05",
+   "value": 0.736826,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0146",
+   "variableId": "x_will_we_get_agi_before_2045",
+   "source": "manifold",
+   "ref": "MowtNfp5FkGicxbzsgcb",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2045",
+   "value": 0.801374,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0147",
+   "variableId": "x_will_a_nuclear_weapon_be_detonated_before_basic_agi",
+   "source": "manifold",
+   "ref": "cl6ic5AtFwHTkDcDIRqq",
+   "url": "https://manifold.markets/Gigacasting/will-a-nuclear-weapon-be-detonated-2c7a70730100",
+   "value": 0.350502,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0148",
+   "variableId": "x_will_we_get_asi_before_2033",
+   "source": "manifold",
+   "ref": "o9FpPxegAw0DLCwTNTpU",
+   "url": "https://manifold.markets/RemNi/will-we-get-asi-before-2033",
+   "value": 0.272759,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0149",
+   "variableId": "x_will_more_than_half_the_us_population_actively_work_with_a",
+   "source": "manifold",
+   "ref": "CaD4fT57PQ2UbSKI64WV",
+   "url": "https://manifold.markets/GensingGenis/will-more-than-half-the-us-populati",
+   "value": 0.45,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0150",
+   "variableId": "x_will_this_tweet_hold_up_starship_will_fly_to_mars_in_24_mo",
+   "source": "manifold",
+   "ref": "h8tQQ9PRsC",
+   "url": "https://manifold.markets/shankypanky/will-this-tweet-hold-up-starship-wi",
+   "value": 0.011713,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0151",
+   "variableId": "x_will_ssi_ilya_s_company_offer_a_product_before_someone_cre",
+   "source": "manifold",
+   "ref": "56gymfk8ma",
+   "url": "https://manifold.markets/ZviMowshowitz/will-ssi-ilyas-company-offer-a-prod",
+   "value": 0.597758,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0152",
+   "variableId": "x_will_ai_cause_a_financial_crash_within_a_decade_by_oct_203",
+   "source": "manifold",
+   "ref": "OKiiNBPTnoyjVTxFqtws",
+   "url": "https://manifold.markets/ZviMowshowitz/will-ai-cause-a-financial-crash-wit",
+   "value": 0.56,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0153",
+   "variableId": "x_will_we_get_agi_before_2042",
+   "source": "manifold",
+   "ref": "kaRBQKvUDqdJLIdP0Y7n",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2042",
+   "value": 0.75,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0154",
+   "variableId": "x_will_we_get_asi_before_2034",
+   "source": "manifold",
+   "ref": "Nc9T6yrdpUP6D2LAJobb",
+   "url": "https://manifold.markets/RemNi/will-we-get-asi-before-2034",
+   "value": 0.278702,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0155",
+   "variableId": "x_will_we_get_agi_before_july_1st_2027",
+   "source": "manifold",
+   "ref": "ysAmD1AL7KSPxg0FAcQ3",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-july-2027",
+   "value": 0.073652,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0156",
+   "variableId": "x_will_we_get_agi_before_2047",
+   "source": "manifold",
+   "ref": "iGREDFAdt2uPMbEnVf7l",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2047",
+   "value": 0.83,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0157",
+   "variableId": "x_if_artificial_superintelligence_exists_by_2030_will_ai_wip",
+   "source": "manifold",
+   "ref": "1kbzaXsfSLjFSe1zt668",
+   "url": "https://manifold.markets/aashiq/if-artificial-superintelligence-exi",
+   "value": 0.38,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0158",
+   "variableId": "x_will_gpt_5_be_able_to_solve_a_b_system_puzzles_consistentl",
+   "source": "manifold",
+   "ref": "OmLCYiszTZ3oHOn2bjAq",
+   "url": "https://manifold.markets/Guuber3/will-gpt5-be-able-to-solve-ab-syste",
+   "value": 0.143955,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0159",
+   "variableId": "x_will_ai_be_among_the_top_5_most_important_issues_for_voter",
+   "source": "manifold",
+   "ref": "zJCXKn0PMWNPxjmjgS33",
+   "url": "https://manifold.markets/Nim/will-ai-be-among-the-top-5-most-imp",
+   "value": 0.584559,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0160",
+   "variableId": "x_will_we_get_agi_before_we_discover_alien_life",
+   "source": "manifold",
+   "ref": "xyPVx6milmNnBmYqFxEO",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-we-discover",
+   "value": 0.850972,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0161",
+   "variableId": "x_will_an_ai_be_capable_of_achieving_a_perfect_score_on_the",
+   "source": "manifold",
+   "ref": "gk30Bh5GRnmXh9uflsEL",
+   "url": "https://manifold.markets/MatthewBarnett/will-an-ai-be-capable-of-achieving-9ac34d5d4b6f",
+   "value": 0.9,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0162",
+   "variableId": "x_will_the_inflation_rate_in_the_us_reach_6_before_it_reache",
+   "source": "manifold",
+   "ref": "NVMLEU2HJh8B4qWouODc",
+   "url": "https://manifold.markets/SIMOROBO/will-the-yearly-inflation-rate-in-t",
+   "value": 0.804883,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0163",
+   "variableId": "x_will_humans_deliberately_cause_an_ai_winter",
+   "source": "manifold",
+   "ref": "FgnY6AmScNw92PNaDtYN",
+   "url": "https://manifold.markets/Duncn/will-humans-deliberately-cause-an-a",
+   "value": 0.252022,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0164",
+   "variableId": "x_will_we_get_agi_before_2043",
+   "source": "manifold",
+   "ref": "957J5L0X7PN5Kopw2osl",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2043",
+   "value": 0.77,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0165",
+   "variableId": "x_will_ai_cause_mass_unemployment_by_2030",
+   "source": "manifold",
+   "ref": "pM0emIJkRESze9dQQyHe",
+   "url": "https://manifold.markets/AitchKay/will-ai-cause-mass-unemployment-by",
+   "value": 0.188377,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0166",
+   "variableId": "x_will_if_anyone_builds_it_appear_in_a_nyt_bestseller_list_a",
+   "source": "manifold",
+   "ref": "spuyq56Py5",
+   "url": "https://manifold.markets/ms/will-if-anyone-builds-it-appear-in",
+   "value": 0.041003,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0167",
+   "variableId": "x_will_we_get_agi_before_2046",
+   "source": "manifold",
+   "ref": "S6myonFL4agK3orA9udU",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2046",
+   "value": 0.813524,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0168",
+   "variableId": "x_will_microsoft_successfully_build_a_nuclear_power_plant_be",
+   "source": "manifold",
+   "ref": "VJn4Ux9DqpG8Zj32vAM1",
+   "url": "https://manifold.markets/ZviMowshowitz/will-microsoft-successfully-build-a",
+   "value": 0.365047,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0169",
+   "variableId": "x_will_an_ai_model_be_developed_before_2030_that_can_accurat",
+   "source": "manifold",
+   "ref": "lH0p4zCoTpmWE2F42ULf",
+   "url": "https://manifold.markets/MetaculusBot/will-an-ai-model-be-developed-befor",
+   "value": 0.0432,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0170",
+   "variableId": "x_will_there_be_a_coherent_ai_safety_movement_with_leaders_a",
+   "source": "manifold",
+   "ref": "20VEF6SzC8Mzx4jS5TVR",
+   "url": "https://manifold.markets/ZviMowshowitz/will-there-be-a-coherent-ai-safety",
+   "value": 0.785241,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0171",
+   "variableId": "x_will_the_catholic_church_train_a_popegpt_and_endorse_it_as",
+   "source": "manifold",
+   "ref": "mejhn9q4y6",
+   "url": "https://manifold.markets/PaulHan/will-the-catholic-church-train-a-po",
+   "value": 0.05,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0172",
+   "variableId": "x_contingent_on_ai_being_perceived_as_a_threat_will_humans_d",
+   "source": "manifold",
+   "ref": "nGIi3iABGGu9OETZXUyR",
+   "url": "https://manifold.markets/LarsDoucet/contingent-on-ai-being-perceived-as",
+   "value": 0.211636,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0173",
+   "variableId": "x_will_the_arc_agi_grand_prize_be_claimed_by_end_of_2026",
+   "source": "manifold",
+   "ref": "0slqwtt5t1",
+   "url": "https://manifold.markets/LCBOB/will-the-arcagi-grand-prize-be-clai-hguqtn9ddd",
+   "value": 0.513602,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0174",
+   "variableId": "x_will_the_arc_agi_grand_prize_be_claimed_before_2030",
+   "source": "manifold",
+   "ref": "p0fzp3jqqc",
+   "url": "https://manifold.markets/AlanTuring/will-the-arc-agi-grand-prize-be-cla",
+   "value": 0.808192,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0175",
+   "variableId": "x_will_the_usa_get_agi_before_we_have_another_recession",
+   "source": "manifold",
+   "ref": "Ac58S2v9Qarx9rtTm1gr",
+   "url": "https://manifold.markets/ZviMowshowitz/will-the-usa-have-another-recession",
+   "value": 0.15,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0176",
+   "variableId": "x_ai_generated_philosophy_book_worth_reading_by_the_end_of_2",
+   "source": "manifold",
+   "ref": "GoyvW7tV96yNTqeYvr1M",
+   "url": "https://manifold.markets/mariopasquato/ai-generated-philosophy-book-worth",
+   "value": 0.627262,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0177",
+   "variableId": "x_manhattan_project_for_agi_before_2029",
+   "source": "manifold",
+   "ref": "qonVOPgTA6eIOFqhQ4ph",
+   "url": "https://manifold.markets/Tossup/lasa-manhattan-project-for-agi-befo",
+   "value": 0.355304,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0178",
+   "variableId": "x_will_ai_wipe_out_cows_before_the_year_2030",
+   "source": "manifold",
+   "ref": "MelpvntqhFTau8Tdl0kp",
+   "url": "https://manifold.markets/TenShino/will-ai-wipe-out-cows-before-the-ye",
+   "value": 0.022037,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0179",
+   "variableId": "x_the_probability_of_extremely_bad_outcomes_e_g_human_extinc",
+   "source": "manifold",
+   "ref": "JpnMNNrVSb5FuIqu9zox",
+   "url": "https://manifold.markets/DismalScientist/the-probability-of-extremely-bad-ou",
+   "value": 0.689051,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0180",
+   "variableId": "x_will_a_world_war_ii_veteran_live_to_see_agi",
+   "source": "manifold",
+   "ref": "BCddoFm4VqP2Dq7ofr5C",
+   "url": "https://manifold.markets/AutopoieticErgodicity/will-a-world-war-ii-veteran-live-to",
+   "value": 0.21,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0181",
+   "variableId": "x_will_we_get_agi_before_2044",
+   "source": "manifold",
+   "ref": "XuIOL0tmb0r2ekxUcVGN",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2044",
+   "value": 0.782501,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0182",
+   "variableId": "x_will_a_human_walk_on_mars_before_strong_agi_is_achieved",
+   "source": "manifold",
+   "ref": "B0UIShayQLWSHWWpSzmQ",
+   "url": "https://manifold.markets/strutheo/will-a-human-walk-on-mars-before-st",
+   "value": 0.438386,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0183",
+   "variableId": "x_will_we_get_asi_before_2035",
+   "source": "manifold",
+   "ref": "gxfbw68ovj",
+   "url": "https://manifold.markets/RemNi/will-we-get-asi-before-2035",
+   "value": 0.279391,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0184",
+   "variableId": "x_by_2028_will_i_believe_that_contemporary_ais_are_aligned_p",
+   "source": "manifold",
+   "ref": "VzKJ4UDazsnXyczv6H1b",
+   "url": "https://manifold.markets/JacobPfau/by-2028-will-i-believe-that-ai-alig",
+   "value": 0.321182,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0185",
+   "variableId": "x_will_models_be_able_to_do_the_work_of_an_ai_researcher_eng",
+   "source": "manifold",
+   "ref": "oYgIq3qYjQvhsjl7Tgii",
+   "url": "https://manifold.markets/Tossup/lasa-will-models-be-able-to-do-the",
+   "value": 0.112156,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0186",
+   "variableId": "x_100b_ai_training_cluster_before_2029",
+   "source": "manifold",
+   "ref": "wKKeNp3qeXPRDH4oVwLo",
+   "url": "https://manifold.markets/Tossup/lasa-100b-ai-training-cluster-by-th",
+   "value": 0.931831,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0187",
+   "variableId": "x_will_i_win_my_bet_with_robin_hanson_about_agi_coming_befor",
+   "source": "manifold",
+   "ref": "F2snDEZl7R0hjL2egwFY",
+   "url": "https://manifold.markets/MatthewBarnett/will-i-win-my-bet-with-robin-hanson",
+   "value": 0.955519,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0188",
+   "variableId": "x_before_2030_will_we_have_ai_that_can_play_minecraft_unders",
+   "source": "manifold",
+   "ref": "hlhtKBnUrwY9A7h6suCd",
+   "url": "https://manifold.markets/IsaacKing/before-2030-will-we-have-multimodal",
+   "value": 0.63,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0189",
+   "variableId": "x_will_we_get_agi_before_july_1st_2026",
+   "source": "manifold",
+   "ref": "o9aoZBfa0XWd7Tr7xkUn",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-july-1st-202",
+   "value": 0.01,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0190",
+   "variableId": "x_will_joe_biden_live_to_see_agi",
+   "source": "manifold",
+   "ref": "JhFg0gu0mBMvKOhimstU",
+   "url": "https://manifold.markets/JamesF/will-joe-biden-live-to-see-agi",
+   "value": 0.368446,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0191",
+   "variableId": "x_will_ai_xrisk_seem_to_be_handled_seriously_by_the_end_of_2",
+   "source": "manifold",
+   "ref": "ehZ3FjgPaMAE8CKBBp9L",
+   "url": "https://manifold.markets/tailcalled/will-ai-xrisk-seem-to-be-handled-se",
+   "value": 0.134099,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0192",
+   "variableId": "x_when_manifold_s_agi_countdown_resolves_yes_will_manifold_u",
+   "source": "manifold",
+   "ref": "GPc0wbPkE36w7CUUm3Yb",
+   "url": "https://manifold.markets/jim/when-manifolds-agi-countdown-resolv",
+   "value": 0.496461,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0193",
+   "variableId": "x_will_gpt_5_make_manifold_think_very_near_term_agi_is_more",
+   "source": "manifold",
+   "ref": "3UwB4bua2hkII3VNQ4ML",
+   "url": "https://manifold.markets/VerySeriousPoster/will-gpt5-make-manifold-think-very",
+   "value": 0.112879,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0194",
+   "variableId": "x_by_2029_will_there_be_a_public_rogue_ai_incident",
+   "source": "manifold",
+   "ref": "zyKN4jVYX8zzYxqzSBdL",
+   "url": "https://manifold.markets/vluzko/by-2029-will-there-be-a-public-rogu",
+   "value": 0.87,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0195",
+   "variableId": "x_will_we_get_agi_before_xi_jinping_stops_being_the_leader_o",
+   "source": "manifold",
+   "ref": "EJF6lLPyHHlXadlgHjAa",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-xi-jinping-s",
+   "value": 0.28,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0196",
+   "variableId": "x_did_covid_19_come_from_a_laboratory_2050_poll",
+   "source": "manifold",
+   "ref": "US37eQkudjSgCGFtVSRf",
+   "url": "https://manifold.markets/ahalekelly/did-covid19-come-from-a-laboratory-9109c5c0aea9",
+   "value": 0.371732,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0197",
+   "variableId": "x_will_a_country_ban_human_driven_cars_in_favor_of_ai_self_d",
+   "source": "manifold",
+   "ref": "7DXAL229eyElYUannr94",
+   "url": "https://manifold.markets/strutheo/will-a-country-ban-human-driven-car",
+   "value": 0.4,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0198",
+   "variableId": "x_will_yudkowsky_claim_that_he_is_more_than_90_sure_that_ai",
+   "source": "manifold",
+   "ref": "8mLQNh5tur4qPwXFl5hB",
+   "url": "https://manifold.markets/IhorKendiukhov/will-yudkowsky-claim-that-he-is-mor-f2h2nq5epx",
+   "value": 0.278591,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0199",
+   "variableId": "x_will_artificial_superintelligence_be_developed_in_the_usa",
+   "source": "manifold",
+   "ref": "2uPzSCupzq",
+   "url": "https://manifold.markets/Symmetry/will-artificial-superintelligence-b",
+   "value": 0.173265,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0200",
+   "variableId": "x_if_asi_is_created_and_doesn_t_wipe_out_humanity_will_it_to",
+   "source": "manifold",
+   "ref": "9JNRQ3fhGuyuoW1gN0xL",
+   "url": "https://manifold.markets/TheAllMemeingEye/if-asi-is-created-and-doesnt-wipe-o-bxa1loxmvl",
+   "value": 0.272455,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0201",
+   "variableId": "x_by_2028_will_i_think_anthropic_has_been_net_good_for_the_w",
+   "source": "manifold",
+   "ref": "Fyi1KQkZHBUb4eGCD34r",
+   "url": "https://manifold.markets/philh/by-2028-will-i-think-anthropic-has",
+   "value": 0.564669,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0202",
+   "variableId": "x_will_things_basically_be_fine_regarding_job_loss_and_unemp",
+   "source": "manifold",
+   "ref": "NtqQ7bNiunP5aHWJamma",
+   "url": "https://manifold.markets/jacksonpolack/will-things-basically-be-fine-regar",
+   "value": 0.61121,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0203",
+   "variableId": "x_are_we_about_to_hit_another_ai_winter_in_2026",
+   "source": "manifold",
+   "ref": "Gw9K7U3fvRxMza0BxJ7v",
+   "url": "https://manifold.markets/MaximeRiche/are-we-about-to-hit-another-ai-wint-c3c0790ef413",
+   "value": 0.085475,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0204",
+   "variableId": "x_will_there_be_at_least_a_close_call_with_a_powerful_misali",
+   "source": "manifold",
+   "ref": "T1uSdwfOr3pXN0V4rmsF",
+   "url": "https://manifold.markets/JonathanRay/will-there-be-at-least-a-close-call",
+   "value": 0.827116,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0205",
+   "variableId": "x_1_hour_agi_a_system_capable_of_any_computer_based_task_a_h",
+   "source": "manifold",
+   "ref": "V1HFXkYiVEJPo9bQwNbm",
+   "url": "https://manifold.markets/NathanHelmBurger/1hour-agi-a-system-capable-of-any-c",
+   "value": 0.298741,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0206",
+   "variableId": "x_will_it_be_revealed_by_2030_that_bing_sydney_s_release_was",
+   "source": "manifold",
+   "ref": "9gpSLROBvHkcBrzyWnQ3",
+   "url": "https://manifold.markets/ChristopherKing/will-it-be-revealed-by-2030-that-bi",
+   "value": 0.05483,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0207",
+   "variableId": "x_will_metr_find_ai_reduces_developer_productivity_in_their",
+   "source": "manifold",
+   "ref": "dnOy0yN5ln",
+   "url": "https://manifold.markets/JaundicedBaboon/will-metr-find-ai-reduces-developer",
+   "value": 0.121442,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0208",
+   "variableId": "x_will_the_us_or_uk_nationalize_any_frontier_ai_labs_by_2035",
+   "source": "manifold",
+   "ref": "Uxu9dll7SdYVTGUEmebV",
+   "url": "https://manifold.markets/MaxHarms/will-the-us-or-uk-nationalize-any-f",
+   "value": 0.653993,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0209",
+   "variableId": "x_will_fast_takeoff_less_than_72_hours_from_agi_to_asi_occur",
+   "source": "manifold",
+   "ref": "NCKfrEGePme7MPrZa3jK",
+   "url": "https://manifold.markets/Peter1169/will-a-fast-takeoff-scenario-occur",
+   "value": 0.173233,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0210",
+   "variableId": "x_conditional_on_their_being_no_ai_takeoff_before_2030_will",
+   "source": "manifold",
+   "ref": "m34sYrVZnuXid60BvEKh",
+   "url": "https://manifold.markets/Duncn/conditional-on-their-being-no-ai-ta",
+   "value": 0.344079,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0211",
+   "variableId": "x_will_king_charles_live_to_see_the_creation_of_agi",
+   "source": "manifold",
+   "ref": "HzDRHkWdYwcqf7heMqI2",
+   "url": "https://manifold.markets/fenouil/will-king-charles-live-to-see-the-c",
+   "value": 0.190168,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0212",
+   "variableId": "x_will_there_be_a_massive_catastrophe_caused_by_ai_before_20",
+   "source": "manifold",
+   "ref": "czck4zd672",
+   "url": "https://manifold.markets/ersatz/will-there-be-a-massive-catastrophe",
+   "value": 0.28,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0213",
+   "variableId": "x_will_eliezeryudkowsky_reverse_his_opinion_on_ai_safety_bef",
+   "source": "manifold",
+   "ref": "NG0aogG9MbGWU713Xtkd",
+   "url": "https://manifold.markets/jim/will-eliezeryudkowsky-reverse-his-o",
+   "value": 0.056312,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0214",
+   "variableId": "x_will_anthropic_have_a_major_conflict_involving_its_unique",
+   "source": "manifold",
+   "ref": "31TfDsy8jgAr4j9sHD6V",
+   "url": "https://manifold.markets/WilliamEden/will-anthropic-have-a-major-conflic",
+   "value": 0.394838,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0215",
+   "variableId": "x_will_we_have_an_ai_generated_research_paper_accepted_to_1",
+   "source": "manifold",
+   "ref": "35y62f0OyIK7pTsVoifT",
+   "url": "https://manifold.markets/_deleted_/will-we-have-an-ai-generated-resear-67eaed57c085",
+   "value": 0.830379,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0216",
+   "variableId": "x_conditional_on_humanity_surviving_to_2035_will_a_global_ai",
+   "source": "manifold",
+   "ref": "RQAbCjnhmzVhODm7MVco",
+   "url": "https://manifold.markets/Bayesian/conditional-on-humanity-surviving-t",
+   "value": 0.3,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0217",
+   "variableId": "x_half_life_3_before_agi",
+   "source": "manifold",
+   "ref": "0Oh9lnEAp6",
+   "url": "https://manifold.markets/jim/will-valve-release-halflife-3-befor",
+   "value": 0.740459,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0218",
+   "variableId": "x_will_we_get_asi_before_2036",
+   "source": "manifold",
+   "ref": "toouubbjmj",
+   "url": "https://manifold.markets/RemNi/will-we-get-asi-before-2036",
+   "value": 0.30073,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0219",
+   "variableId": "x_will_unemployment_rate_in_the_us_reach_10_between_the_2024",
+   "source": "manifold",
+   "ref": "xndlcNdFe4NE2rXYMfuA",
+   "url": "https://manifold.markets/SIMOROBO/will-unemployment-rate-in-the-unite-0e2997d05ff0",
+   "value": 0.136799,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0220",
+   "variableId": "x_will_r1_or_v3_cause_or_materially_enable_a_catastrophic_ri",
+   "source": "manifold",
+   "ref": "08d8EdlNC8",
+   "url": "https://manifold.markets/ZviMowshowitz/will-r1-or-v3-cause-or-materially-e",
+   "value": 0.010318,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0221",
+   "variableId": "x_will_we_have_agi_before_a_mars_colony",
+   "source": "manifold",
+   "ref": "m0xokegumb",
+   "url": "https://manifold.markets/Daniel_MC/will-we-have-agi-before-a-mars-colo",
+   "value": 0.787408,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0222",
+   "variableId": "x_will_meta_ever_deploy_its_best_llm_without_releasing_its_m",
+   "source": "manifold",
+   "ref": "GHUonx0ZbSPsoPA4afSS",
+   "url": "https://manifold.markets/ZviMowshowitz/will-meta-ever-deploy-its-best-llm",
+   "value": 0.804595,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0223",
+   "variableId": "x_will_donald_trump_be_the_us_president_when_we_get_agi",
+   "source": "manifold",
+   "ref": "i6fc1eIKkpZ6Ij0iwN3R",
+   "url": "https://manifold.markets/RemNi/will-donald-trump-be-president-of-t",
+   "value": 0.28,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0224",
+   "variableId": "x_will_ai_achieve_superintelligence_in_music_composition_by",
+   "source": "manifold",
+   "ref": "h6EhpRzQZIV2wHqAHvVj",
+   "url": "https://manifold.markets/SteveSokolowski/will-ai-achieve-superintelligence-i",
+   "value": 0.096852,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0225",
+   "variableId": "x_does_an_ai_disaster_kill_at_least_100_people_before_2040",
+   "source": "manifold",
+   "ref": "hMn7h6TFqzYZr16Lmtht",
+   "url": "https://manifold.markets/ScroogeMcDuck/does-an-ai-disaster-kill-at-least-1-73bcb6a788ab",
+   "value": 0.804075,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0226",
+   "variableId": "x_will_a_misaligned_agi_take_over_the_world",
+   "source": "manifold",
+   "ref": "OEkQx1xzABwnkQRKwyL9",
+   "url": "https://manifold.markets/patodesu/will-a-misaligned-ai-take-over-the",
+   "value": 0.106559,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0227",
+   "variableId": "x_2030_3_over_one_hundred_thousand_humanoid_robots_will_be_d",
+   "source": "manifold",
+   "ref": "92ObamYS7hVzmVRTYd5D",
+   "url": "https://manifold.markets/HenriThunberg/2030-3-over-one-hundred-thousand-hu",
+   "value": 0.790792,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0228",
+   "variableId": "x_will_ai_existential_risk_be_mentioned_in_the_white_house_b",
+   "source": "manifold",
+   "ref": "vcNfzsg6Avjj7ynoxKqV",
+   "url": "https://manifold.markets/ZviMowshowitz/will-ai-existential-risk-be-mention",
+   "value": 0.874734,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0229",
+   "variableId": "x_will_an_accident_involving_miniaturized_fusion_reactors_wi",
+   "source": "manifold",
+   "ref": "OVk0WdKIRJz85No6pF8U",
+   "url": "https://manifold.markets/AlexbGoode/will-an-accident-involving-miniatur",
+   "value": 0.01,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0230",
+   "variableId": "x_if_agi_is_achieved_will_it_be_able_to_consistently_and_rel",
+   "source": "manifold",
+   "ref": "TNFs4ZtNBSQ60rR7lOqf",
+   "url": "https://manifold.markets/brp/if-agi-is-achieved-will-it-be-able",
+   "value": 0.543526,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0231",
+   "variableId": "x_will_sam_altman_be_killed_by_ai",
+   "source": "manifold",
+   "ref": "NQ4QpqrKbmxe6ee9PGyk",
+   "url": "https://manifold.markets/MartinRandall/will-sam-altman-be-killed-by-ai",
+   "value": 0.08525,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0232",
+   "variableId": "x_by_2050_will_there_be_a_cure_to_aging_conditional_on_agi_b",
+   "source": "manifold",
+   "ref": "xRKVaKdN6F2YBYneq7Jk",
+   "url": "https://manifold.markets/DanielEth/by-2050-will-there-be-a-cure-to-agi-2b779d9037b2",
+   "value": 0.40914,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0233",
+   "variableId": "x_will_we_get_agi_before_july_1st_2030",
+   "source": "manifold",
+   "ref": "iVofDnNSPZTSgyWEQuEU",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-july-1st-203",
+   "value": 0.348449,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0234",
+   "variableId": "x_by_2029_will_an_ai_convince_a_human_to_help_it_successfull",
+   "source": "manifold",
+   "ref": "9YEJjxtnXHFsbRe311cX",
+   "url": "https://manifold.markets/vluzko/by-2029-will-an-ai-convince-a-human",
+   "value": 0.558949,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0235",
+   "variableId": "x_will_the_us_federal_government_spend_more_than_1_1000th_of",
+   "source": "manifold",
+   "ref": "IW3ACtIeEN8JTvUxR3fy",
+   "url": "https://manifold.markets/Joshua/will-the-us-government-spend-more-t",
+   "value": 0.124247,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0236",
+   "variableId": "x_by_2028_will_i_think_openai_has_been_net_good_for_the_worl",
+   "source": "manifold",
+   "ref": "CPQsDYhfJtCJQSlfWqIp",
+   "url": "https://manifold.markets/philh/by-2028-will-i-think-openai-has-bee",
+   "value": 0.254256,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0237",
+   "variableId": "x_will_significant_evidence_emerge_that_alibaba_s_rome_ai_tr",
+   "source": "manifold",
+   "ref": "uRnnSUq2Eq",
+   "url": "https://manifold.markets/CDBiddulph/will-significant-evidence-emerge-th",
+   "value": 0.117934,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0238",
+   "variableId": "x_will_an_ai_system_similar_to_auto_gpt_make_a_successful_at",
+   "source": "manifold",
+   "ref": "r229lzHaWfno9FV0gOwj",
+   "url": "https://manifold.markets/JuJumper/will-an-ai-system-similar-to-autogp",
+   "value": 0.26653,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0239",
+   "variableId": "x_will_a_high_level_trump_admin_member_mention_zizians_befor",
+   "source": "manifold",
+   "ref": "Zz9I8tZO02",
+   "url": "https://manifold.markets/AdamK/will-a-highlevel-trump-admin-member",
+   "value": 0.090096,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0240",
+   "variableId": "x_will_ai_wipe_out_all_biological_life_on_earth_before_2100",
+   "source": "manifold",
+   "ref": "qRiKFHS6nvztSzdecHZo",
+   "url": "https://manifold.markets/LarsDoucet/will-ai-wipe-out-all-biological-lif",
+   "value": 0.07799,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0241",
+   "variableId": "x_by_the_end_of_2028_will_ai_models_as_dario_amodei_speculat",
+   "source": "manifold",
+   "ref": "1gRl5hxC7wsYBoyRwfzJ",
+   "url": "https://manifold.markets/BionicD0LPH1N/by-the-end-of-2028-will-ai-models-a",
+   "value": 0.215027,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0242",
+   "variableId": "x_will_the_inflation_rate_in_the_us_reach_6_between_the_2024",
+   "source": "manifold",
+   "ref": "jo4Pcv7EY0ErlZH3PEhp",
+   "url": "https://manifold.markets/SIMOROBO/will-the-inflation-rate-in-the-us-r",
+   "value": 0.364342,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0243",
+   "variableId": "x_is_agi_possible_within_the_known_laws_of_physics",
+   "source": "manifold",
+   "ref": "H5nosHM9qHYSt1nWsyGI",
+   "url": "https://manifold.markets/IsaacKing/is-agi-possible-within-the-known-la",
+   "value": 0.988862,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0244",
+   "variableId": "x_will_noam_chomsky_be_alive_to_witness_the_development_of_a",
+   "source": "manifold",
+   "ref": "sZ3Dvc5oGU8IPWgNlzsl",
+   "url": "https://manifold.markets/AutopoieticErgodicity/will-noam-chomsky-be-alive-to-witne",
+   "value": 0.077064,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0245",
+   "variableId": "x_in_2028_will_a_publicly_available_ai_be_able_to_generate_a",
+   "source": "manifold",
+   "ref": "hh0n5VdLM6qufiB8F7nG",
+   "url": "https://manifold.markets/Fion/in-2028-will-a-publicly-available-a",
+   "value": 0.206719,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0246",
+   "variableId": "x_will_there_be_a_fire_alarm_for_agi_by_the_end_of_2027",
+   "source": "manifold",
+   "ref": "IdQPxWoEENJyu8NvHR9u",
+   "url": "https://manifold.markets/IsaacKing/will-there-be-a-fire-alarm-for-agi",
+   "value": 0.189174,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0247",
+   "variableId": "x_by_2050_will_there_be_a_cure_to_aging_conditional_on_no_ag",
+   "source": "manifold",
+   "ref": "wIEWOLHCkVs0dIj6rq6f",
+   "url": "https://manifold.markets/DanielEth/by-2050-will-there-be-a-cure-to-agi-20f64c45fcbd",
+   "value": 0.149266,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0248",
+   "variableId": "x_will_we_discover_aliens_before_agi",
+   "source": "manifold",
+   "ref": "waurJT9Y9dg4jWMB31xe",
+   "url": "https://manifold.markets/RobinGreen/will-we-discover-aliens-before-agi",
+   "value": 0.113498,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0249",
+   "variableId": "x_will_unsuccessfully_aligned_agi_kill_us_all",
+   "source": "manifold",
+   "ref": "TeWRQojLHpWs2EH05HcC",
+   "url": "https://manifold.markets/hmys/will-unsuccessfully-aligned-agi-kil",
+   "value": 0.321075,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0250",
+   "variableId": "x_is_superintelligence_possible_within_the_known_laws_of_phy",
+   "source": "manifold",
+   "ref": "P9uXl9sAqWBKCgWp2LQS",
+   "url": "https://manifold.markets/IsaacKing/is-superintelligence-possible-withi",
+   "value": 0.957057,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0251",
+   "variableId": "x_will_at_least_five_purely_ai_written_books_make_it_onto_th",
+   "source": "manifold",
+   "ref": "8LdjDDGtPYeHQbbTDCkj",
+   "url": "https://manifold.markets/Tulip/will-at-least-five-purelyaiwritten",
+   "value": 0.449973,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0252",
+   "variableId": "x_will_ai_surpass_humans_in_conducting_scientific_research_b",
+   "source": "manifold",
+   "ref": "LFOo1OITz7nNdeWzvyP3",
+   "url": "https://manifold.markets/Royf214/will-ai-surpass-humans-in-conductin",
+   "value": 0.308164,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0253",
+   "variableId": "x_will_a_silly_manifold_market_wipe_out_humanity_before_2030",
+   "source": "manifold",
+   "ref": "RrQtMa2RcU08dhLDCfYI",
+   "url": "https://manifold.markets/MachiNi/will-a-silly-manifold-market-wipe-o",
+   "value": 0.013462,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0254",
+   "variableId": "x_will_computers_and_internet_still_be_a_widespread_and_acce",
+   "source": "manifold",
+   "ref": "X3e6DVk6qct9G7qQkJwW",
+   "url": "https://manifold.markets/mickaelheitzmann/will-computers-and-internet-still-b",
+   "value": 0.965698,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0255",
+   "variableId": "x_will_i_get_to_feel_the_agi_on_the_big_screen_before_2033",
+   "source": "manifold",
+   "ref": "m8T5Vc08eOybAsyyyV0x",
+   "url": "https://manifold.markets/AdamK/will-i-get-to-feel-the-agi-on-the-b",
+   "value": 0.388591,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0256",
+   "variableId": "x_will_the_arc_agi_grand_prize_be_claimed_by_an_llm",
+   "source": "manifold",
+   "ref": "uyCcw5fmUYcW3WAyddHZ",
+   "url": "https://manifold.markets/Tossup/will-the-arcagi-grand-prize-be-clai-t2or6lg54g",
+   "value": 0.376072,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0257",
+   "variableId": "x_should_smart_ethical_people_go_into_ai_rather_than_climate",
+   "source": "manifold",
+   "ref": "MYF4Ct8dmyPvCWY9ZGgl",
+   "url": "https://manifold.markets/stuhlmueller/should-smart-ethical-people-go-into",
+   "value": 0.686972,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0258",
+   "variableId": "x_will_anthropic_release_claude_5_opus_or_equivalent_next_ge",
+   "source": "manifold",
+   "ref": "RO9htAqtyy",
+   "url": "https://manifold.markets/CalibratedGhosts/will-anthropic-release-claude-5-opu",
+   "value": 0.99,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0259",
+   "variableId": "x_will_any_computer_virus_powered_by_ai_cause_large_damages",
+   "source": "manifold",
+   "ref": "wRWH0HPrn5f5kCMnGUi1",
+   "url": "https://manifold.markets/BendikBendiksen/will-any-computer-virus-powered-by",
+   "value": 0.357377,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0260",
+   "variableId": "x_does_an_ai_disaster_kill_at_least_1_000_000_000_1bn_people",
+   "source": "manifold",
+   "ref": "hd6bCiYXPBI1pikaryWa",
+   "url": "https://manifold.markets/ScroogeMcDuck/does-an-ai-disaster-kill-at-least-1",
+   "value": 0.051012,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0261",
+   "variableId": "x_will_openai_abandon_the_goal_of_building_agi_before_2030",
+   "source": "manifold",
+   "ref": "8yFaXVxy1qQ5RzfVIxtj",
+   "url": "https://manifold.markets/cash/will-openai-abandon-the-goal-of-bui",
+   "value": 0.132161,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0262",
+   "variableId": "x_will_we_get_agi_before_we_get_room_temperature_superconduc",
+   "source": "manifold",
+   "ref": "DglMMu3UGk9fiHa4CUe7",
+   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-we-get-room",
+   "value": 0.845764,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0263",
+   "variableId": "x_will_anthropic_s_rsp_security_commitments_as_of_oct_28_202",
+   "source": "manifold",
+   "ref": "P4hUcypGZ4wNeixCfhzD",
+   "url": "https://manifold.markets/OliverHabryka/will-anthropics-rsp-security-commit",
+   "value": 0.024144,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0264",
+   "variableId": "x_soai_4_a_deepfake_agent_driven_cyber_attack_triggers_the_f",
+   "source": "manifold",
+   "ref": "ChEAhs8gUI",
+   "url": "https://manifold.markets/ZviMowshowitz/soai4-a-deepfakeagentdriven-cyber-a",
+   "value": 0.265069,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0265",
+   "variableId": "x_does_an_ai_disaster_kill_at_least_100_000_people_before_20",
+   "source": "manifold",
+   "ref": "nrRwBalvp8XEsvS39Su0",
+   "url": "https://manifold.markets/ScroogeMcDuck/does-an-ai-accident-kill-at-least-1-16699bd37e14",
+   "value": 0.22277,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0266",
+   "variableId": "x_will_extropic_ai_be_worth_at_least_100_million_before_2028",
+   "source": "manifold",
+   "ref": "xXXy9iCqyaOE44pUTFdX",
+   "url": "https://manifold.markets/IsaacKing/will-extropic-ai-be-worth-at-least",
+   "value": 0.161603,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0267",
+   "variableId": "x_in_early_2028_will_an_ai_be_able_to_generate_a_full_high_q",
+   "source": "manifold",
+   "ref": "A319ydGB1B7f4PMOROL3",
+   "url": "https://manifold.markets/ScottAlexander/in-2028-will-an-ai-be-able-to-gener",
+   "value": 0.30448,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0268",
+   "variableId": "x_in_2028_will_ai_be_at_least_as_big_a_political_issue_as_ab",
+   "source": "manifold",
+   "ref": "nOXCmJFNsLx08PjOc4Qk",
+   "url": "https://manifold.markets/ScottAlexander/in-2028-will-ai-be-at-least-as-big",
+   "value": 0.890167,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0269",
+   "variableId": "x_by_2028_will_there_be_a_visible_break_in_trend_line_on_us",
+   "source": "manifold",
+   "ref": "zg7xJ5ZkJJ4wJPJDPjWO",
+   "url": "https://manifold.markets/ScottAlexander/by-2028-will-there-be-a-visible-bre",
+   "value": 0.38,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0270",
+   "variableId": "x_instant_deepfakes_of_anyone_doing_anything_by_the_end_of_2",
+   "source": "manifold",
+   "ref": "cNmTnf0Q0OqH2clJS26c",
+   "url": "https://manifold.markets/dreev/instant-deepfakes-of-anyone-within",
+   "value": 0.81,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0271",
+   "variableId": "x_will_the_ai_bubble_pop_in_2026",
+   "source": "manifold",
+   "ref": "puLqZusPqU",
+   "url": "https://manifold.markets/256/will-the-ai-bubble-pop-in-2026",
+   "value": 0.104514,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0272",
+   "variableId": "x_acx_2026_will_an_ai_created_song_chart_in_the_top_20_of_th",
+   "source": "manifold",
+   "ref": "9qO6y9sEId",
+   "url": "https://manifold.markets/DaftPunkRock/acx-2026-will-an-aicreated-song-cha",
+   "value": 0.207959,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0273",
+   "variableId": "x_will_we_develop_leopold_s_drop_in_remote_ai_workers_by_end",
+   "source": "manifold",
+   "ref": "Dd6cIaOO5cHHZ6qjh59M",
+   "url": "https://manifold.markets/ZviMowshowitz/will-we-develop-leopolds-dropin-rem",
+   "value": 0.721144,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0274",
+   "variableId": "x_will_artificial_intelligence_solve_a_millennium_prize_prob",
+   "source": "manifold",
+   "ref": "6vw71lj8bi",
+   "url": "https://manifold.markets/AlanTuring/will-artificial-intelligence-solve",
+   "value": 0.580364,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0275",
+   "variableId": "x_in_2028_will_an_ai_be_able_to_play_randomly_selected_compu",
+   "source": "manifold",
+   "ref": "HS8ndzFminW0UN2kRDgq",
+   "url": "https://manifold.markets/ScottAlexander/in-2028-will-an-ai-be-able-to-play",
+   "value": 0.704267,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0276",
+   "variableId": "x_will_trump_post_another_religious_image_deifying_himself",
+   "source": "manifold",
+   "ref": "CIsh2zUqpC",
+   "url": "https://manifold.markets/GnosticGirl/will-trump-post-another-religious-i",
+   "value": 0.772864,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0277",
+   "variableId": "x_will_there_be_troops_or_federal_agents_at_us_voting_booths",
+   "source": "manifold",
+   "ref": "6U2PIUc0E6",
+   "url": "https://manifold.markets/Gen/will-there-be-pressure-by-troops-or",
+   "value": 0.48343,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0278",
+   "variableId": "x_ai_2027_report_s_predictions_borne_out_by_2027",
+   "source": "manifold",
+   "ref": "9OgZp6uC95",
+   "url": "https://manifold.markets/IsaacKing/ai-2027-reports-predictions-borne-o",
+   "value": 0.21115,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0279",
+   "variableId": "x_by_eoy_2026_will_it_seem_as_if_deep_learning_hit_a_wall_by",
+   "source": "manifold",
+   "ref": "uQPZV2B2u4aUTvZWGgoD",
+   "url": "https://manifold.markets/ZviMowshowitz/by-eoy-2026-will-it-seem-as-if-deep",
+   "value": 0.07,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0280",
+   "variableId": "x_will_discord_cancel_age_verification_rollout",
+   "source": "manifold",
+   "ref": "EnEgzsQSd8",
+   "url": "https://manifold.markets/GnosticGirl/will-discord-cancel-age-verificatio",
+   "value": 0.137453,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0281",
+   "variableId": "x_will_ai_cause_the_us_unemployment_rate_to_exceed_10_before",
+   "source": "manifold",
+   "ref": "TryNuKNJXNdiYDCXRpPi",
+   "url": "https://manifold.markets/ahalekelly/will-ai-cause-the-us-unemployment-r",
+   "value": 0.223107,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0282",
+   "variableId": "x_ai_beats_minecraft_rsg_in_under_10_minutes_before_2028",
+   "source": "manifold",
+   "ref": "9AynNtnO5I",
+   "url": "https://manifold.markets/Bayesian/ai-beats-minecraft-rsg-in-under-10-z56AZNtIyL",
+   "value": 0.289816,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0283",
+   "variableId": "x_will_anthropic_become_profitable_this_year",
+   "source": "manifold",
+   "ref": "2ESLt0g85E",
+   "url": "https://manifold.markets/Simon74fe/will-anthropic-become-profitable-th",
+   "value": 0.917901,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0284",
+   "variableId": "x_will_i_think_all_ai_hell_broke_loose_in_2026",
+   "source": "manifold",
+   "ref": "lCdu8E6ySc",
+   "url": "https://manifold.markets/EliezerYudkowsky/will-i-think-all-ai-hell-broke-loos-N9U9U2IPzn",
+   "value": 0.139564,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0285",
+   "variableId": "x_nasa_confirms_aliens_before_2027",
+   "source": "manifold",
+   "ref": "NEu5npNht5",
+   "url": "https://manifold.markets/jerwang/nasa-confirms-aliens-before-2027",
+   "value": 0.019844,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0286",
+   "variableId": "x_is_attention_all_you_need_transformers_sota_in_2027",
+   "source": "manifold",
+   "ref": "iNbCvoguw3o6d4i7Sx2Z",
+   "url": "https://manifold.markets/_deleted_/on-january-1-2027-a-transformerlike-d56426e3f49e",
+   "value": 0.932132,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0287",
+   "variableId": "x_will_tesla_provide_or_be_included_in_an_autonomous_ride_ha",
+   "source": "manifold",
+   "ref": "gx18r8g6AM5sXGJ0lpSQ",
+   "url": "https://manifold.markets/makoyass/will-tesla-provide-an-autonomous-dr",
+   "value": 0.675857,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0288",
+   "variableId": "x_will_anyone_commit_suicide_due_to_fears_of_anti_aligned_ai",
+   "source": "manifold",
+   "ref": "vHAeIQsVj4IgY5zIvVeB",
+   "url": "https://manifold.markets/IsaacKing/will-anyone-commit-suicide-due-to-f",
+   "value": 0.872776,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0289",
+   "variableId": "x_will_fully_autonomous_level_5_self_driving_cars_be_availab",
+   "source": "manifold",
+   "ref": "hdWDcQuy1aDtknfgZe64",
+   "url": "https://manifold.markets/dreev/will-fully-autonomous-level-5-selfd",
+   "value": 0.719372,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0290",
+   "variableId": "x_openai_ipo_before_2027",
+   "source": "manifold",
+   "ref": "NII0slqg2N",
+   "url": "https://manifold.markets/Bayesian/openai-ipo-before-2027",
+   "value": 0.221556,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0291",
+   "variableId": "x_will_97_of_all_jobs_be_fully_automated_before_the_year_207",
+   "source": "manifold",
+   "ref": "ap8fNwshZJN3HOBVQLu5",
+   "url": "https://manifold.markets/M_C/will-there-be-full-automation-of-al",
+   "value": 0.558059,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0292",
+   "variableId": "x_scott_alexander_publishes_a_death_with_dignity_style_post",
+   "source": "manifold",
+   "ref": "LmEKBmHuP5wKm4lRSsal",
+   "url": "https://manifold.markets/GG/scott-alexander-publishes-a-death-w",
+   "value": 0.176005,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0293",
+   "variableId": "x_if_someone_commits_anti_ai_xrisk_terrorism_will_ai_xrisk_w",
+   "source": "manifold",
+   "ref": "b3JRZnUcewzZm8KPIG5X",
+   "url": "https://manifold.markets/tailcalled/if-someone-commits-antiaixrisk-terr",
+   "value": 0.319388,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0294",
+   "variableId": "x_will_there_be_another_major_sam_altman_controversy",
+   "source": "manifold",
+   "ref": "JjafLJtoOxfufp1dNLQp",
+   "url": "https://manifold.markets/GabeGarboden/will-there-be-another-major-sam-alt",
+   "value": 0.67,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0295",
+   "variableId": "x_acx_2026_will_openai_file_for_an_ipo_during_2026",
+   "source": "manifold",
+   "ref": "y2R55l60OA",
+   "url": "https://manifold.markets/DaftPunkRock/acx-2026-will-openai-file-for-an-ip",
+   "value": 0.264,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0296",
+   "variableId": "x_will_the_us_confirm_that_aliens_exist_before_2027",
+   "source": "manifold",
+   "ref": "lEzIAQz2pL",
+   "url": "https://manifold.markets/konga/will-the-us-confirm-that-aliens-exi-cNZPl6hAEu",
+   "value": 0.065943,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0297",
+   "variableId": "x_if_ai_safety_is_divided_by_left_right_politics_in_the_next",
+   "source": "manifold",
+   "ref": "s4ejYnZuqTZQXbJpTVJ8",
+   "url": "https://manifold.markets/NathanNguyen/if-ai-safety-is-divided-by-leftrigh",
+   "value": 0.733956,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0298",
+   "variableId": "x_will_tesla_have_more_autonomous_vehicles_providing_ridehai",
+   "source": "manifold",
+   "ref": "6Iun6Stutq",
+   "url": "https://manifold.markets/NathanpmYoung/will-tesla-have-more-autonomous-veh",
+   "value": 0.22,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0299",
+   "variableId": "x_will_tesla_offer_a_robo_taxi_service_in_california_by_the",
+   "source": "manifold",
+   "ref": "absetlqg1a",
+   "url": "https://manifold.markets/DavidFWatson/will-tesla-offer-a-robotaxi-service-hld91s7u3r",
+   "value": 0.02,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0300",
+   "variableId": "x_will_ai_resolve_p_vs_np_by_2050",
+   "source": "manifold",
+   "ref": "Cxo1aXMF2iuvoul2FAhf",
+   "url": "https://manifold.markets/SG/will-ai-resolve-p-vs-np-by-2050",
+   "value": 0.543521,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0301",
+   "variableId": "x_will_i_talk_with_a_whale_by_2027",
+   "source": "manifold",
+   "ref": "4Wal1Q4UNvCzByXR1ArB",
+   "url": "https://manifold.markets/Sinclair/will-i-talk-with-a-whale-by-2027",
+   "value": 0.066195,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0302",
+   "variableId": "x_will_we_have_near_complete_automation_of_the_world_economy",
+   "source": "manifold",
+   "ref": "LvVDGJAlWrYyk7qmyIqq",
+   "url": "https://manifold.markets/MatthewBarnett/will-we-have-nearcomplete-automatio",
+   "value": 0.21,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0303",
+   "variableId": "x_can_you_just_balenciaga_it_before_2028",
+   "source": "manifold",
+   "ref": "qpdlSsQzdU",
+   "url": "https://manifold.markets/Bayesian/can-you-just-balenciaga-it-before-2",
+   "value": 0.557293,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0304",
+   "variableId": "x_will_the_first_ai_model_that_saturates_humanity_s_last_exa",
+   "source": "manifold",
+   "ref": "A8httP5LuZ",
+   "url": "https://manifold.markets/MilfordHammerschmidt/will-the-first-ai-model-that-satura",
+   "value": 0.80678,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0305",
+   "variableId": "x_will_ai_wipe_humanity_by_2030",
+   "source": "manifold",
+   "ref": "nQXlZeU91WnE35FpBNwY",
+   "url": "https://manifold.markets/pie/will-ai-wipe-humanity-by-2030",
+   "value": 0.1,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0306",
+   "variableId": "x_will_an_ai_play_a_pivotal_role_in_solving_an_important_pol",
+   "source": "manifold",
+   "ref": "MHO4WLe1kw1bxpPozCgp",
+   "url": "https://manifold.markets/RobinGreen/will-an-ai-play-a-pivotal-role-in-s",
+   "value": 0.69415,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0307",
+   "variableId": "x_high_quality_ai_generated_video_games_by_prompt_before_205",
+   "source": "manifold",
+   "ref": "MffzOwfmojTgPI8Nqf9U",
+   "url": "https://manifold.markets/SneakySly/high-quality-aigenerated-video-game-987f81a66d84",
+   "value": 0.65,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0308",
+   "variableId": "x_will_ai_be_able_to_accurately_do_my_taxes_by_eoy_2026",
+   "source": "manifold",
+   "ref": "3ZG39ht97dIrSv8umJry",
+   "url": "https://manifold.markets/PeterWildeford/will-ai-be-able-to-accurately-do-my",
+   "value": 0.604462,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0309",
+   "variableId": "x_fully_indistinguishable_fast_human_deepfakes_before_2030",
+   "source": "manifold",
+   "ref": "RcCl9dhhcL",
+   "url": "https://manifold.markets/IsaacKing/indistinguishable-fast-human-deepfa",
+   "value": 0.679269,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0310",
+   "variableId": "x_will_increasing_levels_of_ai_automation_cause_a_meaningful",
+   "source": "manifold",
+   "ref": "FSAlCG0hY2tv3clI9NHm",
+   "url": "https://manifold.markets/SneakySly/will-increasing-levels-of-aiautomat",
+   "value": 0.590607,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0311",
+   "variableId": "x_will_there_be_a_single_person_unicorn_before_2027",
+   "source": "manifold",
+   "ref": "JcmGpnkEnUzo0ZNh3Tkg",
+   "url": "https://manifold.markets/louis/will-there-be-a-singleperson-unicor",
+   "value": 0.090516,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0312",
+   "variableId": "x_will_anthropic_annual_recurring_revenue_be_under_90bn_end",
+   "source": "manifold",
+   "ref": "6cLlpS9U95",
+   "url": "https://manifold.markets/Simon74fe/will-anthropic-annual-recurring-rev",
+   "value": 0.15948,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0313",
+   "variableId": "x_high_quality_ai_generated_video_games_by_prompt_before_204",
+   "source": "manifold",
+   "ref": "ud1gsdAjy4Bv3K4Lz0Cc",
+   "url": "https://manifold.markets/SneakySly/high-quality-aigenerated-video-game-b5d80a77e7ee",
+   "value": 0.55,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0314",
+   "variableId": "x_will_may_2024_be_remembered_as_the_month_ai_safety_movemen",
+   "source": "manifold",
+   "ref": "XxCnVfPyTwrxagvXIUi6",
+   "url": "https://manifold.markets/ZviMowshowitz/will-may-2024-be-remembered-as-the",
+   "value": 0.039955,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0315",
+   "variableId": "x_will_it_be_common_for_non_programmers_to_create_small_scri",
+   "source": "manifold",
+   "ref": "Y97JOjLQKqd63dARJibz",
+   "url": "https://manifold.markets/jskf/will-it-be-common-for-nonprogrammer-dfc979ea7fec",
+   "value": 0.223401,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0316",
+   "variableId": "x_gpt_6_released_in_2026",
+   "source": "manifold",
+   "ref": "6t5g9tqzs9",
+   "url": "https://manifold.markets/predyx_markets/gpt6-released-in-2026",
+   "value": 0.66824,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0317",
+   "variableId": "x_in_mid_2026_will_an_ai_be_able_to_generate_a_full_high_qua",
+   "source": "manifold",
+   "ref": "LZAEp8dzpU",
+   "url": "https://manifold.markets/JoshSnider/in-mid-2026-will-an-ai-be-able-to-g",
+   "value": 0.044844,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0318",
+   "variableId": "x_will_there_be_a_terrorist_attack_against_openai_before_202",
+   "source": "manifold",
+   "ref": "i57b1Cjvm2Z0qvgqx9Fz",
+   "url": "https://manifold.markets/Bandors/will-there-be-a-terrorist-attack-ag",
+   "value": 0.264971,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0319",
+   "variableId": "x_is_attention_all_you_need",
+   "source": "manifold",
+   "ref": "KvDnTxp9VyTzMj4RzK8W",
+   "url": "https://manifold.markets/Sss19971997/is-attention-all-you-need",
+   "value": 0.931875,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0320",
+   "variableId": "x_will_a_video_made_entirely_with_ai_reach_100_million_views",
+   "source": "manifold",
+   "ref": "L0SAgPdhh0",
+   "url": "https://manifold.markets/irilonto/will-a-video-made-entirely-with-ai",
+   "value": 0.76,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0321",
+   "variableId": "x_will_nvidia_nvda_stock_drop_more_than_50_from_its_peak_at",
+   "source": "manifold",
+   "ref": "4gah3xeo8v",
+   "url": "https://manifold.markets/JTX/will-nvidia-nvda-stock-drop-more-th",
+   "value": 0.089037,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0322",
+   "variableId": "x_as_predicted_by_ai_2027_will_ai_surpass_all_living_humans",
+   "source": "manifold",
+   "ref": "CPn0O2z6d2",
+   "url": "https://manifold.markets/RichBran/as-predicted-by-ai-2027-will-ai-sur",
+   "value": 0.105019,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0323",
+   "variableId": "x_will_the_year_of_the_self_driving_car_happen_before_the_ye",
+   "source": "manifold",
+   "ref": "IGUuQ9SxMD85toOGGv0w",
+   "url": "https://manifold.markets/josh/will-the-year-of-the-selfdriving-ca",
+   "value": 0.929544,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0324",
+   "variableId": "x_nuclear_weapon_used_offensively_in_2026",
+   "source": "manifold",
+   "ref": "6h2SIp892O",
+   "url": "https://manifold.markets/copiumarc/nuclear-weapon-used-offensively-in",
+   "value": 0.025769,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0325",
+   "variableId": "x_high_quality_ai_generated_video_games_by_prompt_before__2",
+   "source": "manifold",
+   "ref": "CgJZtR3iSKuwFbV34i4V",
+   "url": "https://manifold.markets/SneakySly/high-quality-aigenerated-video-game-982c10f39792",
+   "value": 0.6,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0326",
+   "variableId": "x_will_asml_remain_the_worlds_only_producer_of_euv_machines",
+   "source": "manifold",
+   "ref": "kxyvfcpege",
+   "url": "https://manifold.markets/Jarom/will-asml-still-be-the-worlds-only",
+   "value": 0.799235,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0327",
+   "variableId": "x_will_an_ai_minecraft_agent_defeat_the_ender_dragon_before",
+   "source": "manifold",
+   "ref": "S09PzUCuOp",
+   "url": "https://manifold.markets/AdamK/will-an-ai-minecraft-agent-defeat-t-609shENQnu",
+   "value": 0.269275,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0328",
+   "variableId": "x_will_50_of_human_physical_labor_be_replaced_by_robots_befo",
+   "source": "manifold",
+   "ref": "4S1s9hug8VRQWFdwXwgy",
+   "url": "https://manifold.markets/IsaacKing/will-50-of-human-physical-labor-be",
+   "value": 0.153018,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0329",
+   "variableId": "x_high_quality_ai_generated_video_games_by_prompt_before_203",
+   "source": "manifold",
+   "ref": "0oBpV4fxpitgAWJWo3Av",
+   "url": "https://manifold.markets/SneakySly/high-quality-aigenerated-video-game-850616fe0702",
+   "value": 0.486346,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0330",
+   "variableId": "x_will_most_digital_entertainment_be_ai_generated_by_2040",
+   "source": "manifold",
+   "ref": "eu3xUzwd3j9hsyS6IYk1",
+   "url": "https://manifold.markets/CelebratedWhale/will-most-digital-entertainment-be-11a27e445ed4",
+   "value": 0.666895,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0331",
+   "variableId": "x_metr_80_time_horizon_exceeds_10h_before_september",
+   "source": "manifold",
+   "ref": "dCP8cP0CLL",
+   "url": "https://manifold.markets/JacobPfau/metr-80-time-horizon-exceeds-10h-be",
+   "value": 0.339738,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0332",
+   "variableId": "x_will_a_millennium_problem_be_solved_in_2026",
+   "source": "manifold",
+   "ref": "2snNALshs8",
+   "url": "https://manifold.markets/strutheo/will-a-millennium-problem-be-solved",
+   "value": 0.064807,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0333",
+   "variableId": "x_will_a_new_lab_create_a_top_performing_ai_frontier_model_b",
+   "source": "manifold",
+   "ref": "4i4y5ktv3n",
+   "url": "https://manifold.markets/IhorKendiukhov/will-a-new-lab-create-a-topperformi",
+   "value": 0.870758,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0334",
+   "variableId": "x_will_sarah_anderson_et_al_prove_stability_ai_midjourney_an",
+   "source": "manifold",
+   "ref": "yx3o4sTHuWgu46lYqMJt",
+   "url": "https://manifold.markets/Imuli/will-sarah-anderson-et-al-vs-stabil",
+   "value": 0.144047,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0335",
+   "variableId": "x_will_sam_altman_still_be_ceo_of_openai_at_the_end_of_2026",
+   "source": "manifold",
+   "ref": "7f4WjccHH6yD42cot2Ep",
+   "url": "https://manifold.markets/strutheo/will-sam-altman-still-be-ceo-of-ope",
+   "value": 0.945098,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0336",
+   "variableId": "x_major_company_suffers_serious_damage_from_ai_agent_in_2026",
+   "source": "manifold",
+   "ref": "gOlddESzER",
+   "url": "https://manifold.markets/A/major-company-suffers-serious-damag",
+   "value": 0.211138,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0337",
+   "variableId": "x_will_there_be_a_new_revolutionary_technology_by_2030",
+   "source": "manifold",
+   "ref": "bZpiyBYileZLuVTtjJpI",
+   "url": "https://manifold.markets/ItsMe/will-there-be-a-new-revolutionary-t",
+   "value": 0.836926,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0338",
+   "variableId": "x_ai_beats_minecraft_rsg_in_under_10_minutes_before_2029",
+   "source": "manifold",
+   "ref": "0zN8ndgN06",
+   "url": "https://manifold.markets/Bayesian/ai-beats-minecraft-rsg-in-under-10",
+   "value": 0.42,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0339",
+   "variableId": "x_catl_receives_license_renewal_for_yichun_lithium_mine_by_e",
+   "source": "manifold",
+   "ref": "L8EuhySAdp",
+   "url": "https://manifold.markets/MikhailTal/catl-receives-license-renewal-for-y-UAuzRyILcp",
+   "value": 0.611054,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0340",
+   "variableId": "x_will_an_llm_a_gpt_like_text_ai_defeat_the_world_champion_a",
+   "source": "manifold",
+   "ref": "ZWvpC3bfxCmBIyAOcmJp",
+   "url": "https://manifold.markets/YaakovSaxon/will-an-llm-a-gptlike-text-ai-defea",
+   "value": 0.661025,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0341",
+   "variableId": "x_1_anthropic_will_go_public_openai_will_not",
+   "source": "manifold",
+   "ref": "upSgh8QPcI",
+   "url": "https://manifold.markets/HenriThunberg/1-anthropic-will-go-public-openai-w",
+   "value": 0.687898,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0342",
+   "variableId": "x_at_least_one_of_the_most_powerful_neural_nets_at_end_of_20",
+   "source": "manifold",
+   "ref": "h9Uhxx6eDJxjyZp1dO2q",
+   "url": "https://manifold.markets/Amaryllis/at-least-one-of-the-most-powerful-n-07fd4c20e75f",
+   "value": 0.835247,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0343",
+   "variableId": "x_will_chatgpt_stop_calling_itself_a_chatbot_by_2027",
+   "source": "manifold",
+   "ref": "xm5pXSr2BQCTa8hZmBHT",
+   "url": "https://manifold.markets/singer/will-chatgpt-call-itself-a-chatbot",
+   "value": 0.351919,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0344",
+   "variableId": "x_will_we_have_near_complete_automation_of_the_world_econ_2",
+   "source": "manifold",
+   "ref": "ddNCdrbzFtadsm5WUzqJ",
+   "url": "https://manifold.markets/MatthewBarnett/will-we-have-nearcomplete-automatio-30a38f6e6081",
+   "value": 0.090988,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0345",
+   "variableId": "x_high_quality_ai_generated_video_games_by_prompt_before__3",
+   "source": "manifold",
+   "ref": "LGvGEKD3bbdS9uxFgmWJ",
+   "url": "https://manifold.markets/SneakySly/high-quality-aigenerated-video-game-2c55249fe948",
+   "value": 0.225958,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0346",
+   "variableId": "x_will_any_rights_be_granted_to_a_silicon_based_intelligence",
+   "source": "manifold",
+   "ref": "nHcZ0OMT9LlnkOLgpitm",
+   "url": "https://manifold.markets/Tomoffer/will-any-rights-be-granted-to-a-sil",
+   "value": 0.61,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0347",
+   "variableId": "x_will_there_be_a_billion_dollar_company_with_only_one_perso",
+   "source": "manifold",
+   "ref": "l694w77ahy",
+   "url": "https://manifold.markets/PabloAntonio/will-there-be-a-billiondollar-compa",
+   "value": 0.38,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0348",
+   "variableId": "x_will_ai_take_over_the_world_by_2100",
+   "source": "manifold",
+   "ref": "MkeETzMpiLJ0JuoNqiZH",
+   "url": "https://manifold.markets/RobinGreen/will-ai-take-over-the-world-by-2100",
+   "value": 0.45112,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0349",
+   "variableId": "x_openai_discovers_the_first_proof_of_the_riemann_hypothesis",
+   "source": "manifold",
+   "ref": "Ezz5dEU2cg",
+   "url": "https://manifold.markets/MalachiteEagle/openai-discovers-the-first-proof-of",
+   "value": 0.048408,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0350",
+   "variableId": "x_will_an_ai_generated_youtube_video_reach_1b_views_before_2",
+   "source": "manifold",
+   "ref": "KLhhiPOOJbTLJw4XNudp",
+   "url": "https://manifold.markets/RemNi/will-an-ai-generated-video-reach-1b-29128e7a10e6",
+   "value": 0.45178,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0351",
+   "variableId": "x_conditional_on_effective_altruism_lasting_for_a_thousand_y",
+   "source": "manifold",
+   "ref": "BLfFzhtt4506bolkNR86",
+   "url": "https://manifold.markets/PeterBerggren/conditional-on-effective-altruism-l",
+   "value": 0.37197,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0352",
+   "variableId": "x_will_the_percentage_of_top_graduates_in_math_and_cs_at_eli",
+   "source": "manifold",
+   "ref": "eA0J9aSxw7BC9E7YKAUU",
+   "url": "https://manifold.markets/ZviMowshowitz/will-the-percentage-of-top-graduate",
+   "value": 0.777896,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0353",
+   "variableId": "x_will_lean_mathlib_contain_more_than_10_million_lines_of_co",
+   "source": "manifold",
+   "ref": "AynyL0t2g2",
+   "url": "https://manifold.markets/mjmandl/will-lean-mathlib-contain-more-than",
+   "value": 0.666178,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0354",
+   "variableId": "x_will_ai_research_be_mostly_autonomous_by_june_1_2027",
+   "source": "manifold",
+   "ref": "IgN0uNOzzS",
+   "url": "https://manifold.markets/CrypticQccZ/will-ai-research-be-mostly-autonomo",
+   "value": 0.270318,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0355",
+   "variableId": "x_acx_2026_will_the_u_s_enact_an_ai_safety_federal_statute_o",
+   "source": "manifold",
+   "ref": "lC2OstCSty",
+   "url": "https://manifold.markets/DaftPunkRock/acx-2026-will-the-us-enact-an-ai-sa",
+   "value": 0.336486,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0356",
+   "variableId": "x_humanoid_robot_walking_around_me_within_a_year",
+   "source": "manifold",
+   "ref": "5C0cPuPsNA",
+   "url": "https://manifold.markets/Bandors/humanoid-robot-walking-around-me-wi",
+   "value": 0.143212,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0357",
+   "variableId": "x_will_much_ai_research_be_nationalized_by_2027",
+   "source": "manifold",
+   "ref": "zUEQpslIUI",
+   "url": "https://manifold.markets/JamieWahls/will-much-ai-research-be-nationaliz",
+   "value": 0.157382,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0358",
+   "variableId": "x_soai_3_open_ended_agents_make_a_meaningful_scientific_disc",
+   "source": "manifold",
+   "ref": "yNZ90SR8UA",
+   "url": "https://manifold.markets/ZviMowshowitz/soai3-openended-agents-make-a-meani",
+   "value": 0.6,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0359",
+   "variableId": "x_will_chat_gpt_6_release_before_the_end_of_2026",
+   "source": "manifold",
+   "ref": "SEsCD8HU79qnkVGXT7Ys",
+   "url": "https://manifold.markets/strutheo/will-chat-gpt-6-release-before-the",
+   "value": 0.78,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0360",
+   "variableId": "x_will_a_large_language_model_beat_a_super_grandmaster_at_ch",
+   "source": "manifold",
+   "ref": "EN2R0LLgn9",
+   "url": "https://manifold.markets/KeithManning/will-a-large-language-model-beat-a-dy8yzPLg9A",
+   "value": 0.684028,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0361",
+   "variableId": "x_will_50_or_more_of_aws_developers_stop_coding_for_aws_in_t",
+   "source": "manifold",
+   "ref": "hdkdqdc31x",
+   "url": "https://manifold.markets/coproduct/will-50-or-more-of-aws-developers-s",
+   "value": 0.081988,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0362",
+   "variableId": "x_will_a_major_ai_lab_announce_that_the_weights_of_one_of_it",
+   "source": "manifold",
+   "ref": "uLLn6wlUfQqWItfeasU3",
+   "url": "https://manifold.markets/AdamK/will-a-major-ai-lab-announce-that-t",
+   "value": 0.298647,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0363",
+   "variableId": "x_will_the_s_p_500_close_above_7883_34_on_december_31_2026",
+   "source": "manifold",
+   "ref": "nPhdNdqI6S",
+   "url": "https://manifold.markets/SaviorofPlant/will-the-sp-500-close-above-788334",
+   "value": 0.52,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0364",
+   "variableId": "x_will_more_us_ai_models_be_subject_to_us_export_control_dir",
+   "source": "manifold",
+   "ref": "5hqSlZpSg6",
+   "url": "https://manifold.markets/PhilipDowdell/will-more-us-ai-models-be-subject-t",
+   "value": 0.095335,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0365",
+   "variableId": "x_will_a_more_significant_protest_calling_for_a_pause_in_ai",
+   "source": "manifold",
+   "ref": "sk1eGxPkDrbJgmDfHEQH",
+   "url": "https://manifold.markets/ZviMowshowitz/will-a-significant-protest-calling",
+   "value": 0.860218,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0366",
+   "variableId": "x_will_there_be_a_period_of_12_contiguous_months_during_whic",
+   "source": "manifold",
+   "ref": "mjESBbBZWK7PPkHQ0Ur6",
+   "url": "https://manifold.markets/LeoGao/will-there-be-a-period-of-12-contig",
+   "value": 0.70633,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0367",
+   "variableId": "x_will_there_be_at_least_one_major_u_s_blackout_caused_by_a",
+   "source": "manifold",
+   "ref": "5hlIARZzAz",
+   "url": "https://manifold.markets/JamieWahls/will-there-be-at-least-one-major-us",
+   "value": 0.102945,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0368",
+   "variableId": "x_will_it_become_practically_impossible_to_verify_the_authen",
+   "source": "manifold",
+   "ref": "1Y5GgkWKijM26eB8aKbU",
+   "url": "https://manifold.markets/Keepcalmandchill/will-it-become-practically-impossib",
+   "value": 0.562191,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0369",
+   "variableId": "x_will_prompt_injection_be_effectively_solved_by_end_of_2026",
+   "source": "manifold",
+   "ref": "ltnOQQNtgy",
+   "url": "https://manifold.markets/rothific/will-prompt-injection-be-effectivel",
+   "value": 0.102655,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0370",
+   "variableId": "x_will_sam_altman_know_who_i_am_5_year_time_frame",
+   "source": "manifold",
+   "ref": "2Nk2iM9euuA6CcNa5PTt",
+   "url": "https://manifold.markets/PhilosophyBear/will-sam-altman-know-who-i-am-5-yea",
+   "value": 0.496877,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0371",
+   "variableId": "x_openai_reaches_100b_revenue_in_2028",
+   "source": "manifold",
+   "ref": "ugRnhOtcqN",
+   "url": "https://manifold.markets/dreev/openai-reaches-100b-revenue-in-2028",
+   "value": 0.72276,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0372",
+   "variableId": "x_will_an_ai_model_be_capable_of_superhuman_persuasion_befor",
+   "source": "manifold",
+   "ref": "B8w3FaPyQJWJslzSCTv5",
+   "url": "https://manifold.markets/BenHarrison/will-an-ai-model-be-capable-of-supe",
+   "value": 0.85,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0373",
+   "variableId": "x_will_we_reverse_engineer_a_language_model_into_an_interpre",
+   "source": "manifold",
+   "ref": "PLBMCJPWnzTVYY41K1Y1",
+   "url": "https://manifold.markets/NielsW/will-we-reverseengineer-a-language",
+   "value": 0.039208,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0374",
+   "variableId": "x_will_paul_christiano_shake_the_us_president_s_hand_by_2027",
+   "source": "manifold",
+   "ref": "15Ewe8imqb4SqrDjsUzd",
+   "url": "https://manifold.markets/theshortbread/will-paul-christiano-shake-the-us-p",
+   "value": 0.182533,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0375",
+   "variableId": "x_is_ai_safety_a_grift",
+   "source": "manifold",
+   "ref": "RpDV8t57LA2f7V3m3YqD",
+   "url": "https://manifold.markets/Gigacasting/is-ai-safety-a-grift",
+   "value": 0.222944,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0376",
+   "variableId": "x_will_deepseek_s_next_reasoning_model_be_called_r3",
+   "source": "manifold",
+   "ref": "At0S8uhUNg",
+   "url": "https://manifold.markets/jim/will-deepseeks-next-reasoning-model",
+   "value": 0.010096,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0377",
+   "variableId": "x_will_10k_humanoid_robots_be_manufactured_before_2028",
+   "source": "manifold",
+   "ref": "TxrFNRcaQBsON5iGMzz7",
+   "url": "https://manifold.markets/RemNi/will-10k-humanoid-robots-be-manufac-26fcd74c767f",
+   "value": 0.965204,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0378",
+   "variableId": "x_will_jim_outperform_bayesian_in_forecast2026_ai",
+   "source": "manifold",
+   "ref": "RcshPA89sL",
+   "url": "https://manifold.markets/jim/will-jim-outperform-bayesian-in-for",
+   "value": 0.234537,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0379",
+   "variableId": "x_will_openai_stick_to_its_commitment_to_the_same_red_lines",
+   "source": "manifold",
+   "ref": "tgPPcsQSEE",
+   "url": "https://manifold.markets/DrGlebTsipursky/will-openai-stick-to-its-commitment",
+   "value": 0.6,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0380",
+   "variableId": "x_will_universal_basic_income_be_introduced_in_the_u_s_by_20",
+   "source": "manifold",
+   "ref": "a5qjz7gClUTBF2QDMpQD",
+   "url": "https://manifold.markets/YakshBirla/will-universal-basic-income-be-intr",
+   "value": 0.219582,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0381",
+   "variableId": "x_soai_8_a_chinese_lab_overtakes_the_us_lab_dominated_fronti",
+   "source": "manifold",
+   "ref": "LQOZCAnCsO",
+   "url": "https://manifold.markets/ZviMowshowitz/soai8-a-chinese-lab-overtakes-the-u",
+   "value": 0.27766,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0382",
+   "variableId": "x_will_openai_go_public_in_2026",
+   "source": "manifold",
+   "ref": "Csgc56pdZc",
+   "url": "https://manifold.markets/KrishPatel/will-openai-go-public-in-2026",
+   "value": 0.23,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0383",
+   "variableId": "x_will_adam_optimizer_no_longer_be_the_default_optimizer_for",
+   "source": "manifold",
+   "ref": "PJafgSAPNQcuUn4HEpBU",
+   "url": "https://manifold.markets/_deleted_/will-adam-optimizer-no-longer-be-th",
+   "value": 0.315832,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0384",
+   "variableId": "x_will_tesla_robotaxies_hit_the_market_before_jan_1_2027",
+   "source": "manifold",
+   "ref": "udsPdyg0ds",
+   "url": "https://manifold.markets/NeilWarren/will-tesla-robotaxies-hit-the-marke",
+   "value": 0.632111,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0385",
+   "variableId": "x_will_anyone_have_their_mind_read_without_their_prior_conse",
+   "source": "manifold",
+   "ref": "NPFXY9mXiuHRVQivO2YG",
+   "url": "https://manifold.markets/IsaacKing/will-anyone-have-their-mind-read-wi",
+   "value": 0.222178,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0386",
+   "variableId": "x_will_who_classify_the_current_hantavirus_outbreak_as_a_pub",
+   "source": "manifold",
+   "ref": "tLPh6uU2l9",
+   "url": "https://manifold.markets/waterlilly/will-who-classify-the-current-hanta",
+   "value": 0.049874,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0387",
+   "variableId": "x_high_quality_ai_generated_video_games_by_prompt_before_202",
+   "source": "manifold",
+   "ref": "zPQeMJeoLrWpnjiRAad7",
+   "url": "https://manifold.markets/SneakySly/high-quality-aigenerated-video-game",
+   "value": 0.111533,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0388",
+   "variableId": "x_high_quality_ai_generated_video_games_by_prompt_before__4",
+   "source": "manifold",
+   "ref": "JJasOoOOJFTSEc895sCF",
+   "url": "https://manifold.markets/SneakySly/high-quality-aigenerated-video-game-3c8806346d8f",
+   "value": 0.14636,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0389",
+   "variableId": "x_will_openai_ipo_and_be_a_publicly_traded_company_in_the_un",
+   "source": "manifold",
+   "ref": "NjpljpCCdCFW6aAG3SUa",
+   "url": "https://manifold.markets/strutheo/will-openai-ipo-and-be-a-publicly-t-585cd5ee0be9",
+   "value": 0.147333,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0390",
+   "variableId": "x_will_data_center_technicians_still_be_necessary_in_2027",
+   "source": "manifold",
+   "ref": "o8kn8j860a",
+   "url": "https://manifold.markets/DingoBingo/will-data-center-technicians-still",
+   "value": 0.920786,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0391",
+   "variableId": "x_will_2025_be_referred_to_as_the_start_of_the_second_great",
+   "source": "manifold",
+   "ref": "ynPNcqLZyn",
+   "url": "https://manifold.markets/SteveSokolowski/will-2025-be-referred-to-as-the-sta",
+   "value": 0.041709,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0392",
+   "variableId": "x_will_betting_in_or_subsidizing_specific_prediction_markets",
+   "source": "manifold",
+   "ref": "MOurQZeZXOt04myp1PZ0",
+   "url": "https://manifold.markets/IsaacKing/will-betting-in-or-subsidizing-spec",
+   "value": 0.196752,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0393",
+   "variableId": "x_will_openai_display_ads_to_free_tier_users_within_one_year",
+   "source": "manifold",
+   "ref": "dE8zA2Al82",
+   "url": "https://manifold.markets/Bandors/will-openai-display-ads-to-free-tie",
+   "value": 0.989104,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0394",
+   "variableId": "x_will_the_s_p_500_pass_1_000_000_by_eoy_2026",
+   "source": "manifold",
+   "ref": "cZqE66AhN0",
+   "url": "https://manifold.markets/jim/will-the-sp-500-reach-1000000-by-eo",
+   "value": 0.01,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0395",
+   "variableId": "x_soai_9_datacenter_nimbyism_takes_the_us_by_storm_and_sways",
+   "source": "manifold",
+   "ref": "yhShEEcpzL",
+   "url": "https://manifold.markets/ZviMowshowitz/soai9-datacenter-nimbyism-takes-the",
+   "value": 0.417619,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0396",
+   "variableId": "x_will_tailcalled_think_that_the_natural_abstractions_alignm",
+   "source": "manifold",
+   "ref": "BnvZgXJUpzvS7nBCIlqh",
+   "url": "https://manifold.markets/tailcalled/will-tailcalled-think-that-the-natu",
+   "value": 0.133585,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0397",
+   "variableId": "x_will_the_worst_case_elk_problem_be_solved_by_oct_20_2026",
+   "source": "manifold",
+   "ref": "QDI5MD8mRM6QWo44og6I",
+   "url": "https://manifold.markets/LeoGao/will-the-worstcase-elk-problem-be-s",
+   "value": 0.039341,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0398",
+   "variableId": "x_will_anthropic_models_still_be_hosted_on_at_least_one_of_a",
+   "source": "manifold",
+   "ref": "5pUsplLOQt",
+   "url": "https://manifold.markets/DavidFWatson/will-anthropic-models-still-be-host",
+   "value": 0.980634,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0399",
+   "variableId": "x_space_datacenter_industry_generates_100m_annual_revenue_by",
+   "source": "manifold",
+   "ref": "PLCQhQzUs6",
+   "url": "https://manifold.markets/JakobBrunker/space-datacenter-industry-generates",
+   "value": 0.381507,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  },
+  {
+   "marketId": "x0400",
+   "variableId": "x_will_pornhub_offer_an_option_to_generate_ai_porn_videos_on",
+   "source": "manifold",
+   "ref": "1jv1sbanlu",
+   "url": "https://manifold.markets/Peter1169/will-pornhub-offer-an-option-to-gen",
+   "value": 0.032468,
+   "fetchedAt": "2026-07-04T03:34:28Z"
+  }
+ ]
+}
