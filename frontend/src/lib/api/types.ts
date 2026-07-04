@@ -91,6 +91,37 @@ export interface NetworkResponse {
   meta: Meta;
 }
 
+/** Yes/No marginal probabilities, as returned by the graph-fields market list. */
+export interface GraphMarginals {
+  yes: number;
+  no: number;
+}
+
+/**
+ * One market as returned by `GET /v1/markets?fields=graph`, the bulk feed
+ * behind the landing-page NetworkMap. `parents` are the variableIds of the
+ * market's CPT parents (roots omit it or carry an empty array).
+ * `conditionalMarginals` is present only when the request carried a
+ * `context` (active assumptions) and this market is affected by it.
+ */
+export interface GraphMarket {
+  id: string;
+  variableId?: string;
+  title: string;
+  status: MarketStatus;
+  marginals: GraphMarginals;
+  conditionalMarginals?: GraphMarginals;
+  anchor?: MarketAnchor;
+  ftmImplied?: number;
+  parents?: string[];
+}
+
+export interface GraphMarketsResponse {
+  markets: GraphMarket[];
+  count?: number;
+  meta: Meta;
+}
+
 export interface MarketPreview {
   marketId: string;
   title: string;

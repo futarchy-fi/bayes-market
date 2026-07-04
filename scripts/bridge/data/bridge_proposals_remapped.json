@@ -1,0 +1,910 @@
+{
+ "builtAt": "2026-07-04T19:33:27.212238+00:00",
+ "bridges": [
+  {
+   "externalId": "x0078",
+   "title": "Will we get AGI before 2031?",
+   "variableId": "x_will_we_get_agi_before_2031",
+   "parents": [
+    "ftm_agi_by_2034"
+   ],
+   "cpt": {
+    "ftm_agi_by_2034=yes": 0.8641,
+    "ftm_agi_by_2034=no": 0.4402
+   },
+   "impliedMarginal": 0.4566,
+   "currentMarginal": 0.4566,
+   "strength": 3,
+   "rationale": "\"AGI before 2031\" sits ahead of the FTM AGI-training-threshold curve's earliest priced year (2033); used as nearest available anchor, so timing offset weakens the tie. [parent remapped: {'ftm_agi_by_2033': 'ftm_agi_by_2034'}]"
+  },
+  {
+   "externalId": "x0074",
+   "title": "Will we get AGI before 2032?",
+   "variableId": "x_will_we_get_agi_before_2032",
+   "parents": [
+    "ftm_agi_by_2034"
+   ],
+   "cpt": {
+    "ftm_agi_by_2034=yes": 0.8713,
+    "ftm_agi_by_2034=no": 0.4699
+   },
+   "impliedMarginal": 0.4854,
+   "currentMarginal": 0.4854,
+   "strength": 4,
+   "rationale": "\"AGI before 2032\" is one year ahead of the nearest priced FTM AGI-threshold year (2033), a close timing match. [parent remapped: {'ftm_agi_by_2033': 'ftm_agi_by_2034'}]"
+  },
+  {
+   "externalId": "x0086",
+   "title": "Will we get AGI before 2033?",
+   "variableId": "x_will_we_get_agi_before_2033",
+   "parents": [
+    "ftm_agi_by_2034"
+   ],
+   "cpt": {
+    "ftm_agi_by_2034=yes": 0.8795,
+    "ftm_agi_by_2034=no": 0.5035
+   },
+   "impliedMarginal": 0.518,
+   "currentMarginal": 0.518,
+   "strength": 4,
+   "rationale": "\"AGI before 2033\" nearly coincides with the FTM AGI-training-threshold-by-2033 variable. [parent remapped: {'ftm_agi_by_2033': 'ftm_agi_by_2034'}]"
+  },
+  {
+   "externalId": "x0088",
+   "title": "Will we get AGI before 2034?",
+   "variableId": "x_will_we_get_agi_before_2034",
+   "parents": [
+    "ftm_agi_by_2034"
+   ],
+   "cpt": {
+    "ftm_agi_by_2034=yes": 0.8974,
+    "ftm_agi_by_2034=no": 0.5771
+   },
+   "impliedMarginal": 0.5894,
+   "currentMarginal": 0.5894,
+   "strength": 5,
+   "rationale": "\"AGI before 2034\" directly corresponds to the FTM AGI-training-requirements-met-by-2033 threshold (one-year lead convention). [parent remapped: {'ftm_agi_by_2033': 'ftm_agi_by_2034'}]"
+  },
+  {
+   "externalId": "x0085",
+   "title": "Will we get AGI before 2035?",
+   "variableId": "x_will_we_get_agi_before_2035",
+   "parents": [
+    "ftm_agi_by_2034"
+   ],
+   "cpt": {
+    "ftm_agi_by_2034=yes": 0.911,
+    "ftm_agi_by_2034=no": 0.6263
+   },
+   "impliedMarginal": 0.6442,
+   "currentMarginal": 0.6442,
+   "strength": 5,
+   "rationale": "\"AGI before 2035\" directly corresponds to FTM's AGI-by-2034 threshold."
+  },
+  {
+   "externalId": "x0096",
+   "title": "Will we get AGI before 2036?",
+   "variableId": "x_will_we_get_agi_before_2036",
+   "parents": [
+    "ftm_agi_by_2035"
+   ],
+   "cpt": {
+    "ftm_agi_by_2035=yes": 0.9139,
+    "ftm_agi_by_2035=no": 0.6286
+   },
+   "impliedMarginal": 0.6555,
+   "currentMarginal": 0.6555,
+   "strength": 5,
+   "rationale": "\"AGI before 2036\" directly corresponds to FTM's AGI-by-2035 threshold."
+  },
+  {
+   "externalId": "x0107",
+   "title": "Will we get AGI before 2037?",
+   "variableId": "x_will_we_get_agi_before_2037",
+   "parents": [
+    "ftm_agi_by_2035"
+   ],
+   "cpt": {
+    "ftm_agi_by_2035=yes": 0.9189,
+    "ftm_agi_by_2035=no": 0.6412
+   },
+   "impliedMarginal": 0.6757,
+   "currentMarginal": 0.6757,
+   "strength": 5,
+   "rationale": "\"AGI before 2037\" directly corresponds to FTM's AGI-by-2036 threshold. [parent remapped: {'ftm_agi_by_2036': 'ftm_agi_by_2035'}]"
+  },
+  {
+   "externalId": "x0116",
+   "title": "Will we get AGI before 2038?",
+   "variableId": "x_will_we_get_agi_before_2038",
+   "parents": [
+    "ftm_agi_by_2038"
+   ],
+   "cpt": {
+    "ftm_agi_by_2038=yes": 0.9246,
+    "ftm_agi_by_2038=no": 0.6539
+   },
+   "impliedMarginal": 0.6984,
+   "currentMarginal": 0.6984,
+   "strength": 5,
+   "rationale": "\"AGI before 2038\" directly corresponds to FTM's AGI-by-2037 threshold. [parent remapped: {'ftm_agi_by_2037': 'ftm_agi_by_2038'}]"
+  },
+  {
+   "externalId": "x0125",
+   "title": "Will we get AGI before 2039?",
+   "variableId": "x_will_we_get_agi_before_2039",
+   "parents": [
+    "ftm_agi_by_2038"
+   ],
+   "cpt": {
+    "ftm_agi_by_2038=yes": 0.925,
+    "ftm_agi_by_2038=no": 0.6437
+   },
+   "impliedMarginal": 0.7,
+   "currentMarginal": 0.7,
+   "strength": 5,
+   "rationale": "\"AGI before 2039\" directly corresponds to FTM's AGI-by-2038 threshold."
+  },
+  {
+   "externalId": "x0141",
+   "title": "Will we get AGI before 2041?",
+   "variableId": "x_will_we_get_agi_before_2041",
+   "parents": [
+    "ftm_agi_by_2040"
+   ],
+   "cpt": {
+    "ftm_agi_by_2040=yes": 0.935,
+    "ftm_agi_by_2040=no": 0.664
+   },
+   "impliedMarginal": 0.74,
+   "currentMarginal": 0.74,
+   "strength": 5,
+   "rationale": "\"AGI before 2041\" directly corresponds to FTM's AGI-by-2040 threshold."
+  },
+  {
+   "externalId": "x0153",
+   "title": "Will we get AGI before 2042?",
+   "variableId": "x_will_we_get_agi_before_2042",
+   "parents": [
+    "ftm_agi_by_2041"
+   ],
+   "cpt": {
+    "ftm_agi_by_2041=yes": 0.9375,
+    "ftm_agi_by_2041=no": 0.6562
+   },
+   "impliedMarginal": 0.75,
+   "currentMarginal": 0.75,
+   "strength": 5,
+   "rationale": "\"AGI before 2042\" directly corresponds to FTM's AGI-by-2041 threshold."
+  },
+  {
+   "externalId": "x0164",
+   "title": "Will we get AGI before 2043?",
+   "variableId": "x_will_we_get_agi_before_2043",
+   "parents": [
+    "ftm_agi_by_2042"
+   ],
+   "cpt": {
+    "ftm_agi_by_2042=yes": 0.9425,
+    "ftm_agi_by_2042=no": 0.6654
+   },
+   "impliedMarginal": 0.77,
+   "currentMarginal": 0.77,
+   "strength": 5,
+   "rationale": "\"AGI before 2043\" directly corresponds to FTM's AGI-by-2042 threshold."
+  },
+  {
+   "externalId": "x0181",
+   "title": "Will we get AGI before 2044?",
+   "variableId": "x_will_we_get_agi_before_2044",
+   "parents": [
+    "ftm_agi_by_2043"
+   ],
+   "cpt": {
+    "ftm_agi_by_2043=yes": 0.9456,
+    "ftm_agi_by_2043=no": 0.6639
+   },
+   "impliedMarginal": 0.7825,
+   "currentMarginal": 0.7825,
+   "strength": 5,
+   "rationale": "\"AGI before 2044\" directly corresponds to FTM's AGI-by-2043 threshold."
+  },
+  {
+   "externalId": "x0146",
+   "title": "Will we get AGI before 2045?",
+   "variableId": "x_will_we_get_agi_before_2045",
+   "parents": [
+    "ftm_agi_by_2044"
+   ],
+   "cpt": {
+    "ftm_agi_by_2044=yes": 0.9503,
+    "ftm_agi_by_2044=no": 0.6716
+   },
+   "impliedMarginal": 0.8014,
+   "currentMarginal": 0.8014,
+   "strength": 5,
+   "rationale": "\"AGI before 2045\" directly corresponds to FTM's AGI-by-2044 threshold."
+  },
+  {
+   "externalId": "x0167",
+   "title": "Will we get AGI before 2046?",
+   "variableId": "x_will_we_get_agi_before_2046",
+   "parents": [
+    "ftm_agi_by_2045"
+   ],
+   "cpt": {
+    "ftm_agi_by_2045=yes": 0.9534,
+    "ftm_agi_by_2045=no": 0.6728
+   },
+   "impliedMarginal": 0.8135,
+   "currentMarginal": 0.8135,
+   "strength": 5,
+   "rationale": "\"AGI before 2046\" is essentially FTM's AGI-by-2045 threshold (last priced year)."
+  },
+  {
+   "externalId": "x0114",
+   "title": "Will we get AGI before 2048?",
+   "variableId": "x_will_we_get_agi_before_2048",
+   "parents": [
+    "ftm_agi_by_2045"
+   ],
+   "cpt": {
+    "ftm_agi_by_2045=yes": 0.9587,
+    "ftm_agi_by_2045=no": 0.7104
+   },
+   "impliedMarginal": 0.835,
+   "currentMarginal": 0.835,
+   "strength": 4,
+   "rationale": "\"AGI before 2048\" extends past FTM's last priced AGI year (2045); used as the ceiling anchor, timing offset limits tightness."
+  },
+  {
+   "externalId": "x0156",
+   "title": "Will we get AGI before 2047?",
+   "variableId": "x_will_we_get_agi_before_2047",
+   "parents": [
+    "ftm_agi_by_2045"
+   ],
+   "cpt": {
+    "ftm_agi_by_2045=yes": 0.9575,
+    "ftm_agi_by_2045=no": 0.7017
+   },
+   "impliedMarginal": 0.83,
+   "currentMarginal": 0.83,
+   "strength": 4,
+   "rationale": "\"AGI before 2047\" extends past FTM's last priced AGI year (2045); used as ceiling anchor."
+  },
+  {
+   "externalId": "x0089",
+   "title": "Will AGI be achieved in the next 5 years?",
+   "variableId": "x_will_agi_be_achieved_in_the_next_5_years",
+   "parents": [
+    "ftm_agi_by_2034"
+   ],
+   "cpt": {
+    "ftm_agi_by_2034=yes": 0.8402,
+    "ftm_agi_by_2034=no": 0.3415
+   },
+   "impliedMarginal": 0.3607,
+   "currentMarginal": 0.3607,
+   "strength": 3,
+   "rationale": "\"AGI in the next 5 years\" (from 2026) implies ~2031, ahead of FTM's earliest priced AGI year (2033); weaker timing tie. [parent remapped: {'ftm_agi_by_2033': 'ftm_agi_by_2034'}]"
+  },
+  {
+   "externalId": "x0064",
+   "title": "Will artificial superintelligence exist by 2030?  [resolves N/A in 2027]",
+   "variableId": "x_will_artificial_superintelligence_exist_by_2030_resolves_n",
+   "parents": [
+    "ftm_agi_by_2034"
+   ],
+   "cpt": {
+    "ftm_agi_by_2034=yes": 0.8259,
+    "ftm_agi_by_2034=no": 0.2825
+   },
+   "impliedMarginal": 0.3035,
+   "currentMarginal": 0.3035,
+   "strength": 3,
+   "rationale": "ASI-by-2030 is a stronger capability bar than the FTM AGI-training threshold, but AGI is a near-prerequisite for ASI, so treated as a leading indicator with reduced strength. [parent remapped: {'ftm_agi_by_2033': 'ftm_agi_by_2034'}]"
+  },
+  {
+   "externalId": "x0112",
+   "title": "Will the ARC AGI Grand Prize be claimed before January 2027?",
+   "variableId": "x_will_the_arc_agi_grand_prize_be_claimed_before_january_202",
+   "parents": [
+    "ftm_agi_by_2034"
+   ],
+   "cpt": {
+    "ftm_agi_by_2034=yes": 0.8603,
+    "ftm_agi_by_2034=no": 0.4243
+   },
+   "impliedMarginal": 0.4411,
+   "currentMarginal": 0.4411,
+   "strength": 3,
+   "rationale": "Claiming the ARC-AGI grand prize is a general-reasoning capability milestone that would plausibly precede or coincide with FTM's AGI training threshold. [parent remapped: {'ftm_agi_by_2033': 'ftm_agi_by_2034'}]"
+  },
+  {
+   "externalId": "x0173",
+   "title": "Will the ARC-AGI grand prize be claimed by end of 2026?",
+   "variableId": "x_will_the_arc_agi_grand_prize_be_claimed_by_end_of_2026",
+   "parents": [
+    "ftm_agi_by_2034"
+   ],
+   "cpt": {
+    "ftm_agi_by_2034=yes": 0.8784,
+    "ftm_agi_by_2034=no": 0.499
+   },
+   "impliedMarginal": 0.5136,
+   "currentMarginal": 0.5136,
+   "strength": 3,
+   "rationale": "Same ARC-AGI grand-prize logic as x0112; independent external market, same nearest-year FTM anchor. [parent remapped: {'ftm_agi_by_2033': 'ftm_agi_by_2034'}]"
+  },
+  {
+   "externalId": "x0185",
+   "title": "Will models be able to do the work of an AI researcher/engineer before 2027?",
+   "variableId": "x_will_models_be_able_to_do_the_work_of_an_ai_researcher_eng",
+   "parents": [
+    "ftm_auto_rnd_t0_by_2027"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t0_by_2027=yes": 0.778,
+    "ftm_auto_rnd_t0_by_2027=no": 0.0487
+   },
+   "impliedMarginal": 0.1122,
+   "currentMarginal": 0.1122,
+   "strength": 5,
+   "rationale": "\"Models do AI-researcher-level work before 2027\" is essentially FTM's definition of the 5%-R&D-automation threshold by 2027."
+  },
+  {
+   "externalId": "x0354",
+   "title": "Will AI Research Be Mostly Autonomous By June 1 2027?",
+   "variableId": "x_will_ai_research_be_mostly_autonomous_by_june_1_2027",
+   "parents": [
+    "ftm_auto_rnd_t0_by_2027"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t0_by_2027=yes": 0.8176,
+    "ftm_auto_rnd_t0_by_2027=no": 0.2182
+   },
+   "impliedMarginal": 0.2703,
+   "currentMarginal": 0.2703,
+   "strength": 4,
+   "rationale": "\"AI research mostly autonomous by June 2027\" is a stronger bar than FTM's 5% R&D-automation threshold but the same underlying metric and horizon."
+  },
+  {
+   "externalId": "x0087",
+   "title": "Will AI be Recursively Self Improving by mid 2026?",
+   "variableId": "x_will_ai_be_recursively_self_improving_by_mid_2026",
+   "parents": [
+    "ftm_auto_rnd_t0_by_2027"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t0_by_2027=yes": 0.6205,
+    "ftm_auto_rnd_t0_by_2027=no": 0.0175
+   },
+   "impliedMarginal": 0.0699,
+   "currentMarginal": 0.0699,
+   "strength": 4,
+   "rationale": "Recursive self-improvement by mid-2026 is conceptually the leading edge of R&D task automation; nearest priced FTM year is 2027."
+  },
+  {
+   "externalId": "x0331",
+   "title": "METR 80% time horizon exceeds 10h before September",
+   "variableId": "x_metr_80_time_horizon_exceeds_10h_before_september",
+   "parents": [
+    "ftm_auto_rnd_t0_by_2027"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t0_by_2027=yes": 0.8349,
+    "ftm_auto_rnd_t0_by_2027=no": 0.2926
+   },
+   "impliedMarginal": 0.3397,
+   "currentMarginal": 0.3397,
+   "strength": 3,
+   "rationale": "METR's 80%-reliable task-horizon exceeding 10h is an empirical proxy for the same R&D-automation progress FTM's auto_rnd metric tracks."
+  },
+  {
+   "externalId": "x0358",
+   "title": "SOAI#3: Open-ended agents make a meaningful scientific discovery end-to-end (hypothesis, expt, iteration, paper).",
+   "variableId": "x_soai_3_open_ended_agents_make_a_meaningful_scientific_disc",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2035"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t1_by_2035=yes": 0.9,
+    "ftm_auto_rnd_t1_by_2035=no": 0.4658
+   },
+   "impliedMarginal": 0.6,
+   "currentMarginal": 0.6,
+   "strength": 3,
+   "rationale": "Open-ended end-to-end scientific discovery by agents is a mid-tier R&D-automation milestone; no explicit resolution year, so mapped to a mid-horizon FTM anchor."
+  },
+  {
+   "externalId": "x0205",
+   "title": "1-hour AGI.  A system capable of any computer-based task a human can do in 1 hour will be developed by end of 2026.",
+   "variableId": "x_1_hour_agi_a_system_capable_of_any_computer_based_task_a_h",
+   "parents": [
+    "ftm_auto_rnd_t0_by_2027"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t0_by_2027=yes": 0.8247,
+    "ftm_auto_rnd_t0_by_2027=no": 0.2486
+   },
+   "impliedMarginal": 0.2987,
+   "currentMarginal": 0.2987,
+   "strength": 4,
+   "rationale": "A system doing any 1-hour human computer task is a concrete, near-term capability/automation-horizon bar close to FTM's 5%-R&D-automation-by-2027 threshold."
+  },
+  {
+   "externalId": "x0322",
+   "title": "As predicted by AI 2027, will AI surpass all living humans in coding ability by January 2027?",
+   "variableId": "x_as_predicted_by_ai_2027_will_ai_surpass_all_living_humans",
+   "parents": [
+    "ftm_auto_rnd_t0_by_2027"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t0_by_2027=yes": 0.7763,
+    "ftm_auto_rnd_t0_by_2027=no": 0.0411
+   },
+   "impliedMarginal": 0.105,
+   "currentMarginal": 0.105,
+   "strength": 4,
+   "rationale": "AI surpassing all humans at coding by Jan 2027 is essentially a coding-specific instance of FTM's R&D-task-automation threshold."
+  },
+  {
+   "externalId": "x0252",
+   "title": "Will AI surpass humans in conducting scientific research by 2030?",
+   "variableId": "x_will_ai_surpass_humans_in_conducting_scientific_research_b",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2030"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t1_by_2030=yes": 0.827,
+    "ftm_auto_rnd_t1_by_2030=no": 0.2621
+   },
+   "impliedMarginal": 0.3082,
+   "currentMarginal": 0.3082,
+   "strength": 4,
+   "rationale": "AI surpassing humans in scientific research by 2030 aligns with FTM's 20%-R&D-automation-by-2030 threshold."
+  },
+  {
+   "externalId": "x0065",
+   "title": "Will AI be capable of producing an Annals-quality math paper for $100k by March 2030?",
+   "variableId": "x_will_ai_be_capable_of_producing_an_annals_quality_math_pap",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2030"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t1_by_2030=yes": 0.9766,
+    "ftm_auto_rnd_t1_by_2030=no": 0.9003
+   },
+   "impliedMarginal": 0.9065,
+   "currentMarginal": 0.9065,
+   "strength": 3,
+   "rationale": "Producing an Annals-quality math paper is a research-capability milestone loosely tracking FTM's R&D-automation curve; underlying threshold tier is uncertain."
+  },
+  {
+   "externalId": "x0281",
+   "title": "Will AI cause the US Unemployment Rate to exceed 10% before 2030?",
+   "variableId": "x_will_ai_cause_the_us_unemployment_rate_to_exceed_10_before",
+   "parents": [
+    "ftm_auto_goods_t1_by_2030"
+   ],
+   "cpt": {
+    "ftm_auto_goods_t1_by_2030=yes": 0.8058,
+    "ftm_auto_goods_t1_by_2030=no": 0.1995
+   },
+   "impliedMarginal": 0.2231,
+   "currentMarginal": 0.2231,
+   "strength": 4,
+   "rationale": "AI pushing US unemployment above 10% by 2030 is a direct consequence of FTM's 20%-goods-automation-by-2030 threshold being crossed."
+  },
+  {
+   "externalId": "x0165",
+   "title": "Will AI cause mass unemployment... by 2030 ?",
+   "variableId": "x_will_ai_cause_mass_unemployment_by_2030",
+   "parents": [
+    "ftm_auto_goods_t1_by_2030"
+   ],
+   "cpt": {
+    "ftm_auto_goods_t1_by_2030=yes": 0.7971,
+    "ftm_auto_goods_t1_by_2030=no": 0.1637
+   },
+   "impliedMarginal": 0.1884,
+   "currentMarginal": 0.1884,
+   "strength": 4,
+   "rationale": "\"AI causes mass unemployment by 2030\" tracks the same 20%-goods-task-automation threshold."
+  },
+  {
+   "externalId": "x0328",
+   "title": "Will >50% of human physical labor be replaced by robots before 2030?",
+   "variableId": "x_will_50_of_human_physical_labor_be_replaced_by_robots_befo",
+   "parents": [
+    "ftm_auto_goods_t1_by_2030"
+   ],
+   "cpt": {
+    "ftm_auto_goods_t1_by_2030=yes": 0.7883,
+    "ftm_auto_goods_t1_by_2030=no": 0.1272
+   },
+   "impliedMarginal": 0.153,
+   "currentMarginal": 0.153,
+   "strength": 4,
+   "rationale": "50%+ of physical labor replaced by robots by 2030 is a strong-automation scenario consistent with FTM's 20%-goods-automation-by-2030 threshold being met."
+  },
+  {
+   "externalId": "x0302",
+   "title": "Will we have near-complete automation of the world economy before 2035?",
+   "variableId": "x_will_we_have_near_complete_automation_of_the_world_economy",
+   "parents": [
+    "ftm_full_auto_by_2035"
+   ],
+   "cpt": {
+    "ftm_full_auto_by_2035=yes": 0.8025,
+    "ftm_full_auto_by_2035=no": 0.1489
+   },
+   "impliedMarginal": 0.21,
+   "currentMarginal": 0.21,
+   "strength": 5,
+   "rationale": "\"Near-complete automation of the world economy before 2035\" is essentially FTM's full-automation-of-goods-and-services-by-2035 variable."
+  },
+  {
+   "externalId": "x0344",
+   "title": "Will we have near-complete automation of the world economy before 2030?",
+   "variableId": "x_will_we_have_near_complete_automation_of_the_world_econ_2",
+   "parents": [
+    "ftm_full_auto_by_2033"
+   ],
+   "cpt": {
+    "ftm_full_auto_by_2033=yes": 0.7727,
+    "ftm_full_auto_by_2033=no": 0.0633
+   },
+   "impliedMarginal": 0.091,
+   "currentMarginal": 0.091,
+   "strength": 4,
+   "rationale": "\"Near-complete automation before 2030\" precedes FTM's earliest priced full-automation year (2033); used as nearest anchor."
+  },
+  {
+   "externalId": "x0291",
+   "title": "Will >97% of all jobs be fully automated before the year 2075?",
+   "variableId": "x_will_97_of_all_jobs_be_fully_automated_before_the_year_207",
+   "parents": [
+    "ftm_full_auto_by_2045"
+   ],
+   "cpt": {
+    "ftm_full_auto_by_2045=yes": 0.8895,
+    "ftm_full_auto_by_2045=no": 0.2239
+   },
+   "impliedMarginal": 0.5581,
+   "currentMarginal": 0.5581,
+   "strength": 3,
+   "rationale": "97% job automation by 2075 is a much longer horizon than FTM's last priced full-automation year (2045); used as a directional (not tight) anchor."
+  },
+  {
+   "externalId": "x0149",
+   "title": "Will more than half the US population actively work with AI daily by 2027?",
+   "variableId": "x_will_more_than_half_the_us_population_actively_work_with_a",
+   "parents": [
+    "ftm_auto_goods_t0_by_2028"
+   ],
+   "cpt": {
+    "ftm_auto_goods_t0_by_2028=yes": 0.8625,
+    "ftm_auto_goods_t0_by_2028=no": 0.4308
+   },
+   "impliedMarginal": 0.45,
+   "currentMarginal": 0.45,
+   "strength": 3,
+   "rationale": "Half the US population using AI daily by 2027 is an adoption proxy loosely upstream of FTM's 5%-goods-automation threshold; nearest priced year used."
+  },
+  {
+   "externalId": "x0197",
+   "title": "Will a country ban human driven cars in favor of AI self driving in at least one city center by the end of 2040?",
+   "variableId": "x_will_a_country_ban_human_driven_cars_in_favor_of_ai_self_d",
+   "parents": [
+    "ftm_auto_goods_t1_by_2040"
+   ],
+   "cpt": {
+    "ftm_auto_goods_t1_by_2040=yes": 0.7586,
+    "ftm_auto_goods_t1_by_2040=no": 0.1
+   },
+   "impliedMarginal": 0.4,
+   "currentMarginal": 0.4,
+   "strength": 4,
+   "rationale": "A country banning human-driven cars in favor of AI by 2040 presumes broad task automation consistent with FTM's 20%-goods-automation-by-2040 threshold."
+  },
+  {
+   "externalId": "x0330",
+   "title": "Will most digital entertainment be AI generated by 2040?",
+   "variableId": "x_will_most_digital_entertainment_be_ai_generated_by_2040",
+   "parents": [
+    "ftm_auto_goods_t1_by_2040"
+   ],
+   "cpt": {
+    "ftm_auto_goods_t1_by_2040=yes": 0.9167,
+    "ftm_auto_goods_t1_by_2040=no": 0.4579
+   },
+   "impliedMarginal": 0.6669,
+   "currentMarginal": 0.6669,
+   "strength": 3,
+   "rationale": "Most digital entertainment being AI-generated by 2040 is a sectoral instance of FTM's broader goods-and-services automation threshold."
+  },
+  {
+   "externalId": "x0267",
+   "title": "In early 2028, will an AI be able to generate a full high-quality movie to a prompt?",
+   "variableId": "x_in_early_2028_will_an_ai_be_able_to_generate_a_full_high_q",
+   "parents": [
+    "ftm_auto_goods_t0_by_2028"
+   ],
+   "cpt": {
+    "ftm_auto_goods_t0_by_2028=yes": 0.8261,
+    "ftm_auto_goods_t0_by_2028=no": 0.2802
+   },
+   "impliedMarginal": 0.3045,
+   "currentMarginal": 0.3045,
+   "strength": 3,
+   "rationale": "AI generating a full high-quality movie by early 2028 is a creative-task-automation milestone loosely within FTM's goods-and-services automation frame; high forecaster count (4497) justifies inclusion despite a loose metric match."
+  },
+  {
+   "externalId": "x0052",
+   "title": "Will global corp spending on AI be \u2265$700B during the calendar year 2029?",
+   "variableId": "x_will_global_corp_spending_on_ai_be_700b_during_the_calenda",
+   "parents": [
+    "ftm_gwp_compute_t1_by_2029"
+   ],
+   "cpt": {
+    "ftm_gwp_compute_t1_by_2029=yes": 0.92,
+    "ftm_gwp_compute_t1_by_2029=no": 0.6607
+   },
+   "impliedMarginal": 0.68,
+   "currentMarginal": 0.68,
+   "strength": 4,
+   "rationale": "Global corporate AI spend >=$700B in 2029 is essentially FTM's compute-investment-exceeds-1%-of-world-output-by-2029 threshold."
+  },
+  {
+   "externalId": "x0186",
+   "title": "$100B AI training cluster before 2029?",
+   "variableId": "x_100b_ai_training_cluster_before_2029",
+   "parents": [
+    "ftm_gwp_compute_t1_by_2029"
+   ],
+   "cpt": {
+    "ftm_gwp_compute_t1_by_2029=yes": 0.983,
+    "ftm_gwp_compute_t1_by_2029=no": 0.9277
+   },
+   "impliedMarginal": 0.9318,
+   "currentMarginal": 0.9318,
+   "strength": 4,
+   "rationale": "A $100B training cluster before 2029 is a concrete instance of compute investment crossing FTM's 1%-of-world-output-by-2029 threshold."
+  },
+  {
+   "externalId": "x0342",
+   "title": "At least one of the most powerful neural nets at end of 2026 will be trained using 10^27 FLOPs",
+   "variableId": "x_at_least_one_of_the_most_powerful_neural_nets_at_end_of_20",
+   "parents": [
+    "ftm_train_run_t0_by_2027"
+   ],
+   "cpt": {
+    "ftm_train_run_t0_by_2027=yes": 0.9588,
+    "ftm_train_run_t0_by_2027=no": 0.8307
+   },
+   "impliedMarginal": 0.8352,
+   "currentMarginal": 0.8352,
+   "strength": 3,
+   "rationale": "A 10^27 FLOP training run by end-2026 is one order of magnitude below FTM's smallest priced training-run threshold (1e28 by 2027); used as the nearest larger-threshold anchor."
+  },
+  {
+   "externalId": "x0227",
+   "title": "2030 \u2013 3. Over one hundred thousand humanoid robots will be deployed in the real world.",
+   "variableId": "x_2030_3_over_one_hundred_thousand_humanoid_robots_will_be_d",
+   "parents": [
+    "ftm_hw_ratio_t0_by_2032"
+   ],
+   "cpt": {
+    "ftm_hw_ratio_t0_by_2032=yes": 0.9477,
+    "ftm_hw_ratio_t0_by_2032=no": 0.783
+   },
+   "impliedMarginal": 0.7908,
+   "currentMarginal": 0.7908,
+   "strength": 3,
+   "rationale": "100k+ humanoid robots deployed by 2030 depends on hardware cost-performance gains FTM tracks via hw_ratio; nearest priced year (2032) used since 2030 isn't priced in that family."
+  },
+  {
+   "externalId": "x0013",
+   "title": "Will OpenAI, DeepMind, or Anthropic have revenue of at least $100B in 2027?",
+   "variableId": "x_will_openai_deepmind_or_anthropic_have_revenue_of_at_least",
+   "parents": [
+    "ftm_gwp_compute_t0_by_2027"
+   ],
+   "cpt": {
+    "ftm_gwp_compute_t0_by_2027=yes": 0.925,
+    "ftm_gwp_compute_t0_by_2027=no": 0.6723
+   },
+   "impliedMarginal": 0.7,
+   "currentMarginal": 0.7,
+   "strength": 3,
+   "rationale": "Frontier labs reaching $100B revenue by 2027 is a downstream indicator of the compute/AI-investment scale FTM's gwp_compute metric tracks."
+  },
+  {
+   "externalId": "x0316",
+   "title": "GPT-6 released in 2026?",
+   "variableId": "x_gpt_6_released_in_2026",
+   "parents": [
+    "ftm_train_run_t0_by_2027"
+   ],
+   "cpt": {
+    "ftm_train_run_t0_by_2027=yes": 0.9171,
+    "ftm_train_run_t0_by_2027=no": 0.6591
+   },
+   "impliedMarginal": 0.6682,
+   "currentMarginal": 0.6682,
+   "strength": 3,
+   "rationale": "A GPT-6-class release in 2026 is a proxy for continued frontier-scaling pace, loosely tied to FTM's training-run-scale threshold (nearest priced year 2027)."
+  },
+  {
+   "externalId": "x0366",
+   "title": "Will there be a period of 12 contiguous months during which no new compute-SOTA LM is released, by Jan 1, 2033?",
+   "variableId": "x_will_there_be_a_period_of_12_contiguous_months_during_whic",
+   "parents": [
+    "ftm_train_run_t1_by_2033"
+   ],
+   "cpt": {
+    "ftm_train_run_t1_by_2033=yes": 0.4452,
+    "ftm_train_run_t1_by_2033=no": 0.9266
+   },
+   "impliedMarginal": 0.7063,
+   "currentMarginal": 0.7063,
+   "strength": 4,
+   "rationale": "A 12-month stretch with no new compute-SOTA model by 2033 is the direct negation of continued large-training-run progress FTM's train_run metric tracks."
+  },
+  {
+   "externalId": "x0203",
+   "title": "Are we about to hit another AI winter in 2026?",
+   "variableId": "x_are_we_about_to_hit_another_ai_winter_in_2026",
+   "parents": [
+    "ftm_train_run_t0_by_2027"
+   ],
+   "cpt": {
+    "ftm_train_run_t0_by_2027=yes": 0.0214,
+    "ftm_train_run_t0_by_2027=no": 0.0878
+   },
+   "impliedMarginal": 0.0855,
+   "currentMarginal": 0.0855,
+   "strength": 3,
+   "rationale": "An AI winter starting in 2026 is the inverse of continued training-run scaling; nearest priced FTM year (2027) used."
+  },
+  {
+   "externalId": "x0279",
+   "title": "By EOY 2026, will it seem as if deep learning hit a wall by EOY 2025?",
+   "variableId": "x_by_eoy_2026_will_it_seem_as_if_deep_learning_hit_a_wall_by",
+   "parents": [
+    "ftm_train_run_t0_by_2027"
+   ],
+   "cpt": {
+    "ftm_train_run_t0_by_2027=yes": 0.0175,
+    "ftm_train_run_t0_by_2027=no": 0.0719
+   },
+   "impliedMarginal": 0.07,
+   "currentMarginal": 0.07,
+   "strength": 4,
+   "rationale": "\"Deep learning hit a wall by end-2025/judged by end-2026\" is a direct stall indicator opposing FTM's training-run-scaling curve."
+  },
+  {
+   "externalId": "x0271",
+   "title": "Will the AI bubble pop in 2026?",
+   "variableId": "x_will_the_ai_bubble_pop_in_2026",
+   "parents": [
+    "ftm_gwp_compute_t0_by_2027"
+   ],
+   "cpt": {
+    "ftm_gwp_compute_t0_by_2027=yes": 0.0261,
+    "ftm_gwp_compute_t0_by_2027=no": 0.1142
+   },
+   "impliedMarginal": 0.1045,
+   "currentMarginal": 0.1045,
+   "strength": 3,
+   "rationale": "An AI investment bubble popping in 2026 would suppress compute investment as a share of world output, the inverse of FTM's gwp_compute threshold."
+  },
+  {
+   "externalId": "x0090",
+   "title": "Will AI be life-changing for muggles by the end of 2029?",
+   "variableId": "x_will_ai_be_life_changing_for_muggles_by_the_end_of_2029",
+   "parents": [
+    "ftm_auto_goods_t0_by_2029"
+   ],
+   "cpt": {
+    "ftm_auto_goods_t0_by_2029=yes": 0.9417,
+    "ftm_auto_goods_t0_by_2029=no": 0.7526
+   },
+   "impliedMarginal": 0.7669,
+   "currentMarginal": 0.7669,
+   "strength": 3,
+   "rationale": "\"AI life-changing for ordinary people by 2029\" is a diffuse adoption/impact claim loosely upstream of FTM's 5%-goods-automation-by-2029 threshold."
+  },
+  {
+   "externalId": "x0009",
+   "title": "5Y after AGI, universal basic income?",
+   "variableId": "x_5y_after_agi_universal_basic_income",
+   "parents": [
+    "ftm_agi_by_2040"
+   ],
+   "cpt": {
+    "ftm_agi_by_2040=yes": 0.7309,
+    "ftm_agi_by_2040=no": 0.0625
+   },
+   "impliedMarginal": 0.25,
+   "currentMarginal": 0.25,
+   "strength": 3,
+   "rationale": "\"5 years after AGI, UBI?\" requires AGI to have occurred within the operative horizon; FTM's AGI-by-2040 threshold (mid-horizon) is used as the enabling-condition proxy."
+  },
+  {
+   "externalId": "x0028",
+   "title": "5Y after AGI, nuclear fusion 10% world energy",
+   "variableId": "x_5y_after_agi_nuclear_fusion_10_world_energy",
+   "parents": [
+    "ftm_agi_by_2040"
+   ],
+   "cpt": {
+    "ftm_agi_by_2040=yes": 0.5848,
+    "ftm_agi_by_2040=no": 0.05
+   },
+   "impliedMarginal": 0.2,
+   "currentMarginal": 0.2,
+   "strength": 3,
+   "rationale": "\"5 years after AGI, does fusion reach 10% of world energy?\" likewise presupposes AGI timing; FTM's AGI-by-2040 threshold used as enabling-condition proxy."
+  },
+  {
+   "externalId": "x0289",
+   "title": "Will fully autonomous (level 5) self-driving cars be available in a major US city before 2030?",
+   "variableId": "x_will_fully_autonomous_level_5_self_driving_cars_be_availab",
+   "parents": [
+    "ftm_auto_goods_t1_by_2030",
+    "ftm_hw_ratio_t0_by_2032"
+   ],
+   "cpt": {
+    "ftm_auto_goods_t1_by_2030=yes|ftm_hw_ratio_t0_by_2032=yes": 1.0,
+    "ftm_auto_goods_t1_by_2030=yes|ftm_hw_ratio_t0_by_2032=no": 0.8527,
+    "ftm_auto_goods_t1_by_2030=no|ftm_hw_ratio_t0_by_2032=yes": 0.854,
+    "ftm_auto_goods_t1_by_2030=no|ftm_hw_ratio_t0_by_2032=no": 0.7067
+   },
+   "impliedMarginal": 0.7194,
+   "currentMarginal": 0.7194,
+   "strength": 3,
+   "rationale": "Level-5 self-driving availability by 2030 plausibly needs both broad task-automation progress and cheaper AI-hardware price-performance; treated as two semi-independent FTM drivers."
+  },
+  {
+   "externalId": "x0016",
+   "title": "By 2030, will general-purpose robot learning new tasks be >$20k?",
+   "variableId": "x_by_2030_will_general_purpose_robot_learning_new_tasks_be_2",
+   "parents": [
+    "ftm_hw_ratio_t0_by_2032",
+    "ftm_sw_ratio_t0_by_2030"
+   ],
+   "cpt": {
+    "ftm_hw_ratio_t0_by_2032=yes|ftm_sw_ratio_t0_by_2030=yes": 1.0,
+    "ftm_hw_ratio_t0_by_2032=yes|ftm_sw_ratio_t0_by_2030=no": 0.8244,
+    "ftm_hw_ratio_t0_by_2032=no|ftm_sw_ratio_t0_by_2030=yes": 0.8425,
+    "ftm_hw_ratio_t0_by_2032=no|ftm_sw_ratio_t0_by_2030=no": 0.6669
+   },
+   "impliedMarginal": 0.7,
+   "currentMarginal": 0.7,
+   "strength": 3,
+   "rationale": "Robot learning-new-tasks cost falling under $20k by 2030 depends on both hardware price-performance and software/algorithmic efficiency gains -- two largely orthogonal FTM mechanisms."
+  },
+  {
+   "externalId": "x0269",
+   "title": "By 2028, will there be a visible break in trend line on US GDP, GDP per capita, unemployment, or productivity, which most economists attribu",
+   "variableId": "x_by_2028_will_there_be_a_visible_break_in_trend_line_on_us",
+   "parents": [
+    "ftm_gwp_growth_t0_in_2028",
+    "ftm_auto_goods_t0_by_2028"
+   ],
+   "cpt": {
+    "ftm_gwp_growth_t0_in_2028=yes|ftm_auto_goods_t0_by_2028=yes": 1.0,
+    "ftm_gwp_growth_t0_in_2028=yes|ftm_auto_goods_t0_by_2028=no": 0.6756,
+    "ftm_gwp_growth_t0_in_2028=no|ftm_auto_goods_t0_by_2028=yes": 0.6713,
+    "ftm_gwp_growth_t0_in_2028=no|ftm_auto_goods_t0_by_2028=no": 0.3468
+   },
+   "impliedMarginal": 0.38,
+   "currentMarginal": 0.38,
+   "strength": 4,
+   "rationale": "A visible AI-attributed break in US macro trend lines by 2028 is jointly driven by aggregate growth acceleration and goods/services task automation, two distinct FTM metrics."
+  }
+ ]
+}

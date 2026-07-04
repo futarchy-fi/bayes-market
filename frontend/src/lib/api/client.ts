@@ -18,6 +18,7 @@ import type {
   Session,
   MarketListFilters,
   CptResponse,
+  GraphMarketsResponse,
 } from "./types";
 import { normalizeMarketListFilters } from "@/lib/marketListFilters";
 
@@ -129,6 +130,25 @@ export function getMarket(
 
 export function getNetwork(): Promise<import("./types").NetworkResponse> {
   return request<import("./types").NetworkResponse>(`/v1/network`);
+}
+
+/**
+ * Bulk graph-shaped market feed for the landing-page NetworkMap: one request
+ * for (nearly) all markets, with `parents` for edges. When `context` (active
+ * assumptions) is non-empty it is sent as a single `context` query param
+ * whose value is `var1=outcome1|var2=outcome2` (URL-encoded), NOT the
+ * repeated `context=` params `getMarket` uses -- this is a distinct,
+ * graph-specific wire contract.
+ */
+export function getGraphMarkets(
+  context: MarketContextEntry[] = [],
+): Promise<GraphMarketsResponse> {
+  const params = new URLSearchParams();
+  params.set("fields", "graph");
+  if (context.length > 0) {
+    params.set("context", context.map((c) => `${c.variableId}=${c.outcomeId}`).join("|"));
+  }
+  return request<GraphMarketsResponse>(`/v1/markets?${params.toString()}`);
 }
 
 export function getMarketPreview(

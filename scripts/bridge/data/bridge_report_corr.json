@@ -1,0 +1,347 @@
+{
+ "at": "2026-07-04T19:55:47Z",
+ "dryRun": false,
+ "proposed": 56,
+ "applied": 53,
+ "dropped": [
+  {
+   "externalId": "x0269",
+   "reason": "width budget: belief structure would exceed the treewidth budget (cluster over 10 variables, 1024 states > 512; max_width=8)"
+  },
+  {
+   "externalId": "x0016",
+   "reason": "width budget: belief structure would exceed the treewidth budget (cluster over 10 variables, 1024 states > 512; max_width=8)"
+  },
+  {
+   "externalId": "x0289",
+   "reason": "width budget: belief structure would exceed the treewidth budget (cluster over 10 variables, 1024 states > 512; max_width=8)"
+  }
+ ],
+ "worstMarginalDelta": 4.768198581528438e-07,
+ "stats": {
+  "treewidth": 8.0,
+  "cliqueCount": 909.0,
+  "maxCliqueStates": 512.0,
+  "statesLog2": 909.0
+ },
+ "checks": [
+  {
+   "externalId": "x0085",
+   "target": 0.644195,
+   "implied": 0.644195,
+   "delta": 4.2e-07
+  },
+  {
+   "externalId": "x0088",
+   "target": 0.589429,
+   "implied": 0.589429,
+   "delta": 1.3e-07
+  },
+  {
+   "externalId": "x0096",
+   "target": 0.655518,
+   "implied": 0.655518,
+   "delta": 1.5e-07
+  },
+  {
+   "externalId": "x0107",
+   "target": 0.675742,
+   "implied": 0.675742,
+   "delta": 1.5e-07
+  },
+  {
+   "externalId": "x0116",
+   "target": 0.698398,
+   "implied": 0.698398,
+   "delta": 7e-08
+  },
+  {
+   "externalId": "x0125",
+   "target": 0.7,
+   "implied": 0.7,
+   "delta": 1.9e-07
+  },
+  {
+   "externalId": "x0141",
+   "target": 0.74,
+   "implied": 0.74,
+   "delta": 5e-08
+  },
+  {
+   "externalId": "x0146",
+   "target": 0.801374,
+   "implied": 0.801374,
+   "delta": 1.6e-07
+  },
+  {
+   "externalId": "x0153",
+   "target": 0.75,
+   "implied": 0.75,
+   "delta": 2e-07
+  },
+  {
+   "externalId": "x0164",
+   "target": 0.77,
+   "implied": 0.77,
+   "delta": 1.3e-07
+  },
+  {
+   "externalId": "x0167",
+   "target": 0.813524,
+   "implied": 0.813524,
+   "delta": 2e-07
+  },
+  {
+   "externalId": "x0181",
+   "target": 0.782501,
+   "implied": 0.782501,
+   "delta": 4.8e-07
+  },
+  {
+   "externalId": "x0185",
+   "target": 0.112156,
+   "implied": 0.112156,
+   "delta": 2.9e-07
+  },
+  {
+   "externalId": "x0302",
+   "target": 0.21,
+   "implied": 0.21,
+   "delta": 2.2e-07
+  },
+  {
+   "externalId": "x0052",
+   "target": 0.68,
+   "implied": 0.68,
+   "delta": 4.4e-07
+  },
+  {
+   "externalId": "x0074",
+   "target": 0.485368,
+   "implied": 0.485368,
+   "delta": 3.7e-07
+  },
+  {
+   "externalId": "x0086",
+   "target": 0.517952,
+   "implied": 0.517952,
+   "delta": 2.7e-07
+  },
+  {
+   "externalId": "x0087",
+   "target": 0.069949,
+   "implied": 0.069949,
+   "delta": 2.9e-07
+  },
+  {
+   "externalId": "x0114",
+   "target": 0.834957,
+   "implied": 0.834957,
+   "delta": 1.9e-07
+  },
+  {
+   "externalId": "x0156",
+   "target": 0.83,
+   "implied": 0.83,
+   "delta": 3.7e-07
+  },
+  {
+   "externalId": "x0165",
+   "target": 0.188377,
+   "implied": 0.188377,
+   "delta": 4.3e-07
+  },
+  {
+   "externalId": "x0186",
+   "target": 0.931831,
+   "implied": 0.931831,
+   "delta": 4.7e-07
+  },
+  {
+   "externalId": "x0197",
+   "target": 0.4,
+   "implied": 0.4,
+   "delta": 2.2e-07
+  },
+  {
+   "externalId": "x0205",
+   "target": 0.298741,
+   "implied": 0.298741,
+   "delta": 5e-08
+  },
+  {
+   "externalId": "x0252",
+   "target": 0.308164,
+   "implied": 0.308164,
+   "delta": 3.9e-07
+  },
+  {
+   "externalId": "x0279",
+   "target": 0.07,
+   "implied": 0.07,
+   "delta": 3.2e-07
+  },
+  {
+   "externalId": "x0281",
+   "target": 0.223107,
+   "implied": 0.223107,
+   "delta": 4.4e-07
+  },
+  {
+   "externalId": "x0322",
+   "target": 0.105019,
+   "implied": 0.105019,
+   "delta": 2.3e-07
+  },
+  {
+   "externalId": "x0328",
+   "target": 0.153018,
+   "implied": 0.153018,
+   "delta": 1.2e-07
+  },
+  {
+   "externalId": "x0344",
+   "target": 0.090988,
+   "implied": 0.090988,
+   "delta": 2.5e-07
+  },
+  {
+   "externalId": "x0354",
+   "target": 0.270318,
+   "implied": 0.270318,
+   "delta": 2.5e-07
+  },
+  {
+   "externalId": "x0366",
+   "target": 0.70633,
+   "implied": 0.70633,
+   "delta": 3.7e-07
+  },
+  {
+   "externalId": "x0009",
+   "target": 0.25,
+   "implied": 0.25,
+   "delta": 5e-08
+  },
+  {
+   "externalId": "x0013",
+   "target": 0.7,
+   "implied": 0.7,
+   "delta": 3.8e-07
+  },
+  {
+   "externalId": "x0028",
+   "target": 0.2,
+   "implied": 0.2,
+   "delta": 6e-08
+  },
+  {
+   "externalId": "x0064",
+   "target": 0.303467,
+   "implied": 0.303467,
+   "delta": 2.5e-07
+  },
+  {
+   "externalId": "x0065",
+   "target": 0.906498,
+   "implied": 0.906498,
+   "delta": 4e-08
+  },
+  {
+   "externalId": "x0078",
+   "target": 0.456569,
+   "implied": 0.456569,
+   "delta": 8e-08
+  },
+  {
+   "externalId": "x0089",
+   "target": 0.360704,
+   "implied": 0.360704,
+   "delta": 7e-08
+  },
+  {
+   "externalId": "x0090",
+   "target": 0.766906,
+   "implied": 0.766906,
+   "delta": 1.7e-07
+  },
+  {
+   "externalId": "x0112",
+   "target": 0.441065,
+   "implied": 0.441065,
+   "delta": 1.6e-07
+  },
+  {
+   "externalId": "x0149",
+   "target": 0.45,
+   "implied": 0.45,
+   "delta": 4e-08
+  },
+  {
+   "externalId": "x0173",
+   "target": 0.513602,
+   "implied": 0.513602,
+   "delta": 1e-07
+  },
+  {
+   "externalId": "x0203",
+   "target": 0.085475,
+   "implied": 0.085475,
+   "delta": 3.4e-07
+  },
+  {
+   "externalId": "x0227",
+   "target": 0.790792,
+   "implied": 0.790792,
+   "delta": 2e-07
+  },
+  {
+   "externalId": "x0267",
+   "target": 0.30448,
+   "implied": 0.30448,
+   "delta": 2.7e-07
+  },
+  {
+   "externalId": "x0271",
+   "target": 0.104514,
+   "implied": 0.104514,
+   "delta": 2e-07
+  },
+  {
+   "externalId": "x0291",
+   "target": 0.558059,
+   "implied": 0.558059,
+   "delta": 1.5e-07
+  },
+  {
+   "externalId": "x0316",
+   "target": 0.66824,
+   "implied": 0.66824,
+   "delta": 3.9e-07
+  },
+  {
+   "externalId": "x0330",
+   "target": 0.666895,
+   "implied": 0.666895,
+   "delta": 1.3e-07
+  },
+  {
+   "externalId": "x0331",
+   "target": 0.339738,
+   "implied": 0.339738,
+   "delta": 3.2e-07
+  },
+  {
+   "externalId": "x0342",
+   "target": 0.835247,
+   "implied": 0.835247,
+   "delta": 9e-08
+  },
+  {
+   "externalId": "x0358",
+   "target": 0.6,
+   "implied": 0.6,
+   "delta": 3.4e-07
+  }
+ ]
+}

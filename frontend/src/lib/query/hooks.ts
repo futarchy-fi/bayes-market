@@ -80,6 +80,22 @@ export function useNetwork() {
   });
 }
 
+/**
+ * Bulk graph-shaped market feed for the landing NetworkMap: ~900 markets in
+ * one response, so the map can render without a per-node query. `context`
+ * (active assumptions) gets its own stable cache entry, same pattern as
+ * useMarket's context-conditioned key.
+ */
+export function useGraphMarkets(context: api.MarketContextEntry[] = []) {
+  return useQuery({
+    queryKey: context.length
+      ? (["markets", "graph", { context }] as const)
+      : (["markets", "graph"] as const),
+    queryFn: () => api.getGraphMarkets(context),
+    staleTime: 15000,
+  });
+}
+
 export function useMarketEvents(marketId: string) {
   return useQuery({
     queryKey: queryKeys.marketEvents(marketId),

@@ -31,6 +31,15 @@ from backend.inference import FactoredMarket, JointMarketError  # noqa: E402
 
 YEARS = list(range(2027, 2046))
 
+
+def popcount(x: int) -> int:
+    """int.bit_count() equivalent that also runs on Python 3.9."""
+    try:
+        return x.bit_count()
+    except AttributeError:
+        return bin(x).count("1")
+
+
 # metric key in mc_series.csv (or derived) -> question spec.
 # monotone=True: use the running max, questions read "by <year>".
 SERIES_SPECS = [
@@ -134,6 +143,29 @@ SCALAR_SPECS = [
     },
 ]
 
+# Per-family operationalized resolution criteria ({thr}/{year} templates,
+# editorial pass 2026-07-04); missing file falls back to the generic sentence.
+_RESOLUTIONS_PATH = Path(__file__).resolve().parent / "resolution_templates.json"
+try:
+    RESOLUTIONS: dict[str, str] = json.loads(_RESOLUTIONS_PATH.read_text())["templates"]
+except (OSError, ValueError, KeyError):
+    RESOLUTIONS = {}
+
+
+def resolution_text(v: "Variable") -> str:
+    tpl = RESOLUTIONS.get(v.slug)
+    if not tpl:
+        return (
+            f"Resolution: per the metric definition in the Epoch Full Takeoff "
+            f"Model ('{v.metric}'), estimated from public data (Epoch AI, "
+            f"official statistics) at resolution time."
+        )
+    if v.thr_idx is not None and "thresholds" in v.spec:
+        thr = v.spec["fmt"](v.spec["thresholds"][v.thr_idx])
+        return tpl.format(thr=thr, year=v.year)
+    return tpl.format(year=v.year)
+
+
 MIN_P = 0.03
 MIN_SIDE_TRIALS = 8
 SMOOTH = 0.5
@@ -154,7 +186,7 @@ class Variable:
         self.slug = slug
         self.year = year
         self.thr_idx = thr_idx
-        self.sample_p = mask.bit_count() / n
+        self.sample_p = popcount(mask) / n
         self.spec = spec
 
 
@@ -221,11 +253,11 @@ def build_variables(series, scalar_cols, trial_ids):
     dropped = {"degenerate": 0, "duplicate": 0, "missing": 0}
 
     def add(vid, title, mask, metric, slug, year, thr_idx, spec):
-        p = mask.bit_count() / n
+        p = popcount(mask) / n
         if not (MIN_P <= p <= 1 - MIN_P):
             dropped["degenerate"] += 1
             return
-        side = min(mask.bit_count(), n - mask.bit_count())
+        side = min(popcount(mask), n - popcount(mask))
         if side < MIN_SIDE_TRIALS:
             dropped["degenerate"] += 1
             return
@@ -286,9 +318,9 @@ def build_variables(series, scalar_cols, trial_ids):
 
 
 def mutual_information(a: int, b: int, n: int) -> float:
-    n11 = (a & b).bit_count()
-    n1_ = a.bit_count()
-    n_1 = b.bit_count()
+    n11 = popcount(a & b)
+    n1_ = popcount(a)
+    n_1 = popcount(b)
     mi = 0.0
     for cell, row, col in (
         (n11, n1_, n_1),
@@ -435,8 +467,8 @@ def fit_cpts(variables, parents, implication, n):
             if forced is not None:
                 p = forced
             else:
-                ctx_n = ctx_mask.bit_count()
-                yes = (ctx_mask & v.mask).bit_count()
+                ctx_n = popcount(ctx_mask)
+                yes = popcount(ctx_mask & v.mask)
                 p_hat = (yes + SMOOTH) / (ctx_n + 2 * SMOOTH) if ctx_n else v.sample_p
                 lam = ctx_n / (ctx_n + SHRINK_N)
                 p = lam * p_hat + (1 - lam) * v.sample_p
@@ -694,9 +726,7 @@ def main():
             "id": mid,
             "title": v.title,
             "description": (
-                f"{v.title}. Resolution: per the metric definition in the Epoch "
-                f"Full Takeoff Model ('{v.metric}'), estimated from public data "
-                f"(Epoch AI, official statistics) at resolution time. Prior from "
+                f"{v.title}. {resolution_text(v)} Prior from "
                 f"the FTM Monte Carlo ({manifest.get('n_trials', n)} trials, "
                 f"observed-2026-06-28 recalibration): {v.sample_p:.1%}."
             ),

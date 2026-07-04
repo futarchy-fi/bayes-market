@@ -16,6 +16,7 @@ import {
   getServiceIndex,
   submitEventTrade,
   submitMarketComment,
+  getGraphMarkets,
   BayesApiError,
 } from "@/lib/api/client";
 
@@ -260,6 +261,26 @@ describe("API Client", () => {
     expect(headers["Content-Type"]).toBe("application/json");
     expect(headers["X-Bayes-Agent-Id"]).toBe("agent-4");
     expect(result.comment.commentId).toBe("c1");
+  });
+
+  it("getGraphMarkets calls /v1/markets?fields=graph with no context by default", async () => {
+    const body = { markets: [], meta: { apiVersion: "1.0", timestamp: "" } };
+    mockFetch.mockResolvedValue(jsonResponse(body));
+    await getGraphMarkets();
+    expect(mockFetch).toHaveBeenCalledWith("/v1/markets?fields=graph", expect.any(Object));
+  });
+
+  it("getGraphMarkets encodes active assumptions as a single pipe-joined context param", async () => {
+    const body = { markets: [], meta: { apiVersion: "1.0", timestamp: "" } };
+    mockFetch.mockResolvedValue(jsonResponse(body));
+    await getGraphMarkets([
+      { variableId: "var", outcomeId: "yes" },
+      { variableId: "var2", outcomeId: "no" },
+    ]);
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/v1/markets?fields=graph&context=var%3Dyes%7Cvar2%3Dno",
+      expect.any(Object),
+    );
   });
 
   it("throws BayesApiError on non-ok response", async () => {

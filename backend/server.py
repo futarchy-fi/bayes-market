@@ -1715,6 +1715,65 @@ def graph_market_summary(market: dict[str, Any]) -> dict[str, Any]:
     return {field: market.get(field) for field in GRAPH_MARKET_FIELDS if field in market}
 
 
+def market_parent_variables(market_id: str) -> list[str]:
+    """Parent variableIds of a market's CPT, in stable (sorted) order."""
+    rows = CONDITIONAL_MARGINALS.get(market_id)
+    if not rows:
+        return []
+    parents: set[str] = set()
+    for context_key in rows:
+        pairs = parse_cpt_key(str(context_key))
+        if pairs:
+            parents.update(variable_id for variable_id, _ in pairs)
+    return sorted(parents)
+
+
+def conditional_graph_marginals(context_key: str) -> dict[str, dict[str, float]]:
+    """Marginals for every variable under the given evidence, one propagation.
+
+    The joint is copied, conditioned on each `var=outcome` pair, and read
+    back in full — O(one distribute) instead of one evidence query per
+    market, which is what makes whole-graph conditioning viable at ~900
+    markets.
+    """
+    pairs = parse_cpt_key(context_key)
+    if pairs is None:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "context must be var=outcome assignments joined by |",
+            {"parameter": "context", "received": context_key},
+        )
+    joint = get_joint_market()
+    if joint is None or not hasattr(joint, "condition"):
+        raise ApiError(409, "joint_unavailable", "Joint market model is not available")
+    shadow = deepcopy(joint)
+    try:
+        for variable_id, outcome_id in pairs:
+            if not shadow.condition(variable_id, outcome_id):
+                raise ApiError(
+                    400,
+                    "invalid_query",
+                    "context references an unknown variableId",
+                    {"parameter": "context", "received": variable_id},
+                )
+    except JointMarketError as err:
+        raise ApiError(
+            400, "invalid_context", str(err), {"parameter": "context", "received": context_key}
+        ) from err
+    conditional: dict[str, dict[str, float]] = {}
+    for market in MARKETS.values():
+        variable_id = str(market.get("variableId") or "")
+        if not variable_id or variable_id in conditional:
+            continue
+        marginal = shadow.marginal(variable_id, {})
+        if marginal:
+            conditional[variable_id] = {
+                outcome_id: round(float(value), 6) for outcome_id, value in marginal.items()
+            }
+    return conditional
+
+
 def percentile_ms(values: list[float], ratio: float) -> float:
     """Return a rounded percentile value from a list of millisecond samples."""
     if not values:
@@ -3163,6 +3222,23 @@ def parse_market_list_query(query: dict[str, list[str]]) -> dict[str, Any]:
     limit = parse_integer_query_param(query, "limit", default=0, minimum=1) if limit_values else None
     offset = parse_integer_query_param(query, "offset", default=0, minimum=0) if offset_values else 0
 
+    context_values = query.get("context", [])
+    if len(context_values) > 1:
+        raise ApiError(
+            400,
+            "invalid_query",
+            "context must be provided at most once",
+            {"parameter": "context", "received": context_values},
+        )
+    context_key = context_values[0] if context_values else None
+    if context_key is not None and fields != "graph":
+        raise ApiError(
+            400,
+            "invalid_query",
+            "context is only supported with fields=graph",
+            {"parameter": "context", "received": context_key},
+        )
+
     filters: dict[str, Any] = {
         "status": status,
         "sort": sort,
@@ -3171,6 +3247,8 @@ def parse_market_list_query(query: dict[str, list[str]]) -> dict[str, Any]:
     }
     if fields is not None:
         filters["fields"] = fields
+    if context_key:
+        filters["context"] = context_key
     if limit is not None:
         filters["limit"] = limit
     if limit is not None or offset_values:
@@ -3813,6 +3891,18 @@ def list_markets(query: dict[str, list[str]]) -> tuple[dict[str, Any], int]:
 
     project_market = graph_market_summary if fields == "graph" else market_summary
     summaries = [project_market(market) for market in markets]
+    if fields == "graph":
+        for summary in summaries:
+            parents = market_parent_variables(str(summary.get("id")))
+            if parents:
+                summary["parents"] = parents
+        context_key = filters.get("context")
+        if context_key:
+            conditional = conditional_graph_marginals(str(context_key))
+            for summary in summaries:
+                marginal = conditional.get(str(summary.get("variableId") or ""))
+                if marginal:
+                    summary["conditionalMarginals"] = marginal
     response = {
         "markets": summaries,
         "count": len(summaries),

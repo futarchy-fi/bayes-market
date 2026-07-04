@@ -1,8 +1,7 @@
 import { Link } from "react-router-dom";
 import { AssumptionProvider, useAssumptions } from "@/features/assumptions/AssumptionContext";
 import { AssumptionBar } from "@/features/assumptions/AssumptionBar";
-import { BeliefFlowGraph } from "@/features/graph/BeliefFlowGraph";
-import { ModelVsCrowd } from "@/features/graph/ModelVsCrowd";
+import { NetworkMap } from "@/features/graph/NetworkMap";
 import { useMarkets } from "@/lib/query/hooks";
 
 /**
@@ -38,9 +37,7 @@ function LandingContent() {
 
       <AssumptionBar />
 
-      <BeliefFlowGraph />
-
-      <ModelVsCrowd markets={data?.markets ?? []} />
+      <NetworkMap />
 
       <div style={{ display: "flex", gap: "var(--space-md)", alignItems: "center", fontSize: "0.85rem" }}>
         <Link to="/markets" style={ctaStyle}>
