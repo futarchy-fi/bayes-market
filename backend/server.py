@@ -62,10 +62,12 @@ from backend.inference import (
     InferenceCompileError,
     InferenceQueryError,
     InferenceUnsupportedQueryError,
+    FactoredMarket,
     JointMarket,
     JointMarketError,
     NetworkModelError,
     build_market_network,
+    build_network_nodes,
     canonical_json_hash,
     parse_cpt_key,
 )
@@ -1508,22 +1510,90 @@ def get_market_network() -> BayesNetworkModel | None:
 
 
 JOINT_MARKET_LIQUIDITY = float(os.environ.get("BAYES_JOINT_LIQUIDITY", "300"))
+# "factored" (junction tree; scales with treewidth, not variable count) or
+# "flat" (explicit 2^n joint; only viable for small networks).
+JOINT_MAKER_KIND = (os.environ.get("BAYES_MAKER") or "factored").strip().lower()
+JOINT_MAX_TREEWIDTH_ENV = (os.environ.get("BAYES_MAX_TREEWIDTH") or "").strip()
 _JOINT_MARKET_STATE: dict[str, Any] = {"market": None}
+
+
+def _joint_width_budget(variable_count: int) -> int:
+    """Treewidth cap for the factored maker.
+
+    Env override wins. Otherwise small networks get the flat-equivalent
+    budget (n-1: every context is tradeable, exactly as the explicit joint
+    allowed), and larger networks get the scale budget of 8 — per-trade cost
+    O(n * 2^(w+1)), which keeps thousands of markets in millisecond range.
+    """
+    if JOINT_MAX_TREEWIDTH_ENV:
+        return max(1, int(JOINT_MAX_TREEWIDTH_ENV))
+    if variable_count <= 20:
+        return max(1, variable_count - 1)
+    return 8
+
+
+def _build_joint_maker() -> "JointMarket | FactoredMarket | None":
+    """Fresh maker from the seeded network (factored unless BAYES_MAKER=flat)."""
+    if JOINT_MAKER_KIND != "flat":
+        try:
+            nodes = build_network_nodes(MARKETS, CONDITIONAL_MARGINALS)
+            return FactoredMarket.from_nodes(
+                nodes,
+                liquidity=JOINT_MARKET_LIQUIDITY,
+                max_width=_joint_width_budget(len(nodes)),
+            )
+        except JointMarketError:
+            return None
+    network = get_market_network()
+    if network is None:
+        return None
+    try:
+        return JointMarket.from_network(network, liquidity=JOINT_MARKET_LIQUIDITY)
+    except JointMarketError:
+        return None
 
 
 JOINT_STATE_PATH = os.environ.get("BAYES_JOINT_STATE_PATH") or ""
 
 
-def _load_joint_snapshot() -> JointMarket | None:
-    """Restore a persisted joint if it matches the current variable space."""
+def _load_joint_snapshot() -> "JointMarket | FactoredMarket | None":
+    """Restore a persisted joint if it matches the current variable space.
+
+    Understands both formats: factored-v1 snapshots restore directly; legacy
+    flat snapshots are absorbed into a freshly built junction tree (an exact
+    projection whenever the flat joint factorizes over it), so traded prices
+    survive the flat-to-factored migration.
+    """
     if not JOINT_STATE_PATH:
         return None
     path = Path(JOINT_STATE_PATH)
     if not path.exists():
         return None
     try:
-        market = JointMarket.from_snapshot(json.loads(path.read_text()))
-    except (OSError, ValueError, KeyError, TypeError, JointMarketError):
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    market: "JointMarket | FactoredMarket | None"
+    try:
+        if data.get("format") == "factored-v1":
+            if JOINT_MAKER_KIND == "flat":
+                return None
+            market = FactoredMarket.from_snapshot(
+                data, max_width=_joint_width_budget(len(data.get("order", [])))
+            )
+        elif "probabilities" in data:
+            if JOINT_MAKER_KIND == "flat":
+                market = JointMarket.from_snapshot(data)
+            else:
+                market = _build_joint_maker()
+                if market is None:
+                    return None
+                market.absorb_flat(
+                    data["order"], data["outcomes"], data["probabilities"]
+                )
+        else:
+            return None
+    except (ValueError, KeyError, TypeError, JointMarketError):
         return None
     live_variables = {
         str(m.get("variableId")) for m in MARKETS.values() if m.get("variableId")
@@ -1549,7 +1619,7 @@ def persist_joint_market() -> None:
         pass
 
 
-def get_joint_market() -> JointMarket | None:
+def get_joint_market() -> "JointMarket | FactoredMarket | None":
     """Return the combinatorial LMSR market maker over the network joint.
 
     Restored from BAYES_JOINT_STATE_PATH when a compatible snapshot exists
@@ -1564,15 +1634,10 @@ def get_joint_market() -> JointMarket | None:
             _JOINT_MARKET_STATE["market"] = restored
             resync_marginals_from_joint()
             return restored
-        network = get_market_network()
-        if network is None:
+        maker = _build_joint_maker()
+        if maker is None:
             return None
-        try:
-            _JOINT_MARKET_STATE["market"] = JointMarket.from_network(
-                network, liquidity=JOINT_MARKET_LIQUIDITY
-            )
-        except JointMarketError:
-            return None
+        _JOINT_MARKET_STATE["market"] = maker
     return _JOINT_MARKET_STATE["market"]
 
 

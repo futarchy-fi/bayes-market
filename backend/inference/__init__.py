@@ -29,11 +29,13 @@ from .errors import (
     InferenceQueryError,
     InferenceUnsupportedQueryError,
 )
+from .factored_market import FactoredMarket
 from .joint_market import JointMarket, JointMarketError
 from .network_model import (
     BayesNetworkModel,
     NetworkModelError,
     build_market_network,
+    build_network_nodes,
     parse_cpt_key,
 )
 
@@ -63,6 +65,8 @@ __all__ = [
     "MarginalQueryResult",
     "NetworkModelError",
     "build_market_network",
+    "build_network_nodes",
+    "FactoredMarket",
     "canonical_json_hash",
     "parse_cpt_key",
     "compile_current_market_artifact",

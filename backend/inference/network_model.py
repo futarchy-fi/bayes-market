@@ -225,11 +225,11 @@ def _digit_combos(counts: list[int]):
             return
 
 
-def build_market_network(
+def build_network_nodes(
     markets: Mapping[str, Mapping[str, Any]],
     conditional_marginals: Mapping[str, Mapping[str, Mapping[str, float]]],
-) -> BayesNetworkModel:
-    """Build the joint model from market records and per-market CPTs.
+) -> list[dict[str, Any]]:
+    """Build CPT nodes from market records — the flat and factored makers' shared input.
 
     Every market becomes a node. Markets with a complete, well-formed CPT
     (all parent combinations present, parents resolvable to markets) get
@@ -283,7 +283,15 @@ def build_market_network(
                     }
         nodes.append(node)
 
-    return BayesNetworkModel(nodes)
+    return nodes
+
+
+def build_market_network(
+    markets: Mapping[str, Mapping[str, Any]],
+    conditional_marginals: Mapping[str, Mapping[str, Mapping[str, float]]],
+) -> BayesNetworkModel:
+    """Build the joint model from market records and per-market CPTs."""
+    return BayesNetworkModel(build_network_nodes(markets, conditional_marginals))
 
 
 def _root_node(
