@@ -13,6 +13,20 @@ export interface MarketListFilters {
   q?: string;
 }
 
+/** Where an external reference probability for a market came from. */
+export type MarketAnchorSource = "metaculus" | "manifold";
+
+/** An external forecast anchored to this market, for model-vs-crowd comparisons. */
+export interface MarketAnchor {
+  source: MarketAnchorSource;
+  /** Source-specific reference id (e.g. a Metaculus question id). */
+  ref: string;
+  url: string;
+  /** Reference probability, 0-1. */
+  value: number;
+  fetchedAt: string;
+}
+
 export interface MarketSummary {
   id: string;
   title: string;
@@ -24,6 +38,10 @@ export interface MarketSummary {
   variableId?: string;
   /** Current prices per outcome (kept in sync with the joint market maker). */
   marginals?: Record<string, number>;
+  /** Model-implied prior probability (0-1) from the futarchy team model (FTM), when available. */
+  ftmImplied?: number;
+  /** External forecast (e.g. Metaculus/Manifold) anchored to this market, when available. */
+  anchor?: MarketAnchor;
 }
 
 export interface Market {

@@ -33,6 +33,14 @@ const BAR_H = 5;
 /** Above this many nodes the graph defaults to focus mode instead of drawing everything. */
 const AUTO_FOCUS_NODE_LIMIT = 40;
 
+/**
+ * Hard ceiling on mounted FlowNode components, independent of focus state.
+ * Each FlowNode fires its own per-market useMarket queries, so this is the
+ * backstop against a mount storm on large networks (e.g. a user backing out
+ * of focus mode, or an ego set that is itself large).
+ */
+const MAX_RENDERED_NODES = 60;
+
 interface BeliefFlowGraphProps {
   focusMarketId?: string;
   onNodeClick?: (marketId: string) => void;
@@ -58,6 +66,27 @@ function barPath(x: number, y: number, w: number, h: number): string {
     `h ${-(w - r)}`,
     `Z`,
   ].join(" ");
+}
+
+/**
+ * Same rule the auto-focus effect used to apply after the fact: the biggest
+ * mover (by |deltaPts|), else the first root. Pure and synchronous so it can
+ * be used directly during render (see `autoFocusId` below) instead of via a
+ * post-commit effect.
+ */
+function computeAutoFocusTarget(
+  markets: FlowMarket[],
+  edges: Array<{ source: string; target: string }>,
+  deltaById: ReadonlyMap<string, number>,
+): string | null {
+  const ranked = topMovers(
+    markets.flatMap((m) => {
+      const d = deltaById.get(m.id);
+      return d === undefined ? [] : [{ id: m.id, deltaPts: d }];
+    }),
+    1,
+  );
+  return ranked[0]?.id ?? firstRootId(markets.map((m) => m.id), edges);
 }
 
 function firstOutcomeProbability(
@@ -295,26 +324,39 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
 
   // ---- Focus mode (2-hop ego graph) ----
   const [focusedId, setFocusedId] = useState<string | null>(null);
-  const effectiveFocusId = focusedId != null && marketById.has(focusedId) ? focusedId : null;
-
-  // Scale readiness: past the limit, open focused on the biggest mover (or
-  // the first root) instead of drawing the whole network. Runs once.
   const [deltaById, setDeltaById] = useState<ReadonlyMap<string, number>>(new Map());
+
+  // Scale readiness: past the limit, the graph opens focused on the biggest
+  // mover (or the first root) instead of drawing the whole network. This is
+  // derived synchronously during render -- NOT via an effect -- so the very
+  // FIRST commit where markets.length exceeds AUTO_FOCUS_NODE_LIMIT already
+  // renders only the ego subgraph. Setting this via a post-render effect
+  // (the previous approach) let every node mount -- and fire its per-market
+  // useMarket queries -- on that first commit, before the effect had a
+  // chance to prune it back down; deriving it inline avoids that extra
+  // commit entirely.
+  const autoFocusId = useMemo(
+    () => (markets.length > AUTO_FOCUS_NODE_LIMIT ? computeAutoFocusTarget(markets, edges, deltaById) : null),
+    [markets, edges, deltaById],
+  );
+
+  const explicitFocusId = focusedId != null && marketById.has(focusedId) ? focusedId : null;
+  const effectiveFocusId = explicitFocusId ?? autoFocusId;
+
+  // Reactive follow-up only: once an auto-focus target is available, lock it
+  // in as the explicit selection so "Focused on … / Show all" has a stable
+  // id to work with (e.g. so it survives the user picking a different node
+  // and coming back). Guarded to fire at most once per mount, and it only
+  // ever moves focusedId from null to a value -- it can never widen the
+  // rendered set back toward the full (storm-sized) graph, so it cannot
+  // re-trigger the mount storm.
   const autoFocusApplied = useRef(false);
   useEffect(() => {
     if (autoFocusApplied.current) return;
-    if (markets.length <= AUTO_FOCUS_NODE_LIMIT) return;
+    if (autoFocusId == null) return;
     autoFocusApplied.current = true;
-    const ranked = topMovers(
-      markets.flatMap((m) => {
-        const d = deltaById.get(m.id);
-        return d === undefined ? [] : [{ id: m.id, deltaPts: d }];
-      }),
-      1,
-    );
-    const target = ranked[0]?.id ?? firstRootId(markets.map((m) => m.id), edges);
-    if (target) setFocusedId(target);
-  }, [markets, edges, deltaById]);
+    setFocusedId(autoFocusId);
+  }, [autoFocusId]);
 
   const displayed = useMemo(() => {
     const allIds = markets.map((m) => m.id);
@@ -323,9 +365,26 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
     return { ids: allIds.filter((id) => ego.has(id)), edges: induceEdges(ego, edges) };
   }, [markets, edges, effectiveFocusId]);
 
+  // Hard cap: never mount more than MAX_RENDERED_NODES FlowNode components,
+  // regardless of focus state. The focused node (if any) is always kept.
+  const renderedIds = useMemo(() => {
+    if (displayed.ids.length <= MAX_RENDERED_NODES) return displayed.ids;
+    if (effectiveFocusId && displayed.ids.includes(effectiveFocusId)) {
+      const rest = displayed.ids.filter((id) => id !== effectiveFocusId);
+      return [effectiveFocusId, ...rest.slice(0, MAX_RENDERED_NODES - 1)];
+    }
+    return displayed.ids.slice(0, MAX_RENDERED_NODES);
+  }, [displayed.ids, effectiveFocusId]);
+  const renderedIdSet = useMemo(() => new Set(renderedIds), [renderedIds]);
+  const truncatedCount = displayed.ids.length - renderedIds.length;
+  const renderedEdges = useMemo(
+    () => (truncatedCount > 0 ? induceEdges(renderedIdSet, displayed.edges) : displayed.edges),
+    [displayed.edges, renderedIdSet, truncatedCount],
+  );
+
   const layout = useMemo(
-    () => computeFlowLayout(displayed.ids, displayed.edges, { orientation: "vertical", columnGap: 40 }),
-    [displayed],
+    () => computeFlowLayout(renderedIds, renderedEdges, { orientation: "vertical", columnGap: 40 }),
+    [renderedIds, renderedEdges],
   );
 
   const positionById = useMemo(
@@ -386,9 +445,8 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
     );
   }
 
-  const displayedIdSet = new Set(displayed.ids);
-  const displayedMarkets = markets.filter((m) => displayedIdSet.has(m.id));
-  const matchIds = searchMatchIds(query, displayedMarkets);
+  const renderedMarkets = markets.filter((m) => renderedIdSet.has(m.id));
+  const matchIds = searchMatchIds(query, renderedMarkets);
   const focusedMarket = effectiveFocusId ? marketById.get(effectiveFocusId) : undefined;
 
   const contextFor = (market: FlowMarket) =>
@@ -425,7 +483,7 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
-              const id = firstSearchMatch(query, displayedMarkets);
+              const id = firstSearchMatch(query, renderedMarkets);
               if (id) {
                 setSelected(id);
                 onNodeClick?.(id);
@@ -462,6 +520,12 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
             </div>
           )}
 
+          {truncatedCount > 0 && (
+            <div style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", marginBottom: 6 }}>
+              Showing {MAX_RENDERED_NODES} of {displayed.ids.length} — use search or focus.
+            </div>
+          )}
+
           <svg
             viewBox={`0 0 ${layout.width} ${layout.height}`}
             style={{ width: "100%", maxWidth: 860, height: "auto", display: "block", margin: "0 auto" }}
@@ -479,7 +543,7 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
             </defs>
 
             {/* Edges: solid hairline beziers, cause above -> effect below */}
-            {displayed.edges.map((e, i) => {
+            {renderedEdges.map((e, i) => {
               const s = positionById.get(e.source);
               const t = positionById.get(e.target);
               if (!s || !t) return null;
