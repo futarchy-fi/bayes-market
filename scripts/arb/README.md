@@ -56,6 +56,15 @@ the slippage floor, **45.6 mana payable at resolution *if* the declared
 relationships hold**, largest an 11.2pp gap between IsaacKing's Minecraft-AGI
 benchmark market and Gabrielle's copy (+26 mana).
 
+### Evan Daniel 2x2 joint marginals
+
+`relationships_evand.json` vendors a transformed snapshot of Evan Daniel's
+curated [`evand/conditional-markets`](https://github.com/evand/conditional-markets)
+2x2 Manifold markets and is loaded automatically. Its `joint_marginal`
+relations report each joint's A/B marginals and any declared standalone-binary
+gaps; they are report-only and never construct bundles. The source dataset is
+used with attribution under its MIT license.
+
 Read honestly, this is closer to a negative result than a harvest: every
 surviving bundle is a cross-creator duplicate, so its "every consistent
 world" guarantee is conditional on an equivalence the resolver explicitly
