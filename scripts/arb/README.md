@@ -52,9 +52,17 @@ python3 scripts/arb/relbot.py --min-profit 0.5 --out /tmp/relbot.json
 ```
 
 First full run (2026-07-12): 46 relationships, 4 violated, 3 bundles clear
-the slippage floor, **45.6 mana guaranteed at resolution**, largest an
-11.2pp gap between IsaacKing's Minecraft-AGI benchmark market and Gabrielle's
-copy (+26 mana).
+the slippage floor, **45.6 mana payable at resolution *if* the declared
+relationships hold**, largest an 11.2pp gap between IsaacKing's Minecraft-AGI
+benchmark market and Gabrielle's copy (+26 mana).
+
+Read honestly, this is closer to a negative result than a harvest: every
+surviving bundle is a cross-creator duplicate, so its "every consistent
+world" guarantee is conditional on an equivalence the resolver explicitly
+does not guarantee (caveat 1), while the unconditional class — within-creator
+ladders — shows no alpha at snapshot time (caveat 3). v0's real finding is
+that *snapshot* coherence-arb on Manifold is already priced; the value lives
+in the continuous loop and in pricing resolver risk itself.
 
 ## Caveats found by the first run (they are the roadmap)
 
@@ -71,6 +79,11 @@ copy (+26 mana).
 3. **Coherence-by-stasis.** Within-creator ladders (the truly riskless
    class) are coherent to <1pp today; that alpha appears in news bursts.
    The bot must be a loop, not a snapshot.
+4. **Fees are unverified.** The trust gate validates the *pricing* function
+   (pool state → displayed probability); a fee applied at bet time would sit
+   outside that check and quietly eat the margin on every bundle. Irrelevant
+   while the bot never trades — must be settled (docs check or a 1-mana probe
+   bet) before the execution layer ships.
 
 ## Staging
 
