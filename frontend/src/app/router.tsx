@@ -6,6 +6,7 @@ import MarketList from "@/routes/MarketList";
 import MarketDetail from "@/routes/MarketDetail";
 import Portfolio from "@/routes/Portfolio";
 import System from "@/routes/System";
+import Compare from "@/routes/Compare";
 import { CreateMarketForm } from "@/features/market/CreateMarketForm";
 
 export const router = createBrowserRouter(
@@ -18,6 +19,7 @@ export const router = createBrowserRouter(
         { path: "markets/new", element: <CreateMarketForm /> },
         { path: "markets/:marketId", element: <MarketDetail /> },
         { path: "portfolio", element: <Portfolio /> },
+        { path: "compare", element: <Compare /> },
         { path: "system", element: <System /> },
       ],
     },
