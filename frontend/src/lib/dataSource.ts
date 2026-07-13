@@ -48,23 +48,33 @@ export function mapNetMarket(market: exchange.NetMarket): Market {
   };
 }
 
-export async function listMarkets(filters: MarketListFilters = {}): Promise<MarketListResponse> {
-  if (!isExchangeMode()) return paper.listMarkets(filters);
-
-  const response = await exchange.getNetMarkets();
+export function filterMarketList(
+  response: MarketListResponse,
+  filters: MarketListFilters = {},
+): MarketListResponse {
   const normalized = normalizeMarketListFilters(filters);
-  let markets = response.markets.map(mapNetMarket);
+  let markets = [...response.markets];
   if (normalized.status) markets = markets.filter((market) => market.status === normalized.status);
   if (normalized.q) {
     const query = normalized.q.toLocaleLowerCase();
     markets = markets.filter((market) => market.title.toLocaleLowerCase().includes(query));
   }
   if (normalized.sort) {
-    const field = normalized.sort === "created" ? "created_at" : normalized.sort;
-    markets.sort((a, b) => String(b[field]).localeCompare(String(a[field]), undefined, { numeric: true }));
+    const field = normalized.sort === "created" ? undefined : normalized.sort;
+    if (field) markets.sort((a, b) => String(b[field]).localeCompare(String(a[field]), undefined, { numeric: true }));
   }
+  return { ...response, markets, count: markets.length };
+}
 
-  return { markets, count: markets.length, meta: exchangeMeta() };
+export async function listMarkets(filters: MarketListFilters = {}): Promise<MarketListResponse> {
+  if (!isExchangeMode()) return paper.listMarkets(filters);
+
+  const response = await exchange.getNetMarkets();
+  return filterMarketList({
+    markets: response.markets.map(mapNetMarket),
+    count: response.count,
+    meta: exchangeMeta(),
+  }, filters);
 }
 
 export async function getMarket(
