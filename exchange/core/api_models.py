@@ -314,6 +314,7 @@ class HealthResponse(BaseModel):
     ledger_accounts: int
     users: int
     net: NetHealth
+    venues: dict[str, dict]
 
 
 # --- Tracked Repos ---
