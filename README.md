@@ -41,6 +41,38 @@ cd frontend && npm install && npm run dev      # build: npm run build · test: n
 | `GET /v1/markets/{id}/events`, `/trades`, `/meta`, `/engine-stats` | per-market event log, trades, metadata, engine internals |
 | `GET /v1/accounts/{id}/positions`, `/exposure`, `/pnl`, `/risk` | per-account portfolio views |
 
+### Self-serve markets & resolvers
+
+Authenticated users can create an AMM market with `POST /v1/markets`:
+
+```json
+{
+  "question": "Will the release ship this week?",
+  "outcomes": ["yes", "no"],
+  "deadline": "2030-01-02T12:00:00Z",
+  "funding": "25"
+}
+```
+
+The funding is transferred from the creator's credits into the AMM. It must
+be between `MIN_USER_FUNDING` (default `10`) and `MAX_USER_FUNDING` (default
+`500`). A deadline is required, must be in the future, and may be at most 400
+days away. `POST /v1/book/markets` accepts `question` and `deadline`; book
+markets require no subsidy. `USER_MARKET_CAP` (default `10`) limits each
+account's open self-serve markets across both venues.
+
+Every market publishes its creator and resolver on its public detail route.
+Self-serve markets use a `creator` resolver, admin-created markets use
+`admin`, and pull-request webhook markets use `github_pr`. Creators may call
+`POST /v1/markets/{id}/resolve` (or the corresponding `/void` route) only at
+or after the deadline; the book venue uses the same operations below
+`/v1/book/markets/{id}`.
+
+Administrators can resolve or void any market at any time. This is the
+dispute override: use the admin key with the venue's settlement route, or use
+the existing AMM admin routes at `/v1/admin/markets/{id}/resolve` and
+`/v1/admin/markets/{id}/void`.
+
 ### Sealed batch venue
 
 The always-on batch venue is a binary LMSR that accepts one sealed pending
