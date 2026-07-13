@@ -1,0 +1,140 @@
+#!/bin/bash
+set -euo pipefail
+
+# Futarchy CLI Installer
+# Usage: curl -fsSL https://futarchy.ai/install.sh | bash
+
+BOLD='\033[1m'
+DIM='\033[2m'
+PURPLE='\033[38;5;141m'
+TEAL='\033[38;5;43m'
+RED='\033[31m'
+NC='\033[0m'
+
+info()    { printf "${DIM}%s${NC}\n" "$*"; }
+success() { printf "${TEAL}%s${NC}\n" "$*"; }
+error()   { printf "${RED}error:${NC} %s\n" "$*" >&2; }
+header()  { printf "\n${PURPLE}${BOLD}%s${NC}\n" "$*"; }
+
+REPO="https://github.com/futarchy-fi/bayes-market.git"
+SPEC="futarchy @ git+${REPO}#subdirectory=exchange/cli"
+
+header "Futarchy CLI Installer"
+echo ""
+
+# --- Detect OS ---
+OS="$(uname -s)"
+case "$OS" in
+    Darwin) PLATFORM="macOS" ;;
+    Linux)  PLATFORM="Linux" ;;
+    *)      error "Unsupported OS: $OS"; exit 1 ;;
+esac
+info "Platform: $PLATFORM"
+
+# --- Check Python ---
+PYTHON=""
+for cmd in python3 python; do
+    if command -v "$cmd" &>/dev/null; then
+        version=$("$cmd" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+')
+        major=$(echo "$version" | cut -d. -f1)
+        minor=$(echo "$version" | cut -d. -f2)
+        if [ "$major" -ge 3 ] && [ "$minor" -ge 10 ]; then
+            PYTHON="$cmd"
+            break
+        fi
+    fi
+done
+
+if [ -z "$PYTHON" ]; then
+    error "Python 3.10+ is required but not found."
+    echo ""
+    if [ "$PLATFORM" = "macOS" ]; then
+        info "Install with:  brew install python3"
+    else
+        info "Install with:  sudo apt install python3 python3-pip   (Debian/Ubuntu)"
+        info "           or: sudo dnf install python3 python3-pip   (Fedora)"
+    fi
+    exit 1
+fi
+info "Python: $($PYTHON --version)"
+
+# --- Choose install method ---
+USE_PIPX=false
+if command -v pipx &>/dev/null; then
+    USE_PIPX=true
+    info "Installer: pipx"
+elif [ "$PLATFORM" = "macOS" ]; then
+    # On macOS, pip install --user often doesn't work (externally managed)
+    # Try to install pipx first
+    if command -v brew &>/dev/null; then
+        info "Installing pipx via Homebrew..."
+        brew install pipx 2>/dev/null && USE_PIPX=true || true
+    fi
+fi
+
+# --- Ensure PATH includes pipx bin dir ---
+if $USE_PIPX; then
+    pipx ensurepath 2>/dev/null || true
+    # Also add to current session so `command -v futarchy` works below
+    PIPX_BIN="${HOME}/.local/bin"
+    if [ -d "$PIPX_BIN" ] && [[ ":$PATH:" != *":$PIPX_BIN:"* ]]; then
+        export PATH="$PIPX_BIN:$PATH"
+    fi
+fi
+
+# --- Clean up any stale installs ---
+# Remove non-pipx installs that may shadow the pipx binary
+for stale in /opt/homebrew/bin/futarchy /usr/local/bin/futarchy; do
+    if [ -f "$stale" ] && ! readlink -f "$stale" 2>/dev/null | grep -q pipx; then
+        info "Removing stale install at $stale..."
+        rm -f "$stale" 2>/dev/null || sudo rm -f "$stale" 2>/dev/null || true
+    fi
+done
+
+# Also uninstall from system pip if present
+$PYTHON -m pip uninstall futarchy -y 2>/dev/null || true
+
+# --- Install / Upgrade ---
+UPGRADING=false
+if command -v futarchy &>/dev/null; then
+    UPGRADING=true
+    header "Upgrading..."
+else
+    header "Installing..."
+fi
+echo ""
+
+if $USE_PIPX; then
+    if $UPGRADING; then
+        pipx uninstall futarchy 2>/dev/null || true
+    fi
+    pipx install --pip-args="--no-cache-dir" "$SPEC"
+    # Ensure PATH is configured for future shells
+    pipx ensurepath 2>/dev/null || true
+else
+    PIP_ARGS="--force-reinstall --no-deps"
+    $PYTHON -m pip install $PIP_ARGS "$SPEC" --break-system-packages 2>/dev/null \
+        || $PYTHON -m pip install $PIP_ARGS "$SPEC" --user 2>/dev/null \
+        || $PYTHON -m pip install $PIP_ARGS "$SPEC"
+    # Ensure deps are present (--no-deps skipped them above)
+    $PYTHON -m pip install "$SPEC" --break-system-packages 2>/dev/null \
+        || $PYTHON -m pip install "$SPEC" --user 2>/dev/null \
+        || $PYTHON -m pip install "$SPEC" 2>/dev/null || true
+fi
+
+# --- Verify ---
+echo ""
+if command -v futarchy &>/dev/null; then
+    success "futarchy $(futarchy --version 2>/dev/null || echo "0.1.0") installed successfully!"
+    echo ""
+    info "Get started:"
+    printf "  ${BOLD}futarchy markets${NC}        ${DIM}# browse open markets${NC}\n"
+    printf "  ${BOLD}futarchy login${NC}          ${DIM}# create an account${NC}\n"
+    printf "  ${BOLD}futarchy buy 1 yes 50${NC}   ${DIM}# trade${NC}\n"
+else
+    success "futarchy installed!"
+    echo ""
+    info "Restart your shell (or run: source ~/.bashrc), then:"
+    printf "  ${BOLD}futarchy markets${NC}\n"
+fi
+echo ""
