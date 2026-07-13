@@ -61,8 +61,8 @@ export function useLeaderboard() {
   });
 }
 
-export function useInstruments() {
-  return useQuery({ queryKey: exchangeQueryKeys.instruments(), queryFn: exchange.getInstruments, refetchInterval: 10000 });
+export function useInstruments(enabled = true) {
+  return useQuery({ queryKey: exchangeQueryKeys.instruments(), queryFn: exchange.getInstruments, enabled, refetchInterval: 10000 });
 }
 
 export function useAmmMarket(marketId: string) {

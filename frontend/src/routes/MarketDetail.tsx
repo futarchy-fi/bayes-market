@@ -25,6 +25,8 @@ import type { MarketEvent } from "@/lib/api/types";
 import { TradeCreditsPanel } from "@/lib/exchange/TradeCreditsPanel";
 import { isExchangeMode } from "@/lib/exchangeMode";
 import { ExchangeUnavailable } from "@/components/ui/ExchangeUnavailable";
+import { useInstruments } from "@/lib/exchange/hooks";
+import { VenuePanels } from "@/routes/InstrumentDetail";
 
 export default function MarketDetail() {
   const { marketId } = useParams<{ marketId: string }>();
@@ -53,6 +55,7 @@ export default function MarketDetail() {
   const [graphView, setGraphView] = useState<GraphView>("flow");
   const queryClient = useQueryClient();
   const marketsQuery = useMarkets();
+  const instruments = useInstruments(exchangeMode);
   const engineStatsQuery = useEngineStats(marketId!, { enabled: !exchangeMode });
   const allMarkets = marketsQuery.data?.markets ?? [];
   const cliques = engineStatsQuery.data?.cliques.cliques ?? [];
@@ -74,6 +77,9 @@ export default function MarketDetail() {
   if (!data) return null;
 
   const m = data.market;
+  const instrument = exchangeMode ? instruments.data?.find((item) =>
+    item.listings.some((listing) => listing.venue === "net" && listing.marketId === m.id),
+  ) : undefined;
   const selectedMarket =
     effectiveSelectedId === m.id ? m : selectedMarketQuery.data?.market ?? m;
 
@@ -103,6 +109,8 @@ export default function MarketDetail() {
       {!exchangeMode && <PositionCard marketId={m.id} accountRisk={accountRisk.data} isConfigured={isConfigured} />}
 
       <TradeCreditsPanel marketId={m.id} variableId={m.variableId} />
+
+      {instrument && <VenuePanels instrument={instrument} includeNet={false} />}
 
       {!exchangeMode && <ResolveMarketPanel market={m} />}
 

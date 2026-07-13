@@ -22,6 +22,15 @@ vi.mock("@/features/session/context", async () => {
   };
 });
 
+vi.mock("@/lib/exchange/hooks", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/exchange/hooks")>("@/lib/exchange/hooks");
+  return { ...actual, useInstruments: vi.fn() };
+});
+
+vi.mock("@/routes/InstrumentDetail", () => ({
+  VenuePanels: ({ instrument }: { instrument: { title: string } }) => <div data-testid="inline-venue-panels">{instrument.title} venues</div>,
+}));
+
 // Mock D3 modules used by ForceDirectedGraph
 vi.mock("d3-selection", () => ({
   select: vi.fn(() => ({
@@ -110,6 +119,8 @@ import {
   useProbabilityEdit,
   useCpt,
 } from "@/lib/query/hooks";
+import { useInstruments } from "@/lib/exchange/hooks";
+import { EXCHANGE_MODE_KEY } from "@/lib/exchangeMode";
 
 const mockUseSession = vi.mocked(useSession);
 const mockUseMarket = vi.mocked(useMarket);
@@ -123,6 +134,7 @@ const mockUseResolveMarket = vi.mocked(useResolveMarket);
 const mockUseEventTrade = vi.mocked(useEventTrade);
 const mockUseProbabilityEdit = vi.mocked(useProbabilityEdit);
 const mockUseCpt = vi.mocked(useCpt);
+const mockUseInstruments = vi.mocked(useInstruments);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -266,6 +278,7 @@ beforeEach(() => {
   mockUsePostMarketComment.mockReturnValue(defaultMutationState() as any);
   mockUseProbabilityEdit.mockReturnValue(defaultMutationState() as any);
   mockUseCpt.mockReturnValue(defaultQueryState(undefined) as any);
+  mockUseInstruments.mockReturnValue(defaultQueryState([]) as any);
 });
 
 afterEach(() => {
@@ -292,6 +305,23 @@ describe("MarketDetail", () => {
     await waitFor(() => {
       expect(screen.getByText("active")).toBeInTheDocument();
     });
+  });
+
+  it("renders extra venue panels under a cross-listed market", () => {
+    window.history.replaceState({}, "", "/markets/m1");
+    window.localStorage.removeItem(EXCHANGE_MODE_KEY);
+    mockUseInstruments.mockReturnValue(defaultQueryState([{
+      instrumentId: "eth-3000",
+      title: "ETH Price > $3000 on March 15",
+      listings: [
+        { venue: "net", marketId: "m1", yesPrice: 0.65, status: "active" },
+        { venue: "book", marketId: "9", yesPrice: 0.64, status: "open" },
+      ],
+    }]) as any);
+
+    renderWithProviders(<MarketDetail />);
+
+    expect(screen.getByTestId("inline-venue-panels")).toHaveTextContent("ETH Price > $3000 on March 15 venues");
   });
 
   it("renders outcome probabilities", async () => {

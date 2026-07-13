@@ -3,8 +3,11 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "./helpers";
 import MarketList from "@/routes/MarketList";
 import * as api from "@/lib/api/client";
+import * as exchangeApi from "@/lib/exchange/client";
+import { EXCHANGE_MODE_KEY } from "@/lib/exchangeMode";
 
 vi.mock("@/lib/api/client");
+vi.mock("@/lib/exchange/client");
 
 const mockMarkets = {
   markets: [
@@ -18,7 +21,16 @@ const mockMarkets = {
 describe("MarketList", () => {
   beforeEach(() => {
     vi.useRealTimers();
+    window.history.replaceState({}, "", "/");
     vi.mocked(api.listMarkets).mockResolvedValue(mockMarkets);
+    vi.mocked(exchangeApi.getInstruments).mockResolvedValue([]);
+    vi.mocked(exchangeApi.getNetMarkets).mockResolvedValue({
+      markets: [
+        { id: "m1", variableId: "eth", title: "ETH Price > $3000", status: "active", outcomes: [], marginals: {}, parents: [] },
+        { id: "m2", variableId: "btc", title: "BTC ETF Approval", status: "resolved", outcomes: [], marginals: {}, parents: [] },
+      ],
+      count: 2,
+    });
   });
 
   afterEach(() => {
@@ -39,6 +51,22 @@ describe("MarketList", () => {
       expect(screen.getByText("ETH Price > $3000")).toBeInTheDocument();
     });
     expect(screen.getByText("BTC ETF Approval")).toBeInTheDocument();
+  });
+
+  it("marks a market that is listed on multiple venues", async () => {
+    window.localStorage.removeItem(EXCHANGE_MODE_KEY);
+    vi.mocked(exchangeApi.getInstruments).mockResolvedValue([{
+      instrumentId: "eth-3000",
+      title: "ETH Price > $3000",
+      listings: [
+        { venue: "net", marketId: "m1", yesPrice: 0.6, status: "active" },
+        { venue: "amm", marketId: "7", yesPrice: 0.61, status: "open" },
+      ],
+    }]);
+
+    renderWithProviders(<MarketList />);
+
+    expect(await screen.findByLabelText("Available on 2 venues")).toHaveTextContent("NET · AMM");
   });
 
   it("shows status badges", async () => {
