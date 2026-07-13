@@ -22,9 +22,10 @@ export function AppLayout() {
         borderBottom: "1px solid var(--color-border)",
         background: "var(--color-bg-surface)",
       }}>
-        <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>Bayes Market</span>
+        <NavLink to="/" style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--color-text)", textDecoration: "none" }}>Bayes Market</NavLink>
         {!exchangeMode && <span style={exchangeBadgeStyle}>paper mode</span>}
         <nav style={{ display: "flex", gap: "var(--space-md)" }}>
+          <NavLink to="/" end style={navLinkStyle}>Network</NavLink>
           <NavLink to="/markets" style={navLinkStyle}>Markets</NavLink>
           <NavLink to="/compare" style={navLinkStyle}>Compare</NavLink>
           <NavLink to="/portfolio" style={navLinkStyle}>Portfolio</NavLink>
