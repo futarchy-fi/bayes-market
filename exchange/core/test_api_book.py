@@ -46,6 +46,12 @@ async def test_order_mint_depth_survives_restart():
         assert created.status_code == 200
         market_id = created.json()["id"]
 
+        candles = await _request(
+            "GET", f"/v1/book/markets/{market_id}/candles", key=yes.api_key
+        )
+        assert candles.status_code == 200
+        assert candles.json() == []
+
         resting = await _request(
             "POST", "/v1/book/orders", key=yes.api_key,
             body={"marketId": market_id, "side": "bid", "outcome": "yes",
@@ -79,6 +85,12 @@ async def test_order_mint_depth_survives_restart():
             "GET", f"/v1/book/markets/{market_id}/trades", key=yes.api_key
         )
         assert trades.json()["trades"][0]["kind"] == "mint"
+        candles = await _request(
+            "GET", f"/v1/book/markets/{market_id}/candles", key=yes.api_key
+        )
+        assert set(candles.json()[0]) == {"t", "o", "h", "l", "c", "v"}
+        assert candles.json()[0]["o"] == 0.6
+        assert candles.json()[0]["v"] == 1.0
 
     _, _, _, _, venues, _ = load_snapshot(api_module.STATE_PATH)
     assert venues["book"]["trades"][str(market_id)][0]["kind"] == "mint"

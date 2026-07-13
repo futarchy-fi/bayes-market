@@ -119,3 +119,8 @@ A YES bid and NO bid cross when their prices sum to at least 1, minting one YES+
 One credit per set is held in market escrow until the set is redeemed or the market settles.
 YES asks and NO asks can cross to redeem a set; same-outcome bid/ask orders transfer existing shares.
 All four intents share one YES-axis price-time-priority book, with NO prices represented as `1 - YES`.
+
+Hourly or daily OHLCV candles are available from the AMM trade tape at
+`GET /v1/markets/{id}/candles?interval=hour|day` and from book fills at
+`GET /v1/book/markets/{id}/candles?interval=hour|day`. The net venue has no
+candle route because probability edits do not form a trade tape.

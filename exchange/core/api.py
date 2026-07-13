@@ -32,7 +32,7 @@ from exchange.core.api_models import (
     AuthResponse,
     DeviceFlowStartRequest, DeviceFlowResponse, DeviceFlowPollRequest,
     AccountResponse, AccountActivityEntry, AccountActivityPage, LockResponse,
-    MarketSummary, MarketDetail, PositionEntry, TradeResponse,
+    MarketSummary, MarketDetail, PositionEntry, TradeResponse, Candle,
     DepthEntry, DepthResponse,
     BuyRequest, SellRequest, TradeResult,
     CreateAccountResponse,
@@ -849,6 +849,35 @@ async def auth_device_poll(req: DeviceFlowPollRequest) -> AuthResponse:
 # Public market data (no auth required)
 # ---------------------------------------------------------------------------
 
+_CANDLE_SECONDS = {"hour": 3600, "day": 86400}
+
+
+def _candles(tape, interval: str) -> list[Candle]:
+    """Aggregate timestamp/price/size triples into UTC OHLCV buckets."""
+    if interval not in _CANDLE_SECONDS:
+        raise APIError(400, "invalid_interval", "interval must be hour or day")
+    seconds = _CANDLE_SECONDS[interval]
+    points = []
+    for timestamp, price, volume in tape:
+        parsed = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        points.append((parsed.timestamp(), float(price), float(volume)))
+    points.sort(key=lambda point: point[0])
+
+    buckets: dict[int, list[float]] = {}
+    for timestamp, price, volume in points:
+        bucket = int(timestamp) // seconds * seconds
+        candle = buckets.setdefault(bucket, [price, price, price, price, 0.0])
+        candle[1] = max(candle[1], price)
+        candle[2] = min(candle[2], price)
+        candle[3] = price
+        candle[4] += volume
+    return [
+        Candle(t=t, o=v[0], h=v[1], l=v[2], c=v[3], v=v[4])
+        for t, v in buckets.items()
+    ]
+
 @app.get("/v1/markets")
 async def list_markets(
     category: str | None = None,
@@ -1081,6 +1110,28 @@ async def get_market_trades(market_id: int) -> list[TradeResponse]:
     ]
 
 
+@app.get("/v1/markets/{market_id}/candles")
+async def get_market_candles(
+    market_id: int, interval: str = "hour"
+) -> list[Candle]:
+    """YES-axis AMM candles from its timestamped trade tape."""
+    market = app.state.me.markets.get(market_id)
+    if market is None:
+        raise APIError(404, "market_not_found", f"Market {market_id} not found")
+    binary = set(market.outcomes) == {"yes", "no"}
+    return _candles(
+        (
+            (
+                trade.created_at,
+                1 - trade.price if binary and trade.outcome == "no" else trade.price,
+                trade.amount,
+            )
+            for trade in market.trades
+        ),
+        interval,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Cross-venue instrument registry.
 # ---------------------------------------------------------------------------
@@ -1297,6 +1348,22 @@ async def get_book_trades(
         except VenueError as err:
             raise translate_venue_error(err) from err
     return BookTradesList(trades=trades)
+
+
+@app.get("/v1/book/markets/{market_id}/candles")
+async def get_book_candles(
+    market_id: int, interval: str = "hour"
+) -> list[Candle]:
+    """YES-axis candles from complete-set book fills."""
+    async with app.state.lock:
+        try:
+            _book().get_market(market_id)
+        except VenueError as err:
+            raise translate_venue_error(err) from err
+        fills = list(_book().engine.trades.get(market_id, []))
+    return _candles(
+        ((fill.created_at, fill.price, fill.size) for fill in fills), interval
+    )
 
 
 @app.post("/v1/book/orders")
