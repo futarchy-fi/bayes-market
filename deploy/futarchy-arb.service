@@ -1,0 +1,21 @@
+# Reference user unit for the resident arbitrage agent on farol.
+# Install with:
+#   cp deploy/futarchy-arb.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now futarchy-arb.service
+
+[Unit]
+Description=Futarchy resident arbitrage agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/futarchy/agents
+EnvironmentFile=%h/.config/openclaw/futarchy-arb.env
+ExecStart=%h/futarchy/agents/.venv/bin/python -m exchange.agents.arb --execute --interval 30
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
