@@ -8,6 +8,12 @@ export const exchangeQueryKeys = {
   orders: () => ["exchange", "orders"] as const,
   portfolio: () => ["exchange", "portfolio"] as const,
   leaderboard: () => ["exchange", "leaderboard"] as const,
+  instruments: () => ["exchange", "instruments"] as const,
+  ammMarket: (id: string) => ["exchange", "amm", "markets", id] as const,
+  bookMarket: (id: string) => ["exchange", "book", "markets", id] as const,
+  bookDepth: (id: string) => ["exchange", "book", "depth", id] as const,
+  bookOrders: () => ["exchange", "book", "orders"] as const,
+  bookPositions: () => ["exchange", "book", "positions"] as const,
 };
 
 export function useExchangeMe() {
@@ -53,6 +59,68 @@ export function useLeaderboard() {
     queryFn: exchange.getLeaderboard,
     refetchInterval: 15000,
   });
+}
+
+export function useInstruments() {
+  return useQuery({ queryKey: exchangeQueryKeys.instruments(), queryFn: exchange.getInstruments, refetchInterval: 10000 });
+}
+
+export function useAmmMarket(marketId: string) {
+  return useQuery({ queryKey: exchangeQueryKeys.ammMarket(marketId), queryFn: () => exchange.getAmmMarket(marketId), enabled: Boolean(marketId), refetchInterval: 10000 });
+}
+
+export function useTradeAmm(marketId: string) {
+  const { session } = useExchangeSession();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ action, payload }: { action: "buy" | "sell"; payload: exchange.AmmTradePayload }) => exchange.tradeAmm(marketId, action, payload, session.apiKey),
+    onSuccess: () => Promise.all([
+      queryClient.invalidateQueries({ queryKey: exchangeQueryKeys.me() }),
+      queryClient.invalidateQueries({ queryKey: exchangeQueryKeys.ammMarket(marketId) }),
+      queryClient.invalidateQueries({ queryKey: exchangeQueryKeys.instruments() }),
+    ]),
+  });
+}
+
+export function useBookMarket(marketId: string) {
+  return useQuery({ queryKey: exchangeQueryKeys.bookMarket(marketId), queryFn: () => exchange.getBookMarket(marketId), enabled: Boolean(marketId), refetchInterval: 10000 });
+}
+
+export function useBookDepth(marketId: string) {
+  return useQuery({ queryKey: exchangeQueryKeys.bookDepth(marketId), queryFn: () => exchange.getBookDepth(marketId), enabled: Boolean(marketId), refetchInterval: 5000 });
+}
+
+export function useBookOrders() {
+  const { session, isSignedIn } = useExchangeSession();
+  return useQuery({ queryKey: [...exchangeQueryKeys.bookOrders(), session.githubLogin], queryFn: () => exchange.getBookOrders(session.apiKey), enabled: isSignedIn, refetchInterval: 10000 });
+}
+
+export function useBookPositions() {
+  const { session, isSignedIn } = useExchangeSession();
+  return useQuery({ queryKey: [...exchangeQueryKeys.bookPositions(), session.githubLogin], queryFn: () => exchange.getBookPositions(session.apiKey), enabled: isSignedIn, refetchInterval: 10000 });
+}
+
+function invalidateBook(queryClient: ReturnType<typeof useQueryClient>, marketId?: string) {
+  void queryClient.invalidateQueries({ queryKey: exchangeQueryKeys.me() });
+  void queryClient.invalidateQueries({ queryKey: exchangeQueryKeys.bookOrders() });
+  void queryClient.invalidateQueries({ queryKey: exchangeQueryKeys.bookPositions() });
+  if (marketId) {
+    void queryClient.invalidateQueries({ queryKey: exchangeQueryKeys.bookMarket(marketId) });
+    void queryClient.invalidateQueries({ queryKey: exchangeQueryKeys.bookDepth(marketId) });
+  }
+  void queryClient.invalidateQueries({ queryKey: exchangeQueryKeys.instruments() });
+}
+
+export function usePlaceBookOrder(marketId: string) {
+  const { session } = useExchangeSession();
+  const queryClient = useQueryClient();
+  return useMutation({ mutationFn: (payload: exchange.BookOrderPayload) => exchange.placeBookOrder(payload, session.apiKey), onSuccess: () => invalidateBook(queryClient, marketId) });
+}
+
+export function useCancelBookOrder(marketId?: string) {
+  const { session } = useExchangeSession();
+  const queryClient = useQueryClient();
+  return useMutation({ mutationFn: (orderId: number) => exchange.cancelBookOrder(orderId, session.apiKey), onSuccess: () => invalidateBook(queryClient, marketId) });
 }
 
 export function usePreviewNetEdit() {
