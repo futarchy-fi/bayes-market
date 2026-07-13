@@ -1,6 +1,35 @@
+import httpx
 import pytest
 
+from .api import APIError, Client
 from .main import context_pipe, encode_context, filter_net_markets, parse_given
+
+
+def _client_with(handler) -> Client:
+    client = Client(api_url="http://test")
+    client._http = httpx.Client(
+        base_url="http://test", transport=httpx.MockTransport(handler)
+    )
+    return client
+
+
+def test_device_poll_raises_on_202_pending():
+    # regression: a 202 pending body used to be returned as success, so
+    # `futarchy login` saved an empty API key on the very first poll.
+    def handler(request):
+        return httpx.Response(202, json={"error": {"code": "device_flow_pending"}})
+
+    with pytest.raises(APIError) as exc:
+        _client_with(handler).device_auth_poll("dc")
+    assert exc.value.status == 202
+
+
+def test_device_poll_returns_token_on_200():
+    def handler(request):
+        return httpx.Response(200, json={"api_key": "k", "github_login": "u"})
+
+    resp = _client_with(handler).device_auth_poll("dc")
+    assert resp["api_key"] == "k"
 
 
 def test_given_context_dict_and_wire_encoding():

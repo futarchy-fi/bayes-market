@@ -27,7 +27,8 @@ class Client:
             headers["Authorization"] = f"Bearer {api_key}"
         self._http = httpx.Client(base_url=self.base, headers=headers, timeout=TIMEOUT)
 
-    def _request(self, method: str, path: str, **kwargs) -> dict | list:
+    def _request(self, method: str, path: str,
+                 raise_on: tuple[int, ...] = (), **kwargs) -> dict | list:
         try:
             resp = self._http.request(method, path, **kwargs)
         except httpx.ConnectError:
@@ -37,7 +38,7 @@ class Client:
             print(f"Error: request to {self.base}{path} timed out", file=sys.stderr)
             sys.exit(1)
 
-        if resp.status_code >= 400:
+        if resp.status_code >= 400 or resp.status_code in raise_on:
             try:
                 detail = resp.json().get("detail", resp.text)
             except (json.JSONDecodeError, ValueError):
@@ -65,7 +66,10 @@ class Client:
         return self.post("/v1/auth/device", body={})
 
     def device_auth_poll(self, device_code: str) -> dict:
-        return self.post("/v1/auth/device/token", body={"device_code": device_code})
+        # 202 = authorization pending: surface it as APIError(202) so the
+        # login loop keeps polling instead of mistaking it for success.
+        return self._request("POST", "/v1/auth/device/token", raise_on=(202,),
+                             json={"device_code": device_code})
 
     def me(self) -> dict:
         return self.get("/v1/me")

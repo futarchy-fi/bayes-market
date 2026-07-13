@@ -79,7 +79,9 @@ def login(client) -> None:
         except Exception as e:
             status = getattr(e, "status", None)
             detail = getattr(e, "detail", str(e))
-            if status == 202:
+            if status == 202 or (status is not None and status >= 500):
+                # 5xx: transient upstream (GitHub) hiccup — keep polling;
+                # the loop is bounded by the device code expiry (-> 410).
                 time.sleep(interval)
                 continue
             if status == 410:
@@ -92,6 +94,9 @@ def login(client) -> None:
     api_key = resp.get("api_key", "")
     account_id = resp.get("account_id", "?")
     github_login = resp.get("github_login", "")
+    if not api_key:
+        print(f"\n  Error: server returned no API key: {resp}\n", file=sys.stderr)
+        sys.exit(1)
 
     cfg = load_config()
     cfg["api_key"] = api_key
@@ -100,8 +105,8 @@ def login(client) -> None:
 
     print(f"\n  Logged in as {github_login} (account #{account_id})")
     print(f"  Key saved to {_config_file()}")
-    print("\n  You have 100 credits to start trading.")
-    print("  Try: futarchy markets\n")
+    print("\n  Run `futarchy me` to see your starting balance.")
+    print("  Try: futarchy net markets\n")
 
 
 def logout() -> None:
