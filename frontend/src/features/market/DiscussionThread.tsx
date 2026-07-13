@@ -5,6 +5,7 @@ import { formatRelativeTime } from "@/lib/utils/format";
 import type { Market } from "@/lib/api/types";
 import { isExchangeMode } from "@/lib/exchangeMode";
 import { ExchangeUnavailable } from "@/components/ui/ExchangeUnavailable";
+import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 
 const MAX_COMMENT_BODY_LENGTH = 2000;
 
@@ -63,7 +64,8 @@ export function DiscussionThread({ market }: DiscussionThreadProps) {
 
       <div style={threadStyle}>
         {comments.isLoading && <span style={mutedTextStyle}>Loading discussion...</span>}
-        {comments.isError && (
+        {comments.isError && comments.data && <ReconnectingHint />}
+        {comments.isError && !comments.data && (
           <span style={errorTextStyle}>
             {comments.error instanceof Error ? comments.error.message : "Failed to load comments"}
           </span>

@@ -10,6 +10,7 @@ import { useSession } from "@/features/session/context";
 import type { AnalyticsInterval, MarketSummary } from "@/lib/api/types";
 import { useAccountPnl, useMarketAnalytics, useMarkets } from "@/lib/query/hooks";
 import { ErrorMessage, LoadingPage } from "@/components/ui/Spinner";
+import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import { isExchangeMode } from "@/lib/exchangeMode";
 import { ExchangeUnavailable } from "@/components/ui/ExchangeUnavailable";
 
@@ -73,7 +74,7 @@ export default function Analytics() {
     return <LoadingPage />;
   }
 
-  if (marketsQuery.error) {
+  if (marketsQuery.error && !marketsQuery.data) {
     return <ErrorMessage message={marketsQuery.error instanceof Error ? marketsQuery.error.message : "Failed to load markets"} />;
   }
 
@@ -101,6 +102,7 @@ export default function Analytics() {
 
   return (
     <div style={{ display: "grid", gap: "var(--space-lg)" }}>
+      {marketsQuery.error && <ReconnectingHint />}
       <div style={{ display: "grid", gap: "var(--space-xs)" }}>
         <h1 style={{ fontSize: "1.6rem", fontWeight: 600 }}>Market Analytics</h1>
         <p style={introStyle}>
@@ -119,12 +121,13 @@ export default function Analytics() {
 
       {analyticsQuery.isLoading && !analyticsQuery.data && <LoadingPage />}
 
-      {analyticsQuery.error && (
+      {analyticsQuery.error && !analyticsQuery.data && (
         <ErrorMessage message={analyticsQuery.error instanceof Error ? analyticsQuery.error.message : "Failed to load analytics"} />
       )}
 
       {analyticsQuery.data && (
         <>
+          {analyticsQuery.error && <ReconnectingHint />}
           <AnalyticsSummaryCards summary={analyticsQuery.data.summary} />
           <PriceChart series={analyticsQuery.data.priceSeries} interval={interval} />
           <div style={{ display: "grid", gap: "var(--space-lg)", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", alignItems: "start" }}>

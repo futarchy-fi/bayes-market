@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ErrorMessage, LoadingPage } from "@/components/ui/Spinner";
+import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import { EXCHANGE_API, type Instrument, type InstrumentListing } from "@/lib/exchange/client";
 import { TradeCreditsPanel, friendlyExchangeError } from "@/lib/exchange/TradeCreditsPanel";
 import {
@@ -24,11 +25,12 @@ export default function InstrumentDetail() {
   const instrument = instruments.data?.find((item) => item.instrumentId === instrumentId);
 
   if (instruments.isLoading) return <LoadingPage />;
-  if (instruments.error) return <ErrorMessage message="Could not load this exchange instrument." />;
+  if (instruments.error && !instruments.data) return <ErrorMessage message="Could not load this exchange instrument." />;
   if (!instrument) return <ErrorMessage message="Instrument not found." />;
 
   return (
     <div style={{ display: "grid", gap: "var(--space-lg)" }}>
+      {instruments.error && <ReconnectingHint />}
       <div>
         <Link to="/instruments" style={{ fontSize: "0.8rem" }}>← Exchange</Link>
         <h1 style={{ marginTop: "var(--space-sm)", fontSize: "1.5rem", fontWeight: 600 }}>{instrument.title}</h1>
@@ -56,8 +58,8 @@ function NetVenuePanel({ listing }: { listing?: InstrumentListing }) {
   return (
     <div data-testid="net-panel" style={{ display: "grid", gap: "var(--space-sm)" }}>
       <VenueHeader name="NET" listing={listing} />
-      {market.isLoading ? <LoadingLine /> : market.error ? <span style={errorStyle}>{friendlyExchangeError(market.error)}</span> : market.data ? (
-        <TradeCreditsPanel marketId={listing.marketId} variableId={market.data.variableId} />
+      {market.isLoading ? <LoadingLine /> : market.error && !market.data ? <span style={errorStyle}>{friendlyExchangeError(market.error)}</span> : market.data ? (
+        <>{market.error && <ReconnectingHint />}<TradeCreditsPanel marketId={listing.marketId} variableId={market.data.variableId} /></>
       ) : null}
     </div>
   );
@@ -88,8 +90,9 @@ function AmmVenuePanel({ listing }: { listing?: InstrumentListing }) {
   return (
     <section data-testid="amm-panel" style={panelStyle}>
       <VenueHeader name="AMM" listing={listing} />
-      {market.isLoading ? <LoadingLine /> : market.error ? <span style={errorStyle}>{friendlyExchangeError(market.error)}</span> : market.data ? (
+      {market.isLoading ? <LoadingLine /> : market.error && !market.data ? <span style={errorStyle}>{friendlyExchangeError(market.error)}</span> : market.data ? (
         <>
+          {market.error && <ReconnectingHint />}
           <PriceRow prices={market.data.prices} />
           {!isSignedIn ? <SignInPrompt action="trade the AMM" /> : (
             <form onSubmit={submit} style={{ display: "grid", gap: "var(--space-sm)" }}>
@@ -145,6 +148,8 @@ function BookVenuePanel({ listing }: { listing?: InstrumentListing }) {
   const [validationError, setValidationError] = useState<string | null>(null);
   const openOrders = useMemo(() => (orders.data?.orders ?? []).filter((order) => String(order.marketId) === marketId && ["open", "partial"].includes(order.status)), [marketId, orders.data]);
   const outcomeDepth = depth.data?.outcomes[outcome];
+  const queryError = (market.error && !market.data) || (depth.error && !depth.data);
+  const reconnecting = (market.error && market.data) || (depth.error && depth.data);
 
   if (!listing) return <UnavailablePanel venue="BOOK" />;
   const submit = (event: FormEvent) => {
@@ -157,7 +162,8 @@ function BookVenuePanel({ listing }: { listing?: InstrumentListing }) {
   return (
     <section data-testid="book-panel" style={panelStyle}>
       <VenueHeader name="ORDER BOOK" listing={listing} />
-      {market.isLoading || depth.isLoading ? <LoadingLine /> : market.error || depth.error ? <span style={errorStyle}>Could not load the order book.</span> : market.data ? (
+      {reconnecting && <ReconnectingHint />}
+      {market.isLoading || depth.isLoading ? <LoadingLine /> : queryError ? <span style={errorStyle}>Could not load the order book.</span> : market.data ? (
         <>
           <div style={twoColumnStyle}>
             <span style={noteStyle}>Best bid <strong style={{ color: "var(--color-text)" }}>{formatPrice(market.data.bestBid)}</strong></span>
@@ -196,7 +202,8 @@ function BookVenuePanel({ listing }: { listing?: InstrumentListing }) {
               </form>
               <div style={{ display: "grid", gap: "var(--space-xs)" }}>
                 <h3 style={subheadingStyle}>My open orders</h3>
-                {openOrders.length === 0 ? <span style={noteStyle}>No open orders for this market.</span> : openOrders.map((order) => (
+                {orders.error && orders.data && <ReconnectingHint />}
+                {orders.error && !orders.data ? <span style={errorStyle}>Could not load your open orders.</span> : openOrders.length === 0 ? <span style={noteStyle}>No open orders for this market.</span> : openOrders.map((order) => (
                   <div key={order.orderId} style={orderRowStyle}>
                     <span>{order.side.toUpperCase()} {order.outcome.toUpperCase()} {order.remaining} @ {formatPrice(order.price)}</span>
                     <button type="button" disabled={cancel.isPending} onClick={() => cancel.mutate(order.orderId)} style={linkButtonStyle}>Cancel</button>

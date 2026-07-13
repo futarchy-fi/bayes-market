@@ -49,10 +49,14 @@ function createEmptyMarketCommentsResponse(marketId: string): MarketCommentsResp
 }
 
 export function useMarkets(filters: MarketListFilters = {}) {
+  const exchangeMode = isExchangeMode();
   return useQuery({
-    queryKey: queryKeys.markets(filters),
-    queryFn: () => dataSource.listMarkets(filters),
-    refetchInterval: 5000,
+    queryKey: queryKeys.markets(exchangeMode ? {} : filters),
+    queryFn: () => dataSource.listMarkets(exchangeMode ? {} : filters),
+    select: exchangeMode
+      ? (response) => dataSource.filterMarketList(response, filters)
+      : undefined,
+    refetchInterval: 15000,
   });
 }
 
@@ -68,7 +72,7 @@ export function useMarket(
       ? ([...queryKeys.market(marketId), { context }] as const)
       : queryKeys.market(marketId),
     queryFn: () => dataSource.getMarket(marketId, context),
-    refetchInterval: 5000,
+    refetchInterval: 15000,
     enabled: opts?.enabled ?? true,
   });
 }
@@ -149,7 +153,7 @@ export function useHealth() {
   return useQuery({
     queryKey: queryKeys.health(),
     queryFn: () => api.getHealth(),
-    refetchInterval: 10000,
+    refetchInterval: 30000,
   });
 }
 
