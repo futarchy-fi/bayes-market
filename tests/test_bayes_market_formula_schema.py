@@ -104,7 +104,7 @@ class BayesMarketFormulaSchemaTests(unittest.TestCase):
             [
                 [
                     {"variableId": " frontier_ai_governance_regime_2030 ", "outcomeId": " no "},
-                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": " delayed ", "negated": True},
+                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": " no ", "negated": True},
                 ]
             ],
             lookup_market_by_variable_id=self.lookup_market_by_variable_id,
@@ -114,7 +114,7 @@ class BayesMarketFormulaSchemaTests(unittest.TestCase):
             normalized,
             [
                 [
-                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "delayed", "negated": True},
+                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "no", "negated": True},
                     {"variableId": "frontier_ai_governance_regime_2030", "outcomeId": "no", "negated": False},
                 ]
             ],
@@ -127,7 +127,7 @@ class BayesMarketFormulaSchemaTests(unittest.TestCase):
             [
                 [
                     {"variableId": " m3 ", "outcomeId": " no "},
-                    {"variableId": "m2", "outcomeId": " delayed ", "negated": True},
+                    {"variableId": "m2", "outcomeId": " no ", "negated": True},
                 ]
             ]
         )
@@ -136,7 +136,7 @@ class BayesMarketFormulaSchemaTests(unittest.TestCase):
             normalized,
             [
                 [
-                    {"variableId": "m2", "outcomeId": "delayed", "negated": True},
+                    {"variableId": "m2", "outcomeId": "no", "negated": True},
                     {"variableId": "m3", "outcomeId": "no", "negated": False},
                 ]
             ],
