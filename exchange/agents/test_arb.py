@@ -23,7 +23,12 @@ from exchange.venues.joint.test_venue import TINY_SEEDS
 @pytest.fixture
 async def seeded_exchange(tmp_path, monkeypatch):
     seeds = tmp_path / "seeds.json"
-    seeds.write_text(json.dumps(TINY_SEEDS))
+    # Production takeoff seeds mark live markets "active" (not "open") —
+    # regression for the anchor-status bug that made every tick a NOOP.
+    tiny = json.loads(json.dumps(TINY_SEEDS))
+    for market in tiny["markets"].values():
+        market["status"] = "active"
+    seeds.write_text(json.dumps(tiny))
     state_path = tmp_path / "state.json"
     original_state_path = api_module.STATE_PATH
     monkeypatch.setenv("EXCHANGE_SEEDS_PATH", str(seeds))

@@ -144,6 +144,20 @@ class HttpExchange:
         return await self._request("DELETE", f"/v1/book/orders/{order_id}")
 
 
+
+_TERMINAL_STATUSES = {"resolved", "void", "voided", "closed"}
+
+
+def _tradable(market: dict) -> bool:
+    """True unless the market reached a terminal state.
+
+    Venue kinds disagree on the live-status word ("open" for amm/book,
+    "active" for net seeds), so reject known-terminal states instead of
+    matching one live one.
+    """
+    return str(market.get("status", "open")).lower() not in _TERMINAL_STATUSES
+
+
 class ArbPolicy:
     def __init__(self, client: ExchangeClient, config: ArbConfig) -> None:
         self.client = client
@@ -160,7 +174,7 @@ class ArbPolicy:
         if anchor_listing is None:
             return []
         anchor_market = await self.client.market("net", anchor_listing["marketId"])
-        if anchor_market.get("status", "open") != "open":
+        if not _tradable(anchor_market):
             return []
         anchor = _decimal(anchor_market["marginals"]["yes"])
         instrument_id = instrument["instrumentId"]
@@ -173,7 +187,7 @@ class ArbPolicy:
             venue, market_id = listing["venue"], str(listing["marketId"])
             if venue == "amm":
                 market = await self.client.market(venue, market_id)
-                if market.get("status", "open") != "open":
+                if not _tradable(market):
                     continue
                 yes = _decimal(market["prices"]["yes"])
                 gap = abs(yes - anchor)
@@ -193,7 +207,7 @@ class ArbPolicy:
                         await self.client.buy_amm(market_id, outcome, budget)
             elif venue == "book":
                 market = await self.client.market(venue, market_id)
-                if market.get("status", "open") != "open":
+                if not _tradable(market):
                     continue
                 if book_orders is None:
                     book_orders = await self.client.book_orders()
