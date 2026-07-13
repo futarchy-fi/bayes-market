@@ -202,8 +202,7 @@ class BayesMarketInferenceModuleTests(unittest.TestCase):
         conditional_marginals = {
             "frontier_capability_breakthrough_2028=yes": {
                 "yes": 0.2,
-                "no": 0.7,
-                "delayed": 0.1,
+                "no": 0.8,
             }
         }
 

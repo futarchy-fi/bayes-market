@@ -26,7 +26,7 @@ server_spec.loader.exec_module(server)
 class BayesMarketLmsrTests(unittest.TestCase):
     def setUp(self) -> None:
         self.binary_previous = deepcopy(server.INITIAL_MARKETS["m1"]["marginals"])
-        self.multi_previous = deepcopy(server.INITIAL_MARKETS["m2"]["marginals"])
+        self.multi_previous = {"yes": 0.25, "no": 0.60, "delayed": 0.15}
         self.binary_liquidity = float(server.INITIAL_MARKETS["m1"]["liquidity"])
         self.multi_liquidity = float(server.INITIAL_MARKETS["m2"]["liquidity"])
 

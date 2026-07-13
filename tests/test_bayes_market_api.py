@@ -620,7 +620,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             [parent["variableId"] for parent in cpt_payload["parents"]],
             ["frontier_capability_breakthrough_2028", "autonomous_ai_coding_deployment_2028"],
         )
-        self.assertEqual(len(cpt_payload["entries"]), 6)
+        self.assertEqual(len(cpt_payload["entries"]), 4)
 
         cpt_payload, cpt_status = server.get_market_cpt("m15")
         self.assertEqual(cpt_status, 200)
@@ -1168,9 +1168,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         handler.handle_api.assert_called_once_with("GET")
         handler._serve_static.assert_not_called()
 
-    def test_market_analytics_returns_multi_outcome_price_series_and_excludes_contextual_edits(self):
+    def test_market_analytics_returns_price_series_and_excludes_contextual_edits(self):
         unconditional_body = build_unconditional_probability_edit_body("acct_chart", "m2", "yes", 0.4)
-        contextual_body = build_unconditional_probability_edit_body("acct_context", "m2", "delayed", 0.2)
+        contextual_body = build_unconditional_probability_edit_body("acct_context", "m2", "no", 0.2)
         contextual_body["context"] = [{"variableId": server.MARKETS["m1"]["variableId"], "outcomeId": "yes"}]
 
         unconditional_payload, unconditional_status = server.route_request(
@@ -1217,18 +1217,14 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             series["outcomeId"]: series
             for series in analytics_payload["priceSeries"]
         }
-        self.assertEqual(set(series_by_outcome), {"yes", "no", "delayed"})
+        self.assertEqual(set(series_by_outcome), {"yes", "no"})
         self.assertEqual(
             [point["probability"] for point in series_by_outcome["yes"]["points"]],
             [0.25, unconditional_payload["order"]["newMarginals"]["yes"]],
         )
         self.assertEqual(
             [point["probability"] for point in series_by_outcome["no"]["points"]],
-            [0.6, unconditional_payload["order"]["newMarginals"]["no"]],
-        )
-        self.assertEqual(
-            [point["probability"] for point in series_by_outcome["delayed"]["points"]],
-            [0.15, unconditional_payload["order"]["newMarginals"]["delayed"]],
+            [0.75, unconditional_payload["order"]["newMarginals"]["no"]],
         )
         emitted_at_points = {
             point["emittedAt"]
@@ -2029,7 +2025,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         other_market_trade, other_market_status = server.route_request(
             "POST",
             "/v1/markets/m2/orders/event-trade",
-            build_event_trade_body("acct_trade_history", "m2", "delayed", size=4.0, side="buy"),
+            build_event_trade_body("acct_trade_history", "m2", "no", size=4.0, side="buy"),
         )
         resolve_seed_market("m3", "no")
         rejected_trade_payload, rejected_trade_status = server.route_request(
@@ -3296,7 +3292,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(server.ACCOUNT_RISK, {})
 
-    def test_probability_edit_three_outcome_market_rescales_remaining_mass(self):
+    def test_probability_edit_binary_market_rescales_remaining_mass(self):
         payload, status = server.route_request(
             "POST",
             "/v1/markets/m2/orders/probability-edit",
@@ -3309,7 +3305,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         )
 
         self.assertEqual(status, 201)
-        self.assertEqual(payload["order"]["newMarginals"], {"yes": 0.4, "no": 0.48, "delayed": 0.12})
+        self.assertEqual(payload["order"]["newMarginals"], {"yes": 0.4, "no": 0.6})
         self.assertEqual(payload["order"]["accountId"], "acct_multi")
         self.assertTrue(payload["order"]["commandId"].startswith("cmd_"))
 
@@ -3323,22 +3319,28 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertIsNone(server.validate_structure_preserving_edit(server.MARKETS["m1"], normalized_payload))
 
     def test_validate_structure_preserving_edit_accepts_three_outcome_market_payload(self):
+        market = deepcopy(server.MARKETS["m2"])
+        market["outcomes"].append({"id": "delayed", "name": "Partial or delayed"})
+        market["marginals"] = {"yes": 0.25, "no": 0.6, "delayed": 0.15}
         normalized_payload = {
             "variableId": "autonomous_ai_coding_deployment_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
             "context": [],
         }
 
-        self.assertIsNone(server.validate_structure_preserving_edit(server.MARKETS["m2"], normalized_payload))
+        self.assertIsNone(server.validate_structure_preserving_edit(market, normalized_payload))
 
     def test_validate_structure_preserving_edit_accepts_high_probability_three_outcome_payload(self):
+        market = deepcopy(server.MARKETS["m2"])
+        market["outcomes"].append({"id": "delayed", "name": "Partial or delayed"})
+        market["marginals"] = {"yes": 0.25, "no": 0.6, "delayed": 0.15}
         normalized_payload = {
             "variableId": "autonomous_ai_coding_deployment_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.99},
             "context": [],
         }
 
-        self.assertIsNone(server.validate_structure_preserving_edit(server.MARKETS["m2"], normalized_payload))
+        self.assertIsNone(server.validate_structure_preserving_edit(market, normalized_payload))
 
     def test_validate_structure_preserving_edit_rejects_unknown_target_outcome(self):
         normalized_payload = {
@@ -3390,7 +3392,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
     def test_validate_structure_preserving_edit_rejects_impossible_renormalization_fixture(self):
         malformed_market = deepcopy(server.MARKETS["m2"])
         malformed_market["id"] = "m2_malformed"
-        malformed_market["marginals"] = {"yes": 1.0, "no": -0.2, "delayed": 0.2}
+        malformed_market["marginals"] = {"yes": 1.2, "no": -0.2}
         normalized_payload = {
             "variableId": "autonomous_ai_coding_deployment_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
@@ -3404,12 +3406,12 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_structure_preserving_edit")
         self.assertEqual(error.details["marketId"], "m2_malformed")
-        self.assertIn("non-negative", error.message)
+        self.assertEqual(error.message, "market.marginals must preserve non-negative values for all outcomes")
 
     def test_validate_structure_preserving_edit_rejects_missing_market_outcome_mass(self):
         malformed_market = deepcopy(server.MARKETS["m2"])
         malformed_market["id"] = "m2_missing_outcome"
-        malformed_market["marginals"] = {"no": 0.8, "delayed": 0.2}
+        malformed_market["marginals"] = {"no": 1.0}
         normalized_payload = {
             "variableId": "autonomous_ai_coding_deployment_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
@@ -3423,12 +3425,12 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_structure_preserving_edit")
         self.assertEqual(error.details["marketId"], "m2_missing_outcome")
-        self.assertIn("exactly one value for each market outcome", error.message)
+        self.assertEqual(error.message, "market.marginals must contain exactly one value for each market outcome")
 
     def test_validate_structure_preserving_edit_rejects_unexpected_market_outcome_mass(self):
         malformed_market = deepcopy(server.MARKETS["m2"])
         malformed_market["id"] = "m2_extra_outcome"
-        malformed_market["marginals"] = {"yes": 0.25, "no": 0.45, "delayed": 0.15, "later": 0.15}
+        malformed_market["marginals"] = {"yes": 0.25, "no": 0.75, "later": 0.0}
         normalized_payload = {
             "variableId": "autonomous_ai_coding_deployment_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
@@ -3442,12 +3444,12 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_structure_preserving_edit")
         self.assertEqual(error.details["marketId"], "m2_extra_outcome")
-        self.assertIn("exactly one value for each market outcome", error.message)
+        self.assertEqual(error.message, "market.marginals must contain exactly one value for each market outcome")
 
     def test_validate_structure_preserving_edit_rejects_non_unit_market_mass(self):
         malformed_market = deepcopy(server.MARKETS["m2"])
         malformed_market["id"] = "m2_non_unit"
-        malformed_market["marginals"] = {"yes": 0.25, "no": 0.7, "delayed": 0.25}
+        malformed_market["marginals"] = {"yes": 0.25, "no": 0.7}
         normalized_payload = {
             "variableId": "autonomous_ai_coding_deployment_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
@@ -3461,12 +3463,12 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_structure_preserving_edit")
         self.assertEqual(error.details["marketId"], "m2_non_unit")
-        self.assertIn("sum to 1.0", error.message)
+        self.assertEqual(error.message, "market.marginals must sum to 1.0")
 
     def test_validate_structure_preserving_edit_rejects_non_finite_market_mass(self):
         malformed_market = deepcopy(server.MARKETS["m2"])
         malformed_market["id"] = "m2_non_finite"
-        malformed_market["marginals"] = {"yes": math.nan, "no": 0.6, "delayed": 0.4}
+        malformed_market["marginals"] = {"yes": math.nan, "no": 1.0}
         normalized_payload = {
             "variableId": "autonomous_ai_coding_deployment_2028",
             "target": {"kind": "marginal", "outcomeId": "yes", "probability": 0.4},
@@ -3480,12 +3482,12 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_structure_preserving_edit")
         self.assertEqual(error.details["marketId"], "m2_non_finite")
-        self.assertIn("finite numeric values", error.message)
+        self.assertEqual(error.message, "market.marginals must contain finite numeric values for all market outcomes")
 
     def test_normalize_probability_edit_payload_uses_existing_conditional_slice_for_validation(self):
         context = [{"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m2"] = {
-            server.context_state_key(context): {"yes": 1.0, "no": -0.2, "delayed": 0.2}
+            server.context_state_key(context): {"yes": 1.2, "no": -0.2}
         }
 
         with self.assertRaises(server.ApiError) as ctx:
@@ -3503,13 +3505,14 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_structure_preserving_edit")
         self.assertEqual(error.details["marketId"], "m2")
+        self.assertEqual(error.message, "market.marginals must preserve non-negative values for all outcomes")
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(server.EVENTS, {})
 
     def test_normalize_probability_edit_payload_rejects_conditional_slice_missing_market_outcome_mass(self):
         context = [{"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m2"] = {
-            server.context_state_key(context): {"no": 0.8, "delayed": 0.2}
+            server.context_state_key(context): {"no": 1.0}
         }
 
         with self.assertRaises(server.ApiError) as ctx:
@@ -3527,14 +3530,14 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_structure_preserving_edit")
         self.assertEqual(error.details["marketId"], "m2")
-        self.assertIn("exactly one value for each market outcome", error.message)
+        self.assertEqual(error.message, "market.marginals must contain exactly one value for each market outcome")
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(server.EVENTS, {})
 
     def test_normalize_probability_edit_payload_rejects_non_finite_conditional_slice_mass(self):
         context = [{"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m2"] = {
-            server.context_state_key(context): {"yes": 0.25, "no": math.inf, "delayed": 0.15}
+            server.context_state_key(context): {"yes": 0.25, "no": math.inf}
         }
 
         with self.assertRaises(server.ApiError) as ctx:
@@ -3552,14 +3555,14 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_structure_preserving_edit")
         self.assertEqual(error.details["marketId"], "m2")
-        self.assertIn("finite numeric values", error.message)
+        self.assertEqual(error.message, "market.marginals must contain finite numeric values for all market outcomes")
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(server.EVENTS, {})
 
     def test_normalize_probability_edit_payload_rejects_conditional_slice_with_extra_outcome_mass(self):
         context = [{"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m2"] = {
-            server.context_state_key(context): {"yes": 0.25, "no": 0.45, "delayed": 0.15, "later": 0.15}
+            server.context_state_key(context): {"yes": 0.25, "no": 0.75, "later": 0.0}
         }
 
         with self.assertRaises(server.ApiError) as ctx:
@@ -3577,14 +3580,14 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_structure_preserving_edit")
         self.assertEqual(error.details["marketId"], "m2")
-        self.assertIn("exactly one value for each market outcome", error.message)
+        self.assertEqual(error.message, "market.marginals must contain exactly one value for each market outcome")
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(server.EVENTS, {})
 
     def test_normalize_probability_edit_payload_rejects_conditional_slice_with_non_unit_mass(self):
         context = [{"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m2"] = {
-            server.context_state_key(context): {"yes": 0.25, "no": 0.6, "delayed": 0.2}
+            server.context_state_key(context): {"yes": 0.25, "no": 0.8}
         }
 
         with self.assertRaises(server.ApiError) as ctx:
@@ -3602,7 +3605,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(error.status, 400)
         self.assertEqual(error.code, "invalid_structure_preserving_edit")
         self.assertEqual(error.details["marketId"], "m2")
-        self.assertIn("sum to 1.0", error.message)
+        self.assertEqual(error.message, "market.marginals must sum to 1.0")
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(server.EVENTS, {})
 
@@ -3704,7 +3707,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 context: dict[str, str] | None = None,
             ) -> object:
                 self.contexts.append(deepcopy(context))
-                return type("MarginalResult", (), {"marginals": {"yes": 0.2, "no": 0.3, "delayed": 0.5}})()
+                return type("MarginalResult", (), {"marginals": {"yes": 0.2, "no": 0.8}})()
 
         original_backend = server.CURRENT_MODEL_QUERY_BACKEND
         stub_backend = StubQueryBackend()
@@ -3724,9 +3727,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         finally:
             server.CURRENT_MODEL_QUERY_BACKEND = original_backend
 
-        self.assertEqual(preview["previousMarginals"], {"yes": 0.2, "no": 0.3, "delayed": 0.5})
-        self.assertEqual(preview["newMarginals"], {"yes": 0.4, "no": 0.225, "delayed": 0.375})
-        self.assertEqual(server.MARKETS["m2"]["marginals"], {"yes": 0.25, "no": 0.6, "delayed": 0.15})
+        self.assertEqual(preview["previousMarginals"], {"yes": 0.2, "no": 0.8})
+        self.assertEqual(preview["newMarginals"], {"yes": 0.4, "no": 0.6})
+        self.assertEqual(server.MARKETS["m2"]["marginals"], {"yes": 0.25, "no": 0.75})
         self.assertEqual(
             stub_backend.contexts,
             [
@@ -3747,7 +3750,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 context: dict[str, str] | None = None,
             ) -> object:
                 self.contexts.append(deepcopy(context))
-                return type("MarginalResult", (), {"marginals": {"yes": 0.2, "no": 0.3, "delayed": 0.5}})()
+                return type("MarginalResult", (), {"marginals": {"yes": 0.2, "no": 0.8}})()
 
         original_backend = server.CURRENT_MODEL_QUERY_BACKEND
         stub_backend = StubQueryBackend()
@@ -3768,9 +3771,9 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             server.CURRENT_MODEL_QUERY_BACKEND = original_backend
 
         self.assertEqual(status, 201)
-        self.assertEqual(payload["order"]["previousMarginals"], {"yes": 0.2, "no": 0.3, "delayed": 0.5})
-        self.assertEqual(payload["order"]["newMarginals"], {"yes": 0.4, "no": 0.225, "delayed": 0.375})
-        self.assertEqual(server.MARKETS["m2"]["marginals"], {"yes": 0.4, "no": 0.225, "delayed": 0.375})
+        self.assertEqual(payload["order"]["previousMarginals"], {"yes": 0.2, "no": 0.8})
+        self.assertEqual(payload["order"]["newMarginals"], {"yes": 0.4, "no": 0.6})
+        self.assertEqual(server.MARKETS["m2"]["marginals"], {"yes": 0.4, "no": 0.6})
         self.assertEqual(
             stub_backend.contexts,
             [
@@ -3791,7 +3794,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 context: dict[str, str] | None = None,
             ) -> object:
                 self.contexts.append(deepcopy(context))
-                return type("MarginalResult", (), {"marginals": {"yes": 0.2, "no": 0.3, "delayed": 0.5}})()
+                return type("MarginalResult", (), {"marginals": {"yes": 0.2, "no": 0.8}})()
 
         original_backend = server.CURRENT_MODEL_QUERY_BACKEND
         stub_backend = StubQueryBackend()
@@ -5878,7 +5881,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(reopen_payload["error"]["details"]["accountId"], "ops_admin")
 
     def test_market_resolution_accepts_final_probabilities_body_and_canonicalizes_command_payload(self):
-        final_probabilities = {"yes": 0.0, "no": 0.0, "delayed": 1.0}
+        final_probabilities = {"yes": 0.0, "no": 1.0}
 
         payload, status = server.route_request(
             "POST",
@@ -5889,13 +5892,13 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(payload["market"]["id"], "m2")
         self.assertEqual(payload["market"]["status"], "resolved")
-        self.assertEqual(payload["market"]["resolution"], "delayed")
+        self.assertEqual(payload["market"]["resolution"], "no")
         self.assertEqual(payload["market"]["resolutionProbabilities"], final_probabilities)
         self.assertEqual(payload["market"]["marginals"], final_probabilities)
         command = server.COMMANDS[payload["result"]["commandId"]]
-        self.assertEqual(command["payload"], expected_market_resolution_payload("m2", "delayed"))
+        self.assertEqual(command["payload"], expected_market_resolution_payload("m2", "no"))
         event = server.EVENTS[payload["result"]["eventId"]]
-        self.assertEqual(event["payload"]["resolution"]["outcomeId"], "delayed")
+        self.assertEqual(event["payload"]["resolution"]["outcomeId"], "no")
         self.assertEqual(event["payload"]["resolution"]["finalProbabilities"], final_probabilities)
 
     def test_market_resolution_idempotency_replays_across_legacy_and_final_probability_shapes(self):
@@ -6117,7 +6120,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             [
                 [
                     {"variableId": " frontier_ai_governance_regime_2030 ", "outcomeId": " no "},
-                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": " delayed ", "negated": True},
+                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": " no ", "negated": True},
                 ],
                 [
                     {"variableId": " frontier_capability_breakthrough_2028 ", "outcomeId": " yes "},
@@ -6129,7 +6132,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             normalized,
             [
                 [
-                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "delayed", "negated": True},
+                    {"variableId": "autonomous_ai_coding_deployment_2028", "outcomeId": "no", "negated": True},
                     {"variableId": "frontier_ai_governance_regime_2030", "outcomeId": "no", "negated": False},
                 ],
                 [
@@ -8050,7 +8053,7 @@ class BayesMarketApiMarketInvariantTests(unittest.TestCase):
             ("m1", "yes"),
             ("m2", "yes"),
             ("m1", "no"),
-            ("m2", "delayed"),
+            ("m2", "no"),
             ("m1", "yes"),
             ("m2", "no"),
         )
@@ -8832,7 +8835,7 @@ class BayesMarketApiConcurrencyTests(unittest.TestCase):
                         build_unconditional_probability_edit_body(
                             f"acct_concurrency_m2_{index}",
                             "m2",
-                            "yes" if index % 2 == 0 else "delayed",
+                            "yes" if index % 2 == 0 else "no",
                             0.35 if index % 2 == 0 else 0.25,
                         ),
                     ),
@@ -9119,7 +9122,7 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         *,
         market_id: str = "m2",
         account_id: str = "ops_http_auth",
-        outcome_id: str = "delayed",
+        outcome_id: str = "no",
         final_probabilities: dict[str, float] | None = None,
         agent_id: str | None = None,
     ):
@@ -9257,7 +9260,7 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
                 lambda agent_id: self.market_resolution_with_headers(
                     market_id="m2",
                     account_id="ops_http_headers_breadth_resolve",
-                    outcome_id="delayed",
+                    outcome_id="no",
                     agent_id=agent_id,
                 ),
             ),
@@ -9467,14 +9470,14 @@ class BayesMarketApiAuthRateLimitTests(unittest.TestCase):
         status, payload, response_headers = self.market_resolution_with_headers(
             market_id="m2",
             account_id="ops_http_auth_valid",
-            outcome_id="delayed",
+            outcome_id="no",
             agent_id="agent-admin-valid",
         )
 
         self.assertEqual(status, 201)
         self.assertEqual(payload["market"]["id"], "m2")
         self.assertEqual(payload["market"]["status"], "resolved")
-        self.assertEqual(payload["market"]["resolution"], "delayed")
+        self.assertEqual(payload["market"]["resolution"], "no")
         self.assertEqual(payload["result"]["status"], "accepted")
         self.assert_rate_limit_headers_absent(response_headers)
         self.assertEqual(server.MARKETS["m2"]["status"], "resolved")
@@ -10132,18 +10135,18 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
             "/v1/markets/m2/resolve",
             build_market_resolution_body(
                 "ops_http",
-                final_probabilities={"yes": 0.0, "no": 0.0, "delayed": 1.0},
+                final_probabilities={"yes": 0.0, "no": 1.0},
             ),
         )
 
         self.assertEqual(status, 201)
         self.assertEqual(payload["market"]["id"], "m2")
         self.assertEqual(payload["market"]["status"], "resolved")
-        self.assertEqual(payload["market"]["resolution"], "delayed")
-        self.assertEqual(payload["market"]["resolutionProbabilities"], {"yes": 0.0, "no": 0.0, "delayed": 1.0})
-        self.assertEqual(payload["market"]["marginals"], {"yes": 0.0, "no": 0.0, "delayed": 1.0})
+        self.assertEqual(payload["market"]["resolution"], "no")
+        self.assertEqual(payload["market"]["resolutionProbabilities"], {"yes": 0.0, "no": 1.0})
+        self.assertEqual(payload["market"]["marginals"], {"yes": 0.0, "no": 1.0})
         command = server.COMMANDS[payload["result"]["commandId"]]
-        self.assertEqual(command["payload"], expected_market_resolution_payload("m2", "delayed"))
+        self.assertEqual(command["payload"], expected_market_resolution_payload("m2", "no"))
 
     def test_market_resolve_route_is_method_not_allowed_for_get(self):
         status, payload = self.request("GET", "/v1/markets/m1/resolve")
@@ -10415,7 +10418,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         server.MARKETS[malformed_market_id] = deepcopy(server.MARKETS["m2"])
         server.MARKETS[malformed_market_id]["id"] = malformed_market_id
         server.MARKETS[malformed_market_id]["variableId"] = "autonomous_ai_coding_deployment_2028_http_malformed"
-        server.MARKETS[malformed_market_id]["marginals"] = {"yes": 1.0, "no": -0.2, "delayed": 0.2}
+        server.MARKETS[malformed_market_id]["marginals"] = {"yes": 1.2, "no": -0.2}
 
         status, payload = self.request(
             "POST",
@@ -10426,13 +10429,17 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(payload["error"]["code"], "invalid_structure_preserving_edit")
         self.assertEqual(payload["error"]["details"]["marketId"], malformed_market_id)
+        self.assertEqual(
+            payload["error"]["message"],
+            "market.marginals must preserve non-negative values for all outcomes",
+        )
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(server.EVENTS, {})
 
     def test_probability_edit_http_surfaces_structure_preserving_failure_for_existing_conditional_slice(self):
         context = [{"variableId": "frontier_capability_breakthrough_2028", "outcomeId": "yes"}]
         server.CONDITIONAL_MARGINALS["m2"] = {
-            server.context_state_key(context): {"yes": 1.0, "no": -0.2, "delayed": 0.2}
+            server.context_state_key(context): {"yes": 1.2, "no": -0.2}
         }
 
         status, payload = self.request(
@@ -10449,6 +10456,10 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(payload["error"]["code"], "invalid_structure_preserving_edit")
         self.assertEqual(payload["error"]["details"]["marketId"], "m2")
+        self.assertEqual(
+            payload["error"]["message"],
+            "market.marginals must preserve non-negative values for all outcomes",
+        )
         self.assertEqual(server.ORDERS, {})
         self.assertEqual(server.EVENTS, {})
 
