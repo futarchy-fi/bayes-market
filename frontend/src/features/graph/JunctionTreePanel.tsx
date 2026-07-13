@@ -1,5 +1,7 @@
 import { useEngineStats } from "@/lib/query/hooks";
 import type { EngineStatsResponse, CliqueSummary } from "@/lib/api/types";
+import { isExchangeMode } from "@/lib/exchangeMode";
+import { ExchangeUnavailable } from "@/components/ui/ExchangeUnavailable";
 
 interface JunctionTreePanelProps {
   marketId: string;
@@ -90,6 +92,8 @@ function formatBytes(bytes: number): string {
 
 export function JunctionTreePanel({ marketId }: JunctionTreePanelProps) {
   const { data, isLoading } = useEngineStats(marketId);
+
+  if (isExchangeMode()) return <ExchangeUnavailable title="Junction Tree & Inference" />;
 
   if (isLoading) {
     return (

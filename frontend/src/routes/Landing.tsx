@@ -3,6 +3,7 @@ import { AssumptionProvider, useAssumptions } from "@/features/assumptions/Assum
 import { AssumptionBar } from "@/features/assumptions/AssumptionBar";
 import { NetworkMap } from "@/features/graph/NetworkMap";
 import { useMarkets } from "@/lib/query/hooks";
+import { isExchangeMode } from "@/lib/exchangeMode";
 
 /**
  * Landing: the live belief network is the product, so it is the hero.
@@ -18,6 +19,7 @@ export default function Landing() {
 }
 
 function LandingContent() {
+  const exchangeMode = isExchangeMode();
   const { assumptions } = useAssumptions();
   const { data } = useMarkets();
   const marketCount = data?.markets.length ?? 0;
@@ -43,9 +45,9 @@ function LandingContent() {
         <Link to="/markets" style={ctaStyle}>
           Browse markets →
         </Link>
-        <Link to="/markets/new" style={secondaryLinkStyle}>
+        {!exchangeMode && <Link to="/markets/new" style={secondaryLinkStyle}>
           Create a market
-        </Link>
+        </Link>}
         <Link to="/system" style={secondaryLinkStyle}>
           System status
         </Link>
