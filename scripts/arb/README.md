@@ -9,6 +9,9 @@ value is structure, and structure is checkable — and tradeable — everywhere.
 Both scripts are stdlib-only (plus `certifi` if your Python lacks a CA
 bundle) and never trade: no API keys, no writes, no side effects.
 
+Bayes reads now default to the exchange at `BAYES_API_URL` (default `http://127.0.0.1:3210`).
+Use `--paper` or `BAYES_BACKEND=paper` to compare against the legacy paper backend.
+
 ## scan_manifold.py — the sensor
 
 For every live bayes-market with an `anchor`, fetch the CURRENT external

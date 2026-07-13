@@ -42,7 +42,8 @@ def _ssl_context() -> ssl.SSLContext:
 
 SSL_CTX = _ssl_context()
 
-BAYES_BASE = "https://bayes.futarchy.ai"
+BAYES_BASE = os.environ.get("BAYES_API_URL", "http://127.0.0.1:3210")
+PAPER_BASE = "https://bayes.futarchy.ai"
 MANIFOLD_BASE = "https://api.manifold.markets/v0"
 METACULUS_BASE = "https://www.metaculus.com/api2"
 USER_AGENT = (
@@ -75,10 +76,12 @@ def fetch_json(url: str, timeout: float = 20.0) -> dict | list | None:
     return None
 
 
-def bayes_anchor_markets(base: str) -> list[dict]:
-    payload = fetch_json(f"{base}/v1/markets")
+def bayes_anchor_markets(base: str, paper: bool = False) -> list[dict]:
+    path = "/v1/markets" if paper else "/v1/net/markets?fields=graph"
+    payload = fetch_json(f"{base}{path}")
     markets = payload["markets"] if isinstance(payload, dict) else payload
-    return [m for m in markets if m.get("anchor")]
+    return [m for m in markets if m.get("anchor")
+            and m.get("status") not in ("closed", "resolved", "void")]
 
 
 def manifold_now(ref: str) -> dict:
@@ -147,8 +150,8 @@ def edge_metrics(p_bayes: float, p_ext: float) -> dict:
     return {"side": side, "ev_per_dollar": round(ev, 4), "kelly": round(kelly, 4)}
 
 
-def scan(base: str, limit: int | None, workers: int) -> dict:
-    markets = bayes_anchor_markets(base)
+def scan(base: str, limit: int | None, workers: int, paper: bool = False) -> dict:
+    markets = bayes_anchor_markets(base, paper)
     if limit:
         markets = markets[:limit]
     print(f"anchored markets to check: {len(markets)}", file=sys.stderr)
@@ -209,13 +212,17 @@ def scan(base: str, limit: int | None, workers: int) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base", default=BAYES_BASE)
+    parser.add_argument("--base", default=None)
+    parser.add_argument("--paper", action="store_true",
+                        default=os.environ.get("BAYES_BACKEND", "").lower() == "paper",
+                        help="read the legacy paper backend")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--out", default=None, help="write full JSON report here")
     args = parser.parse_args()
 
-    report = scan(args.base, args.limit, args.workers)
+    base = args.base or (PAPER_BASE if args.paper else BAYES_BASE)
+    report = scan(base, args.limit, args.workers, args.paper)
     if args.out:
         Path(args.out).write_text(json.dumps(report, indent=1))
         print(f"report written: {args.out}", file=sys.stderr)

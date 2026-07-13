@@ -44,7 +44,8 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-BAYES_BASE = "https://bayes.futarchy.ai"
+BAYES_BASE = os.environ.get("BAYES_API_URL", "http://127.0.0.1:3210")
+PAPER_BASE = "https://bayes.futarchy.ai"
 MANIFOLD_BASE = "https://api.manifold.markets/v0"
 USER_AGENT = "bayes-market-relbot/0.1 (research script for futarchy.ai bayes-market)"
 MAX_LEG_MANA = 5000.0  # per-leg sizing cap so a pool is never dominated
@@ -75,6 +76,13 @@ def fetch_json(url: str, timeout: float = 20.0):
         except Exception:
             time.sleep(1.5 * (2**attempt))
     return None
+
+
+def bayes_markets(base: str, paper: bool = False) -> list[dict]:
+    path = "/v1/markets" if paper else "/v1/net/markets?fields=graph"
+    payload = fetch_json(f"{base}{path}")
+    markets = payload["markets"] if isinstance(payload, dict) else payload
+    return [m for m in markets if m.get("status") not in ("closed", "resolved", "void")]
 
 
 # --------------------------------------------------------------------------
@@ -305,17 +313,20 @@ def evaluate(rel: dict, markets: dict[str, dict]) -> dict | None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base", default=BAYES_BASE)
+    parser.add_argument("--base", default=None)
+    parser.add_argument("--paper", action="store_true",
+                        default=os.environ.get("BAYES_BACKEND", "").lower() == "paper",
+                        help="read the legacy paper backend")
     parser.add_argument("--book", default=None, help="user relationships.json")
     parser.add_argument("--out", default=None)
     parser.add_argument("--min-profit", type=float, default=1.0,
                         help="only surface bundles with >= this guaranteed mana")
     args = parser.parse_args()
 
-    payload = fetch_json(f"{args.base}/v1/markets")
-    bayes_markets = payload["markets"] if isinstance(payload, dict) else payload
+    base = args.base or (PAPER_BASE if args.paper else BAYES_BASE)
+    local_markets = bayes_markets(base, args.paper)
     refs = sorted(
-        {m["anchor"]["ref"] for m in bayes_markets
+        {m["anchor"]["ref"] for m in local_markets
          if (m.get("anchor") or {}).get("source") == "manifold"}
     )
     print(f"fetching {len(refs)} manifold market objects…", file=sys.stderr)
