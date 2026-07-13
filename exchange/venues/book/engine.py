@@ -25,6 +25,14 @@ from typing import Any, Mapping
 
 from exchange.core.models import ZERO
 from exchange.core.risk_engine import InsufficientBalance, RiskEngine
+from exchange.venues.base import (
+    InsufficientCredits,
+    InvalidTarget,
+    MarketClosed,
+    TradeRejected,
+    UnknownMarket,
+    VenueError,
+)
 
 
 PRICE_QUANTUM = Decimal("0.0001")
@@ -32,30 +40,6 @@ SIZE_QUANTUM = Decimal("0.01")
 MONEY_QUANTUM = Decimal("0.000001")
 ONE = Decimal("1")
 HALF = Decimal("0.5")
-
-
-class VenueError(Exception):
-    """Base class for book venue errors."""
-
-
-class UnknownMarket(VenueError):
-    pass
-
-
-class MarketClosed(VenueError):
-    pass
-
-
-class InvalidTarget(VenueError):
-    pass
-
-
-class InsufficientCredits(VenueError):
-    pass
-
-
-class TradeRejected(VenueError):
-    pass
 
 
 class NoPosition(VenueError):
@@ -116,6 +100,18 @@ class Order:
         return self.size - self.remaining
 
 
+@dataclass
+class Fill:
+    id: int
+    market_id: int
+    maker_order_id: int
+    taker_order_id: int
+    price: Decimal
+    size: Decimal
+    kind: str
+    created_at: str
+
+
 class BookEngine:
     def __init__(self, risk_engine: RiskEngine) -> None:
         self.risk = risk_engine
@@ -123,8 +119,10 @@ class BookEngine:
         self.orders: dict[int, Order] = {}
         self.positions: dict[int, dict[int, dict[str, Decimal]]] = {}
         self.reservations: dict[int, Decimal] = {}
+        self.trades: dict[int, list[Fill]] = {}
         self._market_seq = 0
         self._order_seq = 0
+        self._trade_seq = 0
 
     def create_market(self, question: str, deadline: str | None = None) -> BookMarket:
         self._market_seq += 1
@@ -281,8 +279,13 @@ class BookEngine:
         return {
             "marketSeq": self._market_seq,
             "orderSeq": self._order_seq,
+            "tradeSeq": self._trade_seq,
             "markets": [self._encode(asdict(m)) for m in self.markets.values()],
             "orders": [self._encode(asdict(o)) for o in self.orders.values()],
+            "trades": self._encode({
+                market_id: [asdict(fill) for fill in fills]
+                for market_id, fills in self.trades.items()
+            }),
             "positions": self._encode(self.positions),
             "reservations": self._encode(self.reservations),
         }
@@ -292,6 +295,7 @@ class BookEngine:
         engine = cls(risk_engine)
         engine._market_seq = int(data.get("marketSeq", 0))
         engine._order_seq = int(data.get("orderSeq", 0))
+        engine._trade_seq = int(data.get("tradeSeq", 0))
         for raw in data.get("markets", []):
             item = dict(raw)
             item["id"] = int(item["id"])
@@ -315,6 +319,23 @@ class BookEngine:
                 item[key] = Decimal(item[key])
             order = Order(**item)
             engine.orders[order.id] = order
+        engine.trades = {
+            int(market_id): [
+                Fill(
+                    **{
+                        **raw,
+                        "id": int(raw["id"]),
+                        "market_id": int(raw["market_id"]),
+                        "maker_order_id": int(raw["maker_order_id"]),
+                        "taker_order_id": int(raw["taker_order_id"]),
+                        "price": Decimal(raw["price"]),
+                        "size": Decimal(raw["size"]),
+                    }
+                )
+                for raw in fills
+            ]
+            for market_id, fills in data.get("trades", {}).items()
+        }
         engine.positions = {
             int(account_id): {
                 int(market_id): {outcome: Decimal(value) for outcome, value in position.items()}
@@ -363,6 +384,7 @@ class BookEngine:
     def _fill(self, taker: Order, maker: Order, size: Decimal) -> None:
         intents = {(taker.side, taker.outcome), (maker.side, maker.outcome)}
         if intents == {("bid", "yes"), ("ask", "yes")}:
+            kind = "transfer"
             buyer = taker if taker.side == "bid" else maker
             seller = maker if buyer is taker else taker
             price = maker.price
@@ -370,6 +392,7 @@ class BookEngine:
             self._consume_ask(seller, size)
             self._add_position(buyer.account_id, buyer.market_id, "yes", size)
         elif intents == {("bid", "no"), ("ask", "no")}:
+            kind = "transfer"
             buyer = taker if taker.side == "bid" else maker
             seller = maker if buyer is taker else taker
             price = maker.price
@@ -377,6 +400,7 @@ class BookEngine:
             self._consume_ask(seller, size)
             self._add_position(buyer.account_id, buyer.market_id, "no", size)
         elif taker.side == maker.side == "bid":
+            kind = "mint"
             yes = taker if taker.outcome == "yes" else maker
             no = maker if yes is taker else taker
             yes_price = maker.canonical_price
@@ -388,6 +412,7 @@ class BookEngine:
             self._add_position(no.account_id, no.market_id, "no", size)
             self.markets[taker.market_id].total_sets_minted += size
         elif taker.side == maker.side == "ask":
+            kind = "redeem"
             yes = taker if taker.outcome == "yes" else maker
             no = maker if yes is taker else taker
             yes_price = maker.canonical_price
@@ -401,6 +426,19 @@ class BookEngine:
             self.markets[taker.market_id].total_sets_minted -= size
         else:  # pragma: no cover - canonical sides make this unreachable
             raise TradeRejected("unsupported intent pair")
+        self._trade_seq += 1
+        fills = self.trades.setdefault(taker.market_id, [])
+        fills.append(Fill(
+            id=self._trade_seq,
+            market_id=taker.market_id,
+            maker_order_id=maker.id,
+            taker_order_id=taker.id,
+            price=maker.canonical_price,
+            size=size,
+            kind=kind,
+            created_at=_now(),
+        ))
+        del fills[:-500]
         self._advance(taker, size)
         self._advance(maker, size)
 
