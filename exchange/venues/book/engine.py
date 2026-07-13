@@ -76,6 +76,7 @@ class BookMarket:
     created_at: str = ""
     resolution: str | None = None
     total_sets_minted: Decimal = ZERO
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -124,7 +125,10 @@ class BookEngine:
         self._order_seq = 0
         self._trade_seq = 0
 
-    def create_market(self, question: str, deadline: str | None = None) -> BookMarket:
+    def create_market(
+        self, question: str, deadline: str | None = None,
+        metadata: dict | None = None,
+    ) -> BookMarket:
         self._market_seq += 1
         escrow = self.risk.create_account()
         market = BookMarket(
@@ -133,6 +137,7 @@ class BookEngine:
             escrow_account_id=escrow.id,
             deadline=deadline,
             created_at=_now(),
+            metadata=metadata or {},
         )
         self.markets[market.id] = market
         return market

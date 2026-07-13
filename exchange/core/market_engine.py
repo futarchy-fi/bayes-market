@@ -67,13 +67,24 @@ class MarketEngine:
                       outcomes: list[str] = None,
                       deadline: str = None,
                       funding_account_id: int | None = None,
+                      funding: Decimal | None = None,
                       ) -> tuple[Market, 'Account']:
         """
         Create a market with a funded AMM.
 
         If funding_account_id is provided, transfers the subsidy from that
         account to the AMM (treasury mode). Otherwise mints fresh credits.
+        An explicit funding value preserves the caller's exact Decimal amount.
         """
+        subsidy = funding if funding is not None else max_loss(
+            b, len(outcomes or ["yes", "no"]))
+        if funding_account_id is not None:
+            funder = self.risk.get_account(funding_account_id)
+            if funder.available_balance < subsidy:
+                raise InsufficientBalance(
+                    f"account {funding_account_id}: need {subsidy}, "
+                    f"have {funder.available_balance} available")
+
         amm = self.risk.create_account()
         market = Market.new(
             question=question,
@@ -89,7 +100,6 @@ class MarketEngine:
         )
         self.markets[market.id] = market
 
-        subsidy = max_loss(b, len(market.outcomes))
         if funding_account_id is not None:
             self.risk.transfer_available(
                 funding_account_id, amm.id, subsidy,
