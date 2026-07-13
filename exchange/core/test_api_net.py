@@ -25,12 +25,12 @@ from decimal import Decimal
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-import core.api as api_module
-from core.api import app, _authenticate_github_identity
-from core.models import reset_counters
-from core.persistence import load_snapshot
-from venues.joint.msr import payout_for_edit, stake_for_edit
-from venues.joint.test_venue import TINY_SEEDS, THREE_VAR_SEEDS
+import exchange.core.api as api_module
+from exchange.core.api import app, _authenticate_github_identity
+from exchange.core.models import reset_counters
+from exchange.core.persistence import load_snapshot
+from exchange.venues.joint.msr import payout_for_edit, stake_for_edit
+from exchange.venues.joint.test_venue import TINY_SEEDS, THREE_VAR_SEEDS
 
 ADMIN_HEADERS = {"Authorization": "Bearer test-admin-key"}
 

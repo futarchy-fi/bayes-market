@@ -33,18 +33,18 @@ os.environ.setdefault("FUTARCHY_ADMIN_KEY", "test-admin-key")
 os.environ.setdefault("FUTARCHY_STATE", "/tmp/futarchy_test_state_hardening.json")
 os.environ.setdefault("INITIAL_CREDITS", "1000")
 
-import core.api as api_module
-from core.api import app, _authenticate_github_identity
-from core.auth import AuthStore
-from core.middleware import (
+import exchange.core.api as api_module
+from exchange.core.api import app, _authenticate_github_identity
+from exchange.core.auth import AuthStore
+from exchange.core.middleware import (
     rate_limiter,
     BodySizeLimitMiddleware,
     MAX_BODY_BYTES,
 )
-from core.models import reset_counters
-from core.risk_engine import RiskEngine
-from core.market_engine import MarketEngine
-from venues.joint.test_venue import TINY_SEEDS
+from exchange.core.models import reset_counters
+from exchange.core.risk_engine import RiskEngine
+from exchange.core.market_engine import MarketEngine
+from exchange.venues.joint.test_venue import TINY_SEEDS
 
 
 # ---------------------------------------------------------------------------

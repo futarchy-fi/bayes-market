@@ -2,10 +2,10 @@ from decimal import Decimal
 
 import pytest
 
-from core.risk_engine import RiskEngine
+from exchange.core.risk_engine import RiskEngine
 from venues.joint.inference import JointMarketError
-from venues.joint.msr import payout_for_edit, stake_for_edit
-from venues.joint.venue import (
+from exchange.venues.joint.msr import payout_for_edit, stake_for_edit
+from exchange.venues.joint.venue import (
     ContextContradicted,
     InsufficientCredits,
     InsufficientTreasury,

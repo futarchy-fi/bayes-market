@@ -14,11 +14,11 @@ from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 
 import pytest
 
-from core.models import (
+from exchange.core.models import (
     Account, Lock, Market, Trade, TradeLeg, Transaction,
     ZERO, quantize, reset_counters, next_id,
 )
-from core.lmsr import (
+from exchange.core.lmsr import (
     cost, prices, cost_to_buy, amount_for_cost,
     liquidity_cost, b_for_funding, max_loss,
 )
@@ -26,8 +26,8 @@ from core.lmsr import (
 # These imports will fail until the engines exist.
 # That's intentional — the tests define the interface.
 try:
-    from core.risk_engine import RiskEngine
-    from core.market_engine import MarketEngine
+    from exchange.core.risk_engine import RiskEngine
+    from exchange.core.market_engine import MarketEngine
     ENGINES_AVAILABLE = True
 except ImportError:
     ENGINES_AVAILABLE = False

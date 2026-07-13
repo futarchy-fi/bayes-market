@@ -18,16 +18,16 @@ import json
 import os
 from decimal import Decimal
 
-from core.models import (
+from exchange.core.models import (
     Lock, Account, Transaction, TradeLeg, Trade, Market, TrackedRepo,
     ZERO, _counters, set_counter, reset_counters,
 )
-from core.risk_engine import RiskEngine
-from core.market_engine import MarketEngine
+from exchange.core.risk_engine import RiskEngine
+from exchange.core.market_engine import MarketEngine
 
 # Optional import — auth module may not exist in older setups
 try:
-    from core.auth import AuthStore, User
+    from exchange.core.auth import AuthStore, User
     _HAS_AUTH = True
 except ImportError:
     _HAS_AUTH = False

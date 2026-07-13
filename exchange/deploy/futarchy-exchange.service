@@ -9,7 +9,7 @@
 # /etc/futarchy/exchange.env (600 root) — never in the repo.
 
 [Unit]
-Description=Futarchy Exchange API (uvicorn core.api:app)
+Description=Futarchy Exchange API (uvicorn exchange.core.api:app)
 After=network-online.target
 Wants=network-online.target
 
@@ -19,7 +19,7 @@ User=futarchy
 Group=futarchy
 WorkingDirectory=/opt/futarchy/agents
 EnvironmentFile=/etc/futarchy/exchange.env
-ExecStart=/opt/futarchy/agents/.venv/bin/uvicorn core.api:app --host 127.0.0.1 --port 8000
+ExecStart=/opt/futarchy/agents/.venv/bin/uvicorn exchange.core.api:app --host 127.0.0.1 --port 8000
 Restart=on-failure
 RestartSec=5
 

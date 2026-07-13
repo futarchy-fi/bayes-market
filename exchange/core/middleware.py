@@ -11,8 +11,8 @@ from fastapi import Depends, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
-from core.api_errors import APIError
-from core.auth import User
+from exchange.core.api_errors import APIError
+from exchange.core.auth import User
 
 
 ADMIN_KEY = os.environ.get("FUTARCHY_ADMIN_KEY", "")

@@ -3,16 +3,16 @@
 Futarchy engine CLI. Every invocation: lock → load → execute → save → unlock.
 
 Usage:
-    python3 -m core.cli create-account
-    python3 -m core.cli mint ACCOUNT_ID AMOUNT
-    python3 -m core.cli create-market QUESTION CATEGORY CATEGORY_ID
-    python3 -m core.cli buy MARKET_ID ACCOUNT_ID OUTCOME BUDGET
-    python3 -m core.cli sell MARKET_ID ACCOUNT_ID OUTCOME AMOUNT
-    python3 -m core.cli resolve MARKET_ID OUTCOME
-    python3 -m core.cli void MARKET_ID
-    python3 -m core.cli account ACCOUNT_ID
-    python3 -m core.cli market MARKET_ID
-    python3 -m core.cli markets
+    python3 -m exchange.core.cli create-account
+    python3 -m exchange.core.cli mint ACCOUNT_ID AMOUNT
+    python3 -m exchange.core.cli create-market QUESTION CATEGORY CATEGORY_ID
+    python3 -m exchange.core.cli buy MARKET_ID ACCOUNT_ID OUTCOME BUDGET
+    python3 -m exchange.core.cli sell MARKET_ID ACCOUNT_ID OUTCOME AMOUNT
+    python3 -m exchange.core.cli resolve MARKET_ID OUTCOME
+    python3 -m exchange.core.cli void MARKET_ID
+    python3 -m exchange.core.cli account ACCOUNT_ID
+    python3 -m exchange.core.cli market MARKET_ID
+    python3 -m exchange.core.cli markets
 
 Output: JSON, one line. {"ok": true, ...} or {"ok": false, "error": "..."}
 State: FUTARCHY_STATE env var, default ./futarchy_state.json
@@ -26,11 +26,11 @@ import sys
 from contextlib import contextmanager
 from decimal import Decimal
 
-from core.models import reset_counters, ZERO
-from core.risk_engine import RiskEngine
-from core.market_engine import MarketEngine
-from core.persistence import save_snapshot, load_snapshot
-from core.lmsr import prices
+from exchange.core.models import reset_counters, ZERO
+from exchange.core.risk_engine import RiskEngine
+from exchange.core.market_engine import MarketEngine
+from exchange.core.persistence import save_snapshot, load_snapshot
+from exchange.core.lmsr import prices
 
 
 STATE_PATH = os.environ.get("FUTARCHY_STATE", "./futarchy_state.json")

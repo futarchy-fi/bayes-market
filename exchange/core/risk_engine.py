@@ -18,7 +18,7 @@ computing costs and revenues.
 from decimal import Decimal
 from typing import Optional
 
-from core.models import (
+from exchange.core.models import (
     Account, Lock, Transaction,
     ZERO, quantize, reset_counters,
 )

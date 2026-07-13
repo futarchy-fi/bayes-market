@@ -5,8 +5,8 @@ test_api_net.py, but InsufficientTreasury can't be triggered through the
 public API (there's no treasury-drain endpoint), so its 409 mapping is
 locked here at the boundary function instead.
 """
-from core.api_errors import translate_venue_error
-from venues.joint.venue import (
+from exchange.core.api_errors import translate_venue_error
+from exchange.venues.joint.venue import (
     InsufficientCredits,
     InsufficientTreasury,
     TradeRejected,

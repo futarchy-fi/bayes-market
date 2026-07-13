@@ -28,12 +28,12 @@ os.environ["FUTARCHY_ADMIN_KEY"] = "test-admin-key"
 os.environ["FUTARCHY_STATE"] = "/tmp/futarchy_test_state.json"
 os.environ["INITIAL_CREDITS"] = "1000"
 
-from core.api import app, _authenticate_github_identity
-from core.auth import AuthStore
-from core.middleware import rate_limiter, RateLimiter
-from core.models import reset_counters
-from core.risk_engine import RiskEngine
-from core.market_engine import MarketEngine
+from exchange.core.api import app, _authenticate_github_identity
+from exchange.core.auth import AuthStore
+from exchange.core.middleware import rate_limiter, RateLimiter
+from exchange.core.models import reset_counters
+from exchange.core.risk_engine import RiskEngine
+from exchange.core.market_engine import MarketEngine
 
 
 ADMIN_HEADERS = {"Authorization": "Bearer test-admin-key"}
@@ -171,7 +171,7 @@ class TestAuth:
         assert resp.status_code == 404
 
     async def test_device_flow_start_requires_client_id(self, client):
-        with patch("core.api.GITHUB_CLIENT_ID", ""):
+        with patch("exchange.core.api.GITHUB_CLIENT_ID", ""):
             resp = await client.post("/v1/auth/device", json={})
         assert resp.status_code == 501
         assert resp.json()["error"]["code"] == "device_flow_unavailable"
@@ -184,8 +184,8 @@ class TestAuth:
             "expires_in": 900,
             "interval": 5,
         })
-        with patch("core.api.GITHUB_CLIENT_ID", "client-id"), \
-                patch("core.api.start_device_flow", mock):
+        with patch("exchange.core.api.GITHUB_CLIENT_ID", "client-id"), \
+                patch("exchange.core.api.start_device_flow", mock):
             resp = await client.post("/v1/auth/device", json={})
         assert resp.status_code == 200
         data = resp.json()
@@ -194,8 +194,8 @@ class TestAuth:
 
     async def test_device_flow_poll_pending(self, client):
         mock = AsyncMock(side_effect=ValueError("device_flow_pending"))
-        with patch("core.api.GITHUB_CLIENT_ID", "client-id"), \
-                patch("core.api.poll_device_flow", mock):
+        with patch("exchange.core.api.GITHUB_CLIENT_ID", "client-id"), \
+                patch("exchange.core.api.poll_device_flow", mock):
             resp = await client.post("/v1/auth/device/token",
                                      json={"device_code": "device-123"})
         assert resp.status_code == 202
@@ -204,9 +204,9 @@ class TestAuth:
     async def test_device_flow_poll_creates_account(self, client):
         poll_mock = AsyncMock(return_value={"access_token": "gho_token"})
         validate_mock = AsyncMock(return_value={"id": 77, "login": "octocat"})
-        with patch("core.api.GITHUB_CLIENT_ID", "client-id"), \
-                patch("core.api.poll_device_flow", poll_mock), \
-                patch("core.api.validate_github_token", validate_mock):
+        with patch("exchange.core.api.GITHUB_CLIENT_ID", "client-id"), \
+                patch("exchange.core.api.poll_device_flow", poll_mock), \
+                patch("exchange.core.api.validate_github_token", validate_mock):
             resp = await client.post("/v1/auth/device/token",
                                      json={"device_code": "device-123"})
         assert resp.status_code == 200
@@ -218,7 +218,7 @@ class TestAuth:
         assert me.json()["available"] == "1000"
 
     async def test_oauth_web_login_redirects_to_github(self, client):
-        with patch("core.api.GITHUB_CLIENT_ID", "client-id"):
+        with patch("exchange.core.api.GITHUB_CLIENT_ID", "client-id"):
             resp = await client.get("/v1/auth/github/login",
                                     follow_redirects=False)
         assert resp.status_code == 302
@@ -236,7 +236,7 @@ class TestAuth:
         assert query["state"][0] in app.state.github_oauth_states
 
     async def test_oauth_web_login_accepts_select_account_prompt(self, client):
-        with patch("core.api.GITHUB_CLIENT_ID", "client-id"):
+        with patch("exchange.core.api.GITHUB_CLIENT_ID", "client-id"):
             resp = await client.get("/v1/auth/github/login",
                                     params={"prompt": "select_account"},
                                     follow_redirects=False)
@@ -246,15 +246,15 @@ class TestAuth:
         assert query["prompt"] == ["select_account"]
 
     async def test_oauth_web_login_rejects_unknown_prompt(self, client):
-        with patch("core.api.GITHUB_CLIENT_ID", "client-id"):
+        with patch("exchange.core.api.GITHUB_CLIENT_ID", "client-id"):
             resp = await client.get("/v1/auth/github/login",
                                     params={"prompt": "consent"})
         assert resp.status_code == 400
         assert resp.json()["error"]["code"] == "github_oauth_invalid_prompt"
 
     async def test_oauth_callback_rejects_invalid_state(self, client):
-        with patch("core.api.GITHUB_CLIENT_ID", "client-id"), \
-                patch("core.api.GITHUB_CLIENT_SECRET", "client-secret"):
+        with patch("exchange.core.api.GITHUB_CLIENT_ID", "client-id"), \
+                patch("exchange.core.api.GITHUB_CLIENT_SECRET", "client-secret"):
             resp = await client.get("/v1/auth/callback",
                                     params={"code": "oauth-code",
                                             "state": "bad-state"})
@@ -266,10 +266,10 @@ class TestAuth:
         exchange_mock = AsyncMock(return_value="gho_token")
         validate_mock = AsyncMock(return_value={"id": 88, "login": "octocat"})
 
-        with patch("core.api.GITHUB_CLIENT_ID", "client-id"), \
-                patch("core.api.GITHUB_CLIENT_SECRET", "client-secret"), \
-                patch("core.api._exchange_github_oauth_code", exchange_mock), \
-                patch("core.api.validate_github_token", validate_mock):
+        with patch("exchange.core.api.GITHUB_CLIENT_ID", "client-id"), \
+                patch("exchange.core.api.GITHUB_CLIENT_SECRET", "client-secret"), \
+                patch("exchange.core.api._exchange_github_oauth_code", exchange_mock), \
+                patch("exchange.core.api.validate_github_token", validate_mock):
             resp = await client.get("/v1/auth/callback",
                                     params={"code": "oauth-code",
                                             "state": "valid-state"},
@@ -1026,9 +1026,9 @@ class TestAdmin:
 
     async def test_no_admin_key_configured(self, client):
         # Temporarily clear admin key
-        import core.middleware
-        old = core.middleware.ADMIN_KEY
-        core.middleware.ADMIN_KEY = ""
+        import exchange.core.middleware
+        old = exchange.core.middleware.ADMIN_KEY
+        exchange.core.middleware.ADMIN_KEY = ""
         try:
             resp = await client.post("/v1/admin/markets",
                                      headers={"Authorization": "Bearer x"},
@@ -1036,7 +1036,7 @@ class TestAdmin:
                                            "category_id": "t#x"})
             assert resp.status_code == 500
         finally:
-            core.middleware.ADMIN_KEY = old
+            exchange.core.middleware.ADMIN_KEY = old
 
 
 # ---------------------------------------------------------------------------
@@ -1097,7 +1097,7 @@ class TestPersistence:
         assert resp.status_code == 200
 
         # Reload state from disk
-        from core.persistence import load_snapshot
+        from exchange.core.persistence import load_snapshot
         risk, me, auth_store, tracked_repos, _venues = load_snapshot("/tmp/futarchy_test_state.json")
 
         # Verify market exists
@@ -1318,8 +1318,8 @@ class TestWebhook:
                           json={"account_id": treasury_id, "amount": "10000"})
 
         # Set the treasury env var
-        import core.api
-        core.api.TREASURY_ACCOUNT_ID = str(treasury_id)
+        import exchange.core.api
+        exchange.core.api.TREASURY_ACCOUNT_ID = str(treasury_id)
         return treasury_id
 
     async def _post_webhook(self, client, payload, secret=None):
@@ -1487,8 +1487,8 @@ class TestExpiredMarketReconciliation:
     async def test_startup_voids_expired_markets_loaded_from_snapshot(
         self, tmp_path
     ):
-        import core.api as api_module
-        from core.persistence import load_snapshot, save_snapshot
+        import exchange.core.api as api_module
+        from exchange.core.persistence import load_snapshot, save_snapshot
 
         reset_counters()
         risk = RiskEngine()
@@ -1527,7 +1527,7 @@ class TestExpiredMarketReconciliation:
     async def test_background_reconciler_voids_markets_after_deadline(
         self, client, monkeypatch
     ):
-        import core.api as api_module
+        import exchange.core.api as api_module
 
         monkeypatch.setattr(
             api_module,

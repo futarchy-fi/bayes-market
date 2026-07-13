@@ -28,11 +28,11 @@ from httpx import ASGITransport, AsyncClient
 # first; required for a standalone run of this file).
 os.environ["FUTARCHY_ADMIN_KEY"] = "test-admin-key"
 
-import core.api as api_module
-from core.api import app, _authenticate_github_identity
-from core.models import reset_counters
-from venues.joint.msr import payout_for_edit
-from venues.joint.test_venue import TINY_SEEDS
+import exchange.core.api as api_module
+from exchange.core.api import app, _authenticate_github_identity
+from exchange.core.models import reset_counters
+from exchange.venues.joint.msr import payout_for_edit
+from exchange.venues.joint.test_venue import TINY_SEEDS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -103,8 +103,8 @@ class TestSignupCreditsDefault:
 
             assert "INITIAL_CREDITS" not in os.environ
 
-            import core.api as api_module
-            from core.models import reset_counters
+            import exchange.core.api as api_module
+            from exchange.core.models import reset_counters
 
             # The module-level default, with no env override in sight.
             assert api_module.INITIAL_CREDITS == Decimal("1000"), (
@@ -323,7 +323,7 @@ class TestLeaderboard:
         api_module.STATE_PATH = str(tmp_path / "state.json")
 
         async with api_module.lifespan(app):
-            from core.auth import User
+            from exchange.core.auth import User
 
             auth_store = app.state.auth_store
             legacy_acc = app.state.risk.create_account()
@@ -360,10 +360,10 @@ class TestLeaderboard:
 
 class TestServiceAccountFlagPersistence:
     def test_roundtrip_survives_save_and_load(self, tmp_path):
-        from core.auth import AuthStore, User
-        from core.market_engine import MarketEngine
-        from core.persistence import load_snapshot, save_snapshot
-        from core.risk_engine import RiskEngine
+        from exchange.core.auth import AuthStore, User
+        from exchange.core.market_engine import MarketEngine
+        from exchange.core.persistence import load_snapshot, save_snapshot
+        from exchange.core.risk_engine import RiskEngine
 
         reset_counters()
         risk = RiskEngine()
@@ -390,7 +390,7 @@ class TestServiceAccountFlagPersistence:
         assert loaded_auth.local_users["human"].is_service_account is False
 
     def test_legacy_snapshot_without_field_loads_as_false(self):
-        from core.persistence import _load_auth
+        from exchange.core.persistence import _load_auth
 
         auth_data = {
             "users": [],

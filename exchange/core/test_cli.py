@@ -16,11 +16,11 @@ import json
 import sys
 from decimal import Decimal
 
-from core.cli import main
-from core.models import reset_counters
-from core.persistence import load_snapshot, save_snapshot
-from core.market_engine import MarketEngine
-from core.risk_engine import RiskEngine
+from exchange.core.cli import main
+from exchange.core.models import reset_counters
+from exchange.core.persistence import load_snapshot, save_snapshot
+from exchange.core.market_engine import MarketEngine
+from exchange.core.risk_engine import RiskEngine
 
 
 def _seed_state_with_venues(path: str, venues_section: dict) -> None:

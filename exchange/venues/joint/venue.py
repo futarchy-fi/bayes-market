@@ -22,9 +22,9 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping
 
-from core.risk_engine import RiskEngine
+from exchange.core.risk_engine import RiskEngine
 from venues.joint.inference import FactoredMarket, JointMarketError, build_network_nodes
-from venues.joint.msr import payout_for_edit, stake_for_edit
+from exchange.venues.joint.msr import payout_for_edit, stake_for_edit
 
 TREASURY_SEED = Decimal("1000000")
 

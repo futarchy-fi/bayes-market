@@ -7,8 +7,8 @@ Every error response: {"error": {"code": "...", "message": "...", "details": {..
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from core.risk_engine import InsufficientBalance
-from venues.joint.venue import (
+from exchange.core.risk_engine import InsufficientBalance
+from exchange.venues.joint.venue import (
     ContextContradicted,
     InsufficientCredits,
     InsufficientTreasury,

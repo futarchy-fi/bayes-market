@@ -1,7 +1,7 @@
 from decimal import Decimal
 import math
 import random
-from venues.joint.msr import stake_for_edit, payout_for_edit
+from exchange.venues.joint.msr import stake_for_edit, payout_for_edit
 
 B = Decimal("50")
 

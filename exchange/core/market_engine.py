@@ -34,16 +34,16 @@ Buy and sell share a single execution core (_execute_trade).
 
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 
-from core.models import (
+from exchange.core.models import (
     Market, Trade, TradeLeg, Transaction,
     ZERO, quantize, next_id,
     ASSET_PRECISION,
 )
-from core.lmsr import (
+from exchange.core.lmsr import (
     cost as lmsr_cost, cost_to_buy, amount_for_cost, prices,
     liquidity_cost, b_for_funding, max_loss,
 )
-from core.risk_engine import RiskEngine, InsufficientBalance
+from exchange.core.risk_engine import RiskEngine, InsufficientBalance
 
 
 # Credit precision quantum (ASSET_PRECISION)
@@ -168,7 +168,7 @@ class MarketEngine:
         if amm_pos:
             self.risk.settle_lock(amm_pos.lock_id, amm_payout)
 
-        from core.models import _now
+        from exchange.core.models import _now
         market.resolved_at = _now()
         self._sweep_amm(market)
 
@@ -199,7 +199,7 @@ class MarketEngine:
                     # Position and conditional_loss: release to owner
                     self.risk.release_lock(lk.lock_id)
 
-        from core.models import _now
+        from exchange.core.models import _now
         market.resolved_at = _now()
         self._sweep_amm(market)
 
@@ -347,7 +347,7 @@ class MarketEngine:
         For sells: proportional margin is released from position lock,
         revenue goes to CP lock, PnL transferred between trader and AMM.
         """
-        from core.models import _now
+        from exchange.core.models import _now
 
         acc = self.risk.get_account(account_id)
         amm_id = market.amm_account_id

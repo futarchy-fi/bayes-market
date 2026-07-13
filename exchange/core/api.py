@@ -23,10 +23,10 @@ import httpx
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import FileResponse, RedirectResponse
 
-from core.api_errors import (
+from exchange.core.api_errors import (
     APIError, api_error_handler, translate_engine_error, translate_venue_error,
 )
-from core.api_models import (
+from exchange.core.api_models import (
     AuthResponse,
     DeviceFlowStartRequest, DeviceFlowResponse, DeviceFlowPollRequest,
     AccountResponse, AccountActivityEntry, AccountActivityPage, LockResponse,
@@ -47,20 +47,20 @@ from core.api_models import (
     NetResolveResponse, NetVoidResponse,
     NetPortfolioResponse, LeaderboardEntry, LeaderboardResponse,
 )
-from core.auth import (
+from exchange.core.auth import (
     AuthStore, validate_github_token,
     start_device_flow, poll_device_flow,
 )
-from core.lmsr import max_loss, prices as lmsr_prices, cost_to_move_price
-from core.market_engine import MarketEngine
-from core.middleware import (
+from exchange.core.lmsr import max_loss, prices as lmsr_prices, cost_to_move_price
+from exchange.core.market_engine import MarketEngine
+from exchange.core.middleware import (
     AuthUser, AdminDep, require_auth, rate_limiter,
     DynamicCORSMiddleware, BodySizeLimitMiddleware,
 )
-from core.models import ZERO, TrackedRepo, reset_counters
-from core.persistence import save_snapshot, load_snapshot
-from core.risk_engine import RiskEngine, InsufficientBalance
-from venues.joint.venue import JointVenue, VenueError
+from exchange.core.models import ZERO, TrackedRepo, reset_counters
+from exchange.core.persistence import save_snapshot, load_snapshot
+from exchange.core.risk_engine import RiskEngine, InsufficientBalance
+from exchange.venues.joint.venue import JointVenue, VenueError
 
 logger = logging.getLogger(__name__)
 
@@ -1281,7 +1281,7 @@ async def admin_create_service_account(
         raw_key = secrets.token_urlsafe(32)
         key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
 
-        from core.auth import User, _now
+        from exchange.core.auth import User, _now
         user = User(
             github_id=0,
             github_login=username,
@@ -1460,7 +1460,7 @@ async def admin_override_status(market_id: int, req: dict,
             m.resolution = None
 
         # Record in the ledger — every state change must be auditable.
-        from core.models import Transaction
+        from exchange.core.models import Transaction
         tx = Transaction.new(
             account_id=m.amm_account_id,
             available_delta=ZERO,
