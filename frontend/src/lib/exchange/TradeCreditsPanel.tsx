@@ -3,6 +3,7 @@ import { EXCHANGE_API, ExchangeApiError, type NetOrderPreview } from "./client";
 import { useNetMarket, usePlaceNetEdit, usePreviewNetEdit } from "./hooks";
 import { useExchangeSession } from "./session";
 import { isExchangeMode } from "@/lib/exchangeMode";
+import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 
 export function friendlyExchangeError(error: unknown): string {
   if (!(error instanceof ExchangeApiError)) return "The exchange request failed. Please try again.";
@@ -52,10 +53,11 @@ export function TradeCreditsPanel({ marketId, variableId }: { marketId: string; 
         <a href={`${EXCHANGE_API}/v1/auth/github/login`}>Sign in with GitHub to trade credits</a>
       ) : market.isLoading ? (
         <span style={noteStyle}>Loading live exchange market…</span>
-      ) : market.error ? (
+      ) : market.error && !market.data ? (
         <span style={errorStyle}>{friendlyExchangeError(market.error)}</span>
       ) : market.data ? (
         <>
+          {market.error && <ReconnectingHint />}
           <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-md)" }}>
             {outcomes.map((outcome) => (
               <span key={outcome.id} style={{ fontSize: "0.85rem" }}>

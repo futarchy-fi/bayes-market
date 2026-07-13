@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useMarkets } from "@/lib/query/hooks";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
+import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import { formatCurrency, timeUntil } from "@/lib/utils/format";
 import {
   isMarketListSort,
@@ -192,7 +193,8 @@ export default function MarketList() {
       </div>
 
       {isLoading && <LoadingPage />}
-      {error && <ErrorMessage message={error instanceof Error ? error.message : "Failed to load markets"} />}
+      {error && !data && <ErrorMessage message={error instanceof Error ? error.message : "Failed to load markets"} />}
+      {error && data && <ReconnectingHint />}
 
       {data && data.markets.length > 0 && (
         <div style={{ display: "flex", gap: "var(--space-lg)", fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: "var(--space-md)" }}>

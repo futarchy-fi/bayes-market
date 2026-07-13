@@ -5,6 +5,7 @@ import { useAccountRisk, useMarkets } from "@/lib/query/hooks";
 import { useBookOrders, useBookPositions, useCancelBookOrder, useExchangeMe, useMeNet } from "@/lib/exchange/hooks";
 import { useExchangeSession } from "@/lib/exchange/session";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
+import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import { isExchangeMode } from "@/lib/exchangeMode";
 import { EXCHANGE_API } from "@/lib/exchange/client";
 
@@ -42,12 +43,15 @@ function ExchangePortfolio({ me, net, positions, orders, cancel }: {
   cancel: ReturnType<typeof useCancelBookOrder>;
 }) {
   if (me.isLoading || net.isLoading || positions.isLoading || orders.isLoading) return <LoadingPage />;
-  if (me.error || net.error || positions.error || orders.error) return <ErrorMessage message="Could not load your credits exchange portfolio." />;
+  const queries = [me, net, positions, orders];
+  if (queries.some((query) => query.error && !query.data)) return <ErrorMessage message="Could not load your credits exchange portfolio." />;
+  const reconnecting = queries.some((query) => query.error);
 
   const openOrders = (orders.data?.orders ?? []).filter((order) => ["open", "partial"].includes(order.status));
 
   return (
     <section style={{ display: "grid", gap: "var(--space-md)" }}>
+      {reconnecting && <ReconnectingHint />}
       <h2 style={sectionTitle}>Exchange (credits)</h2>
       <div style={metricGridStyle}>
         <MetricCard label="Available" value={me.data?.available ?? "—"} />
@@ -99,7 +103,7 @@ function PaperPortfolio({ isConfigured, riskQuery, marketTitles }: {
 }) {
   if (!isConfigured) return <div style={promptStyle}>Set your Account ID in the header to view your paper portfolio.</div>;
   if (riskQuery.isLoading) return <LoadingPage />;
-  if (riskQuery.error) return <ErrorMessage message="Account not found or no positions yet." />;
+  if (riskQuery.error && !riskQuery.data) return <ErrorMessage message="Account not found or no positions yet." />;
   if (!riskQuery.data) return null;
 
   const risk = riskQuery.data.account.risk;
@@ -107,6 +111,7 @@ function PaperPortfolio({ isConfigured, riskQuery, marketTitles }: {
   const healthColor = cap.status === "healthy" ? "var(--color-success)" : cap.status === "warning" ? "var(--color-warning)" : "var(--color-danger)";
   return (
     <section style={{ display: "grid", gap: "var(--space-md)" }}>
+      {riskQuery.error && <ReconnectingHint />}
       <h2 style={sectionTitle}>Paper belief flow</h2>
       <div style={metricGridStyle}>
         <MetricCard label="Limit" value={cap.limit.toFixed(2)} />
