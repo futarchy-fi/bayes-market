@@ -1,0 +1,278 @@
+[
+  {
+    "type": "joint_marginal",
+    "joint_slug": "agi-before-2028-python-4-before-203",
+    "name": "AGI / Python 4",
+    "labelA": "AGI",
+    "labelB": "Python 4",
+    "truthTable": {
+      "a_yes_b_yes": "AGI // Python 4",
+      "a_yes_b_no": "AGI // No Python 4",
+      "a_no_b_yes": "No AGI // Python 4",
+      "a_no_b_no": "No AGI // No Python 4"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [
+      "HQObM8ZeuU0YQ3HUdGZ2",
+      "ckEcKJJmfK6MunQmaSgc"
+    ],
+    "binaryB": [],
+    "note": "both titled 'Will we get AGI before 2028?' - VERIFY resolution criteria match before trading"
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "artemis-iii-flown-with-a-crewed-lan",
+    "name": "Artemis III / China Moon",
+    "labelA": "Artemis III",
+    "labelB": "China first",
+    "truthTable": {
+      "a_yes_b_yes": "Artemis III flown with a crewed landing AND China lands a person on the Moon first",
+      "a_yes_b_no": "Artemis III flown with a crewed landing AND The US returns to the Moon first",
+      "a_no_b_yes": "Artemis III not flown with a crewed landing AND China lands a person on the Moon first",
+      "a_no_b_no": "Artemis III not flown with a crewed landing AND The US returns to the Moon first"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "will-trump-win-the-2026-nobel-peace",
+    "name": "Trump Peace / Nobel",
+    "labelA": "Peace",
+    "labelB": "Nobel",
+    "truthTable": {
+      "a_yes_b_yes": "Peace and Nobel",
+      "a_yes_b_no": "Peace but no Nobel",
+      "a_no_b_no": "No peace, no Nobel",
+      "a_no_b_yes": "No peace, Nobel anyway"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "will-gavin-newsom-be-the-nominee-an",
+    "name": "Newsom Nominee / Wins",
+    "labelA": "Nominee",
+    "labelB": "Wins",
+    "truthTable": {
+      "a_yes_b_no": "Is nominee, doesn't win",
+      "a_yes_b_yes": "Is nominee, does win",
+      "a_no_b_no": "Is not nominee, doesn't win",
+      "a_no_b_yes": "Is not nominee, does win"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "will-a-foreign-military-strike-iran",
+    "name": "Iran Strikes / Regime Falls",
+    "labelA": "Strikes",
+    "labelB": "Regime falls",
+    "truthTable": {
+      "a_no_b_no": "No strikes, regime stays",
+      "a_no_b_yes": "No strikes, regime falls",
+      "a_yes_b_no": "Strikes, regime stays",
+      "a_yes_b_yes": "Strikes, regime falls"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "conditional-on-aella-getting-new-ca",
+    "name": "Aella Cavities / Lantern Bioworks",
+    "labelA": "Cavities",
+    "labelB": "10k+ treated",
+    "truthTable": {
+      "a_yes_b_yes": "Aella gets new cavities; >= 10000 people get treatment",
+      "a_yes_b_no": "Aella gets new cavities; < 10000 people get treatment",
+      "a_no_b_yes": "Aella does not get new cavities; >= 10000 people get treatment",
+      "a_no_b_no": "Aella does not get new cavities; < 10000 people get treatment"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "drivechain-bitcoin-prices-x-drivech",
+    "name": "Drivechain / Bitcoin $100k",
+    "labelA": "Drivechain",
+    "labelB": "BTC > $100k",
+    "truthTable": {
+      "a_yes_b_yes": "Drivechain // > $100k",
+      "a_yes_b_no": "Drivechain // <= $100k",
+      "a_no_b_yes": "No Drivechain // > $100k",
+      "a_no_b_no": "No Drivechain // <= $100k"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "will-messi-and-ronaldo-both-reach-1",
+    "name": "Messi / Ronaldo 1000 Goals",
+    "labelA": "Messi 1000",
+    "labelB": "Ronaldo 1000",
+    "truthTable": {
+      "a_yes_b_yes": "Yes, both Messi and Ronaldo will reach 1000 career goals.",
+      "a_yes_b_no": "Only Messi will reach 1000 career goals.",
+      "a_no_b_yes": "Only Ronaldo will reach 1000 career goals.",
+      "a_no_b_no": "Neither will reach 1000 career goals."
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "state-of-iran-in-2030",
+    "name": "Iran 2030 Regime / Nukes",
+    "labelA": "Same regime",
+    "labelB": "Has nukes",
+    "truthTable": {
+      "a_yes_b_yes": "Current regime in power, with nukes",
+      "a_yes_b_no": "Current regime in power, no nukes",
+      "a_no_b_yes": "Different regime in power, with nukes",
+      "a_no_b_no": "Different regime in power, no nukes"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "large-states-redistrict-before-2026",
+    "name": "Large States Redistrict",
+    "labelA": "Texas",
+    "labelB": "CA or NY",
+    "truthTable": {
+      "a_yes_b_yes": "Texas, as well as California or New York",
+      "a_yes_b_no": "Texas, but neither California nor New York",
+      "a_no_b_yes": "California or New York, but not Texas",
+      "a_no_b_no": "None of Texas, California, and New York"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "will-oh-elect-a-democratic-senator",
+    "name": "Ohio Senator / 4+ Dem Reps",
+    "labelA": "Dem Senator",
+    "labelB": "≥4 Dem Reps",
+    "truthTable": {
+      "a_yes_b_yes": "Dem Senator, >= 4 Dem Reps",
+      "a_yes_b_no": "Dem Senator, < 4 Dem Reps",
+      "a_no_b_yes": "Non-Dem Senator, >= 4 Dem Reps",
+      "a_no_b_no": "Non-Dem Senator, < 4 Dem Reps"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "which-major-parties-will-nominate-a",
+    "name": "2028 Woman Nominees",
+    "labelA": "Dem woman",
+    "labelB": "Rep woman",
+    "truthTable": {
+      "a_yes_b_yes": "Both",
+      "a_yes_b_no": "Democratic only",
+      "a_no_b_yes": "Republican only",
+      "a_no_b_no": "Neither"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "ai-movies-2028-x-nvda-400",
+    "name": "AI Movies / NVDA Price",
+    "labelA": "AI movies 2028",
+    "labelB": "NVDA >$400",
+    "truthTable": {
+      "a_yes_b_yes": "AI movies by early 2028 & NVDA above $400 at EOY 2027",
+      "a_yes_b_no": "AI movies by early 2028 & NVDA below $400 at EOY 2027",
+      "a_no_b_yes": "No AI movies by early 2028 & NVDA above $400 at EOY 2027",
+      "a_no_b_no": "No AI movies by early 2028 & NVDA below $400 at EOY 2027"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "will-texas-elect-a-democratic-senat",
+    "name": "Texas Senator / 14+ Dem Reps",
+    "labelA": "Dem Senator",
+    "labelB": "≥14 Dem Reps",
+    "truthTable": {
+      "a_yes_b_yes": "Dem Senator, >= 14 Dem Reps",
+      "a_yes_b_no": "Dem Senator, < 14 Dem Reps",
+      "a_no_b_yes": "Non-Dem Senator, >= 14 Dem Reps",
+      "a_no_b_no": "Non-Dem Senator, < 14 Dem Reps"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "will-democrats-win-iowa-in-2026",
+    "name": "Iowa 2026: Dem Senate / Governor",
+    "labelA": "Dem Senate",
+    "labelB": "Dem Governor",
+    "truthTable": {
+      "a_yes_b_yes": "Democrats win both senate and governor",
+      "a_yes_b_no": "Democrats win senate ONLY",
+      "a_no_b_yes": "Democrats win governor ONLY",
+      "a_no_b_no": "Democrats don’t win senate or governor"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "will-the-democrats-win-at-least-222",
+    "name": "Dem 222+ Seats / Trump Impeached",
+    "labelA": "222+ seats",
+    "labelB": "Impeached",
+    "truthTable": {
+      "a_yes_b_yes": ">= 222, Impeached",
+      "a_yes_b_no": ">= 222, Not Impeached",
+      "a_no_b_yes": "< 222, Impeached",
+      "a_no_b_no": "< 222, Not Impeached"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  },
+  {
+    "type": "joint_marginal",
+    "joint_slug": "will-aoc-be-the-nominee-and-will-sh",
+    "name": "AOC 2028 Nominee / Wins",
+    "labelA": "Nominee",
+    "labelB": "Wins",
+    "truthTable": {
+      "a_yes_b_yes": "Is nominee, does win",
+      "a_yes_b_no": "Is nominee, doesn't win",
+      "a_no_b_yes": "Isn't nominee, does win",
+      "a_no_b_no": "Isn't nominee, doesn't win"
+    },
+    "declaredBy": "evand/conditional-markets",
+    "binaryA": [],
+    "binaryB": []
+  }
+]

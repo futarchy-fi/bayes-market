@@ -218,6 +218,58 @@ def load_user_book(path: str | None) -> list[dict]:
     return entries
 
 
+def joint_probabilities(market: dict, truth_table: dict) -> tuple[float, float]:
+    """Return the A and B marginals from an exact-text 2x2 answer mapping."""
+    answers = market.get("answers") or []
+
+    def cell_sum(*cells: str) -> float:
+        texts = {truth_table[cell] for cell in cells}
+        return sum(float(answer["probability"]) for answer in answers
+                   if answer.get("text") in texts)
+
+    return (cell_sum("a_yes_b_yes", "a_yes_b_no"),
+            cell_sum("a_yes_b_yes", "a_no_b_yes"))
+
+
+def joint_marginal_gap(joint_p: float, binary_p: float) -> float:
+    return round(joint_p - binary_p, 4)
+
+
+def evaluate_joints(entries: list[dict]) -> dict:
+    """Fetch joint markets and compare their marginals with declared binaries."""
+    joints, gaps = [], []
+    for entry in entries:
+        slug = entry["joint_slug"]
+        market = fetch_json(f"{MANIFOLD_BASE}/slug/{slug}")
+        if (not isinstance(market, dict) or market.get("isResolved")
+                or market.get("mechanism") != "cpmm-multi-1"):
+            continue
+        try:
+            prob_a, prob_b = joint_probabilities(market, entry["truthTable"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        prob_a, prob_b = round(prob_a, 4), round(prob_b, 4)
+        joints.append({"slug": slug, "name": entry["name"],
+                       "pA": prob_a, "pB": prob_b})
+
+        # Multichoice auto-arb sizing is future work; these checks are report-only.
+        for leg, joint_p in (("A", prob_a), ("B", prob_b)):
+            for binary_id in entry.get(f"binary{leg}", []):
+                binary = fetch_json(f"{MANIFOLD_BASE}/market/{binary_id}")
+                if (not isinstance(binary, dict) or binary.get("isResolved")
+                        or binary.get("probability") is None):
+                    continue
+                binary_p = round(float(binary["probability"]), 4)
+                gaps.append({
+                    "leg": leg, "joint_slug": slug, "joint_p": joint_p,
+                    "binary_id": binary_id, "binary_p": binary_p,
+                    "gap": joint_marginal_gap(joint_p, binary_p),
+                    "declaredBy": entry["declaredBy"],
+                    "note": entry.get("note", ""),
+                })
+    return {"joints": joints, "gaps": gaps}
+
+
 def evaluate(rel: dict, markets: dict[str, dict]) -> dict | None:
     market_a, market_b = markets.get(rel["a"]), markets.get(rel["b"])
     if not market_a or not market_b:
@@ -289,13 +341,18 @@ def main() -> None:
     print(f"cpmm model verified on {len(trusted)} markets ({dropped} dropped)",
           file=sys.stderr)
 
-    book = auto_book(trusted) + load_user_book(args.book)
+    default_joint_book = Path(__file__).with_name("relationships_evand.json")
+    declared = load_user_book(args.book) + load_user_book(str(default_joint_book))
+    joint_entries = [r for r in declared if r.get("type") == "joint_marginal"]
+    book = auto_book(trusted) + [r for r in declared
+                                 if r.get("type") != "joint_marginal"]
     results = [r for rel in book if (r := evaluate(rel, trusted))]
     violations = [r for r in results if r["violated"]]
     profitable = [r for r in violations
                   if r["bundle"]["guaranteed_profit"] >= args.min_profit]
     profitable.sort(key=lambda r: -r["bundle"]["guaranteed_profit"])
 
+    joint_checks = evaluate_joints(joint_entries)
     report = {
         "relationships_checked": len(results),
         "violated": len(violations),
@@ -304,13 +361,15 @@ def main() -> None:
             sum(r["bundle"]["guaranteed_profit"] for r in profitable), 2),
         "bundles": profitable,
         "all_violations": violations,
+        "joint_marginal_checks": joint_checks,
     }
     if args.out:
         Path(args.out).write_text(json.dumps(report, indent=1))
 
     print(json.dumps({k: report[k] for k in
                       ("relationships_checked", "violated",
-                       "profitable_after_slippage", "total_guaranteed_mana")}, indent=1))
+                       "profitable_after_slippage", "total_guaranteed_mana",
+                       "joint_marginal_checks")}, indent=1))
     for r in profitable[:15]:
         b = r["bundle"]
         print(f"\n  [{r['type']}] {r['title_a']}  vs  {r['title_b']}"
@@ -320,6 +379,11 @@ def main() -> None:
               f"\n    declaredBy {r['declaredBy']}  {r['note']}")
     if not profitable:
         print("\n  no bundle clears the profit floor after slippage right now")
+    for gap in joint_checks["gaps"]:
+        print(f"\n  [joint_marginal:{gap['leg']}] {gap['joint_slug']}"
+              f"\n    joint {gap['joint_p']} / binary {gap['binary_p']}"
+              f"  gap {gap['gap']}  binary {gap['binary_id']}"
+              f"\n    declaredBy {gap['declaredBy']}  {gap['note']}")
 
 
 if __name__ == "__main__":
