@@ -76,6 +76,83 @@ export interface LeaderboardEntry {
   total: string;
 }
 
+export type Venue = "net" | "amm" | "book";
+
+export interface InstrumentListing {
+  venue: Venue;
+  marketId: string;
+  yesPrice: number | null;
+  status: string;
+}
+
+export interface Instrument {
+  instrumentId: string;
+  title: string;
+  listings: InstrumentListing[];
+}
+
+export interface AmmMarket {
+  market_id: number;
+  question: string;
+  status: string;
+  outcomes: string[];
+  prices: Record<string, string>;
+}
+
+export interface AmmTradePayload {
+  outcome: string;
+  budget?: string;
+  amount?: string;
+}
+
+export interface AmmTradeResult {
+  trade_id: number;
+  outcome: string;
+  amount: string;
+  price: string;
+  value: string;
+}
+
+export interface BookMarket {
+  id: number;
+  question: string;
+  status: string;
+  outcomes: string[];
+  bestBid: string | null;
+  bestAsk: string | null;
+  lastPrice: string | null;
+}
+
+export interface BookDepthLevel { price: string; size: string }
+export interface BookOutcomeDepth { bids: BookDepthLevel[]; asks: BookDepthLevel[] }
+export interface BookDepth extends BookOutcomeDepth {
+  marketId: number;
+  outcomes: Record<string, BookOutcomeDepth>;
+}
+
+export interface BookOrderPayload {
+  marketId: number;
+  side: "bid" | "ask";
+  outcome: string;
+  price: string;
+  size: string;
+}
+
+export interface BookOrder extends BookOrderPayload {
+  orderId: number;
+  accountId: number;
+  filled: string;
+  remaining: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface PlacedBookOrder extends BookOrder {
+  balance: { available: string; frozen: string };
+}
+
+export interface BookPosition { marketId: number; yes: string; no: string }
+
 async function request<T>(path: string, options: RequestInit = {}, apiKey?: string): Promise<T> {
   const headers: Record<string, string> = { ...(options.headers as Record<string, string>) };
   if (options.body) headers["Content-Type"] = "application/json";
@@ -101,6 +178,18 @@ export const getNetOrders = (apiKey: string) =>
   request<{ orders: NetOrder[] }>("/v1/net/orders/mine", {}, apiKey);
 export const getMeNet = (apiKey: string) => request<NetPortfolio>("/v1/me/net", {}, apiKey);
 export const getLeaderboard = () => request<{ entries: LeaderboardEntry[] }>("/v1/leaderboard");
+export const getInstruments = () => request<Instrument[]>("/v1/instruments");
+export const getAmmMarket = (marketId: string) => request<AmmMarket>(`/v1/markets/${encodeURIComponent(marketId)}`);
+export const tradeAmm = (marketId: string, action: "buy" | "sell", payload: AmmTradePayload, apiKey: string) =>
+  request<AmmTradeResult>(`/v1/markets/${encodeURIComponent(marketId)}/${action}`, { method: "POST", body: JSON.stringify(payload) }, apiKey);
+export const getBookMarket = (marketId: string) => request<BookMarket>(`/v1/book/markets/${encodeURIComponent(marketId)}`);
+export const getBookDepth = (marketId: string) => request<BookDepth>(`/v1/book/markets/${encodeURIComponent(marketId)}/orderbook`);
+export const getBookOrders = (apiKey: string) => request<{ orders: BookOrder[] }>("/v1/book/orders/mine", {}, apiKey);
+export const getBookPositions = (apiKey: string) => request<{ positions: BookPosition[] }>("/v1/book/positions/mine", {}, apiKey);
+export const placeBookOrder = (payload: BookOrderPayload, apiKey: string) =>
+  request<PlacedBookOrder>("/v1/book/orders", { method: "POST", body: JSON.stringify(payload) }, apiKey);
+export const cancelBookOrder = (orderId: number, apiKey: string) =>
+  request<PlacedBookOrder>(`/v1/book/orders/${orderId}`, { method: "DELETE" }, apiKey);
 export const previewNetEdit = (payload: NetEditPayload, apiKey: string) =>
   request<NetOrderPreview>("/v1/net/orders/preview", { method: "POST", body: JSON.stringify(payload) }, apiKey);
 export const placeNetEdit = (payload: NetEditPayload, apiKey: string) =>
