@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from urllib.parse import quote
 
 import httpx
 
@@ -89,3 +90,32 @@ class Client:
             "outcome": outcome,
             "amount": amount,
         })
+
+    # ── Net venue endpoints ──
+
+    def list_net_markets(self) -> dict:
+        return self.get("/v1/net/markets")
+
+    def get_net_market(self, market_id: str) -> dict:
+        return self.get(f"/v1/net/markets/{quote(market_id, safe='')}")
+
+    def net_marginal(self, variable_id: str, context: str = "") -> dict:
+        path = f"/v1/net/marginal?variable={quote(variable_id, safe='')}"
+        if context:
+            path += f"&context={context}"
+        return self._request("GET", path)
+
+    def preview_net_order(self, body: dict) -> dict:
+        return self.post("/v1/net/orders/preview", body=body)
+
+    def place_net_order(self, body: dict) -> dict:
+        return self.post("/v1/net/orders", body=body)
+
+    def my_net_orders(self) -> dict:
+        return self.get("/v1/net/orders/mine")
+
+    def net_portfolio(self) -> dict:
+        return self.get("/v1/me/net")
+
+    def leaderboard(self) -> dict:
+        return self.get("/v1/leaderboard")
