@@ -1143,11 +1143,13 @@ class TestDashboard:
         assert "Futarchy" in resp.text
         assert "Sign in with GitHub" in resp.text
 
-    async def test_landing_page_links_to_dashboard(self, client):
-        """Landing page must contain a link to the dashboard."""
+    async def test_landing_page_routes_humans_and_agents(self, client):
+        """Landing routes humans to futarchy.ai and agents to /docs + CLI."""
         resp = await client.get("/")
         assert resp.status_code == 200
-        assert "/dashboard" in resp.text
+        assert "futarchy.ai" in resp.text
+        assert "/docs" in resp.text
+        assert "install.sh" in resp.text
 
     async def test_dashboard_api_paths_match_registered_routes(self, client):
         """Every fetch() path in dashboard.html must correspond to a real API route.
