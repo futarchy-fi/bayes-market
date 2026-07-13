@@ -281,6 +281,113 @@ class NetVoidResponse(BaseModel):
     calledOff: list[str]
 
 
+# --- Complete-set order-book venue ---
+
+class BookMarket(BaseModel):
+    id: int
+    question: str
+    status: str
+    outcomes: list[str]
+    bestBid: str | None = None
+    bestAsk: str | None = None
+    lastPrice: str | None = None
+    setsMinted: str
+    deadline: str | None = None
+    createdAt: str
+    resolution: str | None = None
+
+
+class BookMarketList(BaseModel):
+    markets: list[BookMarket]
+    count: int
+
+
+class BookCreateMarketRequest(BaseModel):
+    question: str
+    deadline: str | None = None
+
+
+class BookOrderRequest(BaseModel):
+    marketId: int
+    side: str
+    outcome: str
+    price: str
+    size: str
+
+
+class BookOrder(BaseModel):
+    orderId: int
+    accountId: int
+    marketId: int
+    side: str
+    outcome: str
+    price: str
+    size: str
+    filled: str
+    remaining: str
+    status: str
+    createdAt: str
+
+
+class BookOrderBalance(BaseModel):
+    available: str
+    frozen: str
+
+
+class BookOrderResponse(BookOrder):
+    balance: BookOrderBalance
+
+
+class BookOrdersList(BaseModel):
+    orders: list[BookOrder]
+
+
+class BookPosition(BaseModel):
+    marketId: int
+    yes: str
+    no: str
+
+
+class BookPositionsList(BaseModel):
+    positions: list[BookPosition]
+
+
+class BookDepthLevel(BaseModel):
+    price: str
+    size: str
+
+
+class BookOutcomeDepth(BaseModel):
+    bids: list[BookDepthLevel]
+    asks: list[BookDepthLevel]
+
+
+class BookDepth(BookOutcomeDepth):
+    marketId: int
+    outcomes: dict[str, BookOutcomeDepth]
+
+
+class BookTrade(BaseModel):
+    tradeId: int
+    marketId: int
+    makerOrderId: int
+    takerOrderId: int
+    price: str
+    size: str
+    kind: str
+    createdAt: str
+
+
+class BookTradesList(BaseModel):
+    trades: list[BookTrade]
+
+
+class BookSettlementResponse(BaseModel):
+    market: BookMarket
+    cancelledOrders: list[int]
+    settledAccounts: list[int]
+
+
 class NetOrdersList(BaseModel):
     orders: list[NetOrder]
 

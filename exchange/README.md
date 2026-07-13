@@ -2,7 +2,7 @@
 
 Imported from `futarchy-fi/agents@8df23de` (`exchange-v2`), implementing Plans A+B from the donor's `docs/superpowers/plans/2026-07-05-futarchy-exchange.md`.
 
-The service combines a `RiskEngine` credit ledger, whose only money inlet is minting, with venue A's per-market LMSR (`MarketEngine`) and venue B's staked probability edits (log-MSR). Venue B uses the same canonical factored inference engine in `backend/inference/` that powers `backend/server.py`; no inference implementation is vendored here.
+The service combines a `RiskEngine` credit ledger, whose only money inlet is minting, with venue A's per-market LMSR (`MarketEngine`), venue B's staked probability edits (log-MSR), and an always-on complete-set order book. Venue B uses the same canonical factored inference engine in `backend/inference/` that powers `backend/server.py`; no inference implementation is vendored here.
 
 ## Configuration
 
@@ -54,3 +54,12 @@ the three small venue/payload fixtures, and pass the suite. Then construct the
 venue in `exchange.core.api.lifespan` and add it to
 `app.state.venues_by_kind` under its unique `kind`; existing routes need not
 change.
+
+## Order-book venue
+
+Create markets with `POST /v1/book/markets` (`{"question":"...","deadline":null}`), then place or quote orders with `{"marketId":1,"side":"bid|ask","outcome":"yes|no","price":"0.6000","size":"1.00"}`. Public market, aggregated depth, and fill history live under `/v1/book/markets`; authenticated order and position views live under `/v1/book/orders` and `/v1/book/positions`.
+
+A YES bid and NO bid cross when their prices sum to at least 1, minting one YES+NO complete set per matched unit.
+One credit per set is held in market escrow until the set is redeemed or the market settles.
+YES asks and NO asks can cross to redeem a set; same-outcome bid/ask orders transfer existing shares.
+All four intents share one YES-axis price-time-priority book, with NO prices represented as `1 - YES`.

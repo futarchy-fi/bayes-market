@@ -46,6 +46,10 @@ from exchange.core.api_models import (
     NetOrder, NetOrderResponse, NetOrdersList,
     NetResolveResponse, NetVoidResponse,
     NetPortfolioResponse, LeaderboardEntry, LeaderboardResponse,
+    BookMarket, BookMarketList, BookCreateMarketRequest,
+    BookOrderRequest, BookOrder, BookOrderBalance, BookOrderResponse,
+    BookOrdersList, BookPositionsList, BookDepth, BookTradesList,
+    BookSettlementResponse,
 )
 from exchange.core.auth import (
     AuthStore, validate_github_token,
@@ -62,6 +66,8 @@ from exchange.core.persistence import save_snapshot, load_snapshot
 from exchange.core.risk_engine import RiskEngine, InsufficientBalance
 from exchange.venues.amm import AmmVenue
 from exchange.venues.base import Venue, VenueError
+from exchange.venues.book.engine import BookEngine
+from exchange.venues.book.venue import BookVenue
 from exchange.venues.joint.venue import JointVenue
 
 logger = logging.getLogger(__name__)
@@ -147,7 +153,15 @@ async def lifespan(app: FastAPI):
         if seeds_path
         else None
     )
-    app.state.venues_by_kind: dict[str, Venue] = {"amm": AmmVenue(me)}
+    app.state.book = (
+        BookVenue.from_snapshot(venues["book"], risk)
+        if "book" in venues
+        else BookVenue(BookEngine(risk))
+    )
+    app.state.venues_by_kind: dict[str, Venue] = {
+        "amm": AmmVenue(me),
+        "book": app.state.book,
+    }
     if app.state.joint is not None:
         app.state.venues_by_kind["net"] = app.state.joint
 
@@ -177,7 +191,8 @@ app = FastAPI(
     description=(
         "HTTP API for the Futarchy Exchange: independent per-market LMSR "
         "trading (buy/sell) alongside the joint MSR net venue for staked "
-        "probability-edit orders across causally-linked variables."
+        "probability-edit orders across causally-linked variables and an "
+        "always-on complete-set order book."
     ),
     lifespan=lifespan,
 )
@@ -203,10 +218,14 @@ def _save():
     """
     if TX_LOG_CEILING and len(app.state.risk.transactions) > TX_LOG_CEILING:
         app.state.risk.compact_transactions(TX_LOG_KEEP)
+    book = getattr(app.state, "book", None)
+    if book is not None and book.engine.risk is not app.state.risk:
+        book = None
     save_snapshot(app.state.risk, app.state.me, STATE_PATH,
                   auth_store=app.state.auth_store,
                   tracked_repos=app.state.tracked_repos,
                   joint_venue=app.state.joint,
+                  book_venue=book,
                   venues=getattr(app.state, "venues", None))
 
 
@@ -859,6 +878,134 @@ async def get_leaderboard() -> LeaderboardResponse:
             for acc in ranked
         ]
     return LeaderboardResponse(entries=entries)
+
+
+# ---------------------------------------------------------------------------
+# Complete-set order-book venue.
+# ---------------------------------------------------------------------------
+
+def _book() -> BookVenue:
+    return app.state.book
+
+
+@app.get("/v1/book/markets")
+async def list_book_markets() -> BookMarketList:
+    venue = _book()
+    async with app.state.lock:
+        markets = [BookMarket(**venue.get_market(mid)) for mid in venue.market_ids()]
+    return BookMarketList(markets=markets, count=len(markets))
+
+
+@app.get("/v1/book/markets/{market_id}")
+async def get_book_market(market_id: int) -> BookMarket:
+    async with app.state.lock:
+        try:
+            return BookMarket(**_book().get_market(market_id))
+        except VenueError as err:
+            raise translate_venue_error(err) from err
+
+
+@app.get("/v1/book/markets/{market_id}/orderbook")
+async def get_book_orderbook(market_id: int) -> BookDepth:
+    async with app.state.lock:
+        try:
+            return BookDepth(**_book().orderbook(market_id))
+        except VenueError as err:
+            raise translate_venue_error(err) from err
+
+
+@app.get("/v1/book/markets/{market_id}/trades")
+async def get_book_trades(
+    market_id: int, limit: int = Query(default=100, ge=1, le=500)
+) -> BookTradesList:
+    async with app.state.lock:
+        try:
+            trades = _book().trades_for(market_id, limit)
+        except VenueError as err:
+            raise translate_venue_error(err) from err
+    return BookTradesList(trades=trades)
+
+
+@app.post("/v1/book/orders")
+async def place_book_order(req: BookOrderRequest, user: AuthUser) -> BookOrderResponse:
+    async with app.state.lock:
+        try:
+            order = _book().place(user.account_id, req.model_dump())
+            _save()
+        except VenueError as err:
+            raise translate_venue_error(err) from err
+        account = app.state.risk.get_account(user.account_id)
+        balance = BookOrderBalance(
+            available=str(account.available_balance),
+            frozen=str(account.frozen_balance),
+        )
+    return BookOrderResponse(**order, balance=balance)
+
+
+@app.delete("/v1/book/orders/{order_id}")
+async def cancel_book_order(order_id: int, user: AuthUser) -> BookOrderResponse:
+    async with app.state.lock:
+        try:
+            order = _book().cancel(user.account_id, order_id)
+            _save()
+        except VenueError as err:
+            raise translate_venue_error(err) from err
+        account = app.state.risk.get_account(user.account_id)
+        balance = BookOrderBalance(
+            available=str(account.available_balance),
+            frozen=str(account.frozen_balance),
+        )
+    return BookOrderResponse(**order, balance=balance)
+
+
+@app.get("/v1/book/orders/mine")
+async def list_my_book_orders(user: AuthUser) -> BookOrdersList:
+    async with app.state.lock:
+        orders = list(reversed(_book().orders_for(user.account_id)))
+    return BookOrdersList(orders=[BookOrder(**order) for order in orders])
+
+
+@app.get("/v1/book/positions/mine")
+async def list_my_book_positions(user: AuthUser) -> BookPositionsList:
+    async with app.state.lock:
+        positions = _book().positions_for(user.account_id)
+    return BookPositionsList(positions=positions)
+
+
+@app.post("/v1/book/markets")
+async def create_book_market(
+    req: BookCreateMarketRequest, _: AdminDep
+) -> BookMarket:
+    async with app.state.lock:
+        market = _book().create_market(req.question, req.deadline)
+        _save()
+    return BookMarket(**market)
+
+
+@app.post("/v1/book/markets/{market_id}/resolve")
+async def resolve_book_market(
+    market_id: int, req: ResolveRequest, _: AdminDep
+) -> BookSettlementResponse:
+    async with app.state.lock:
+        try:
+            report = _book().resolve(market_id, req.outcome)
+            _save()
+        except VenueError as err:
+            raise translate_venue_error(err) from err
+    return BookSettlementResponse(**report)
+
+
+@app.post("/v1/book/markets/{market_id}/void")
+async def void_book_market(
+    market_id: int, _: AdminDep
+) -> BookSettlementResponse:
+    async with app.state.lock:
+        try:
+            report = _book().void(market_id)
+            _save()
+        except VenueError as err:
+            raise translate_venue_error(err) from err
+    return BookSettlementResponse(**report)
 
 
 # ---------------------------------------------------------------------------
