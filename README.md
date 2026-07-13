@@ -41,6 +41,30 @@ cd frontend && npm install && npm run dev      # build: npm run build · test: n
 | `GET /v1/markets/{id}/events`, `/trades`, `/meta`, `/engine-stats` | per-market event log, trades, metadata, engine internals |
 | `GET /v1/accounts/{id}/positions`, `/exposure`, `/pnl`, `/risk` | per-account portfolio views |
 
+### Sealed batch venue
+
+The always-on batch venue is a binary LMSR that accepts one sealed pending
+order per account and market in each round. Submit an authenticated
+`POST /v1/batch/orders` with:
+
+```json
+{"marketId": 1, "outcome": "yes", "target": "0.70", "maxSpend": "10"}
+```
+
+Submitting again in the same round replaces that account's order and adjusts
+its locked balance. `GET /v1/batch/orders/mine` returns only the caller's
+pending orders; other accounts' targets, budgets, and orders are never
+disclosed by public market routes.
+
+Admins create markets with `POST /v1/batch/markets` using `question` and
+either `b` or `funding` (`funding = b * ln(2)`). An optional positive
+`roundSeconds` enables automatic rounds. A round can always be cleared
+manually at `POST /v1/batch/markets/{id}/close-round`; clearing executes all
+sealed orders competitively, advances the round, and publishes only the
+clearing price and participant count in `roundHistory`. Admins finish a market
+with `/resolve` and an `outcome`, or `/void` to refund filled cost basis and
+release pending locks.
+
 ## Deployment
 
 Runs on the **farol** host as a systemd user service (`bayes-market.service`, `WorkingDirectory=~/bayes-market`,

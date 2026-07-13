@@ -55,6 +55,9 @@ async def _seed_listings(client):
     book = await _post(client, "/v1/book/markets", {"question": "Will it ship?"})
     assert book.status_code == 200
 
+    batch = await _post(client, "/v1/batch/markets", {"question": "Will it ship?"})
+    assert batch.status_code == 200
+
     trader = await _authenticate_github_identity({"id": 801, "login": "maker"})
     for outcome, price in (("yes", "0.4000"), ("no", "0.3000")):
         order = await _post(
@@ -75,6 +78,7 @@ async def _seed_listings(client):
         {"venue": "net", "marketId": "g1"},
         {"venue": "amm", "marketId": str(amm.json()["market_id"])},
         {"venue": "book", "marketId": str(book.json()["id"])},
+        {"venue": "batch", "marketId": str(batch.json()["id"])},
     ]
 
 
@@ -85,6 +89,7 @@ def test_yes_price_extracts_each_venue_shape():
         "book", {"bestBid": "0.4000", "bestAsk": "0.7000"}
     ) == pytest.approx(0.55)
     assert yes_price("book", {"bestBid": None, "bestAsk": None}) is None
+    assert yes_price("batch", {"postedPrice": "0.57"}) == pytest.approx(0.57)
 
 
 async def test_create_list_delete_all_live_venues(tmp_path, monkeypatch):
@@ -111,6 +116,7 @@ async def test_create_list_delete_all_live_venues(tmp_path, monkeypatch):
         assert by_venue["net"]["yesPrice"] == pytest.approx(0.6)
         assert by_venue["amm"]["yesPrice"] == pytest.approx(0.5)
         assert by_venue["book"]["yesPrice"] == pytest.approx(0.55)
+        assert by_venue["batch"]["yesPrice"] == pytest.approx(0.5)
         assert {listing["status"] for listing in instrument["listings"]} == {"open"}
 
         deleted = await client.delete(

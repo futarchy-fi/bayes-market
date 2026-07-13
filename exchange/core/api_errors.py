@@ -23,6 +23,7 @@ from exchange.venues.joint.venue import (
     WidthBudgetExceeded,
 )
 from exchange.venues.book.engine import NoPosition
+from exchange.venues.batch.engine import ClearingError
 
 
 class APIError(Exception):
@@ -111,6 +112,8 @@ def translate_venue_error(exc: VenueError) -> APIError:
         return APIError(400, "insufficient_credits", msg)
     if isinstance(exc, NoPosition):
         return APIError(400, "no_position", msg)
+    if isinstance(exc, ClearingError):
+        return APIError(409, "clearing_error", msg)
     if isinstance(exc, MarketClosed):
         return APIError(409, "market_closed", msg)
     if isinstance(exc, ContextContradicted):
