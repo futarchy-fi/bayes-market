@@ -8,16 +8,18 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from exchange.core.risk_engine import InsufficientBalance
-from exchange.venues.joint.venue import (
-    ContextContradicted,
+from exchange.venues.base import (
     InsufficientCredits,
-    InsufficientTreasury,
     InvalidOutcome,
     InvalidTarget,
     MarketClosed,
     UnknownMarket,
-    UnknownVariable,
     VenueError,
+)
+from exchange.venues.joint.venue import (
+    ContextContradicted,
+    InsufficientTreasury,
+    UnknownVariable,
     WidthBudgetExceeded,
 )
 

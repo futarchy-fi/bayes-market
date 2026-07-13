@@ -23,6 +23,15 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from exchange.core.risk_engine import RiskEngine
+from exchange.venues.base import (
+    InsufficientCredits,
+    InvalidOutcome,
+    InvalidTarget,
+    MarketClosed,
+    TradeRejected,
+    UnknownMarket,
+    VenueError,
+)
 from backend.inference.factored_market import FactoredMarket
 from backend.inference.joint_market import JointMarketError
 from backend.inference.network_model import build_network_nodes
@@ -42,20 +51,8 @@ def nodes_from_seeds(seeds: Mapping[str, Any]) -> list[dict[str, Any]]:
     return build_network_nodes(markets, conditional_marginals)
 
 
-class VenueError(Exception):
-    """Base class for JointVenue errors."""
-
-
-class UnknownMarket(VenueError):
-    """Raised when a market id has no corresponding seed record."""
-
-
-class UnknownVariable(VenueError):
+class UnknownVariable(UnknownMarket):
     """Raised when a variable id is not part of the joint model."""
-
-
-class InsufficientCredits(VenueError):
-    """Raised when an account lacks the available balance to cover a stake."""
 
 
 class InsufficientTreasury(VenueError):
@@ -69,21 +66,11 @@ class InsufficientTreasury(VenueError):
     drained/misconfigured treasury or an accounting bug."""
 
 
-class WidthBudgetExceeded(VenueError):
+class WidthBudgetExceeded(TradeRejected):
     """Raised when a probability edit is rejected by the junction-tree width budget."""
 
 
-class MarketClosed(VenueError):
-    """Raised when an edit targets, or is contexted on, a resolved or voided variable.
-
-    Rejecting these up front (before any lock is taken) is what keeps a bet
-    from freezing funds forever: a market that can never resolve can never
-    settle, so an edit against it must never be allowed to reach the risk
-    engine.
-    """
-
-
-class ContextContradicted(VenueError):
+class ContextContradicted(TradeRejected):
     """Raised when a context is inconsistent with the current belief state.
 
     Two cases share this exception: (1) a context key at edit time whose
@@ -95,34 +82,6 @@ class ContextContradicted(VenueError):
     """
 
 
-class InvalidOutcome(VenueError):
-    """Raised when an outcome value is not among a variable's real outcomes.
-
-    Covers two call sites: (1) a context key at edit time whose value isn't
-    one of the outcomes of the variable that key names, and (2) the
-    resolved-outcome argument to ``resolve_variable`` when it isn't one of
-    the target variable's outcomes. Both are "bad outcome id", distinct
-    from ``UnknownVariable`` (the variable/key itself doesn't exist) and
-    from ``ContextContradicted`` (the variable and outcome are both real,
-    but contradict an already-recorded resolution).
-    """
-
-
-class InvalidTarget(VenueError):
-    """Raised when a target (or the current price) is degenerate.
-
-    Covers msr's own validation (`before`/`target` not strictly inside
-    (0, 1)) as well as a `trade_to_probability` price that's already
-    pinned to 0 or 1 under the given context (the event is already
-    effectively settled there).
-    """
-
-
-class TradeRejected(VenueError):
-    """Catch-all for a rejected trade_to_probability call that is neither a
-    width-budget failure nor a degenerate-price failure."""
-
-
 class JointVenue:
     """Venue B: a factored joint (Bayes-network) prediction market.
 
@@ -130,6 +89,8 @@ class JointVenue:
     inference engine from it, and exposes a read surface over the live
     (traded) marginals plus the seed metadata for each market.
     """
+
+    kind = "net"
 
     def __init__(
         self,
@@ -390,6 +351,15 @@ class JointVenue:
             "b": self._liquidity,
         }
 
+    def quote(self, account_id: int, payload: dict) -> dict[str, Any]:
+        return self.preview_edit(
+            account_id,
+            payload["variableId"],
+            payload["outcomeId"],
+            payload["target"],
+            payload.get("context"),
+        )
+
     def place_edit(
         self,
         account_id: int,
@@ -458,6 +428,15 @@ class JointVenue:
         self._orders.append(order)
         self._orders_by_var.setdefault(variable_id, []).append(order)
         return order
+
+    def place(self, account_id: int, payload: dict) -> dict[str, Any]:
+        return self.place_edit(
+            account_id,
+            payload["variableId"],
+            payload["outcomeId"],
+            payload["target"],
+            payload.get("context"),
+        )
 
     # -- settlement -------------------------------------------------------
 
@@ -643,6 +622,14 @@ class JointVenue:
 
         return {"calledOff": called_off}
 
+    def resolve(self, market_id: str, outcome_id: str) -> dict[str, Any]:
+        record = self.get_market(market_id)
+        return self.resolve_variable(str(record["variableId"]), outcome_id)
+
+    def void(self, market_id: str) -> dict[str, Any]:
+        record = self.get_market(market_id)
+        return self.void_variable(str(record["variableId"]))
+
     # -- persistence --------------------------------------------------------
 
     def snapshot(self) -> dict[str, Any]:
@@ -780,6 +767,12 @@ class JointVenue:
     def orders_count(self) -> int:
         """Total number of orders ever placed on this venue (any status)."""
         return len(self._orders)
+
+    def stats(self) -> dict[str, int]:
+        return {
+            "markets": len(self._markets),
+            "orders_or_trades": len(self._orders),
+        }
 
     def orders_for(self, account_id: int) -> list[dict[str, Any]]:
         """``account_id``'s orders, oldest-first (placement/append order).

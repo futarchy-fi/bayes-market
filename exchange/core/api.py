@@ -60,7 +60,9 @@ from exchange.core.middleware import (
 from exchange.core.models import ZERO, TrackedRepo, reset_counters
 from exchange.core.persistence import save_snapshot, load_snapshot
 from exchange.core.risk_engine import RiskEngine, InsufficientBalance
-from exchange.venues.joint.venue import JointVenue, VenueError
+from exchange.venues.amm import AmmVenue
+from exchange.venues.base import Venue, VenueError
+from exchange.venues.joint.venue import JointVenue
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +147,9 @@ async def lifespan(app: FastAPI):
         if seeds_path
         else None
     )
+    app.state.venues_by_kind: dict[str, Venue] = {"amm": AmmVenue(me)}
+    if app.state.joint is not None:
+        app.state.venues_by_kind["net"] = app.state.joint
 
     app.state.github_oauth_states = {}
     app.state.lock = asyncio.Lock()
@@ -494,6 +499,10 @@ async def health() -> HealthResponse:
             orders=joint.orders_count() if joint is not None else 0,
             enabled=joint is not None,
         ),
+        venues={
+            kind: venue.stats()
+            for kind, venue in getattr(app.state, "venues_by_kind", {}).items()
+        },
     )
 
 

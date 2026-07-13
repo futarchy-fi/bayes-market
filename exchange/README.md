@@ -43,3 +43,14 @@ python3 -m pytest exchange/ -q
 ```
 
 The live Bayes server in `backend/server.py` is untouched and runs separately.
+
+## Venue contract
+
+A venue kind implements the runtime-checkable `Venue` protocol in
+`exchange/venues/base.py`, uses the shared `RiskEngine` for every credit
+mutation, and exposes quotes as read-only operations. To add one, subclass the
+reusable `VenueContractSuite` in `exchange/venues/contract_suite.py`, provide
+the three small venue/payload fixtures, and pass the suite. Then construct the
+venue in `exchange.core.api.lifespan` and add it to
+`app.state.venues_by_kind` under its unique `kind`; existing routes need not
+change.
