@@ -34,7 +34,7 @@ from exchange.core.models import reset_counters
 from exchange.venues.joint.msr import payout_for_edit
 from exchange.venues.joint.test_venue import TINY_SEEDS
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 ADMIN_HEADERS = {"Authorization": "Bearer test-admin-key"}
 
