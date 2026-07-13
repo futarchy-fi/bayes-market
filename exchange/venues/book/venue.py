@@ -48,6 +48,9 @@ class BookVenue:
             "deadline": market.deadline,
             "createdAt": market.created_at,
             "resolution": market.resolution,
+            "creatorAccountId": market.metadata.get("creator_account_id"),
+            "resolver": market.metadata.get("resolver", {"type": "admin"}),
+            "metadata": market.metadata,
         }
 
     def quote(self, account_id: int, payload: dict) -> dict:
@@ -127,8 +130,11 @@ class BookVenue:
             ),
         }
 
-    def create_market(self, question: str, deadline: str | None = None) -> dict:
-        market = self.engine.create_market(question, deadline)
+    def create_market(
+        self, question: str, deadline: str | None = None,
+        metadata: dict | None = None,
+    ) -> dict:
+        market = self.engine.create_market(question, deadline, metadata)
         return self.get_market(market.id)
 
     def cancel(self, account_id: int, order_id: int) -> dict:

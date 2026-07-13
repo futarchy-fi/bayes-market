@@ -123,6 +123,16 @@ async def require_auth(request: Request, response: Response) -> User:
     return user
 
 
+async def require_user_or_admin(
+    request: Request, response: Response,
+) -> User | None:
+    """Return a user for user keys and ``None`` for the admin key."""
+    token = _get_bearer_token(request)
+    if token and _is_admin_key(token):
+        return None
+    return await require_auth(request, response)
+
+
 async def require_admin(request: Request) -> None:
     """Require the admin API key."""
     if not ADMIN_KEY:
@@ -136,6 +146,7 @@ async def require_admin(request: Request) -> None:
 
 
 AuthUser = Annotated[User, Depends(require_auth)]
+UserOrAdmin = Annotated[User | None, Depends(require_user_or_admin)]
 AdminDep = Annotated[None, Depends(require_admin)]
 OptionalUser = Annotated[User | None, Depends(optional_auth)]
 

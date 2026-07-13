@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import hmac
 import logging
+import math
 import os
 import re
 import secrets
@@ -37,7 +38,7 @@ from exchange.core.api_models import (
     CreateAccountResponse,
     CreateServiceAccountRequest, CreateServiceAccountResponse,
     MintRequest, MintResponse,
-    CreateMarketRequest, CreateMarketResponse,
+    CreateMarketRequest, UserCreateMarketRequest, CreateMarketResponse,
     ResolveRequest, HealthResponse, NetHealth,
     AddLiquidityRequest, AddLiquidityResponse,
     InstrumentRequest,
@@ -63,7 +64,7 @@ from exchange.core.auth import (
 from exchange.core.lmsr import max_loss, prices as lmsr_prices, cost_to_move_price
 from exchange.core.market_engine import MarketEngine
 from exchange.core.middleware import (
-    AuthUser, AdminDep, require_auth, rate_limiter,
+    AuthUser, UserOrAdmin, AdminDep, require_auth, rate_limiter,
     DynamicCORSMiddleware, BodySizeLimitMiddleware,
 )
 from exchange.core.models import ZERO, Instrument, TrackedRepo, reset_counters
@@ -106,6 +107,10 @@ MARKET_EXPIRY_CHECK_INTERVAL_SECONDS = float(
 BATCH_ROUND_CHECK_SECONDS = float(
     os.environ.get("BATCH_ROUND_CHECK_SECONDS", "30")
 )
+MIN_USER_FUNDING = Decimal(os.environ.get("MIN_USER_FUNDING", "10"))
+MAX_USER_FUNDING = Decimal(os.environ.get("MAX_USER_FUNDING", "500"))
+USER_MARKET_CAP = int(os.environ.get("USER_MARKET_CAP", "10"))
+USER_MARKET_MAX_DAYS = 400
 
 # Transaction-log compaction (I4): once the append-only log exceeds
 # TX_LOG_CEILING entries, _save() compacts it down to the most recent
@@ -469,15 +474,138 @@ def _parse_deadline(deadline: str | None) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _validate_user_deadline(deadline: str | None) -> None:
+    if not deadline:
+        raise APIError(400, "deadline_required", "A deadline is required")
+    parsed = _parse_deadline(deadline)
+    if parsed is None:
+        raise APIError(400, "invalid_deadline", "Deadline must be ISO 8601")
+    current = _now()
+    if parsed <= current:
+        raise APIError(400, "invalid_deadline", "Deadline must be in the future")
+    if parsed > current + timedelta(days=USER_MARKET_MAX_DAYS):
+        raise APIError(
+            400, "deadline_out_of_bounds",
+            f"Deadline must be within {USER_MARKET_MAX_DAYS} days",
+        )
+
+
+def _validate_user_market(
+    question: str, outcomes: list[str] | None,
+) -> tuple[str, list[str]]:
+    question = question.strip()
+    if not question:
+        raise APIError(400, "invalid_question", "Question must not be empty")
+    values = (
+        [value.strip() for value in outcomes]
+        if outcomes is not None else ["yes", "no"]
+    )
+    if not 2 <= len(values) <= 8 or any(not value for value in values):
+        raise APIError(
+            400, "invalid_outcomes", "Provide 2 to 8 non-empty outcomes")
+    if len(set(values)) != len(values):
+        raise APIError(400, "invalid_outcomes", "Outcomes must be unique")
+    return question, values
+
+
+def _validate_user_funding(raw: str) -> Decimal:
+    try:
+        funding = Decimal(raw)
+    except (InvalidOperation, ValueError):
+        raise APIError(400, "invalid_funding", f"Invalid funding: {raw}")
+    if not funding.is_finite():
+        raise APIError(400, "invalid_funding", "Funding must be finite")
+    if not MIN_USER_FUNDING <= funding <= MAX_USER_FUNDING:
+        raise APIError(
+            400, "funding_out_of_bounds",
+            f"Funding must be between {MIN_USER_FUNDING} and {MAX_USER_FUNDING}",
+        )
+    return funding
+
+
+def _creator_metadata(account_id: int, *, funded: bool = False) -> dict:
+    metadata = {
+        "creator_account_id": account_id,
+        "resolver": {"type": "creator"},
+    }
+    if funded:
+        metadata["funding_account_id"] = account_id
+    return metadata
+
+
+def _creator_open_market_count(account_id: int) -> int:
+    count = sum(
+        market.status == "open"
+        and market.metadata.get("creator_account_id") == account_id
+        for market in app.state.me.markets.values()
+    )
+    book = getattr(app.state, "book", None)
+    if book is not None and book.engine.risk is app.state.risk:
+        count += sum(
+            market.status == "open"
+            and market.metadata.get("creator_account_id") == account_id
+            for market in book.engine.markets.values()
+        )
+    return count
+
+
+def _enforce_creator_cap(account_id: int) -> None:
+    if _creator_open_market_count(account_id) >= USER_MARKET_CAP:
+        raise APIError(
+            409, "market_cap_reached",
+            f"Account may have at most {USER_MARKET_CAP} open self-serve markets",
+        )
+
+
+def _user_category_id(account_id: int, question: str) -> str:
+    slug = re.sub(
+        r"[^a-z0-9]+", "-", question.lower()
+    ).strip("-")[:48].rstrip("-")
+    slug = slug or "market"
+    existing = {market.category_id for market in app.state.me.markets.values()}
+    nonce = len(existing)
+    while True:
+        short_hash = hashlib.sha256(
+            f"{account_id}\0{question}\0{nonce}".encode()
+        ).hexdigest()[:8]
+        category_id = f"user/{account_id}/{slug}-{short_hash}"
+        if category_id not in existing:
+            return category_id
+        nonce += 1
+
+
+def _authorize_market_resolver(
+    user, metadata: dict, deadline: str | None,
+) -> None:
+    if user is None:
+        return
+    if (
+        metadata.get("creator_account_id") != user.account_id
+        or metadata.get("resolver", {}).get("type") != "creator"
+    ):
+        raise APIError(
+            403, "not_resolver", "Caller is not this market's resolver")
+    parsed = _parse_deadline(deadline)
+    if parsed is None or _now() < parsed:
+        raise APIError(
+            403, "before_deadline", "Creator cannot settle before deadline")
+
+
 async def _reconcile_expired_markets_once(
     now: datetime | None = None,
 ) -> list[int]:
-    current = now or datetime.now(timezone.utc)
+    current = now or _now()
     expired_ids: list[int] = []
 
     async with app.state.lock:
         for market in list(app.state.me.markets.values()):
             if market.status != "open":
+                continue
+            if market.metadata.get("resolver", {}).get("type") == "creator":
                 continue
 
             deadline = _parse_deadline(market.deadline)
@@ -764,6 +892,41 @@ async def list_markets(
     return result
 
 
+@app.post("/v1/markets")
+async def create_user_market(
+    req: UserCreateMarketRequest, user: AuthUser,
+) -> CreateMarketResponse:
+    question, outcomes = _validate_user_market(req.question, req.outcomes)
+    _validate_user_deadline(req.deadline)
+    funding = _validate_user_funding(req.funding)
+    b = funding / Decimal(str(math.log(len(outcomes))))
+
+    async with app.state.lock:
+        _enforce_creator_cap(user.account_id)
+        metadata = _creator_metadata(user.account_id, funded=True)
+        try:
+            market, amm = app.state.me.create_market(
+                question=question,
+                category="user",
+                category_id=_user_category_id(user.account_id, question),
+                metadata=metadata,
+                b=b,
+                outcomes=outcomes,
+                deadline=req.deadline,
+                funding_account_id=user.account_id,
+                funding=funding,
+            )
+        except (ValueError, InsufficientBalance) as err:
+            raise translate_engine_error(err) from err
+        _save()
+
+    return CreateMarketResponse(
+        market_id=market.id,
+        amm_account_id=amm.id,
+        b=str(market.b),
+    )
+
+
 @app.get("/v1/markets/{market_id}")
 async def get_market(market_id: int) -> MarketDetail:
     """Get full market detail including LMSR state."""
@@ -795,7 +958,41 @@ async def get_market(market_id: int) -> MarketDetail:
         volume=str(volume),
         resolved_at=m.resolved_at,
         metadata=m.metadata,
+        creator_account_id=m.metadata.get("creator_account_id"),
+        resolver=m.metadata.get("resolver", {"type": "admin"}),
     )
+
+
+@app.post("/v1/markets/{market_id}/resolve")
+async def resolve_market(
+    market_id: int, req: ResolveRequest, user: UserOrAdmin,
+) -> dict:
+    async with app.state.lock:
+        market = app.state.me.markets.get(market_id)
+        if market is None:
+            raise APIError(404, "market_not_found", f"Market {market_id} not found")
+        _authorize_market_resolver(user, market.metadata, market.deadline)
+        try:
+            app.state.me.resolve(market_id, req.outcome)
+            _save()
+        except ValueError as err:
+            raise translate_engine_error(err) from err
+    return {"market_id": market_id, "resolution": req.outcome}
+
+
+@app.post("/v1/markets/{market_id}/void")
+async def void_market(market_id: int, user: UserOrAdmin) -> dict:
+    async with app.state.lock:
+        market = app.state.me.markets.get(market_id)
+        if market is None:
+            raise APIError(404, "market_not_found", f"Market {market_id} not found")
+        _authorize_market_resolver(user, market.metadata, market.deadline)
+        try:
+            app.state.me.void(market_id)
+            _save()
+        except ValueError as err:
+            raise translate_engine_error(err) from err
+    return {"market_id": market_id, "status": "void"}
 
 
 @app.get("/v1/markets/{market_id}/positions")
@@ -1150,19 +1347,36 @@ async def list_my_book_positions(user: AuthUser) -> BookPositionsList:
 
 @app.post("/v1/book/markets")
 async def create_book_market(
-    req: BookCreateMarketRequest, _: AdminDep
+    req: BookCreateMarketRequest, user: UserOrAdmin,
 ) -> BookMarket:
+    if user is None:
+        question = req.question
+        metadata = {"resolver": {"type": "admin"}}
+    else:
+        question, _ = _validate_user_market(req.question, None)
+        _validate_user_deadline(req.deadline)
+        metadata = _creator_metadata(user.account_id)
+
     async with app.state.lock:
-        market = _book().create_market(req.question, req.deadline)
+        if user is not None:
+            _enforce_creator_cap(user.account_id)
+        market = _book().create_market(question, req.deadline, metadata)
         _save()
     return BookMarket(**market)
 
 
 @app.post("/v1/book/markets/{market_id}/resolve")
 async def resolve_book_market(
-    market_id: int, req: ResolveRequest, _: AdminDep
+    market_id: int, req: ResolveRequest, user: UserOrAdmin,
 ) -> BookSettlementResponse:
     async with app.state.lock:
+        market = _book().engine.markets.get(market_id)
+        if market is None:
+            try:
+                _book().get_market(market_id)
+            except VenueError as err:
+                raise translate_venue_error(err) from err
+        _authorize_market_resolver(user, market.metadata, market.deadline)
         try:
             report = _book().resolve(market_id, req.outcome)
             _save()
@@ -1173,9 +1387,16 @@ async def resolve_book_market(
 
 @app.post("/v1/book/markets/{market_id}/void")
 async def void_book_market(
-    market_id: int, _: AdminDep
+    market_id: int, user: UserOrAdmin,
 ) -> BookSettlementResponse:
     async with app.state.lock:
+        market = _book().engine.markets.get(market_id)
+        if market is None:
+            try:
+                _book().get_market(market_id)
+            except VenueError as err:
+                raise translate_venue_error(err) from err
+        _authorize_market_resolver(user, market.metadata, market.deadline)
         try:
             report = _book().void(market_id)
             _save()
@@ -1796,13 +2017,16 @@ async def admin_create_market(req: CreateMarketRequest,
         except InvalidOperation:
             raise APIError(400, "invalid_amount", f"Invalid b: {b_str}")
 
+    metadata = dict(req.metadata)
+    metadata.setdefault("resolver", {"type": "admin"})
+
     async with app.state.lock:
         try:
             market, amm = app.state.me.create_market(
                 question=req.question,
                 category=req.category,
                 category_id=req.category_id,
-                metadata=req.metadata,
+                metadata=metadata,
                 b=b,
                 outcomes=req.outcomes,
                 deadline=req.deadline,
@@ -2118,6 +2342,9 @@ async def _handle_pr_opened(tracked: TrackedRepo, pr: dict,
         "liquidity_step": LIQUIDITY_STEP,
         "liquidity_steps_remaining": LIQUIDITY_RAMP_STEPS,
         "next_liquidity_at": next_liquidity,
+        "resolver": {
+            "type": "github_pr", "repo": repo_slug, "pr_number": pr_num,
+        },
     }
 
     async with app.state.lock:

@@ -91,6 +91,8 @@ class MarketDetail(MarketSummary):
     volume: str
     resolved_at: str | None
     metadata: dict
+    creator_account_id: int | None = None
+    resolver: dict = {"type": "admin"}
 
 class DepthEntry(BaseModel):
     target: str       # e.g. "60%"
@@ -169,6 +171,12 @@ class CreateMarketRequest(BaseModel):
     outcomes: list[str] | None = None
     deadline: str | None = None
     metadata: dict = {}
+
+class UserCreateMarketRequest(BaseModel):
+    question: str
+    outcomes: list[str] | None = None
+    deadline: str
+    funding: str
 
 class CreateMarketResponse(BaseModel):
     market_id: int
@@ -306,6 +314,9 @@ class BookMarket(BaseModel):
     deadline: str | None = None
     createdAt: str
     resolution: str | None = None
+    creatorAccountId: int | None = None
+    resolver: dict = {"type": "admin"}
+    metadata: dict = {}
 
 
 class BookMarketList(BaseModel):
