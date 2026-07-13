@@ -1,0 +1,21 @@
+# Reference user unit for the funded exchange calibrator.
+# Create the ordinary service account "calibrator" and fund its initial credits
+# via an external admin mint. The service receives only that account's bearer
+# key through the environment file. Keep the existing timer cadence unchanged.
+#
+# Install with:
+#   cp deploy/futarchy-calibrator.service ~/.config/systemd/user/
+#   cp deploy/futarchy-calibrator.env.example ~/.config/openclaw/futarchy-calibrator.env
+#   chmod 600 ~/.config/openclaw/futarchy-calibrator.env
+#   systemctl --user daemon-reload
+
+[Unit]
+Description=Futarchy funded exchange calibrator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/futarchy/agents
+EnvironmentFile=%h/.config/openclaw/futarchy-calibrator.env
+ExecStart=%h/futarchy/agents/.venv/bin/python scripts/calibrator/calibrate_anchors.py --execute
