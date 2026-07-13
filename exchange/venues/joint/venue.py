@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+from copy import deepcopy
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping
@@ -230,6 +231,32 @@ class JointVenue:
                 f"context yields zero probability for {variable_id}"
             )
         return result
+
+    def all_marginals(
+        self, context: dict[str, str] | None = None
+    ) -> dict[str, dict[str, float]]:
+        """Every live marginal, optionally after conditioning one shadow model."""
+        model = self._fm
+        if context:
+            model = deepcopy(model)
+            for variable_id, outcome_id in context.items():
+                market_id = self._var_to_market.get(variable_id)
+                if market_id is None:
+                    raise UnknownVariable(variable_id)
+                outcomes = {o["id"] for o in self._markets[market_id]["outcomes"]}
+                if outcome_id not in outcomes:
+                    raise InvalidOutcome(f"unknown outcome: {outcome_id}")
+                try:
+                    model.condition(variable_id, outcome_id)
+                except JointMarketError as err:
+                    raise ContextContradicted(str(err)) from err
+        return {
+            variable_id: dict(model.marginal(variable_id) or {})
+            for variable_id in self._var_to_market
+        }
+
+    def inference_stats(self) -> dict[str, float]:
+        return self._fm.stats()
 
     # -- staked probability edits -----------------------------------------
 

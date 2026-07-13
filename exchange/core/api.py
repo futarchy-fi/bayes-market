@@ -1617,6 +1617,33 @@ def _parse_context(raw: str | None) -> dict[str, str]:
     return context
 
 
+def _paper_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _paper_status(record: dict) -> str:
+    return {"open": "active", "void": "closed"}.get(
+        str(record.get("status", "active")), str(record.get("status", "active"))
+    )
+
+
+def _graph_market(record: dict, conditional: dict[str, float] | None = None) -> dict:
+    market = {
+        key: record[key]
+        for key in ("id", "variableId", "title", "anchor", "ftmImplied")
+        if key in record
+    }
+    market["marginals"] = {key: float(value) for key, value in record["marginals"].items()}
+    market["status"] = _paper_status(record)
+    if record.get("parents"):
+        market["parents"] = list(record["parents"])
+    if conditional is not None:
+        market["conditionalMarginals"] = {
+            key: round(float(value), 6) for key, value in conditional.items()
+        }
+    return market
+
+
 def _to_net_market(record: dict) -> NetMarket:
     """Build a ``NetMarket`` response from a venue ``get_market()`` dict.
 
@@ -1638,12 +1665,93 @@ def _to_net_market(record: dict) -> NetMarket:
     )
 
 
-@app.get("/v1/net/markets")
-async def list_net_markets() -> NetMarketList:
-    """List every net-venue market with its live (traded) marginals."""
+@app.get("/v1/net/network")
+async def get_net_network():
+    """Paper-server-compatible network nodes, edges, and joint diagnostics."""
     joint = _require_joint()
     async with app.state.lock:
-        markets = [_to_net_market(joint.get_market(mid)) for mid in joint.market_ids()]
+        entries = [
+            (str(market_id), joint.get_market(market_id))
+            for market_id in joint.market_ids()
+        ]
+        id_by_variable = {
+            str(record["variableId"]): market_id for market_id, record in entries
+        }
+        nodes = [
+            {
+                "marketId": market_id,
+                "variableId": str(record["variableId"]),
+                "title": str(record.get("title", "")),
+                "status": _paper_status(record),
+            }
+            for market_id, record in entries
+        ]
+        edges = [
+            {
+                "from": id_by_variable[parent],
+                "to": market_id,
+                "fromVariableId": parent,
+                "toVariableId": str(record["variableId"]),
+            }
+            for market_id, record in entries
+            for parent in record.get("parents", [])
+            if parent in id_by_variable
+        ]
+        stats = joint.inference_stats()
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "joint": stats,
+        "meta": {"timestamp": _paper_timestamp()},
+    }
+
+
+@app.get("/v1/net/markets")
+async def list_net_markets(fields: str | None = None, context: str | None = None):
+    """List net markets, with a paper-compatible bulk graph projection."""
+    if fields is None:
+        if context is not None:
+            raise APIError(400, "invalid_query", "context is only supported with fields=graph")
+    elif fields != "graph":
+        raise APIError(400, "invalid_query", "fields must be graph")
+
+    joint = _require_joint()
+    ctx = _parse_context(context) if fields == "graph" else {}
+    async with app.state.lock:
+        records = [joint.get_market(mid) for mid in joint.market_ids()]
+        if fields == "graph":
+            try:
+                conditional = joint.all_marginals(ctx) if ctx else {}
+            except VenueError as err:
+                raise translate_venue_error(err) from err
+        else:
+            conditional = {}
+
+    if fields == "graph":
+        markets = [
+            _graph_market(
+                record,
+                conditional.get(str(record["variableId"])) if ctx else None,
+            )
+            for record in records
+            if _paper_status(record) != "resolved"
+        ]
+        filters = {
+            "status": None,
+            "sort": None,
+            "q": None,
+            "include_resolved": False,
+            "fields": "graph",
+        }
+        if context:
+            filters["context"] = context
+        return {
+            "markets": markets,
+            "count": len(markets),
+            "meta": {"timestamp": _paper_timestamp(), "filters": filters},
+        }
+
+    markets = [_to_net_market(record) for record in records]
     return NetMarketList(markets=markets, count=len(markets))
 
 
