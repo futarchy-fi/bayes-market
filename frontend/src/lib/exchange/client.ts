@@ -30,6 +30,17 @@ export interface NetMarket {
   parents: string[];
 }
 
+export interface NetMarketList {
+  markets: NetMarket[];
+  count: number;
+}
+
+export interface NetMarginalResponse {
+  variable: string;
+  context: Record<string, string>;
+  marginal: Record<string, number>;
+}
+
 export interface NetEditPayload {
   variableId: string;
   outcomeId: string;
@@ -174,6 +185,23 @@ async function request<T>(path: string, options: RequestInit = {}, apiKey?: stri
 export const getMe = (apiKey: string) => request<ExchangeAccount>("/v1/me", {}, apiKey);
 export const getNetMarket = (marketId: string) =>
   request<NetMarket>(`/v1/net/markets/${encodeURIComponent(marketId)}`);
+export const getNetMarkets = () => request<NetMarketList>("/v1/net/markets");
+export const getNetMarginal = (variableId: string, context: Record<string, string>) => {
+  const params = new URLSearchParams({ variable: variableId });
+  if (Object.keys(context).length > 0) {
+    params.set("context", Object.entries(context).map(([key, value]) => `${key}=${value}`).join("|"));
+  }
+  return request<NetMarginalResponse>(`/v1/net/marginal?${params.toString()}`);
+};
+export const getNetNetwork = () =>
+  request<import("@/lib/api/types").NetworkResponse>("/v1/net/network");
+export const getNetGraphMarkets = (context: Array<{ variableId: string; outcomeId: string }> = []) => {
+  const params = new URLSearchParams({ fields: "graph" });
+  if (context.length > 0) {
+    params.set("context", context.map(({ variableId, outcomeId }) => `${variableId}=${outcomeId}`).join("|"));
+  }
+  return request<import("@/lib/api/types").GraphMarketsResponse>(`/v1/net/markets?${params.toString()}`);
+};
 export const getNetOrders = (apiKey: string) =>
   request<{ orders: NetOrder[] }>("/v1/net/orders/mine", {}, apiKey);
 export const getMeNet = (apiKey: string) => request<NetPortfolio>("/v1/me/net", {}, apiKey);

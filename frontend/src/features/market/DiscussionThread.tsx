@@ -3,6 +3,8 @@ import { useSession } from "@/features/session/context";
 import { useMarketComments, usePostMarketComment } from "@/lib/query/hooks";
 import { formatRelativeTime } from "@/lib/utils/format";
 import type { Market } from "@/lib/api/types";
+import { isExchangeMode } from "@/lib/exchangeMode";
+import { ExchangeUnavailable } from "@/components/ui/ExchangeUnavailable";
 
 const MAX_COMMENT_BODY_LENGTH = 2000;
 
@@ -15,6 +17,8 @@ export function DiscussionThread({ market }: DiscussionThreadProps) {
   const comments = useMarketComments(market.id);
   const mutation = usePostMarketComment(market.id);
   const [body, setBody] = useState("");
+
+  if (isExchangeMode()) return <ExchangeUnavailable title="Discussion" />;
 
   const trimmedBody = body.trim();
   const remaining = MAX_COMMENT_BODY_LENGTH - body.length;

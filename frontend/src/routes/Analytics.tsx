@@ -10,6 +10,8 @@ import { useSession } from "@/features/session/context";
 import type { AnalyticsInterval, MarketSummary } from "@/lib/api/types";
 import { useAccountPnl, useMarketAnalytics, useMarkets } from "@/lib/query/hooks";
 import { ErrorMessage, LoadingPage } from "@/components/ui/Spinner";
+import { isExchangeMode } from "@/lib/exchangeMode";
+import { ExchangeUnavailable } from "@/components/ui/ExchangeUnavailable";
 
 function isAnalyticsInterval(value: string | null): value is AnalyticsInterval {
   return value === "hour" || value === "day";
@@ -20,9 +22,10 @@ function preferredMarket(markets: MarketSummary[]): MarketSummary | undefined {
 }
 
 export default function Analytics() {
+  const exchangeMode = isExchangeMode();
   const { session } = useSession();
   const marketsQuery = useMarkets();
-  const pnlQuery = useAccountPnl(session.accountId);
+  const pnlQuery = useAccountPnl(session.accountId, { enabled: !exchangeMode });
   const [searchParams, setSearchParams] = useSearchParams();
 
   const interval: AnalyticsInterval = isAnalyticsInterval(searchParams.get("interval")) ? (searchParams.get("interval") as AnalyticsInterval) : "day";
@@ -30,7 +33,7 @@ export default function Analytics() {
   const selectedMarket = markets.find((market) => market.id === searchParams.get("market")) ?? preferredMarket(markets);
   const selectedMarketId = selectedMarket?.id ?? "";
   const analyticsQuery = useMarketAnalytics(selectedMarketId, {
-    enabled: selectedMarketId.length > 0,
+    enabled: !exchangeMode && selectedMarketId.length > 0,
     interval,
   });
 
@@ -56,6 +59,15 @@ export default function Analytics() {
       setSearchParams(next, { replace: true });
     }
   }, [interval, searchParams, selectedMarketId, setSearchParams]);
+
+  if (exchangeMode) {
+    return (
+      <div style={{ display: "grid", gap: "var(--space-lg)" }}>
+        <h1 style={{ fontSize: "1.6rem", fontWeight: 600 }}>Market Analytics</h1>
+        <ExchangeUnavailable title="Analytics" />
+      </div>
+    );
+  }
 
   if (marketsQuery.isLoading && markets.length === 0) {
     return <LoadingPage />;

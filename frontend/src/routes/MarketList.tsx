@@ -11,6 +11,7 @@ import {
   readMarketListFiltersFromSearchParams,
 } from "@/lib/marketListFilters";
 import type { MarketListSort, MarketStatus } from "@/lib/api/types";
+import { isExchangeMode } from "@/lib/exchangeMode";
 
 const STATUSES = ["", "active", "resolved", "closed", "draft"] as const;
 const SORTS = ["", "volume", "liquidity", "created"] as const;
@@ -41,6 +42,7 @@ function updateSearchParams(
 }
 
 export default function MarketList() {
+  const exchangeMode = isExchangeMode();
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = readMarketListFiltersFromSearchParams(searchParams);
   const statusFilter = filters.status ?? "";
@@ -99,7 +101,7 @@ export default function MarketList() {
           </p>
         </div>
         <div style={{ display: "flex", gap: "var(--space-sm)", alignItems: "center", flexWrap: "wrap", justifyContent: "end" }}>
-          <Link
+          {!exchangeMode && <Link
             to="/markets/new"
             style={{
               padding: "6px 14px",
@@ -112,7 +114,7 @@ export default function MarketList() {
             }}
           >
             + New Market
-          </Link>
+          </Link>}
         </div>
       </div>
 
@@ -188,8 +190,12 @@ export default function MarketList() {
       {data && data.markets.length > 0 && (
         <div style={{ display: "flex", gap: "var(--space-lg)", fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: "var(--space-md)" }}>
           <span>{data.markets.length} market{data.markets.length !== 1 ? "s" : ""}</span>
-          <span>Total Volume: {formatCurrency(data.markets.reduce((s, m) => s + m.volume, 0))}</span>
-          <span>Total Liquidity: {formatCurrency(data.markets.reduce((s, m) => s + m.liquidity, 0))}</span>
+          {exchangeMode ? <span>Live net-venue prices</span> : (
+            <>
+              <span>Total Volume: {formatCurrency(data.markets.reduce((s, m) => s + m.volume, 0))}</span>
+              <span>Total Liquidity: {formatCurrency(data.markets.reduce((s, m) => s + m.liquidity, 0))}</span>
+            </>
+          )}
         </div>
       )}
 
@@ -217,11 +223,15 @@ export default function MarketList() {
                 <StatusBadge status={m.status} />
               </div>
               <PriceBar marginals={m.marginals} />
-              <div style={{ display: "flex", gap: "var(--space-lg)", fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: "var(--space-sm)" }}>
-                <span>Vol {formatCurrency(m.volume)}</span>
-                <span>Liq {formatCurrency(m.liquidity)}</span>
-                <span>{timeUntil(m.expires_at)}</span>
-              </div>
+              {exchangeMode ? (
+                <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>Exchange venue</span>
+              ) : (
+                <div style={{ display: "flex", gap: "var(--space-lg)", fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: "var(--space-sm)" }}>
+                  <span>Vol {formatCurrency(m.volume)}</span>
+                  <span>Liq {formatCurrency(m.liquidity)}</span>
+                  <span>{timeUntil(m.expires_at)}</span>
+                </div>
+              )}
             </Link>
           ))}
         </div>

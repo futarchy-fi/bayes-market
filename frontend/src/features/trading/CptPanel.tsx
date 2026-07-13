@@ -4,6 +4,8 @@ import { useSession } from "@/features/session/context";
 import { formatProbability } from "@/lib/utils/format";
 import { useDraftEdits } from "@/features/history/useDraftEdits";
 import type { Market } from "@/lib/api/types";
+import { isExchangeMode } from "@/lib/exchangeMode";
+import { ExchangeUnavailable } from "@/components/ui/ExchangeUnavailable";
 
 interface CptPanelProps {
   market: Market;
@@ -21,6 +23,8 @@ export function CptPanel({ market }: CptPanelProps) {
   const mutation = useProbabilityEdit(market.id);
   const [editing, setEditing] = useState<EditingCell | null>(null);
   const draftEdits = useDraftEdits();
+
+  if (isExchangeMode()) return <ExchangeUnavailable title="Conditional Probability Table" />;
 
   if (isLoading) {
     return (

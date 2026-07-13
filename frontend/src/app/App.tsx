@@ -4,11 +4,13 @@ import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { EXCHANGE_API } from "@/lib/exchange/client";
 import { useExchangeMe } from "@/lib/exchange/hooks";
 import { useExchangeSession } from "@/lib/exchange/session";
+import { isExchangeMode } from "@/lib/exchangeMode";
 
 export function AppLayout() {
   const { session, setAccountId, setAgentId } = useSession();
   const exchange = useExchangeSession();
   const me = useExchangeMe();
+  const exchangeMode = isExchangeMode();
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
@@ -21,6 +23,7 @@ export function AppLayout() {
         background: "var(--color-bg-surface)",
       }}>
         <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>Bayes Market</span>
+        {exchangeMode && <span style={exchangeBadgeStyle}>exchange prices</span>}
         <nav style={{ display: "flex", gap: "var(--space-md)" }}>
           <NavLink to="/markets" style={navLinkStyle}>Markets</NavLink>
           <NavLink to="/instruments" style={navLinkStyle}>Exchange</NavLink>
@@ -30,18 +33,22 @@ export function AppLayout() {
           <NavLink to="/system" style={navLinkStyle}>System</NavLink>
         </nav>
         <div style={{ marginLeft: "auto", display: "flex", gap: "var(--space-sm)", alignItems: "center" }}>
-          <input
-            placeholder="Account ID"
-            value={session.accountId}
-            onChange={(e) => setAccountId(e.target.value)}
-            style={headerInputStyle}
-          />
-          <input
-            placeholder="Agent ID (optional)"
-            value={session.agentId}
-            onChange={(e) => setAgentId(e.target.value)}
-            style={{ ...headerInputStyle, width: 140 }}
-          />
+          {!exchangeMode && (
+            <>
+              <input
+                placeholder="Account ID"
+                value={session.accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                style={headerInputStyle}
+              />
+              <input
+                placeholder="Agent ID (optional)"
+                value={session.agentId}
+                onChange={(e) => setAgentId(e.target.value)}
+                style={{ ...headerInputStyle, width: 140 }}
+              />
+            </>
+          )}
           {exchange.isSignedIn ? (
             <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", fontSize: "0.8rem" }}>
               <span>@{exchange.session.githubLogin || `account ${me.data?.account_id ?? ""}`}</span>
@@ -81,3 +88,4 @@ const headerInputStyle: React.CSSProperties = {
 
 const creditChipStyle: React.CSSProperties = { padding: "2px 7px", borderRadius: 999, background: "var(--color-bg-hover)", color: "var(--color-success)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap" };
 const signOutStyle: React.CSSProperties = { padding: 0, border: 0, background: "transparent", color: "var(--color-text-muted)", cursor: "pointer", fontSize: "0.7rem" };
+const exchangeBadgeStyle: React.CSSProperties = { padding: "2px 8px", borderRadius: 999, background: "var(--color-primary)", color: "#fff", fontSize: "0.7rem", fontWeight: 600, whiteSpace: "nowrap" };

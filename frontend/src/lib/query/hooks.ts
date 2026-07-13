@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/lib/api/client";
+import * as dataSource from "@/lib/dataSource";
+import { isExchangeMode } from "@/lib/exchangeMode";
 import type {
   AnalyticsInterval,
   ProbabilityEditPayload,
@@ -49,7 +51,7 @@ function createEmptyMarketCommentsResponse(marketId: string): MarketCommentsResp
 export function useMarkets(filters: MarketListFilters = {}) {
   return useQuery({
     queryKey: queryKeys.markets(filters),
-    queryFn: () => api.listMarkets(filters),
+    queryFn: () => dataSource.listMarkets(filters),
     refetchInterval: 5000,
   });
 }
@@ -65,7 +67,7 @@ export function useMarket(
     queryKey: context.length
       ? ([...queryKeys.market(marketId), { context }] as const)
       : queryKeys.market(marketId),
-    queryFn: () => api.getMarket(marketId, context),
+    queryFn: () => dataSource.getMarket(marketId, context),
     refetchInterval: 5000,
     enabled: opts?.enabled ?? true,
   });
@@ -74,7 +76,7 @@ export function useMarket(
 export function useNetwork() {
   return useQuery({
     queryKey: ["network"] as const,
-    queryFn: () => api.getNetwork(),
+    queryFn: () => dataSource.getNetwork(),
     refetchInterval: 30000,
     staleTime: 15000,
   });
@@ -91,24 +93,26 @@ export function useGraphMarkets(context: api.MarketContextEntry[] = []) {
     queryKey: context.length
       ? (["markets", "graph", { context }] as const)
       : (["markets", "graph"] as const),
-    queryFn: () => api.getGraphMarkets(context),
+    queryFn: () => dataSource.getGraphMarkets(context),
     staleTime: 15000,
   });
 }
 
-export function useMarketEvents(marketId: string) {
+export function useMarketEvents(marketId: string, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.marketEvents(marketId),
     queryFn: () => api.getMarketEvents(marketId),
+    enabled: !isExchangeMode() && (opts?.enabled ?? true),
   });
 }
 
-export function useMarketComments(marketId: string) {
+export function useMarketComments(marketId: string, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.marketComments(marketId),
     // Normalize missing mocks or empty responses into the same empty-thread UI state.
     queryFn: async () =>
       (await api.getMarketComments(marketId)) ?? createEmptyMarketCommentsResponse(marketId),
+    enabled: !isExchangeMode() && (opts?.enabled ?? true),
   });
 }
 
@@ -116,7 +120,7 @@ export function useEngineStats(marketId: string, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.engineStats(marketId),
     queryFn: () => api.getEngineStats(marketId),
-    enabled: opts?.enabled ?? true,
+    enabled: !isExchangeMode() && (opts?.enabled ?? true),
   });
 }
 
@@ -124,7 +128,7 @@ export function useCpt(marketId: string, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.marketCpt(marketId),
     queryFn: () => api.getMarketCpt(marketId),
-    enabled: marketId.length > 0 && (opts?.enabled ?? true),
+    enabled: !isExchangeMode() && marketId.length > 0 && (opts?.enabled ?? true),
   });
 }
 
@@ -135,7 +139,7 @@ export function useMarketAnalytics(
   return useQuery({
     queryKey: queryKeys.marketAnalytics(marketId, opts?.interval),
     queryFn: () => api.getMarketAnalytics(marketId, { interval: opts?.interval }),
-    enabled: marketId.length > 0 && (opts?.enabled ?? true),
+    enabled: !isExchangeMode() && marketId.length > 0 && (opts?.enabled ?? true),
   });
 }
 
@@ -157,19 +161,19 @@ export function useServiceIndex() {
   });
 }
 
-export function useAccountRisk(accountId: string) {
+export function useAccountRisk(accountId: string, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.accountRisk(accountId),
     queryFn: () => api.getAccountRisk(accountId),
-    enabled: accountId.length > 0,
+    enabled: accountId.length > 0 && (opts?.enabled ?? true),
   });
 }
 
-export function useAccountPnl(accountId: string) {
+export function useAccountPnl(accountId: string, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.accountPnl(accountId),
     queryFn: () => api.getAccountPnl(accountId),
-    enabled: accountId.length > 0,
+    enabled: accountId.length > 0 && (opts?.enabled ?? true),
   });
 }
 

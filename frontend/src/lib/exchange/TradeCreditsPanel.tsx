@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { EXCHANGE_API, ExchangeApiError, type NetOrderPreview } from "./client";
 import { useNetMarket, usePlaceNetEdit, usePreviewNetEdit } from "./hooks";
 import { useExchangeSession } from "./session";
+import { isExchangeMode } from "@/lib/exchangeMode";
 
 export function friendlyExchangeError(error: unknown): string {
   if (!(error instanceof ExchangeApiError)) return "The exchange request failed. Please try again.";
@@ -24,6 +25,7 @@ export function StakePreview({ preview }: { preview: NetOrderPreview }) {
 }
 
 export function TradeCreditsPanel({ marketId, variableId }: { marketId: string; variableId: string }) {
+  const exchangeMode = isExchangeMode();
   const { isSignedIn } = useExchangeSession();
   const market = useNetMarket(marketId, isSignedIn);
   const preview = usePreviewNetEdit();
@@ -45,7 +47,7 @@ export function TradeCreditsPanel({ marketId, variableId }: { marketId: string; 
   return (
     <section style={panelStyle}>
       <h2 style={{ fontSize: "1.1rem", fontWeight: 600 }}>Trade credits</h2>
-      <p style={noteStyle}>Trades the credits exchange book, independently of the paper belief flow above.</p>
+      <p style={noteStyle}>{exchangeMode ? "Trades at the live credits exchange venue." : "Trades the credits exchange book, independently of the paper belief flow above."}</p>
       {!isSignedIn ? (
         <a href={`${EXCHANGE_API}/v1/auth/github/login`}>Sign in with GitHub to trade credits</a>
       ) : market.isLoading ? (

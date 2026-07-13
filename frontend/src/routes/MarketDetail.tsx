@@ -23,13 +23,16 @@ import { EventTradePanel } from "@/features/trading/EventTradePanel";
 import { CptPanel } from "@/features/trading/CptPanel";
 import type { MarketEvent } from "@/lib/api/types";
 import { TradeCreditsPanel } from "@/lib/exchange/TradeCreditsPanel";
+import { isExchangeMode } from "@/lib/exchangeMode";
+import { ExchangeUnavailable } from "@/components/ui/ExchangeUnavailable";
 
 export default function MarketDetail() {
   const { marketId } = useParams<{ marketId: string }>();
+  const exchangeMode = isExchangeMode();
   const { session, isConfigured } = useSession();
   const { data, isLoading, error } = useMarket(marketId!);
-  const events = useMarketEvents(marketId!);
-  const accountRisk = useAccountRisk(session.accountId);
+  const events = useMarketEvents(marketId!, { enabled: !exchangeMode });
+  const accountRisk = useAccountRisk(session.accountId, { enabled: !exchangeMode });
 
   // All hooks must run unconditionally (before the loading/error returns
   // below) so their order is stable across renders — see React error #310.
@@ -50,7 +53,7 @@ export default function MarketDetail() {
   const [graphView, setGraphView] = useState<GraphView>("flow");
   const queryClient = useQueryClient();
   const marketsQuery = useMarkets();
-  const engineStatsQuery = useEngineStats(marketId!, { enabled: true });
+  const engineStatsQuery = useEngineStats(marketId!, { enabled: !exchangeMode });
   const allMarkets = marketsQuery.data?.markets ?? [];
   const cliques = engineStatsQuery.data?.cliques.cliques ?? [];
 
@@ -84,61 +87,64 @@ export default function MarketDetail() {
           <StatusBadge status={m.status} />
         </div>
         <p style={{ color: "var(--color-text-muted)", marginBottom: "var(--space-md)" }}>{m.description}</p>
-        <div style={{ display: "flex", gap: "var(--space-lg)", fontSize: "0.85rem", color: "var(--color-text-muted)" }}>
-          <span>Volume: {formatCurrency(m.volume)}</span>
-          <span>Liquidity: {formatCurrency(m.liquidity)}</span>
-          <span>Expires: {timeUntil(m.expires_at)}</span>
-        </div>
+        {exchangeMode ? (
+          <span style={{ fontSize: "0.85rem", color: "var(--color-text-muted)" }}>Live net-venue marginals.</span>
+        ) : (
+          <div style={{ display: "flex", gap: "var(--space-lg)", fontSize: "0.85rem", color: "var(--color-text-muted)" }}>
+            <span>Volume: {formatCurrency(m.volume)}</span>
+            <span>Liquidity: {formatCurrency(m.liquidity)}</span>
+            <span>Expires: {timeUntil(m.expires_at)}</span>
+          </div>
+        )}
       </div>
 
       <ConditionedProbabilityBar market={m} />
 
-      <PositionCard marketId={m.id} accountRisk={accountRisk.data} isConfigured={isConfigured} />
+      {!exchangeMode && <PositionCard marketId={m.id} accountRisk={accountRisk.data} isConfigured={isConfigured} />}
 
       <TradeCreditsPanel marketId={m.id} variableId={m.variableId} />
 
-      <ResolveMarketPanel market={m} />
+      {!exchangeMode && <ResolveMarketPanel market={m} />}
 
-      {m.status === "active" ? (
+      {!exchangeMode && m.status === "active" ? (
         <>
           <UndoRedoToolbar />
           <AssumptionPanel market={m} />
           <CptPanel market={selectedMarket} />
           <EventTradePanel market={m} />
           <DiscussionThread market={m} />
-          <GraphToolbar
-            view={graphView}
-            onViewChange={setGraphView}
-            onExport={handleExport}
-            onImportSuccess={handleImportSuccess}
-          />
-          {graphView === "force" ? (
-            <ConnectedForceGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
-          ) : (
-            <BeliefFlowGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
-          )}
         </>
-      ) : (
+      ) : !exchangeMode ? (
         <>
           <CptPanel market={selectedMarket} />
           <EventTradePanel market={m} />
           <DiscussionThread market={m} />
-          <GraphToolbar
-            view={graphView}
-            onViewChange={setGraphView}
-            onExport={handleExport}
-            onImportSuccess={handleImportSuccess}
-          />
-          {graphView === "force" ? (
-            <ForceDirectedGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
-          ) : (
-            <BeliefFlowGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
-          )}
+        </>
+      ) : (
+        <>
+          <CptPanel market={selectedMarket} />
+          <DiscussionThread market={m} />
         </>
       )}
 
+      <GraphToolbar
+        view={graphView}
+        onViewChange={setGraphView}
+        onExport={handleExport}
+        onImportSuccess={handleImportSuccess}
+      />
+      {graphView === "force" ? (
+        exchangeMode || m.status !== "active" ? (
+          <ForceDirectedGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
+        ) : (
+          <ConnectedForceGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
+        )
+      ) : (
+        <BeliefFlowGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
+      )}
+
       {/* Event Journal */}
-      <div>
+      {exchangeMode ? <ExchangeUnavailable title="Event Journal" /> : <div>
         <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--space-sm)" }}>Event Journal</h2>
         {events.isLoading && <LoadingPage />}
         {events.data && events.data.events.length === 0 && (
@@ -163,7 +169,7 @@ export default function MarketDetail() {
             </table>
           </div>
         )}
-      </div>
+      </div>}
 
       <JunctionTreePanel marketId={m.id} />
     </div>
