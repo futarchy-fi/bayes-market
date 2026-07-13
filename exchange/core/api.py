@@ -32,7 +32,7 @@ from exchange.core.api_models import (
     AuthResponse,
     DeviceFlowStartRequest, DeviceFlowResponse, DeviceFlowPollRequest,
     AccountResponse, AccountActivityEntry, AccountActivityPage, LockResponse,
-    MarketSummary, MarketDetail, PositionEntry, TradeResponse,
+    MarketSummary, MarketDetail, PositionEntry, TradeResponse, Candle,
     DepthEntry, DepthResponse,
     BuyRequest, SellRequest, TradeResult,
     CreateAccountResponse,
@@ -849,6 +849,35 @@ async def auth_device_poll(req: DeviceFlowPollRequest) -> AuthResponse:
 # Public market data (no auth required)
 # ---------------------------------------------------------------------------
 
+_CANDLE_SECONDS = {"hour": 3600, "day": 86400}
+
+
+def _candles(tape, interval: str) -> list[Candle]:
+    """Aggregate timestamp/price/size triples into UTC OHLCV buckets."""
+    if interval not in _CANDLE_SECONDS:
+        raise APIError(400, "invalid_interval", "interval must be hour or day")
+    seconds = _CANDLE_SECONDS[interval]
+    points = []
+    for timestamp, price, volume in tape:
+        parsed = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        points.append((parsed.timestamp(), float(price), float(volume)))
+    points.sort(key=lambda point: point[0])
+
+    buckets: dict[int, list[float]] = {}
+    for timestamp, price, volume in points:
+        bucket = int(timestamp) // seconds * seconds
+        candle = buckets.setdefault(bucket, [price, price, price, price, 0.0])
+        candle[1] = max(candle[1], price)
+        candle[2] = min(candle[2], price)
+        candle[3] = price
+        candle[4] += volume
+    return [
+        Candle(t=t, o=v[0], h=v[1], l=v[2], c=v[3], v=v[4])
+        for t, v in buckets.items()
+    ]
+
 @app.get("/v1/markets")
 async def list_markets(
     category: str | None = None,
@@ -1081,6 +1110,28 @@ async def get_market_trades(market_id: int) -> list[TradeResponse]:
     ]
 
 
+@app.get("/v1/markets/{market_id}/candles")
+async def get_market_candles(
+    market_id: int, interval: str = "hour"
+) -> list[Candle]:
+    """YES-axis AMM candles from its timestamped trade tape."""
+    market = app.state.me.markets.get(market_id)
+    if market is None:
+        raise APIError(404, "market_not_found", f"Market {market_id} not found")
+    binary = set(market.outcomes) == {"yes", "no"}
+    return _candles(
+        (
+            (
+                trade.created_at,
+                1 - trade.price if binary and trade.outcome == "no" else trade.price,
+                trade.amount,
+            )
+            for trade in market.trades
+        ),
+        interval,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Cross-venue instrument registry.
 # ---------------------------------------------------------------------------
@@ -1297,6 +1348,22 @@ async def get_book_trades(
         except VenueError as err:
             raise translate_venue_error(err) from err
     return BookTradesList(trades=trades)
+
+
+@app.get("/v1/book/markets/{market_id}/candles")
+async def get_book_candles(
+    market_id: int, interval: str = "hour"
+) -> list[Candle]:
+    """YES-axis candles from complete-set book fills."""
+    async with app.state.lock:
+        try:
+            _book().get_market(market_id)
+        except VenueError as err:
+            raise translate_venue_error(err) from err
+        fills = list(_book().engine.trades.get(market_id, []))
+    return _candles(
+        ((fill.created_at, fill.price, fill.size) for fill in fills), interval
+    )
 
 
 @app.post("/v1/book/orders")
@@ -1550,6 +1617,33 @@ def _parse_context(raw: str | None) -> dict[str, str]:
     return context
 
 
+def _paper_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _paper_status(record: dict) -> str:
+    return {"open": "active", "void": "closed"}.get(
+        str(record.get("status", "active")), str(record.get("status", "active"))
+    )
+
+
+def _graph_market(record: dict, conditional: dict[str, float] | None = None) -> dict:
+    market = {
+        key: record[key]
+        for key in ("id", "variableId", "title", "anchor", "ftmImplied")
+        if key in record
+    }
+    market["marginals"] = {key: float(value) for key, value in record["marginals"].items()}
+    market["status"] = _paper_status(record)
+    if record.get("parents"):
+        market["parents"] = list(record["parents"])
+    if conditional is not None:
+        market["conditionalMarginals"] = {
+            key: round(float(value), 6) for key, value in conditional.items()
+        }
+    return market
+
+
 def _to_net_market(record: dict) -> NetMarket:
     """Build a ``NetMarket`` response from a venue ``get_market()`` dict.
 
@@ -1571,12 +1665,93 @@ def _to_net_market(record: dict) -> NetMarket:
     )
 
 
-@app.get("/v1/net/markets")
-async def list_net_markets() -> NetMarketList:
-    """List every net-venue market with its live (traded) marginals."""
+@app.get("/v1/net/network")
+async def get_net_network():
+    """Paper-server-compatible network nodes, edges, and joint diagnostics."""
     joint = _require_joint()
     async with app.state.lock:
-        markets = [_to_net_market(joint.get_market(mid)) for mid in joint.market_ids()]
+        entries = [
+            (str(market_id), joint.get_market(market_id))
+            for market_id in joint.market_ids()
+        ]
+        id_by_variable = {
+            str(record["variableId"]): market_id for market_id, record in entries
+        }
+        nodes = [
+            {
+                "marketId": market_id,
+                "variableId": str(record["variableId"]),
+                "title": str(record.get("title", "")),
+                "status": _paper_status(record),
+            }
+            for market_id, record in entries
+        ]
+        edges = [
+            {
+                "from": id_by_variable[parent],
+                "to": market_id,
+                "fromVariableId": parent,
+                "toVariableId": str(record["variableId"]),
+            }
+            for market_id, record in entries
+            for parent in record.get("parents", [])
+            if parent in id_by_variable
+        ]
+        stats = joint.inference_stats()
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "joint": stats,
+        "meta": {"timestamp": _paper_timestamp()},
+    }
+
+
+@app.get("/v1/net/markets")
+async def list_net_markets(fields: str | None = None, context: str | None = None):
+    """List net markets, with a paper-compatible bulk graph projection."""
+    if fields is None:
+        if context is not None:
+            raise APIError(400, "invalid_query", "context is only supported with fields=graph")
+    elif fields != "graph":
+        raise APIError(400, "invalid_query", "fields must be graph")
+
+    joint = _require_joint()
+    ctx = _parse_context(context) if fields == "graph" else {}
+    async with app.state.lock:
+        records = [joint.get_market(mid) for mid in joint.market_ids()]
+        if fields == "graph":
+            try:
+                conditional = joint.all_marginals(ctx) if ctx else {}
+            except VenueError as err:
+                raise translate_venue_error(err) from err
+        else:
+            conditional = {}
+
+    if fields == "graph":
+        markets = [
+            _graph_market(
+                record,
+                conditional.get(str(record["variableId"])) if ctx else None,
+            )
+            for record in records
+            if _paper_status(record) != "resolved"
+        ]
+        filters = {
+            "status": None,
+            "sort": None,
+            "q": None,
+            "include_resolved": False,
+            "fields": "graph",
+        }
+        if context:
+            filters["context"] = context
+        return {
+            "markets": markets,
+            "count": len(markets),
+            "meta": {"timestamp": _paper_timestamp(), "filters": filters},
+        }
+
+    markets = [_to_net_market(record) for record in records]
     return NetMarketList(markets=markets, count=len(markets))
 
 

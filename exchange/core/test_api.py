@@ -28,7 +28,7 @@ os.environ["FUTARCHY_ADMIN_KEY"] = "test-admin-key"
 os.environ["FUTARCHY_STATE"] = "/tmp/futarchy_test_state.json"
 os.environ["INITIAL_CREDITS"] = "1000"
 
-from exchange.core.api import app, _authenticate_github_identity
+from exchange.core.api import app, _authenticate_github_identity, _candles
 from exchange.core.auth import AuthStore
 from exchange.core.middleware import rate_limiter, RateLimiter
 from exchange.core.models import reset_counters
@@ -452,6 +452,26 @@ class TestAccountActivity:
 # Public Market Data
 # ---------------------------------------------------------------------------
 
+def test_candles_aggregate_fabricated_trade_sequence():
+    tape = [
+        ("2026-07-13T10:45:00Z", Decimal("0.60"), Decimal("2")),
+        ("2026-07-13T10:05:00Z", Decimal("0.40"), Decimal("1")),
+        ("2026-07-13T10:30:00Z", Decimal("0.70"), Decimal("3")),
+        ("2026-07-13T11:00:00Z", Decimal("0.50"), Decimal("4")),
+    ]
+
+    hourly = [candle.model_dump() for candle in _candles(tape, "hour")]
+    daily = [candle.model_dump() for candle in _candles(tape, "day")]
+
+    assert hourly == [
+        {"t": 1783936800, "o": 0.4, "h": 0.7, "l": 0.4, "c": 0.6, "v": 6.0},
+        {"t": 1783940400, "o": 0.5, "h": 0.5, "l": 0.5, "c": 0.5, "v": 4.0},
+    ]
+    assert daily == [
+        {"t": 1783900800, "o": 0.4, "h": 0.7, "l": 0.4, "c": 0.5, "v": 10.0}
+    ]
+
+
 class TestPublicMarketData:
     async def _create_market(self, client):
         """Admin creates a market, returns market_id."""
@@ -500,6 +520,12 @@ class TestPublicMarketData:
         resp = await client.get(f"/v1/markets/{mid}/trades")
         assert resp.status_code == 200
         assert resp.json() == []  # No trades yet
+
+    async def test_candles_empty_without_trades(self, client):
+        mid = await self._create_market(client)
+        resp = await client.get(f"/v1/markets/{mid}/candles?interval=day")
+        assert resp.status_code == 200
+        assert resp.json() == []
 
     async def test_list_markets_filter_by_category(self, client):
         await self._create_market(client)

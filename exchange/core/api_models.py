@@ -121,6 +121,15 @@ class TradeResponse(BaseModel):
     created_at: str
 
 
+class Candle(BaseModel):
+    t: int
+    o: float
+    h: float
+    l: float
+    c: float
+    v: float
+
+
 # --- Trading ---
 
 class BuyRequest(BaseModel):

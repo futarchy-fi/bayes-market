@@ -27,12 +27,23 @@ from httpx import ASGITransport, AsyncClient
 
 import exchange.core.api as api_module
 from exchange.core.api import app, _authenticate_github_identity
+from exchange.core.middleware import rate_limiter
 from exchange.core.models import reset_counters
 from exchange.core.persistence import load_snapshot
 from exchange.venues.joint.msr import payout_for_edit, stake_for_edit
 from exchange.venues.joint.test_venue import TINY_SEEDS, THREE_VAR_SEEDS
 
 ADMIN_HEADERS = {"Authorization": "Bearer test-admin-key"}
+
+# Required fields copied from frontend/src/lib/api/types.ts. ``joint`` is the
+# one additional top-level field in the paper server's observable response;
+# its actual Meta wire shape is timestamp-only.
+NETWORK_RESPONSE_REQUIRED = {"nodes", "edges", "meta"}
+NETWORK_NODE_REQUIRED = {"marketId", "variableId", "title", "status"}
+NETWORK_EDGE_REQUIRED = {"from", "to", "fromVariableId", "toVariableId"}
+GRAPH_RESPONSE_REQUIRED = {"markets", "meta"}
+GRAPH_MARKET_REQUIRED = {"id", "title", "status", "marginals"}
+GRAPH_MARGINAL_REQUIRED = {"yes", "no"}
 
 
 def _write_seeds(tmp_path) -> str:
@@ -80,6 +91,7 @@ def _headers(api_key: str) -> dict:
 @pytest.fixture(autouse=True)
 def _isolate_env(monkeypatch):
     """Every test in this module manages its own STATE_PATH / seeds env."""
+    rate_limiter.buckets.clear()
     monkeypatch.delenv("EXCHANGE_SEEDS_PATH", raising=False)
     monkeypatch.delenv("JOINT_LIQUIDITY", raising=False)
     monkeypatch.delenv("JOINT_MAX_WIDTH", raising=False)
@@ -211,6 +223,56 @@ class TestVenuesSectionNotErased:
 # ---------------------------------------------------------------------------
 # Task B2: net read endpoints
 # ---------------------------------------------------------------------------
+
+class TestNetReadParity:
+    async def test_network_matches_paper_and_frontend_required_fields(
+        self, tmp_path, monkeypatch
+    ):
+        reset_counters()
+        monkeypatch.setenv("EXCHANGE_SEEDS_PATH", _write_seeds(tmp_path))
+        api_module.STATE_PATH = str(tmp_path / "state.json")
+
+        async with api_module.lifespan(app):
+            data = await _get_json("/v1/net/network")
+
+        assert set(data) == NETWORK_RESPONSE_REQUIRED | {"joint"}
+        assert all(set(node) == NETWORK_NODE_REQUIRED for node in data["nodes"])
+        assert all(set(edge) == NETWORK_EDGE_REQUIRED for edge in data["edges"])
+        assert set(data["meta"]) == {"timestamp"}
+        assert data["nodes"][0]["status"] == "active"
+        assert data["edges"] == [{
+            "from": "g1",
+            "to": "g2",
+            "fromVariableId": "gcx_a",
+            "toVariableId": "gcx_b",
+        }]
+
+    async def test_graph_feed_matches_frontend_fields_and_conditions_in_bulk(
+        self, tmp_path, monkeypatch
+    ):
+        reset_counters()
+        monkeypatch.setenv("EXCHANGE_SEEDS_PATH", _write_seeds(tmp_path))
+        api_module.STATE_PATH = str(tmp_path / "state.json")
+
+        async with api_module.lifespan(app):
+            data = await _get_json(
+                "/v1/net/markets?fields=graph&context=gcx_a%3Dyes"
+            )
+            assert app.state.joint.marginal("gcx_a")["yes"] == pytest.approx(0.6)
+
+        assert GRAPH_RESPONSE_REQUIRED <= set(data)
+        assert data["count"] == 2
+        assert all(GRAPH_MARKET_REQUIRED <= set(market) for market in data["markets"])
+        assert all(
+            set(market["marginals"]) == GRAPH_MARGINAL_REQUIRED
+            for market in data["markets"]
+        )
+        by_id = {market["id"]: market for market in data["markets"]}
+        assert by_id["g1"]["conditionalMarginals"] == {"yes": 1.0, "no": 0.0}
+        assert by_id["g2"]["conditionalMarginals"]["yes"] == pytest.approx(0.9)
+        assert by_id["g2"]["parents"] == ["gcx_a"]
+        assert "parents" not in by_id["g1"]
+        assert data["meta"]["filters"]["context"] == "gcx_a=yes"
 
 class TestNetMarketsList:
     async def test_list_returns_both_markets_with_live_marginals(
