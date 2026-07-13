@@ -65,6 +65,7 @@ describe("Analytics", () => {
     vi.mocked(api.getMarketAnalytics).mockResolvedValue(mockAnalytics);
     vi.mocked(api.getAccountPnl).mockRejectedValue(new Error("no account"));
     localStorage.clear();
+    localStorage.setItem("exchange-mode", "0"); // paper-path suite
   });
 
   it("shows loading state", () => {

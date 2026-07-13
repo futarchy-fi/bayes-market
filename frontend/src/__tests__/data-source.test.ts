@@ -48,7 +48,17 @@ describe("market data source", () => {
     expect(paper.listMarkets).not.toHaveBeenCalled();
   });
 
-  it("keeps the paper router as the default", async () => {
+  it("routes to the exchange by default (apex swap)", async () => {
+    vi.mocked(exchange.getNetMarkets).mockResolvedValue({ markets: [netMarket], count: 1 });
+
+    await listMarkets();
+
+    expect(exchange.getNetMarkets).toHaveBeenCalledOnce();
+    expect(paper.listMarkets).not.toHaveBeenCalled();
+  });
+
+  it("routes to the paper backend when opted out (?exchange=0)", async () => {
+    localStorage.setItem(EXCHANGE_MODE_KEY, "0");
     const response = { markets: [], count: 0, meta: { apiVersion: "1", timestamp: "now" } };
     vi.mocked(paper.listMarkets).mockResolvedValue(response);
 

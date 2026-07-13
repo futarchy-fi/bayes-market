@@ -12,6 +12,7 @@ function wrapper({ children }: { children: ReactNode }) {
 describe("Session context", () => {
   beforeEach(() => {
     localStorage.clear();
+    localStorage.setItem("exchange-mode", "0"); // paper-path suite
     vi.restoreAllMocks();
   });
 
