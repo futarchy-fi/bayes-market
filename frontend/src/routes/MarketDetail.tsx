@@ -22,6 +22,7 @@ import { ResolveMarketPanel } from "@/features/market/ResolveMarketPanel";
 import { EventTradePanel } from "@/features/trading/EventTradePanel";
 import { CptPanel } from "@/features/trading/CptPanel";
 import type { MarketEvent } from "@/lib/api/types";
+import { TradeCreditsPanel } from "@/lib/exchange/TradeCreditsPanel";
 
 export default function MarketDetail() {
   const { marketId } = useParams<{ marketId: string }>();
@@ -93,6 +94,8 @@ export default function MarketDetail() {
       <ConditionedProbabilityBar market={m} />
 
       <PositionCard marketId={m.id} accountRisk={accountRisk.data} isConfigured={isConfigured} />
+
+      <TradeCreditsPanel marketId={m.id} variableId={m.variableId} />
 
       <ResolveMarketPanel market={m} />
 
