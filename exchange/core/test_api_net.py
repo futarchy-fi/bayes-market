@@ -184,7 +184,7 @@ class TestVenuesSectionNotErased:
             venue.place_edit(account.id, "gcx_a", "yes", 0.8)
             api_module._save()
 
-        _, _, _, _, venues_after_first_save = load_snapshot(str(state_path))
+        _, _, _, _, venues_after_first_save, _ = load_snapshot(str(state_path))
         assert venues_after_first_save.get("joint") is not None
         assert len(venues_after_first_save["joint"]["orders"]) == 1
 
@@ -202,7 +202,7 @@ class TestVenuesSectionNotErased:
             app.state.risk.mint(new_account.id, Decimal("5"))
             api_module._save()
 
-        _, _, _, _, venues_after_second_save = load_snapshot(str(state_path))
+        _, _, _, _, venues_after_second_save, _ = load_snapshot(str(state_path))
         assert venues_after_second_save.get("joint") is not None
         assert len(venues_after_second_save["joint"]["orders"]) == 1
         assert venues_after_second_save == venues_after_first_save

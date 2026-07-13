@@ -80,7 +80,7 @@ async def test_order_mint_depth_survives_restart():
         )
         assert trades.json()["trades"][0]["kind"] == "mint"
 
-    _, _, _, _, venues = load_snapshot(api_module.STATE_PATH)
+    _, _, _, _, venues, _ = load_snapshot(api_module.STATE_PATH)
     assert venues["book"]["trades"][str(market_id)][0]["kind"] == "mint"
 
     async with api_module.lifespan(app):

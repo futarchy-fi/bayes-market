@@ -44,6 +44,41 @@ python3 -m pytest exchange/ -q
 
 The live Bayes server in `backend/server.py` is untouched and runs separately.
 
+## Resident arbitrage agent
+
+The resident agent uses each instrument's NET listing as its price anchor. It
+trades a materially displaced AMM and maintains two-sided order-book bids around
+the anchor. Runs are report-only unless `--execute` is supplied.
+
+Preview one pass without mutating exchange state:
+
+```bash
+python -m exchange.agents.arb --once --report-only
+```
+
+For continuous execution, set `FUTARCHY_API_KEY` and run:
+
+```bash
+python -m exchange.agents.arb --execute --interval 30
+```
+
+| Variable | Purpose / default |
+| --- | --- |
+| `FUTARCHY_API_URL` | Exchange API base URL (`http://127.0.0.1:8000`) |
+| `FUTARCHY_API_KEY` | Trading account API key (required) |
+| `ARB_INSTRUMENTS` | Comma-separated instrument IDs, or `all` (`all`) |
+| `SPREAD_THR` | AMM deviation required before trading (`0.02`) |
+| `BUDGET_CAP` | Maximum AMM spend per action (`25`) |
+| `SIZE_CAP` | Order-book quote size (`10`) |
+| `DELTA` | Distance of book quotes from the NET anchor (`0.01`) |
+| `REQUOTE_THR` | Drift required before replacing book quotes (`0.005`) |
+| `MIN_BALANCE` | Available-balance floor below which no actions run (`50`) |
+| `ACTION_CAP` | Maximum actions per tick (`10`) |
+| `ARB_INTERVAL` | Seconds between ticks (`30`) |
+
+The reference Farol user unit is `deploy/futarchy-arb.service`; it loads
+secrets and overrides from `~/.config/openclaw/futarchy-arb.env`.
+
 ## MCP server
 
 Install the optional MCP dependency:

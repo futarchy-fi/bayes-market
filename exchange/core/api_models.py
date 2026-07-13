@@ -187,6 +187,17 @@ class AddLiquidityResponse(BaseModel):
     b: str
     funding_added: str
 
+
+class InstrumentListingRequest(BaseModel):
+    venue: str
+    marketId: str
+
+
+class InstrumentRequest(BaseModel):
+    instrumentId: str
+    title: str
+    listings: list[InstrumentListingRequest]
+
 class UpdateMetadataRequest(BaseModel):
     metadata: dict
 

@@ -1,11 +1,11 @@
-"""Snapshot persistence (v3-for-JointVenue / schema v4) tests.
+"""Snapshot persistence tests.
 
 Covers:
   (a) full-fidelity roundtrip through core.persistence save/load on disk,
       including settlement parity between the original venue and a twin
       rebuilt from the persisted snapshot.
   (b) migrating a version-2-shaped exchange snapshot forward — the venues
-      section should show up empty, no error.
+      and instruments sections should show up empty, no error.
   (c) FactoredMarket snapshot structure mismatch falls back to rebuilding
       the inference engine from seeds (losing traded prices, keeping
       orders) instead of crashing.
@@ -38,9 +38,9 @@ def test_roundtrip_through_disk_snapshot_preserves_state_and_settlement(tmp_path
 
     me = MarketEngine(engine)
     path = str(tmp_path / "state.json")
-    save_snapshot(engine, me, path, joint_venue=venue)
+    save_snapshot(engine, me, path, joint_venue=venue, instruments={})
 
-    risk2, me2, _auth2, _repos2, venues2 = load_snapshot(path)
+    risk2, me2, _auth2, _repos2, venues2, _instruments2 = load_snapshot(path)
     assert "joint" in venues2
     twin = JointVenue.from_snapshot(venues2["joint"], risk2, TINY_SEEDS)
 
@@ -105,7 +105,7 @@ def test_snapshot_orders_and_market_status_survive_a_resolve(tmp_path):
 # -- (b) migration ---------------------------------------------------------
 
 
-def test_version_2_snapshot_migrates_to_current_with_empty_venues(tmp_path):
+def test_version_2_snapshot_migrates_with_empty_venues_and_instruments(tmp_path):
     v2_state = {
         "version": 2,
         "counters": {},
@@ -119,11 +119,14 @@ def test_version_2_snapshot_migrates_to_current_with_empty_venues(tmp_path):
 
     path.write_text(json.dumps(v2_state))
 
-    risk, me, auth_store, tracked_repos, venues = load_snapshot(str(path))
+    risk, me, auth_store, tracked_repos, venues, instruments = load_snapshot(
+        str(path)
+    )
 
     assert venues == {}
+    assert instruments == {}
     assert tracked_repos == {}
-    assert CURRENT_VERSION >= 4
+    assert CURRENT_VERSION >= 5
 
 
 # -- (c) fm structure mismatch fallback ------------------------------------
