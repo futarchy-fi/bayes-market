@@ -214,6 +214,7 @@ def save_snapshot(risk: RiskEngine, market_engine: MarketEngine,
                   tracked_repos: dict | None = None,
                   joint_venue=None,
                   book_venue=None,
+                  batch_venue=None,
                   venues: dict | None = None,
                   instruments: dict | None = None) -> None:
     """
@@ -233,6 +234,8 @@ def save_snapshot(risk: RiskEngine, market_engine: MarketEngine,
         venues_section["joint"] = joint_venue.snapshot()
     if book_venue is not None:
         venues_section["book"] = book_venue.snapshot()
+    if batch_venue is not None:
+        venues_section["batch"] = batch_venue.snapshot()
 
     state = {
         "version": CURRENT_VERSION,

@@ -15,6 +15,7 @@ subsidy + C-value" and includes complete sets created by offsetting flow.
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_FLOOR, localcontext
@@ -102,6 +103,8 @@ class BatchMarket:
     resolution: str | None = None
     deadline: str | None = None
     created_at: str = ""
+    round_seconds: float | None = None
+    round_started_at: str = ""
 
 
 @dataclass
@@ -149,10 +152,15 @@ class BatchEngine:
         net_cap: Decimal = Decimal("100"),
         funding_account_id: int | None = None,
         deadline: str | None = None,
+        round_seconds: float | None = None,
     ) -> BatchMarket:
         b, net_cap = _decimal(b, "b"), _decimal(net_cap, "net cap")
         if b <= ZERO or net_cap <= ZERO:
             raise InvalidTarget("b and net cap must be positive")
+        if round_seconds is not None and (
+            not math.isfinite(round_seconds) or round_seconds <= 0
+        ):
+            raise InvalidTarget("roundSeconds must be positive")
         self._market_seq += 1
         escrow = self.risk.create_account()
         subsidy = b * Decimal(2).ln()
@@ -175,6 +183,8 @@ class BatchEngine:
             funding_account_id=funding_account_id,
             deadline=deadline,
             created_at=_now(),
+            round_seconds=round_seconds,
+            round_started_at=_now(),
         )
         self.markets[market.id] = market
         return market
@@ -547,6 +557,7 @@ class BatchVenue:
 
     def close_round(self, market_id: int) -> dict:
         result = self.engine.close_round(int(market_id))
+        self.engine.markets[int(market_id)].round_started_at = _now()
         return {
             **{key: value for key, value in result.items() if key != "fills"},
             "fills": [self.fill_record(fill) for fill in result["fills"]],

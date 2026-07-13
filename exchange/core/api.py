@@ -52,6 +52,9 @@ from exchange.core.api_models import (
     BookOrderRequest, BookOrder, BookOrderBalance, BookOrderResponse,
     BookOrdersList, BookPositionsList, BookDepth, BookTradesList,
     BookSettlementResponse,
+    BatchMarket, BatchMarketList, BatchCreateMarketRequest,
+    BatchOrderRequest, BatchOrder, BatchOrderBalance, BatchOrderResponse,
+    BatchOrdersList, BatchRoundResponse,
 )
 from exchange.core.auth import (
     AuthStore, validate_github_token,
@@ -70,6 +73,7 @@ from exchange.venues.amm import AmmVenue
 from exchange.venues.base import Venue, VenueError
 from exchange.venues.book.engine import BookEngine
 from exchange.venues.book.venue import BookVenue
+from exchange.venues.batch.engine import BatchEngine, BatchVenue
 from exchange.venues.joint.venue import JointVenue
 
 logger = logging.getLogger(__name__)
@@ -98,6 +102,9 @@ LIQUIDITY_RAMP_INTERVAL_MINUTES = int(os.environ.get("LIQUIDITY_RAMP_INTERVAL_MI
 LIQUIDITY_BUDGET = os.environ.get("LIQUIDITY_BUDGET", "200")
 MARKET_EXPIRY_CHECK_INTERVAL_SECONDS = float(
     os.environ.get("MARKET_EXPIRY_CHECK_INTERVAL_SECONDS", "60")
+)
+BATCH_ROUND_CHECK_SECONDS = float(
+    os.environ.get("BATCH_ROUND_CHECK_SECONDS", "30")
 )
 
 # Transaction-log compaction (I4): once the append-only log exceeds
@@ -164,9 +171,15 @@ async def lifespan(app: FastAPI):
         if "book" in venues
         else BookVenue(BookEngine(risk))
     )
+    app.state.batch = (
+        BatchVenue.from_snapshot(venues["batch"], risk)
+        if "batch" in venues
+        else BatchVenue(BatchEngine(risk))
+    )
     app.state.venues_by_kind: dict[str, Venue] = {
         "amm": AmmVenue(me),
         "book": app.state.book,
+        "batch": app.state.batch,
     }
     if app.state.joint is not None:
         app.state.venues_by_kind["net"] = app.state.joint
@@ -181,6 +194,13 @@ async def lifespan(app: FastAPI):
         app.state.expiry_task = asyncio.create_task(
             _expired_market_reconciler(app.state.expiry_stop_event)
         )
+    app.state.batch_round_stop_event = asyncio.Event()
+    app.state.batch_round_task = None
+    if BATCH_ROUND_CHECK_SECONDS > 0:
+        await _close_due_batch_rounds_once()
+        app.state.batch_round_task = asyncio.create_task(
+            _batch_round_reconciler(app.state.batch_round_stop_event)
+        )
 
     try:
         yield
@@ -189,6 +209,10 @@ async def lifespan(app: FastAPI):
         expiry_task = getattr(app.state, "expiry_task", None)
         if expiry_task is not None:
             await expiry_task
+        app.state.batch_round_stop_event.set()
+        batch_round_task = getattr(app.state, "batch_round_task", None)
+        if batch_round_task is not None:
+            await batch_round_task
 
 
 app = FastAPI(
@@ -227,11 +251,15 @@ def _save():
     book = getattr(app.state, "book", None)
     if book is not None and book.engine.risk is not app.state.risk:
         book = None
+    batch = getattr(app.state, "batch", None)
+    if batch is not None and batch.engine.risk is not app.state.risk:
+        batch = None
     save_snapshot(app.state.risk, app.state.me, STATE_PATH,
                   auth_store=app.state.auth_store,
                   tracked_repos=app.state.tracked_repos,
                   joint_venue=app.state.joint,
                   book_venue=book,
+                  batch_venue=batch,
                   venues=getattr(app.state, "venues", None),
                   instruments=getattr(app.state, "instruments", {}))
 
@@ -483,6 +511,41 @@ async def _expired_market_reconciler(stop_event: asyncio.Event) -> None:
                 stop_event.wait(),
                 timeout=MARKET_EXPIRY_CHECK_INTERVAL_SECONDS,
             )
+        except asyncio.TimeoutError:
+            continue
+
+
+async def _close_due_batch_rounds_once(now: datetime | None = None) -> list[int]:
+    current = now or datetime.now(timezone.utc)
+    closed: list[int] = []
+    async with app.state.lock:
+        for market in app.state.batch.engine.markets.values():
+            started = _parse_deadline(market.round_started_at or market.created_at)
+            if (
+                market.status != "open"
+                or market.round_seconds is None
+                or started is None
+                or (current - started).total_seconds() < market.round_seconds
+            ):
+                continue
+            try:
+                app.state.batch.close_round(market.id)
+                closed.append(market.id)
+            except VenueError:
+                logger.exception("Failed to close batch market %s", market.id)
+        if closed:
+            _save()
+    return closed
+
+
+async def _batch_round_reconciler(stop_event: asyncio.Event) -> None:
+    while not stop_event.is_set():
+        try:
+            await _close_due_batch_rounds_once()
+        except Exception:
+            logger.exception("Batch round reconciliation failed")
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=BATCH_ROUND_CHECK_SECONDS)
         except asyncio.TimeoutError:
             continue
 
@@ -840,6 +903,8 @@ def yes_price(venue: str, market: dict) -> float | None:
             None if bid is None or ask is None
             else (Decimal(bid) + Decimal(ask)) / 2
         )
+    elif venue == "batch":
+        value = market.get("postedPrice")
     else:
         value = None
     return None if value is None else float(value)
@@ -1117,6 +1182,118 @@ async def void_book_market(
         except VenueError as err:
             raise translate_venue_error(err) from err
     return BookSettlementResponse(**report)
+
+
+# ---------------------------------------------------------------------------
+# Sealed-round batch LMSR venue.
+# ---------------------------------------------------------------------------
+
+def _batch() -> BatchVenue:
+    return app.state.batch
+
+
+@app.get("/v1/batch/markets")
+async def list_batch_markets() -> BatchMarketList:
+    venue = _batch()
+    async with app.state.lock:
+        markets = [BatchMarket(**venue.get_market(mid)) for mid in venue.market_ids()]
+    return BatchMarketList(markets=markets, count=len(markets))
+
+
+@app.get("/v1/batch/markets/{market_id}")
+async def get_batch_market(market_id: int) -> BatchMarket:
+    async with app.state.lock:
+        try:
+            return BatchMarket(**_batch().get_market(market_id))
+        except VenueError as err:
+            raise translate_venue_error(err) from err
+
+
+@app.post("/v1/batch/orders")
+async def place_batch_order(
+    req: BatchOrderRequest, user: AuthUser
+) -> BatchOrderResponse:
+    async with app.state.lock:
+        try:
+            order = _batch().place(user.account_id, req.model_dump())
+            _save()
+        except VenueError as err:
+            raise translate_venue_error(err) from err
+        account = app.state.risk.get_account(user.account_id)
+        balance = BatchOrderBalance(
+            available=str(account.available_balance),
+            frozen=str(account.frozen_balance),
+        )
+    return BatchOrderResponse(**order, balance=balance)
+
+
+@app.get("/v1/batch/orders/mine")
+async def list_my_batch_orders(user: AuthUser) -> BatchOrdersList:
+    async with app.state.lock:
+        orders = list(reversed(_batch().orders_for(user.account_id)))
+    return BatchOrdersList(orders=[BatchOrder(**order) for order in orders])
+
+
+@app.post("/v1/batch/markets")
+async def create_batch_market(
+    req: BatchCreateMarketRequest, _: AdminDep
+) -> BatchMarket:
+    if req.b is not None and req.funding is not None:
+        raise APIError(
+            400, "invalid_target", "Provide either 'b' or 'funding', not both"
+        )
+    try:
+        b = (
+            Decimal(req.funding) / Decimal(2).ln()
+            if req.funding is not None
+            else Decimal(req.b or "100")
+        )
+    except InvalidOperation as err:
+        raise APIError(400, "invalid_target", "b and funding must be decimals") from err
+    async with app.state.lock:
+        try:
+            market = _batch().create_market(
+                req.question, b=b, round_seconds=req.roundSeconds
+            )
+            _save()
+        except VenueError as err:
+            raise translate_venue_error(err) from err
+    return BatchMarket(**market)
+
+
+@app.post("/v1/batch/markets/{market_id}/close-round")
+async def close_batch_round(market_id: int, _: AdminDep) -> BatchRoundResponse:
+    async with app.state.lock:
+        try:
+            result = _batch().close_round(market_id)
+            _save()
+        except VenueError as err:
+            raise translate_venue_error(err) from err
+    return BatchRoundResponse(**result)
+
+
+@app.post("/v1/batch/markets/{market_id}/resolve")
+async def resolve_batch_market(
+    market_id: int, req: ResolveRequest, _: AdminDep
+) -> dict:
+    async with app.state.lock:
+        try:
+            report = _batch().resolve(market_id, req.outcome)
+            _save()
+        except VenueError as err:
+            raise translate_venue_error(err) from err
+    return {"market": BatchMarket(**report["market"]).model_dump()}
+
+
+@app.post("/v1/batch/markets/{market_id}/void")
+async def void_batch_market(market_id: int, _: AdminDep) -> dict:
+    async with app.state.lock:
+        try:
+            report = _batch().void(market_id)
+            _save()
+        except VenueError as err:
+            raise translate_venue_error(err) from err
+    return {"market": BatchMarket(**report["market"]).model_dump()}
 
 
 # ---------------------------------------------------------------------------

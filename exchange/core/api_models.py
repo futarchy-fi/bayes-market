@@ -399,6 +399,70 @@ class BookSettlementResponse(BaseModel):
     settledAccounts: list[int]
 
 
+# --- Sealed-round batch LMSR venue ---
+
+class BatchRoundRecord(BaseModel):
+    round: int
+    clearingPrice: str
+    participants: int
+
+
+class BatchMarket(BaseModel):
+    id: int
+    question: str
+    status: str
+    postedPrice: str
+    round: int
+    roundHistory: list[BatchRoundRecord]
+    b: str
+
+
+class BatchMarketList(BaseModel):
+    markets: list[BatchMarket]
+    count: int
+
+
+class BatchCreateMarketRequest(BaseModel):
+    question: str
+    b: str | None = None
+    funding: str | None = None
+    roundSeconds: float | None = None
+
+
+class BatchOrderRequest(BaseModel):
+    marketId: int
+    outcome: str
+    target: str
+    maxSpend: str
+
+
+class BatchOrder(BaseModel):
+    orderId: int
+    marketId: int
+    round: int
+    outcome: str
+    target: str
+    maxSpend: str
+    status: str
+
+
+class BatchOrderBalance(BaseModel):
+    available: str
+    frozen: str
+
+
+class BatchOrderResponse(BatchOrder):
+    balance: BatchOrderBalance
+
+
+class BatchOrdersList(BaseModel):
+    orders: list[BatchOrder]
+
+
+class BatchRoundResponse(BatchRoundRecord):
+    pass
+
+
 class NetOrdersList(BaseModel):
     orders: list[NetOrder]
 
