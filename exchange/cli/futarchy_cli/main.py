@@ -68,8 +68,8 @@ def cmd_logout(args) -> int:
     return 0
 
 
-REPO = "https://github.com/futarchy-fi/agents.git"
-SPEC = f"futarchy @ git+{REPO}#subdirectory=cli"
+REPO = "https://github.com/futarchy-fi/bayes-market.git"
+SPEC = f"futarchy @ git+{REPO}#subdirectory=exchange/cli"
 
 
 def cmd_update(args) -> int:

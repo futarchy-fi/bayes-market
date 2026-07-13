@@ -1,6 +1,6 @@
 """Build FactoredMarket.from_nodes(...) input from seeds-v1 market data.
 
-Seeds-v1 shape (see ``data/seeds_takeoff.json``):
+Seeds-v1 shape (see ``backend/seeds_takeoff.json``):
     {
       "version": "seeds-v1",
       "markets": {market_id: {...}, ...},
@@ -9,7 +9,7 @@ Seeds-v1 shape (see ``data/seeds_takeoff.json``):
 
 Node construction (independent-root vs. CPT-child, ``cpt_key`` parsing, etc.)
 is delegated to the vendored ``build_network_nodes`` in
-``venues.joint.inference.network_model`` — the same function the upstream
+``backend.inference.network_model`` — the same function the upstream
 bayes-market server uses to build both the flat and factored market makers —
 so this module stays a thin adapter rather than a second copy of that logic.
 """
@@ -23,7 +23,9 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from exchange.core.risk_engine import RiskEngine
-from venues.joint.inference import FactoredMarket, JointMarketError, build_network_nodes
+from backend.inference.factored_market import FactoredMarket
+from backend.inference.joint_market import JointMarketError
+from backend.inference.network_model import build_network_nodes
 from exchange.venues.joint.msr import payout_for_edit, stake_for_edit
 
 TREASURY_SEED = Decimal("1000000")
@@ -183,7 +185,7 @@ class JointVenue:
         # Parents-for-API, derived once here from the same CPT-parsed
         # ``nodes`` the inference engine itself was built from (see
         # ``build_network_nodes`` / ``parse_cpt_key`` in
-        # ``venues.joint.inference.network_model``) rather than re-parsing
+        # ``backend.inference.network_model``) rather than re-parsing
         # ``conditionalMarginals`` a second time, or trusting a hand-authored
         # "parents" field a seed record might (or might not) carry — a
         # market with a malformed/incomplete CPT falls back to an

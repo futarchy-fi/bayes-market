@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 
 from exchange.core.risk_engine import RiskEngine
-from venues.joint.inference import JointMarketError
+from backend.inference.joint_market import JointMarketError
 from exchange.venues.joint.msr import payout_for_edit, stake_for_edit
 from exchange.venues.joint.venue import (
     ContextContradicted,
@@ -22,7 +22,7 @@ from exchange.venues.joint.venue import (
 
 B = Decimal("50")
 
-# Seeds-v1 shape per data/seeds_takeoff.json: "markets" is a dict keyed by
+# Seeds-v1 shape per backend/seeds_takeoff.json: "markets" is a dict keyed by
 # market id, and "conditionalMarginals" is a top-level dict keyed by market
 # id -> cpt_key ("<var>=<outcome>", joined with "," for multiple parents) ->
 # outcome distribution. Root markets (no CPT rows) use their own

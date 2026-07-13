@@ -19,7 +19,7 @@ import pytest
 from exchange.core.market_engine import MarketEngine
 from exchange.core.persistence import CURRENT_VERSION, load_snapshot, save_snapshot
 from exchange.core.risk_engine import RiskEngine
-from venues.joint.inference import JointMarketError
+from backend.inference.joint_market import JointMarketError
 from exchange.venues.joint.test_venue import TINY_SEEDS, _fund
 from exchange.venues.joint.venue import JointVenue, VenueError
 

@@ -16,8 +16,8 @@ success() { printf "${TEAL}%s${NC}\n" "$*"; }
 error()   { printf "${RED}error:${NC} %s\n" "$*" >&2; }
 header()  { printf "\n${PURPLE}${BOLD}%s${NC}\n" "$*"; }
 
-REPO="https://github.com/futarchy-fi/agents.git"
-SPEC="futarchy @ git+${REPO}#subdirectory=cli"
+REPO="https://github.com/futarchy-fi/bayes-market.git"
+SPEC="futarchy @ git+${REPO}#subdirectory=exchange/cli"
 
 header "Futarchy CLI Installer"
 echo ""
