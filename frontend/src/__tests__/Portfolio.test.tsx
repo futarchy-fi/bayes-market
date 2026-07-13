@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
 import { renderWithProviders, createMockQueryResult } from "./helpers";
 import Portfolio from "@/routes/Portfolio";
+import { EXCHANGE_MODE_KEY } from "@/lib/exchangeMode";
 
 // ---------------------------------------------------------------------------
 // Mocks — hook-level, following codebase conventions
@@ -110,6 +111,18 @@ describe("Portfolio", () => {
 
     renderWithProviders(<Portfolio />);
     expect(screen.getByText(/Set your Account ID/)).toBeInTheDocument();
+  });
+
+  it("uses GitHub-session language in exchange mode", () => {
+    window.history.replaceState({}, "", "/portfolio");
+    window.localStorage.removeItem(EXCHANGE_MODE_KEY);
+    mockUseSession.mockReturnValue(unconfiguredSession);
+    mockUseAccountRisk.mockReturnValue(createMockQueryResult() as ReturnType<typeof useAccountRisk>);
+
+    renderWithProviders(<Portfolio />);
+
+    expect(screen.getByText(/Sign in with GitHub/)).toBeInTheDocument();
+    expect(screen.queryByText(/Set your Account ID/)).not.toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------

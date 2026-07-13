@@ -5,10 +5,13 @@ import { useAccountRisk, useMarkets } from "@/lib/query/hooks";
 import { useBookOrders, useBookPositions, useCancelBookOrder, useExchangeMe, useMeNet } from "@/lib/exchange/hooks";
 import { useExchangeSession } from "@/lib/exchange/session";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
+import { isExchangeMode } from "@/lib/exchangeMode";
+import { EXCHANGE_API } from "@/lib/exchange/client";
 
 export default function Portfolio() {
   const { session, isConfigured } = useSession();
-  const riskQuery = useAccountRisk(session.accountId);
+  const exchangeMode = isExchangeMode();
+  const riskQuery = useAccountRisk(session.accountId, { enabled: !exchangeMode });
   const marketsQuery = useMarkets();
   const { isSignedIn } = useExchangeSession();
   const exchangeMe = useExchangeMe();
@@ -22,7 +25,11 @@ export default function Portfolio() {
     <div style={{ display: "grid", gap: "var(--space-lg)" }}>
       <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>Portfolio</h1>
       {isSignedIn && <ExchangePortfolio me={exchangeMe} net={net} positions={bookPositions} orders={bookOrders} cancel={cancelBookOrder} />}
-      <PaperPortfolio isConfigured={isConfigured} riskQuery={riskQuery} marketTitles={marketTitles} />
+      {exchangeMode ? !isSignedIn && (
+        <div style={promptStyle}><a href={`${EXCHANGE_API}/v1/auth/github/login`}>Sign in with GitHub</a> to view your credits portfolio.</div>
+      ) : (
+        <PaperPortfolio isConfigured={isConfigured} riskQuery={riskQuery} marketTitles={marketTitles} />
+      )}
     </div>
   );
 }

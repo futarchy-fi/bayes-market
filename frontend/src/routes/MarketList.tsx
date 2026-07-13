@@ -12,6 +12,7 @@ import {
 } from "@/lib/marketListFilters";
 import type { MarketListSort, MarketStatus } from "@/lib/api/types";
 import { isExchangeMode } from "@/lib/exchangeMode";
+import { useInstruments } from "@/lib/exchange/hooks";
 
 const STATUSES = ["", "active", "resolved", "closed", "draft"] as const;
 const SORTS = ["", "volume", "liquidity", "created"] as const;
@@ -50,6 +51,12 @@ export default function MarketList() {
   const committedSearch = filters.q ?? "";
   const [searchInput, setSearchInput] = useState(committedSearch);
   const { data, isLoading, error } = useMarkets(filters);
+  const instruments = useInstruments(exchangeMode);
+  const instrumentsByNetMarket = new Map(instruments.data?.flatMap((instrument) =>
+    instrument.listings
+      .filter((listing) => listing.venue === "net")
+      .map((listing) => [listing.marketId, instrument] as const),
+  ));
 
   useEffect(() => {
     const rawStatus = searchParams.get("status");
@@ -201,7 +208,9 @@ export default function MarketList() {
 
       {data && (
         <div style={{ display: "grid", gap: "var(--space-md)", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))" }}>
-          {data.markets.map((m) => (
+          {data.markets.map((m) => {
+            const instrument = instrumentsByNetMarket.get(m.id);
+            return (
             <Link
               key={m.id}
               to={`/markets/${m.id}`}
@@ -224,7 +233,17 @@ export default function MarketList() {
               </div>
               <PriceBar marginals={m.marginals} />
               {exchangeMode ? (
-                <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>Exchange venue</span>
+                <div style={{ display: "flex", gap: "var(--space-sm)", alignItems: "center", fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+                  <span>Net venue</span>
+                  {instrument && instrument.listings.length > 1 && (
+                    <span
+                      aria-label={`Available on ${instrument.listings.length} venues`}
+                      style={{ padding: "2px 7px", borderRadius: 999, background: "var(--color-bg-hover)", color: "var(--color-primary)", fontSize: "0.7rem", fontWeight: 600 }}
+                    >
+                      {instrument.listings.map((listing) => listing.venue.toUpperCase()).join(" · ")}
+                    </span>
+                  )}
+                </div>
               ) : (
                 <div style={{ display: "flex", gap: "var(--space-lg)", fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: "var(--space-sm)" }}>
                   <span>Vol {formatCurrency(m.volume)}</span>
@@ -233,7 +252,8 @@ export default function MarketList() {
                 </div>
               )}
             </Link>
-          ))}
+            );
+          })}
         </div>
       )}
 

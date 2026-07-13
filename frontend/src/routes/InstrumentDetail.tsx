@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ErrorMessage, LoadingPage } from "@/components/ui/Spinner";
-import { EXCHANGE_API, type InstrumentListing } from "@/lib/exchange/client";
+import { EXCHANGE_API, type Instrument, type InstrumentListing } from "@/lib/exchange/client";
 import { TradeCreditsPanel, friendlyExchangeError } from "@/lib/exchange/TradeCreditsPanel";
 import {
   useAmmMarket,
@@ -27,8 +27,6 @@ export default function InstrumentDetail() {
   if (instruments.error) return <ErrorMessage message="Could not load this exchange instrument." />;
   if (!instrument) return <ErrorMessage message="Instrument not found." />;
 
-  const listing = (venue: InstrumentListing["venue"]) => instrument.listings.find((item) => item.venue === venue);
-
   return (
     <div style={{ display: "grid", gap: "var(--space-lg)" }}>
       <div>
@@ -36,11 +34,18 @@ export default function InstrumentDetail() {
         <h1 style={{ marginTop: "var(--space-sm)", fontSize: "1.5rem", fontWeight: 600 }}>{instrument.title}</h1>
         <p style={noteStyle}>Compare live prices and trade each venue from one screen.</p>
       </div>
-      <div data-testid="venue-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "var(--space-md)", alignItems: "start" }}>
-        <NetVenuePanel listing={listing("net")} />
-        <AmmVenuePanel listing={listing("amm")} />
-        <BookVenuePanel listing={listing("book")} />
-      </div>
+      <VenuePanels instrument={instrument} />
+    </div>
+  );
+}
+
+export function VenuePanels({ instrument, includeNet = true }: { instrument: Instrument; includeNet?: boolean }) {
+  const listing = (venue: InstrumentListing["venue"]) => instrument.listings.find((item) => item.venue === venue);
+  return (
+    <div data-testid="venue-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "var(--space-md)", alignItems: "start" }}>
+      {includeNet && <NetVenuePanel listing={listing("net")} />}
+      <AmmVenuePanel listing={listing("amm")} />
+      <BookVenuePanel listing={listing("book")} />
     </div>
   );
 }
