@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from urllib.parse import quote
 
 import httpx
 
@@ -26,7 +27,8 @@ class Client:
             headers["Authorization"] = f"Bearer {api_key}"
         self._http = httpx.Client(base_url=self.base, headers=headers, timeout=TIMEOUT)
 
-    def _request(self, method: str, path: str, **kwargs) -> dict | list:
+    def _request(self, method: str, path: str,
+                 raise_on: tuple[int, ...] = (), **kwargs) -> dict | list:
         try:
             resp = self._http.request(method, path, **kwargs)
         except httpx.ConnectError:
@@ -36,7 +38,7 @@ class Client:
             print(f"Error: request to {self.base}{path} timed out", file=sys.stderr)
             sys.exit(1)
 
-        if resp.status_code >= 400:
+        if resp.status_code >= 400 or resp.status_code in raise_on:
             try:
                 detail = resp.json().get("detail", resp.text)
             except (json.JSONDecodeError, ValueError):
@@ -64,7 +66,10 @@ class Client:
         return self.post("/v1/auth/device", body={})
 
     def device_auth_poll(self, device_code: str) -> dict:
-        return self.post("/v1/auth/device/token", body={"device_code": device_code})
+        # 202 = authorization pending: surface it as APIError(202) so the
+        # login loop keeps polling instead of mistaking it for success.
+        return self._request("POST", "/v1/auth/device/token", raise_on=(202,),
+                             json={"device_code": device_code})
 
     def me(self) -> dict:
         return self.get("/v1/me")
@@ -89,3 +94,32 @@ class Client:
             "outcome": outcome,
             "amount": amount,
         })
+
+    # ── Net venue endpoints ──
+
+    def list_net_markets(self) -> dict:
+        return self.get("/v1/net/markets")
+
+    def get_net_market(self, market_id: str) -> dict:
+        return self.get(f"/v1/net/markets/{quote(market_id, safe='')}")
+
+    def net_marginal(self, variable_id: str, context: str = "") -> dict:
+        path = f"/v1/net/marginal?variable={quote(variable_id, safe='')}"
+        if context:
+            path += f"&context={context}"
+        return self._request("GET", path)
+
+    def preview_net_order(self, body: dict) -> dict:
+        return self.post("/v1/net/orders/preview", body=body)
+
+    def place_net_order(self, body: dict) -> dict:
+        return self.post("/v1/net/orders", body=body)
+
+    def my_net_orders(self) -> dict:
+        return self.get("/v1/net/orders/mine")
+
+    def net_portfolio(self) -> dict:
+        return self.get("/v1/me/net")
+
+    def leaderboard(self) -> dict:
+        return self.get("/v1/leaderboard")

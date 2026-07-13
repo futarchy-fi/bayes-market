@@ -7,6 +7,7 @@ import json
 import shutil
 import subprocess
 import sys
+from urllib.parse import quote
 
 from . import __version__
 from . import api as api_mod
@@ -14,10 +15,12 @@ from . import auth
 from . import fmt
 
 
-def _add_global_args(parser: argparse.ArgumentParser) -> None:
+def _add_global_args(parser: argparse.ArgumentParser, suppress_defaults: bool = False) -> None:
+    default = argparse.SUPPRESS if suppress_defaults else None
     parser.add_argument("--json", dest="json_output", action="store_true",
+                        default=argparse.SUPPRESS if suppress_defaults else False,
                         help="Output as JSON")
-    parser.add_argument("--api-url", default=None,
+    parser.add_argument("--api-url", default=default,
                         help="Override API base URL")
 
 
@@ -129,10 +132,128 @@ def cmd_sell(args) -> int:
     return 0
 
 
+def parse_given(pairs: list[str] | None) -> dict[str, str]:
+    context = {}
+    for pair in pairs or []:
+        if pair.count("=") != 1:
+            raise ValueError(f"invalid --given {pair!r}: expected VAR=OUTCOME")
+        variable, outcome = (part.strip() for part in pair.split("=", 1))
+        if not variable or not outcome:
+            raise ValueError(f"invalid --given {pair!r}: expected VAR=OUTCOME")
+        context[variable] = outcome
+    return context
+
+
+def context_pipe(context: dict[str, str]) -> str:
+    return "|".join(f"{variable}={outcome}" for variable, outcome in context.items())
+
+
+def encode_context(context: dict[str, str]) -> str:
+    return quote(context_pipe(context), safe="")
+
+
+def filter_net_markets(markets: list[dict], query: str | None) -> list[dict]:
+    if not query:
+        return markets
+    needle = query.casefold()
+    return [
+        market for market in markets
+        if any(needle in str(market.get(field, "")).casefold()
+               for field in ("id", "variableId", "title"))
+    ]
+
+
+def _given_arg(value: str) -> str:
+    try:
+        parse_given([value])
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+    return value
+
+
+def _net_order_body(args) -> dict:
+    context = parse_given(args.given)
+    body = {
+        "variableId": args.variable_id,
+        "outcomeId": args.outcome_id,
+        "target": args.target,
+    }
+    if context:
+        body["context"] = context
+    return body
+
+
+def cmd_net_markets(args) -> int:
+    data = _client(args).list_net_markets()
+    markets = filter_net_markets(data.get("markets", []), args.query)
+    if args.limit:
+        markets = markets[:args.limit]
+    _output(args, markets, fmt.net_markets_table)
+    return 0
+
+
+def cmd_net_market(args) -> int:
+    data = _client(args).get_net_market(args.market_id)
+    _output(args, data, fmt.net_market_detail)
+    return 0
+
+
+def cmd_net_marginal(args) -> int:
+    context = parse_given(args.given)
+    data = _client(args).net_marginal(args.variable_id, encode_context(context))
+    _output(args, data, fmt.net_marginal)
+    return 0
+
+
+def cmd_net_preview(args) -> int:
+    data = _authed_client(args).preview_net_order(_net_order_body(args))
+    _output(args, data, fmt.net_preview)
+    return 0
+
+
+def cmd_net_edit(args) -> int:
+    data = _authed_client(args).place_net_order(_net_order_body(args))
+    _output(args, data, fmt.net_order_result)
+    return 0
+
+
+def cmd_net_orders(args) -> int:
+    data = _authed_client(args).my_net_orders()
+    _output(args, data, fmt.net_orders_table)
+    return 0
+
+
+def cmd_net_portfolio(args) -> int:
+    data = _authed_client(args).net_portfolio()
+    _output(args, data, fmt.net_portfolio)
+    return 0
+
+
+def cmd_net(args) -> int:
+    if not args.net_command:
+        args.net_parser.print_help()
+        return 0
+    return {
+        "markets": cmd_net_markets,
+        "market": cmd_net_market,
+        "marginal": cmd_net_marginal,
+        "preview": cmd_net_preview,
+        "edit": cmd_net_edit,
+        "orders": cmd_net_orders,
+        "portfolio": cmd_net_portfolio,
+    }[args.net_command](args)
+
+
+def cmd_leaderboard(args) -> int:
+    data = _client(args).leaderboard()
+    _output(args, data, fmt.leaderboard_table)
+    return 0
+
+
 def _sub(subparsers, name: str, **kwargs) -> argparse.ArgumentParser:
     """Create a subparser with global args inherited."""
     p = subparsers.add_parser(name, **kwargs)
-    _add_global_args(p)
+    _add_global_args(p, suppress_defaults=True)
     return p
 
 
@@ -184,7 +305,41 @@ def main(argv: list[str] | None = None) -> int:
     p_sell.add_argument("outcome", choices=["yes", "no"], help="Outcome to sell")
     p_sell.add_argument("amount", type=float, help="Number of tokens to sell")
 
+    # futarchy net ...
+    p_net = _sub(sub, "net", help="Trade the joint Bayes network")
+    net_sub = p_net.add_subparsers(dest="net_command")
+
+    p_net_markets = _sub(net_sub, "markets", help="List net markets")
+    p_net_markets.add_argument("--limit", type=int, default=20,
+                               help="Number to show; 0 shows all (default: 20)")
+    p_net_markets.add_argument("--query", help="Filter by id, variable, or title")
+
+    p_net_market = _sub(net_sub, "market", help="Show net market detail")
+    p_net_market.add_argument("market_id", help="Net market ID")
+
+    p_net_marginal = _sub(net_sub, "marginal", help="Show a variable marginal")
+    p_net_marginal.add_argument("variable_id", help="Variable ID")
+    p_net_marginal.add_argument("--given", action="append", default=[], type=_given_arg,
+                                metavar="VAR=OUTCOME", help="Conditioning value (repeatable)")
+
+    for name, help_text in (("preview", "Preview a probability edit"),
+                            ("edit", "Place a probability edit")):
+        order = _sub(net_sub, name, help=help_text)
+        order.add_argument("variable_id", help="Variable ID")
+        order.add_argument("outcome_id", help="Outcome ID")
+        order.add_argument("target", type=float, help="Target probability")
+        order.add_argument("--given", action="append", default=[], type=_given_arg,
+                           metavar="VAR=OUTCOME", help="Conditioning value (repeatable)")
+
+    _sub(net_sub, "orders", help="List your net orders")
+    _sub(net_sub, "portfolio", help="Show your net portfolio")
+
+    # futarchy leaderboard
+    _sub(sub, "leaderboard", help="Show account leaderboard")
+
     args = parser.parse_args(argv)
+    if args.command == "net":
+        args.net_parser = p_net
 
     if not args.command:
         parser.print_help()
@@ -200,6 +355,8 @@ def main(argv: list[str] | None = None) -> int:
         "activity": cmd_activity,
         "buy": cmd_buy,
         "sell": cmd_sell,
+        "net": cmd_net,
+        "leaderboard": cmd_leaderboard,
     }
 
     try:

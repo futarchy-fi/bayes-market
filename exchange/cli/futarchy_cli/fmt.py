@@ -243,3 +243,165 @@ def trade_result(data: dict) -> str:
         f"  Price    {float(price):.4f}\n"
         f"  Value    {float(value):,.2f}\n"
     )
+
+
+def _marginals(values: dict) -> str:
+    if len(values) == 2 and "yes" in values:
+        return f"P(yes)={float(values['yes']):.4f}"
+    return "  ".join(f"{key}={float(value):.4f}" for key, value in values.items())
+
+
+def net_markets_table(markets: list[dict]) -> str:
+    if not markets:
+        return f"\n  {DIM}No net markets.{RESET}\n"
+    id_width = max(len("ID"), *(len(str(m.get("id", "?"))) for m in markets)) + 2
+    variable_width = max(
+        len("Variable"), *(len(str(m.get("variableId", "?"))) for m in markets)
+    ) + 2
+    marginal_width = max(
+        len("Marginals"), *(
+            len(_marginals(m.get("marginals", {}))) for m in markets
+        )
+    ) + 2
+    lines = [
+        "",
+        f"  {BOLD}{_pad('ID', id_width)}{_pad('Variable', variable_width)}"
+        f"{_pad('Marginals', marginal_width)}Status{RESET}",
+        f"  {DIM}{'─' * (id_width + variable_width + marginal_width + 10)}{RESET}",
+    ]
+    for market in markets:
+        lines.append(
+            f"  {_pad(market.get('id', '?'), id_width)}"
+            f"{_pad(market.get('variableId', '?'), variable_width)}"
+            f"{_pad(_marginals(market.get('marginals', {})), marginal_width)}"
+            f"{market.get('status', '-')}"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def net_market_detail(market: dict) -> str:
+    parents = ", ".join(market.get("parents", [])) or "-"
+    outcomes = market.get("outcomes", [])
+    outcome_labels = ", ".join(
+        str(outcome.get("id", outcome)) if isinstance(outcome, dict) else str(outcome)
+        for outcome in outcomes
+    ) or "-"
+    lines = [
+        "",
+        f"  {BOLD}{market.get('title') or market.get('id', '?')}{RESET}",
+        f"  {DIM}{'─' * 60}{RESET}",
+        f"  ID          {market.get('id', '?')}",
+        f"  Variable    {market.get('variableId', '?')}",
+        f"  Status      {market.get('status', '-')}",
+        f"  Outcomes    {outcome_labels}",
+        f"  Parents     {parents}",
+        f"  Marginals   {_marginals(market.get('marginals', {}))}",
+    ]
+    if market.get("description"):
+        lines.append(f"  Description {market['description']}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def net_marginal(data: dict) -> str:
+    context = ", ".join(f"{k}={v}" for k, v in data.get("context", {}).items()) or "none"
+    return (
+        f"\n  {BOLD}{data.get('variable', '?')}{RESET}\n"
+        f"  {DIM}{'─' * 40}{RESET}\n"
+        f"  Given       {context}\n"
+        f"  Marginal    {_marginals(data.get('marginal', {}))}\n"
+    )
+
+
+def net_preview(data: dict) -> str:
+    return (
+        f"\n  {BOLD}Order preview{RESET}\n"
+        f"  {DIM}{'─' * 30}{RESET}\n"
+        f"  Stake       {float(data.get('stake', 0)):,.2f}\n"
+        f"  Probability {float(data.get('before', 0)):.4f} → {float(data.get('after', 0)):.4f}\n"
+    )
+
+
+def net_order_result(data: dict) -> str:
+    balance = data.get("balance", {})
+    return (
+        f"\n  {GREEN}Order placed{RESET}  {data.get('orderId', '?')}\n"
+        f"  {DIM}{'─' * 36}{RESET}\n"
+        f"  Stake frozen {float(data.get('stake', 0)):,.2f}\n"
+        f"  Probability  {float(data.get('before', 0)):.4f} → {float(data.get('after', 0)):.4f}\n"
+        f"  Balance      available {float(balance.get('available', 0)):,.2f}, "
+        f"frozen {float(balance.get('frozen', 0)):,.2f}\n"
+    )
+
+
+def net_orders_table(data: dict) -> str:
+    orders = data.get("orders", [])
+    if not orders:
+        return f"\n  {DIM}No net orders.{RESET}\n"
+    order_width = max(
+        len("Order"), *(len(str(order.get("orderId", "?"))) for order in orders)
+    ) + 2
+    variable_width = max(
+        len("Variable"), *(
+            len(str(order.get("variableId", "?"))) for order in orders
+        )
+    ) + 2
+    outcome_width = max(
+        len("Outcome"), *(
+            len(str(order.get("outcomeId", "?"))) for order in orders
+        )
+    ) + 2
+    lines = [
+        "",
+        f"  {BOLD}{_pad('Order', order_width)}{_pad('Variable', variable_width)}"
+        f"{_pad('Outcome', outcome_width)}"
+        f"{_pad('Target', 10)}{_pad('Stake', 12)}Status{RESET}",
+        f"  {DIM}{'─' * (order_width + variable_width + outcome_width + 32)}{RESET}",
+    ]
+    for order in orders:
+        target = f"{float(order.get('target', 0)):.4f}"
+        stake = f"{float(order.get('stake', 0)):.2f}"
+        lines.append(
+            f"  {_pad(order.get('orderId', '?'), order_width)}"
+            f"{_pad(order.get('variableId', '?'), variable_width)}"
+            f"{_pad(order.get('outcomeId', '?'), outcome_width)}"
+            f"{_pad(target, 10)}"
+            f"{_pad(stake, 12)}"
+            f"{order.get('status', '-')}"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def net_portfolio(data: dict) -> str:
+    orders = data.get("orders", [])
+    opened = sum(order.get("status") == "open" for order in orders)
+    awaiting = sum(order.get("status") == "awaiting_context" for order in orders)
+    return (
+        f"\n  {BOLD}Net portfolio{RESET}\n"
+        f"  {DIM}{'─' * 32}{RESET}\n"
+        f"  Open stake      {float(data.get('openStake', 0)):,.2f}\n"
+        f"  Settled P&L     {float(data.get('settledPnl', 0)):,.2f}\n"
+        f"  Open orders     {opened}\n"
+        f"  Awaiting orders {awaiting}\n"
+    )
+
+
+def leaderboard_table(data: dict) -> str:
+    entries = data.get("entries", [])
+    if not entries:
+        return f"\n  {DIM}Leaderboard is empty.{RESET}\n"
+    lines = [
+        "",
+        f"  {BOLD}{_pad('Rank', 7)}{_pad('Login', 28)}Total{RESET}",
+        f"  {DIM}{'─' * 48}{RESET}",
+    ]
+    for rank, entry in enumerate(entries, 1):
+        login = entry.get("login") or f"account #{entry.get('accountId', '?')}"
+        lines.append(
+            f"  {_pad(str(rank), 7)}{_pad(_trunc(login, 26), 28)}"
+            f"{float(entry.get('total', 0)):,.2f}"
+        )
+    lines.append("")
+    return "\n".join(lines)

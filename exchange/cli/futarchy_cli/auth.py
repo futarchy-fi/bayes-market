@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import sys
 from pathlib import Path
@@ -11,15 +12,21 @@ CONFIG_DIR = Path.home() / ".config" / "futarchy"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 
+def _config_file() -> Path:
+    return Path(os.environ.get("FUTARCHY_CONFIG_PATH", CONFIG_FILE))
+
+
 def load_config() -> dict:
-    if CONFIG_FILE.exists():
-        return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+    path = _config_file()
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
     return {}
 
 
 def save_config(cfg: dict) -> None:
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_FILE.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+    path = _config_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
 
 
 def get_api_key() -> str | None:
@@ -45,7 +52,7 @@ def login(client) -> None:
     existing = get_api_key()
     if existing:
         print("\n  Already logged in.")
-        print(f"  Config: {CONFIG_FILE}")
+        print(f"  Config: {_config_file()}")
         print("  Run `futarchy logout` to reset.\n")
         return
 
@@ -72,7 +79,9 @@ def login(client) -> None:
         except Exception as e:
             status = getattr(e, "status", None)
             detail = getattr(e, "detail", str(e))
-            if status == 202:
+            if status == 202 or (status is not None and status >= 500):
+                # 5xx: transient upstream (GitHub) hiccup — keep polling;
+                # the loop is bounded by the device code expiry (-> 410).
                 time.sleep(interval)
                 continue
             if status == 410:
@@ -85,6 +94,9 @@ def login(client) -> None:
     api_key = resp.get("api_key", "")
     account_id = resp.get("account_id", "?")
     github_login = resp.get("github_login", "")
+    if not api_key:
+        print(f"\n  Error: server returned no API key: {resp}\n", file=sys.stderr)
+        sys.exit(1)
 
     cfg = load_config()
     cfg["api_key"] = api_key
@@ -92,9 +104,9 @@ def login(client) -> None:
     save_config(cfg)
 
     print(f"\n  Logged in as {github_login} (account #{account_id})")
-    print(f"  Key saved to {CONFIG_FILE}")
-    print("\n  You have 100 credits to start trading.")
-    print("  Try: futarchy markets\n")
+    print(f"  Key saved to {_config_file()}")
+    print("\n  Run `futarchy me` to see your starting balance.")
+    print("  Try: futarchy net markets\n")
 
 
 def logout() -> None:
@@ -104,4 +116,4 @@ def logout() -> None:
     cfg.pop("github_login", None)
     cfg.pop("username", None)
     save_config(cfg)
-    print(f"\n  Logged out. Config cleared at {CONFIG_FILE}\n")
+    print(f"\n  Logged out. Config cleared at {_config_file()}\n")
