@@ -595,6 +595,25 @@ def _authorize_market_resolver(
             403, "before_deadline", "Creator cannot settle before deadline")
 
 
+def _authorize_market_void(user, metadata: dict) -> None:
+    """Voiding is an admin/system action only — creators may never void.
+
+    A creator-resolved market must be *resolved* to an outcome after its
+    deadline. Letting the creator void instead gives them an asymmetric
+    escape: resolve when their own position wins, void when it loses. Since
+    ``void`` forgives losses and returns profits "to source", a losing
+    creator voiding claws back the counterparty's winnings — so every
+    creator market carries negative expected value for anyone trading
+    against it. Only the admin key (``user is None``) may void; a genuinely
+    ambiguous market is voided by an administrator, not self-served.
+    """
+    if user is not None:
+        raise APIError(
+            403, "void_forbidden",
+            "Creators must resolve their market to an outcome; only an "
+            "administrator can void a market.")
+
+
 async def _reconcile_expired_markets_once(
     now: datetime | None = None,
 ) -> list[int]:
@@ -1015,7 +1034,7 @@ async def void_market(market_id: int, user: UserOrAdmin) -> dict:
         market = app.state.me.markets.get(market_id)
         if market is None:
             raise APIError(404, "market_not_found", f"Market {market_id} not found")
-        _authorize_market_resolver(user, market.metadata, market.deadline)
+        _authorize_market_void(user, market.metadata)
         try:
             app.state.me.void(market_id)
             _save()
@@ -1463,7 +1482,7 @@ async def void_book_market(
                 _book().get_market(market_id)
             except VenueError as err:
                 raise translate_venue_error(err) from err
-        _authorize_market_resolver(user, market.metadata, market.deadline)
+        _authorize_market_void(user, market.metadata)
         try:
             report = _book().void(market_id)
             _save()

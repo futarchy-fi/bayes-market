@@ -228,16 +228,26 @@ async def test_admin_can_resolve_creator_market_before_deadline(client):
     assert app.state.me.markets[market_id].resolution == "no"
 
 
-async def test_creator_can_void_after_deadline(client, monkeypatch):
+async def test_creator_cannot_void_their_market(client, monkeypatch):
+    """Voiding is admin-only: a creator voiding is the asymmetric-escape
+    vector (resolve when winning, void when losing). Only admin may void."""
     creator = await _user(70, "voider")
     created = await _create_amm(client, creator.api_key)
     market_id = created.json()["market_id"]
     monkeypatch.setattr(api_module, "_now", lambda: FIXED_NOW + timedelta(days=2))
 
-    response = await client.post(
+    denied = await client.post(
         f"/v1/markets/{market_id}/void", headers=_headers(creator.api_key),
     )
-    assert response.status_code == 200
+    assert denied.status_code == 403
+    assert denied.json()["error"]["code"] == "void_forbidden"
+    assert app.state.me.markets[market_id].status != "void"
+
+    # Admin can still void a genuinely ambiguous market.
+    allowed = await client.post(
+        f"/v1/admin/markets/{market_id}/void", headers=ADMIN_HEADERS,
+    )
+    assert allowed.status_code == 200
     assert app.state.me.markets[market_id].status == "void"
 
 
@@ -265,7 +275,7 @@ async def test_book_creator_metadata_and_resolution(client, monkeypatch):
         f"/v1/book/markets/{market_id}/void", headers=_headers(other.api_key),
     )
     assert denied.status_code == 403
-    assert denied.json()["error"]["code"] == "not_resolver"
+    assert denied.json()["error"]["code"] == "void_forbidden"
     resolved = await client.post(
         f"/v1/book/markets/{market_id}/resolve", headers=_headers(creator.api_key),
         json={"outcome": "yes"},
