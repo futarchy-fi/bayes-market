@@ -205,30 +205,25 @@ def save_snapshot(risk: RiskEngine, market_engine: MarketEngine,
                   path: str, auth_store=None,
                   tracked_repos: dict | None = None,
                   joint_venue=None,
+                  book_venue=None,
                   venues: dict | None = None) -> None:
     """
     Save complete RE + ME + auth + tracked_repos + venues state to a JSON file.
     Atomic: writes to .tmp then renames.
 
-    ``joint_venue``, if given, is a ``venues.joint.venue.JointVenue`` whose
-    ``.snapshot()`` is stored under ``state["venues"]["joint"]``. Other venues
-    can add themselves to the same section the same way without touching
-    this function's signature further.
-
-    ``venues``, if given (and ``joint_venue`` is None), is written through
-    unchanged as the whole ``state["venues"]`` section. This is the
+    Live venue snapshots replace their own keys in the raw ``venues`` section.
+    ``venues``, if given, is otherwise written through unchanged. This is the
     no-erase passthrough: a caller that loaded a snapshot whose venues
     section was non-empty but currently has no live venue object (e.g. the
     venue is disabled this run) passes the raw loaded ``venues`` dict back
-    here so a save doesn't silently wipe out that section. If neither
-    ``joint_venue`` nor ``venues`` is given, the section is written empty.
+    here so a save doesn't silently wipe out that section. If no live venue
+    or raw ``venues`` mapping is given, the section is written empty.
     """
+    venues_section = dict(venues or {})
     if joint_venue is not None:
-        venues_section = {"joint": joint_venue.snapshot()}
-    elif venues is not None:
-        venues_section = venues
-    else:
-        venues_section = {}
+        venues_section["joint"] = joint_venue.snapshot()
+    if book_venue is not None:
+        venues_section["book"] = book_venue.snapshot()
 
     state = {
         "version": CURRENT_VERSION,

@@ -6,6 +6,7 @@ public API (there's no treasury-drain endpoint), so its 409 mapping is
 locked here at the boundary function instead.
 """
 from exchange.core.api_errors import translate_venue_error
+from exchange.venues.book.engine import NoPosition
 from exchange.venues.joint.venue import (
     InsufficientCredits,
     InsufficientTreasury,
@@ -31,3 +32,9 @@ def test_unmapped_venue_error_falls_through_to_trade_rejected():
     err = translate_venue_error(TradeRejected("nope"))
     assert err.status == 400
     assert err.code == "trade_rejected"
+
+
+def test_no_position_maps_to_400():
+    err = translate_venue_error(NoPosition("no shares"))
+    assert err.status == 400
+    assert err.code == "no_position"
