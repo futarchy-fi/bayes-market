@@ -118,8 +118,8 @@ def test_minted_base_survives_snapshot_round_trip(tmp_path):
 
     me = MarketEngine(e)
     path = str(tmp_path / "state.json")
-    save_snapshot(e, me, path)
-    risk2, _, _, _, _ = load_snapshot(path)
+    save_snapshot(e, me, path, instruments={})
+    risk2, _, _, _, _, _ = load_snapshot(path)
 
     assert risk2._minted_base == e._minted_base
     assert risk2.total_minted() == minted

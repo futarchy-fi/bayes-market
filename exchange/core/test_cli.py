@@ -1,7 +1,6 @@
-"""
-CLI venues-section preservation (Plan B final-review item 2).
+"""CLI opaque-section preservation.
 
-Bug: core.cli.load_or_create discarded the loaded ``venues`` section
+Bug: core.cli.load_or_create once discarded the loaded ``venues`` section
 returned by ``load_snapshot`` (bound to ``_venues`` and dropped), so every
 mutating CLI command's ``save_snapshot`` call wrote an EMPTY venues section
 back out — silently wiping any net-venue (JointVenue) state a prior API/CLI
@@ -17,21 +16,23 @@ import sys
 from decimal import Decimal
 
 from exchange.core.cli import main
-from exchange.core.models import reset_counters
+from exchange.core.models import Instrument, reset_counters
 from exchange.core.persistence import load_snapshot, save_snapshot
 from exchange.core.market_engine import MarketEngine
 from exchange.core.risk_engine import RiskEngine
 
 
-def _seed_state_with_venues(path: str, venues_section: dict) -> None:
-    """Write an initial snapshot with a hand-built, non-empty venues section."""
+def _seed_state(path: str, venues_section: dict, instruments: dict) -> None:
+    """Write a snapshot with non-empty opaque sections."""
     reset_counters()
     risk = RiskEngine()
     me = MarketEngine(risk)
-    save_snapshot(risk, me, path, venues=venues_section)
+    save_snapshot(
+        risk, me, path, venues=venues_section, instruments=instruments,
+    )
 
 
-def test_mutating_cli_command_preserves_venues_section(tmp_path, monkeypatch, capsys):
+def test_mutating_cli_preserves_venues_and_instruments(tmp_path, monkeypatch, capsys):
     state_path = str(tmp_path / "state.json")
     venues_section = {
         "joint": {
@@ -46,12 +47,19 @@ def test_mutating_cli_command_preserves_venues_section(tmp_path, monkeypatch, ca
             "seedsSource": "<inline>",
         }
     }
-    _seed_state_with_venues(state_path, venues_section)
+    instruments = {
+        "ship-date": Instrument(
+            "ship-date", "Will it ship?",
+            [{"venue": "net", "marketId": "g1"}],
+        )
+    }
+    _seed_state(state_path, venues_section, instruments)
 
     # Sanity: the section really did land in the file as written.
     with open(state_path) as f:
         pre_state = json.load(f)
     assert pre_state["venues"] == venues_section
+    assert "ship-date" in pre_state["instruments"]
 
     # Run a mutating CLI command (create-account) through the real entry
     # point — this is the load -> execute -> save path that used to wipe
@@ -71,7 +79,11 @@ def test_mutating_cli_command_preserves_venues_section(tmp_path, monkeypatch, ca
     # Byte-identical (same JSON-serializable structure) venues section —
     # nothing about the mutating command touched or erased it.
     assert post_state["venues"] == venues_section
+    assert post_state["instruments"] == pre_state["instruments"]
 
     # And it round-trips through load_snapshot the same way.
-    _risk, _me, _auth, _repos, loaded_venues = load_snapshot(state_path)
+    _risk, _me, _auth, _repos, loaded_venues, loaded_instruments = load_snapshot(
+        state_path
+    )
     assert loaded_venues == venues_section
+    assert loaded_instruments["ship-date"].title == "Will it ship?"

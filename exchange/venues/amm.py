@@ -4,7 +4,7 @@ from copy import deepcopy
 from dataclasses import asdict
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 
-from exchange.core.lmsr import amount_for_cost, cost_to_buy
+from exchange.core.lmsr import amount_for_cost, cost_to_buy, prices
 from exchange.core.market_engine import MarketEngine
 from exchange.core.models import ZERO
 from exchange.core.risk_engine import InsufficientBalance
@@ -29,10 +29,14 @@ class AmmVenue:
         return list(self.engine.markets)
 
     def get_market(self, market_id: int) -> dict:
-        market = self.engine.markets.get(market_id)
+        market = self.engine.markets.get(int(market_id))
         if market is None:
             raise UnknownMarket(f"market {market_id} not found")
-        return asdict(market)
+        record = asdict(market)
+        record["prices"] = (
+            prices(market.q, market.b) if market.status == "open" else {}
+        )
+        return record
 
     def quote(self, account_id: int, payload: dict) -> dict:
         try:

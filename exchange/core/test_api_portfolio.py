@@ -383,9 +383,9 @@ class TestServiceAccountFlagPersistence:
 
         state_path = tmp_path / "state.json"
         save_snapshot(risk, me, str(state_path), auth_store=auth_store,
-                       tracked_repos={})
+                       tracked_repos={}, instruments={})
 
-        _, _, loaded_auth, _, _ = load_snapshot(str(state_path))
+        _, _, loaded_auth, _, _, _ = load_snapshot(str(state_path))
         assert loaded_auth.local_users["bot"].is_service_account is True
         assert loaded_auth.local_users["human"].is_service_account is False
 

@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import logging
 import os
+import re
 import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
@@ -39,6 +40,7 @@ from exchange.core.api_models import (
     CreateMarketRequest, CreateMarketResponse,
     ResolveRequest, HealthResponse, NetHealth,
     AddLiquidityRequest, AddLiquidityResponse,
+    InstrumentRequest,
     UpdateMetadataRequest,
     AddRepoRequest, TrackedRepoResponse, WebhookResponse,
     NetMarket, NetMarketList, NetMarginalResponse,
@@ -61,7 +63,7 @@ from exchange.core.middleware import (
     AuthUser, AdminDep, require_auth, rate_limiter,
     DynamicCORSMiddleware, BodySizeLimitMiddleware,
 )
-from exchange.core.models import ZERO, TrackedRepo, reset_counters
+from exchange.core.models import ZERO, Instrument, TrackedRepo, reset_counters
 from exchange.core.persistence import save_snapshot, load_snapshot
 from exchange.core.risk_engine import RiskEngine, InsufficientBalance
 from exchange.venues.amm import AmmVenue
@@ -127,7 +129,9 @@ def _build_joint_venue(risk: RiskEngine, seeds_path: str, joint_data: dict | Non
 async def lifespan(app: FastAPI):
     # Load state
     if os.path.exists(STATE_PATH):
-        risk, me, auth_store, tracked_repos, venues = load_snapshot(STATE_PATH)
+        risk, me, auth_store, tracked_repos, venues, instruments = load_snapshot(
+            STATE_PATH
+        )
     else:
         reset_counters()
         risk = RiskEngine()
@@ -135,11 +139,13 @@ async def lifespan(app: FastAPI):
         auth_store = AuthStore()
         tracked_repos = {}
         venues = {}
+        instruments = {}
 
     app.state.risk = risk
     app.state.me = me
     app.state.auth_store = auth_store or AuthStore()
     app.state.tracked_repos = tracked_repos
+    app.state.instruments = instruments
     # Raw venues section as loaded from disk (or {} on a fresh boot). Kept
     # around so _save() can pass it through unchanged when app.state.joint
     # is None but the section wasn't empty — see save_snapshot's
@@ -226,7 +232,8 @@ def _save():
                   tracked_repos=app.state.tracked_repos,
                   joint_venue=app.state.joint,
                   book_venue=book,
-                  venues=getattr(app.state, "venues", None))
+                  venues=getattr(app.state, "venues", None),
+                  instruments=getattr(app.state, "instruments", {}))
 
 
 def _outcome_from_reason(reason: str) -> str | None:
@@ -812,6 +819,110 @@ async def get_market_trades(market_id: int) -> list[TradeResponse]:
         )
         for t in m.trades
     ]
+
+
+# ---------------------------------------------------------------------------
+# Cross-venue instrument registry.
+# ---------------------------------------------------------------------------
+
+_INSTRUMENT_SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+def yes_price(venue: str, market: dict) -> float | None:
+    """Extract the live YES price from a venue's ``get_market`` record."""
+    if venue == "net":
+        value = market.get("marginals", {}).get("yes")
+    elif venue == "amm":
+        value = market.get("prices", {}).get("yes")
+    elif venue == "book":
+        bid, ask = market.get("bestBid"), market.get("bestAsk")
+        value = (
+            None if bid is None or ask is None
+            else (Decimal(bid) + Decimal(ask)) / 2
+        )
+    else:
+        value = None
+    return None if value is None else float(value)
+
+
+@app.get("/v1/instruments")
+async def list_instruments() -> list[dict]:
+    result = []
+    async with app.state.lock:
+        for instrument in getattr(app.state, "instruments", {}).values():
+            listings = []
+            for listing in instrument.listings:
+                venue = listing["venue"]
+                market_id = listing["marketId"]
+                market = app.state.venues_by_kind[venue].get_market(market_id)
+                listings.append({
+                    "venue": venue,
+                    "marketId": market_id,
+                    "yesPrice": yes_price(venue, market),
+                    "status": market.get("status", "open"),
+                })
+            result.append({
+                "instrumentId": instrument.instrument_id,
+                "title": instrument.title,
+                "listings": listings,
+            })
+    return result
+
+
+@app.post("/v1/admin/instruments")
+async def admin_create_instrument(req: InstrumentRequest, _: AdminDep) -> dict:
+    slug = req.instrumentId.strip()
+    if not _INSTRUMENT_SLUG.fullmatch(slug):
+        raise APIError(
+            400, "invalid_instrument_id",
+            "instrumentId must be a lowercase slug",
+        )
+
+    listings = [listing.model_dump() for listing in req.listings]
+    async with app.state.lock:
+        instruments = getattr(app.state, "instruments", {})
+        if slug in instruments:
+            raise APIError(409, "instrument_exists", f"Instrument '{slug}' exists")
+        for listing in listings:
+            venue = listing["venue"]
+            market_id = listing["marketId"]
+            adapter = app.state.venues_by_kind.get(venue)
+            if adapter is None:
+                raise APIError(
+                    404, "invalid_listing",
+                    f"Listing {venue}:{market_id} has no live venue",
+                )
+            try:
+                adapter.get_market(market_id)
+            except (VenueError, TypeError, ValueError) as err:
+                raise APIError(
+                    404, "invalid_listing",
+                    f"Listing {venue}:{market_id} does not resolve",
+                ) from err
+        instrument = Instrument(slug, req.title, listings)
+        instruments[slug] = instrument
+        app.state.instruments = instruments
+        _save()
+    return {
+        "instrumentId": instrument.instrument_id,
+        "title": instrument.title,
+        "listings": instrument.listings,
+        "createdAt": instrument.created_at,
+    }
+
+
+@app.delete("/v1/admin/instruments/{instrument_id}")
+async def admin_delete_instrument(instrument_id: str, _: AdminDep) -> dict:
+    async with app.state.lock:
+        instruments = getattr(app.state, "instruments", {})
+        if instrument_id not in instruments:
+            raise APIError(
+                404, "instrument_not_found",
+                f"Instrument '{instrument_id}' not found",
+            )
+        del instruments[instrument_id]
+        _save()
+    return {"deleted": instrument_id}
 
 
 # ---------------------------------------------------------------------------

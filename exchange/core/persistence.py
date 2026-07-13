@@ -19,7 +19,7 @@ import os
 from decimal import Decimal
 
 from exchange.core.models import (
-    Lock, Account, Transaction, TradeLeg, Trade, Market, TrackedRepo,
+    Lock, Account, Transaction, TradeLeg, Trade, Market, TrackedRepo, Instrument,
     ZERO, _counters, set_counter, reset_counters,
 )
 from exchange.core.risk_engine import RiskEngine
@@ -153,7 +153,7 @@ def _load_market(d: dict) -> Market:
 # Schema versioning
 # ---------------------------------------------------------------------------
 
-CURRENT_VERSION = 4
+CURRENT_VERSION = 5
 
 
 def _migrate_1_to_2(state: dict) -> dict:
@@ -177,10 +177,18 @@ def _migrate_3_to_4(state: dict) -> dict:
     return state
 
 
+def _migrate_4_to_5(state: dict) -> dict:
+    """Add instruments section to snapshot."""
+    state["instruments"] = {}
+    state["version"] = 5
+    return state
+
+
 _MIGRATIONS: dict[int, callable] = {
     1: _migrate_1_to_2,
     2: _migrate_2_to_3,
     3: _migrate_3_to_4,
+    4: _migrate_4_to_5,
 }
 
 
@@ -206,9 +214,10 @@ def save_snapshot(risk: RiskEngine, market_engine: MarketEngine,
                   tracked_repos: dict | None = None,
                   joint_venue=None,
                   book_venue=None,
-                  venues: dict | None = None) -> None:
+                  venues: dict | None = None,
+                  instruments: dict | None = None) -> None:
     """
-    Save complete RE + ME + auth + tracked_repos + venues state to a JSON file.
+    Save complete RE + ME + auth + tracked_repos + venues + instruments state.
     Atomic: writes to .tmp then renames.
 
     Live venue snapshots replace their own keys in the raw ``venues`` section.
@@ -238,6 +247,10 @@ def save_snapshot(risk: RiskEngine, market_engine: MarketEngine,
             for slug, repo in (tracked_repos or {}).items()
         },
         "venues": venues_section,
+        "instruments": {
+            slug: _serialize(instrument)
+            for slug, instrument in (instruments or {}).items()
+        },
     }
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
@@ -317,11 +330,24 @@ def _load_tracked_repos(data: dict) -> dict[str, TrackedRepo]:
     return repos
 
 
+def _load_instruments(data: dict) -> dict[str, Instrument]:
+    return {
+        slug: Instrument(
+            instrument_id=record["instrument_id"],
+            title=record["title"],
+            listings=[dict(listing) for listing in record["listings"]],
+            created_at=record["created_at"],
+        )
+        for slug, record in data.items()
+    }
+
+
 def load_snapshot(path: str) -> tuple:
     """
-    Load RE + ME + auth + tracked_repos + venues state from a JSON snapshot.
+    Load RE + ME + auth + tracked_repos + venues + instruments from a snapshot.
     Applies migrations automatically if the snapshot is an older version.
-    Returns (risk_engine, market_engine, auth_store, tracked_repos, venues)
+    Returns (risk_engine, market_engine, auth_store, tracked_repos, venues,
+    instruments)
     ready to use. auth_store is None if the auth module is not available.
     ``venues`` is the raw ``state["venues"]`` dict (e.g. ``venues["joint"]``
     is the payload to hand to ``JointVenue.from_snapshot``) — callers that
@@ -363,4 +389,6 @@ def load_snapshot(path: str) -> tuple:
     # Venues section is opaque here — each venue owns its own from_snapshot.
     venues = state.get("venues", {})
 
-    return risk, me, auth_store, tracked_repos, venues
+    instruments = _load_instruments(state.get("instruments", {}))
+
+    return risk, me, auth_store, tracked_repos, venues, instruments

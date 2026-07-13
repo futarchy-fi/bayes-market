@@ -359,3 +359,12 @@ class TrackedRepo:
             webhook_secret=webhook_secret,
             enabled=enabled,
         )
+
+
+@dataclass
+class Instrument:
+    """One question cross-listed on multiple venue markets."""
+    instrument_id: str
+    title: str
+    listings: list[dict[str, str]]
+    created_at: str = field(default_factory=_now)
