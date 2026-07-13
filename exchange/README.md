@@ -44,6 +44,27 @@ python3 -m pytest exchange/ -q
 
 The live Bayes server in `backend/server.py` is untouched and runs separately.
 
+## MCP server
+
+Install the optional MCP dependency:
+
+```bash
+pip install -r exchange/mcp/requirements.txt
+```
+
+Register the stdio server with Claude Code (omit the environment option for
+public, read-only tools):
+
+```bash
+claude mcp add futarchy-exchange -e FUTARCHY_API_KEY=... -- python -m exchange.mcp
+```
+
+`FUTARCHY_API_URL` defaults to `https://api.futarchy.ai`. The server provides
+`health`, `net_markets`, `net_marginal`, `net_preview_edit`, `net_place_edit`,
+`my_orders`, `my_account`, `my_portfolio`, `leaderboard`, `amm_markets`,
+`amm_buy`, and `amm_sell`. Account and trading tools require
+`FUTARCHY_API_KEY`; market data, health, and the leaderboard are public.
+
 ## Venue contract
 
 A venue kind implements the runtime-checkable `Venue` protocol in
