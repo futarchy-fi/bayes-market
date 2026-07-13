@@ -18,6 +18,7 @@ export function AppLayout() {
         <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>Bayes Market</span>
         <nav style={{ display: "flex", gap: "var(--space-md)" }}>
           <NavLink to="/markets" style={navLinkStyle}>Markets</NavLink>
+          <NavLink to="/compare" style={navLinkStyle}>Compare</NavLink>
           <NavLink to="/portfolio" style={navLinkStyle}>Portfolio</NavLink>
           <NavLink to="/system" style={navLinkStyle}>System</NavLink>
         </nav>
