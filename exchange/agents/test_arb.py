@@ -124,6 +124,42 @@ async def test_thin_amm_converges_without_overshoot_oscillation(seeded_exchange)
     assert spent < Decimal("5")                           # no per-tick spread bleed
 
 
+async def test_anchor_smoothing_blunts_a_transient_net_spike(seeded_exchange):
+    """A one-tick net spike must move the AMM far less when the agent follows
+    an EMA of the marginal (anchor_alpha < 1) than when it follows the raw
+    reading (anchor_alpha = 1). Manipulation resistance: the agent should not
+    convert a transient net blip into a full AMM move in a single tick."""
+    auth, _, _, _ = seeded_exchange
+
+    async def chase_after_spike(alpha: Decimal) -> Decimal:
+        amm, _ = app.state.me.create_market(
+            "S", "arb-test", f"spike-{alpha}", {}, b=Decimal("20")
+        )
+        instrument = {
+            "instrumentId": f"spike-{alpha}", "title": "S",
+            "listings": [
+                {"venue": "net", "marketId": "g1"},
+                {"venue": "amm", "marketId": str(amm.id)},
+            ],
+        }
+        attacker = app.state.risk.create_account(balance=Decimal("100000"))
+        async with _client(auth.api_key) as client:
+            policy = ArbPolicy(client, ArbConfig(report_only=False, anchor_alpha=alpha))
+            for _ in range(6):                     # converge to true 0.60
+                await policy.tick(instrument)
+            base = prices(amm.q, amm.b)["yes"]
+            app.state.joint.place_edit(attacker.id, "gcx_a", "yes", 0.95)  # spike
+            await policy.tick(instrument)
+            spiked = prices(amm.q, amm.b)["yes"]
+            app.state.joint.place_edit(attacker.id, "gcx_a", "yes", 0.60)  # revert
+            return spiked - base
+
+    raw_chase = await chase_after_spike(Decimal("1.0"))
+    smoothed_chase = await chase_after_spike(Decimal("0.3"))
+    assert raw_chase > Decimal("0.2")             # unsmoothed chases the spike hard
+    assert smoothed_chase < raw_chase / 2         # EMA blunts it by more than half
+
+
 async def test_book_gets_two_sided_quotes_at_anchor_delta(seeded_exchange):
     auth, instrument, _, book = seeded_exchange
     async with _client(auth.api_key) as client:

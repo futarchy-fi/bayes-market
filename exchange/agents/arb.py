@@ -49,6 +49,13 @@ class ArbConfig:
     requote_thr: Decimal = Decimal("0.005")
     min_balance: Decimal = Decimal("50")
     action_cap: int = 10
+    # Anchor smoothing: the agent follows an EMA of the net marginal, not the
+    # instantaneous reading, so a transient net spike can't be converted into
+    # a permanent AMM move in one tick. anchor_alpha is the weight on each new
+    # reading (1.0 = no smoothing = follow instantly; lower = slower to trust
+    # a change). A manipulator must now HOLD the net off-true for many ticks
+    # (sustained stake + exposure) to move the agent, instead of one blip.
+    anchor_alpha: Decimal = Decimal("0.3")
     report_only: bool = True
 
 
@@ -186,6 +193,21 @@ class ArbPolicy:
     def __init__(self, client: ExchangeClient, config: ArbConfig) -> None:
         self.client = client
         self.config = config
+        self._anchor_ema: dict[str, Decimal] = {}
+
+    def _smooth_anchor(self, instrument_id: str, raw: Decimal) -> Decimal:
+        """EMA-smooth the net marginal, clamped to (0, 1).
+
+        The clamp keeps a net pushed to an extreme from producing runaway
+        edits; the EMA means the agent chases a *sustained* net move, not a
+        single-tick spike (the manipulation-resistance point — see
+        ArbConfig.anchor_alpha)."""
+        clamped = min(Decimal("1") - _PRICE_EPS, max(_PRICE_EPS, raw))
+        alpha = _decimal(self.config.anchor_alpha)
+        prev = self._anchor_ema.get(instrument_id)
+        smoothed = clamped if prev is None else alpha * clamped + (1 - alpha) * prev
+        self._anchor_ema[instrument_id] = smoothed
+        return smoothed
 
     async def tick(self, instrument: dict) -> list[ArbAction]:
         """Run at most one coherence pass for one registry instrument."""
@@ -200,8 +222,10 @@ class ArbPolicy:
         anchor_market = await self.client.market("net", anchor_listing["marketId"])
         if not _tradable(anchor_market):
             return []
-        anchor = _decimal(anchor_market["marginals"]["yes"])
         instrument_id = instrument["instrumentId"]
+        anchor = self._smooth_anchor(
+            instrument_id, _decimal(anchor_market["marginals"]["yes"])
+        )
         actions: list[ArbAction] = []
         book_orders: list[dict] | None = None
 
@@ -338,6 +362,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--requote-thr", type=Decimal, default=_env_decimal("REQUOTE_THR", "0.005"))
     parser.add_argument("--min-balance", type=Decimal, default=_env_decimal("MIN_BALANCE", "50"))
     parser.add_argument("--action-cap", type=int, default=int(os.getenv("ACTION_CAP", "10")))
+    parser.add_argument("--anchor-alpha", type=Decimal, default=_env_decimal("ANCHOR_ALPHA", "0.3"))
     return parser
 
 
@@ -346,7 +371,8 @@ async def run(args: argparse.Namespace) -> None:
         spread_thr=args.spread_thr, budget_cap=args.budget_cap,
         size_cap=args.size_cap, delta=args.delta,
         requote_thr=args.requote_thr, min_balance=args.min_balance,
-        action_cap=args.action_cap, report_only=not args.execute,
+        action_cap=args.action_cap, anchor_alpha=args.anchor_alpha,
+        report_only=not args.execute,
     )
     selected = None if args.instruments == "all" else {
         item.strip() for item in args.instruments.split(",") if item.strip()
