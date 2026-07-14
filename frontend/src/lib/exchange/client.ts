@@ -102,12 +102,29 @@ export interface Instrument {
   listings: InstrumentListing[];
 }
 
+export interface MarketResolver {
+  type: string;
+  repo?: string;
+  pr_number?: number;
+}
+
+export interface MarketMetadata extends Record<string, unknown> {
+  creator_account_id?: number;
+  creator_github_id?: number;
+  creator_login?: string;
+  resolution_criteria?: string;
+  resolution_rules?: string;
+}
+
 export interface AmmMarket {
   market_id: number;
   question: string;
   status: string;
   outcomes: string[];
   prices: Record<string, string>;
+  creator_account_id?: number | null;
+  resolver?: MarketResolver;
+  metadata?: MarketMetadata;
 }
 
 export interface AmmTradePayload {
@@ -132,6 +149,9 @@ export interface BookMarket {
   bestBid: string | null;
   bestAsk: string | null;
   lastPrice: string | null;
+  creatorAccountId?: number | null;
+  resolver?: MarketResolver;
+  metadata?: MarketMetadata;
 }
 
 export interface BookDepthLevel { price: string; size: string }

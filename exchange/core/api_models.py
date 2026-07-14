@@ -186,6 +186,7 @@ class UserCreateMarketRequest(BaseModel):
     outcomes: list[str] | None = None
     deadline: str
     funding: str
+    resolution_criteria: str | None = None
 
 class CreateMarketResponse(BaseModel):
     market_id: int
@@ -336,6 +337,7 @@ class BookMarketList(BaseModel):
 class BookCreateMarketRequest(BaseModel):
     question: str
     deadline: str | None = None
+    resolution_criteria: str | None = None
 
 
 class BookOrderRequest(BaseModel):

@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ErrorMessage, LoadingPage } from "@/components/ui/Spinner";
 import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
-import { EXCHANGE_API, type Instrument, type InstrumentListing } from "@/lib/exchange/client";
+import {
+  EXCHANGE_API,
+  type Instrument,
+  type InstrumentListing,
+  type MarketMetadata,
+  type MarketResolver,
+} from "@/lib/exchange/client";
 import { TradeCreditsPanel, friendlyExchangeError } from "@/lib/exchange/TradeCreditsPanel";
 import {
   useAmmMarket,
@@ -59,7 +65,13 @@ function NetVenuePanel({ listing }: { listing?: InstrumentListing }) {
     <div data-testid="net-panel" style={{ display: "grid", gap: "var(--space-sm)" }}>
       <VenueHeader name="NET" listing={listing} />
       {market.isLoading ? <LoadingLine /> : market.error && !market.data ? <span style={errorStyle}>{friendlyExchangeError(market.error)}</span> : market.data ? (
-        <>{market.error && <ReconnectingHint />}<TradeCreditsPanel marketId={listing.marketId} variableId={market.data.variableId} /></>
+        <>
+          {market.error && <ReconnectingHint />}
+          <div data-testid="net-resolution-details" style={resolutionDetailsStyle}>
+            <span><strong>Oracle / judge:</strong> Not published by the current NET API.</span>
+          </div>
+          <TradeCreditsPanel marketId={listing.marketId} variableId={market.data.variableId} />
+        </>
       ) : null}
     </div>
   );
@@ -94,6 +106,12 @@ function AmmVenuePanel({ listing }: { listing?: InstrumentListing }) {
         <>
           {market.error && <ReconnectingHint />}
           <PriceRow prices={market.data.prices} />
+          <ResolutionDetails
+            venue="amm"
+            resolver={market.data.resolver}
+            metadata={market.data.metadata}
+            creatorAccountId={market.data.creator_account_id}
+          />
           {!isSignedIn ? <SignInPrompt action="trade the AMM" /> : (
             <form onSubmit={submit} style={{ display: "grid", gap: "var(--space-sm)" }}>
               <div style={twoColumnStyle}>
@@ -165,6 +183,12 @@ function BookVenuePanel({ listing }: { listing?: InstrumentListing }) {
       {reconnecting && <ReconnectingHint />}
       {market.isLoading || depth.isLoading ? <LoadingLine /> : queryError ? <span style={errorStyle}>Could not load the order book.</span> : market.data ? (
         <>
+          <ResolutionDetails
+            venue="book"
+            resolver={market.data.resolver}
+            metadata={market.data.metadata}
+            creatorAccountId={market.data.creatorAccountId}
+          />
           <div style={twoColumnStyle}>
             <span style={noteStyle}>Best bid <strong style={{ color: "var(--color-text)" }}>{formatPrice(market.data.bestBid)}</strong></span>
             <span style={noteStyle}>Best ask <strong style={{ color: "var(--color-text)" }}>{formatPrice(market.data.bestAsk)}</strong></span>
@@ -235,6 +259,51 @@ function PriceRow({ prices }: { prices: Record<string, string> }) {
   return <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-sm)" }}>{Object.entries(prices).map(([outcome, price]) => <span key={outcome} style={priceChipStyle}>{titleCase(outcome)} <strong>{formatPrice(price)}</strong></span>)}</div>;
 }
 
+function ResolutionDetails({
+  venue,
+  resolver,
+  metadata,
+  creatorAccountId,
+}: {
+  venue: string;
+  resolver?: MarketResolver;
+  metadata?: MarketMetadata;
+  creatorAccountId?: number | null;
+}) {
+  const oracle = oracleLabel(resolver, metadata, creatorAccountId);
+  const criteria = metadata?.resolution_criteria ?? metadata?.resolution_rules ?? "Not published for this market.";
+
+  return (
+    <div data-testid={`${venue}-resolution-details`} style={resolutionDetailsStyle}>
+      <span><strong>Oracle / judge:</strong> {oracle}</span>
+      <span><strong>Resolution criteria:</strong> {criteria}</span>
+      <span>{resolver?.type === "github_pr"
+        ? "GitHub events settle outcomes; legacy automatic VOID follows the market deadline."
+        : "The named oracle may choose an outcome or VOID."}</span>
+    </div>
+  );
+}
+
+function oracleLabel(
+  resolver?: MarketResolver,
+  metadata?: MarketMetadata,
+  creatorAccountId?: number | null,
+) {
+  if (resolver?.type === "creator") {
+    const accountId = creatorAccountId ?? metadata?.creator_account_id;
+    const identity = metadata?.creator_login ? `@${metadata.creator_login}` : "Market creator";
+    const ids = [
+      metadata?.creator_github_id ? `GitHub ID ${metadata.creator_github_id}` : null,
+      accountId ? `account #${accountId}` : null,
+    ].filter(Boolean);
+    return `${identity}${ids.length ? ` (${ids.join(", ")})` : ""}`;
+  }
+  if (resolver?.type === "github_pr") {
+    return `${resolver.repo ?? "GitHub"}#${resolver.pr_number ?? "?"}`;
+  }
+  return resolver?.type === "admin" ? "Futarchy administrators" : "Not specified";
+}
+
 function DepthTable({ bids, asks }: { bids: Array<{ price: string; size: string }>; asks: Array<{ price: string; size: string }> }) {
   const rows = Array.from({ length: Math.max(bids.length, asks.length, 1) });
   return <div style={tableWrapStyle}><table style={tableStyle}><thead><tr><th style={thStyle}>Bid</th><th style={thStyle}>Size</th><th style={thStyle}>Ask</th><th style={thStyle}>Size</th></tr></thead><tbody>{rows.map((_, index) => <tr key={index} style={{ borderTop: "1px solid var(--color-border)" }}><td style={tdStyle}>{formatPrice(bids[index]?.price)}</td><td style={tdStyle}>{bids[index]?.size ?? "—"}</td><td style={tdStyle}>{formatPrice(asks[index]?.price)}</td><td style={tdStyle}>{asks[index]?.size ?? "—"}</td></tr>)}</tbody></table></div>;
@@ -255,6 +324,7 @@ const linkButtonStyle: React.CSSProperties = { padding: 0, border: 0, background
 const twoColumnStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "var(--space-sm)" };
 const confirmStyle: React.CSSProperties = { padding: "var(--space-sm)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", color: "var(--color-text-muted)", fontSize: "0.8rem" };
 const priceChipStyle: React.CSSProperties = { padding: "3px 8px", borderRadius: 999, background: "var(--color-bg-hover)", fontSize: "0.75rem" };
+const resolutionDetailsStyle: React.CSSProperties = { display: "grid", gap: "var(--space-xs)", padding: "var(--space-sm)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", color: "var(--color-text-muted)", fontSize: "0.75rem" };
 const subheadingStyle: React.CSSProperties = { fontSize: "0.85rem", fontWeight: 600 };
 const orderRowStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: "var(--space-sm)", fontSize: "0.75rem" };
 const tableWrapStyle: React.CSSProperties = { border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", overflow: "auto" };
