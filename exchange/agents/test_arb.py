@@ -64,6 +64,30 @@ def _client(api_key: str) -> HttpExchange:
     )
 
 
+async def test_http_client_uses_fail_closed_target_endpoint():
+    seen = {}
+
+    def handler(request):
+        seen["path"] = request.url.path
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(204)
+
+    async with HttpExchange(
+        "http://test", "key", transport=httpx.MockTransport(handler),
+    ) as client:
+        result = await client.buy_amm(
+            "7", "yes", Decimal("1"), Decimal("0.6"), Decimal("0.02"),
+            Decimal("5"), Decimal("50"),
+        )
+
+    assert result is None
+    assert seen["path"] == "/v1/markets/7/buy-to-price"
+    assert set(seen["body"]) == {
+        "outcome", "maxBudget", "targetPrice", "maxPriceMove",
+        "positionLimit", "minBalance",
+    }
+
+
 async def test_distorted_amm_moves_toward_net_anchor_in_bounded_steps(
     seeded_exchange,
 ):
@@ -77,8 +101,6 @@ async def test_distorted_amm_moves_toward_net_anchor_in_bounded_steps(
         executed = []
         for _ in range(3):
             actions = await policy.tick(instrument)
-            if not actions:
-                break
             executed.extend(actions)
 
     assert executed
@@ -87,6 +109,7 @@ async def test_distorted_amm_moves_toward_net_anchor_in_bounded_steps(
 
     after = prices(amm.q, amm.b)["yes"]
     assert before < after < anchor
+    assert after - before <= Decimal("0.06")  # at most 2pp on each of three ticks
     assert anchor - after < anchor - before
 
 
@@ -126,7 +149,30 @@ async def test_thin_amm_converges_without_overshoot_oscillation(seeded_exchange)
     assert spent < Decimal("5")                           # no per-tick spread bleed
 
 
-async def test_anchor_smoothing_blunts_a_transient_net_spike(seeded_exchange):
+async def test_tiny_budget_cap_converges_monotonically_over_many_ticks(
+    seeded_exchange,
+):
+    auth, instrument, amm, _ = seeded_exchange
+    instrument = {**instrument, "listings": instrument["listings"][:2]}
+    history = [prices(amm.q, amm.b)["yes"]]
+
+    async with _client(auth.api_key) as client:
+        policy = ArbPolicy(client, ArbConfig(
+            report_only=False, budget_cap=Decimal("0.20"),
+        ))
+        buys = []
+        for _ in range(30):
+            actions = await policy.tick(instrument)
+            buys.extend(action for action in actions if action.kind == "buy")
+            history.append(prices(amm.q, amm.b)["yes"])
+
+    assert len(buys) > 5
+    assert all(Decimal("0") < action.budget <= Decimal("0.20") for action in buys)
+    assert history == sorted(history)
+    assert Decimal("0") < Decimal("0.60") - history[-1] < Decimal("0.02")
+
+
+async def test_anchor_smoothing_blunts_a_small_transient_net_spike(seeded_exchange):
     """A one-tick net spike must move the AMM far less when the agent follows
     an EMA of the marginal (anchor_alpha < 1) than when it follows the raw
     reading (anchor_alpha = 1). Manipulation resistance: the agent should not
@@ -150,7 +196,7 @@ async def test_anchor_smoothing_blunts_a_transient_net_spike(seeded_exchange):
             for _ in range(6):                     # converge to true 0.60
                 await policy.tick(instrument)
             base = prices(amm.q, amm.b)["yes"]
-            app.state.joint.place_edit(attacker.id, "gcx_a", "yes", 0.95)  # spike
+            app.state.joint.place_edit(attacker.id, "gcx_a", "yes", 0.64)  # spike
             await policy.tick(instrument)
             spiked = prices(amm.q, amm.b)["yes"]
             app.state.joint.place_edit(attacker.id, "gcx_a", "yes", 0.60)  # revert
@@ -158,8 +204,78 @@ async def test_anchor_smoothing_blunts_a_transient_net_spike(seeded_exchange):
 
     raw_chase = await chase_after_spike(Decimal("1.0"))
     smoothed_chase = await chase_after_spike(Decimal("0.3"))
-    assert raw_chase > Decimal("0.2")             # unsmoothed chases the spike hard
-    assert smoothed_chase < raw_chase / 2         # EMA blunts it by more than half
+    assert Decimal("0.015") < raw_chase <= Decimal("0.02")
+    assert smoothed_chase == Decimal("0")         # EMA keeps it below the trade band
+
+
+async def test_downward_correction_buys_no_and_moves_at_most_two_points(
+    seeded_exchange,
+):
+    auth, instrument, amm, _ = seeded_exchange
+    instrument = {**instrument, "listings": instrument["listings"][:2]}
+    attacker = app.state.risk.create_account(balance=Decimal("1000"))
+    app.state.me.buy(amm.id, attacker.id, "yes", Decimal("20"))
+    before = prices(amm.q, amm.b)["yes"]
+    balance_before = app.state.risk.get_account(auth.account_id).available_balance
+
+    async with _client(auth.api_key) as client:
+        policy = ArbPolicy(client, ArbConfig(report_only=False))
+        actions = await policy.tick(instrument)
+
+    after = prices(amm.q, amm.b)["yes"]
+    spent = balance_before - app.state.risk.get_account(auth.account_id).available_balance
+    assert [action.outcome for action in actions] == ["no"]
+    assert Decimal("0") < before - after <= Decimal("0.0201")
+    assert spent == actions[0].budget
+
+
+async def test_instrument_budget_and_per_listing_inventory_caps(seeded_exchange):
+    auth, instrument, amm, _ = seeded_exchange
+    second, _ = app.state.me.create_market(
+        "A2", "arb-test", "a-second", {}, b=Decimal("20")
+    )
+    instrument = {
+        **instrument,
+        "listings": [
+            instrument["listings"][0],
+            {"venue": "amm", "marketId": str(amm.id)},
+            {"venue": "amm", "marketId": str(second.id)},
+        ],
+    }
+    balance_before = app.state.risk.get_account(auth.account_id).available_balance
+
+    async with _client(auth.api_key) as client:
+        policy = ArbPolicy(client, ArbConfig(
+            report_only=False,
+            instrument_budget_cap=Decimal("0.75"),
+            inventory_cap=Decimal("2"),
+        ))
+        actions = await policy.tick(instrument)
+
+    spent = balance_before - app.state.risk.get_account(auth.account_id).available_balance
+    assert len(actions) == 2
+    assert spent == sum((action.budget for action in actions), Decimal("0"))
+    assert spent <= Decimal("0.75")
+    assert all(
+        sum(market.position(auth.account_id).values(), Decimal("0")) <= Decimal("1")
+        for market in (amm, second)
+    )
+
+
+async def test_repeated_ticks_after_convergence_are_idempotent(seeded_exchange):
+    auth, instrument, amm, _ = seeded_exchange
+    instrument = {**instrument, "listings": instrument["listings"][:2]}
+
+    async with _client(auth.api_key) as client:
+        policy = ArbPolicy(client, ArbConfig(report_only=False))
+        for _ in range(8):
+            await policy.tick(instrument)
+        q_after = deepcopy(amm.q)
+        balance_after = app.state.risk.get_account(auth.account_id).available_balance
+        assert [await policy.tick(instrument) for _ in range(3)] == [[], [], []]
+
+    assert amm.q == q_after
+    assert app.state.risk.get_account(auth.account_id).available_balance == balance_after
 
 
 async def test_spend_reserves_the_balance_floor(seeded_exchange):
@@ -176,33 +292,31 @@ async def test_spend_reserves_the_balance_floor(seeded_exchange):
     )
 
     async with _client(auth.api_key) as client:
-        await ArbPolicy(
+        policy = ArbPolicy(
             client, ArbConfig(report_only=False, min_balance=Decimal("50")),
-        ).tick(instrument)
+        )
+        await policy.tick(instrument)
 
     after = app.state.risk.get_account(auth.account_id).available_balance
     assert after >= Decimal("50")          # floor held
     assert after <= Decimal("53")          # and it did use the headroom it had
 
 
-async def test_book_gets_two_sided_quotes_at_anchor_delta(seeded_exchange):
+async def test_agent_cancels_legacy_book_quotes(seeded_exchange):
     auth, instrument, _, book = seeded_exchange
+    order = app.state.book.engine.place_order(
+        auth.account_id, book["id"], "bid", "yes",
+        Decimal("0.5000"), Decimal("1.00"),
+    )
     async with _client(auth.api_key) as client:
         actions = await ArbPolicy(
             client, ArbConfig(report_only=False)
         ).tick(instrument)
 
-    book_actions = [action for action in actions if action.venue == "book"]
-    assert [(action.outcome, action.price) for action in book_actions] == [
-        ("yes", Decimal("0.5900")),
-        ("no", Decimal("0.3900")),
+    assert [(action.kind, action.order_id) for action in actions if action.kind == "cancel"] == [
+        ("cancel", order.id)
     ]
-    orders = list(app.state.book.engine.orders.values())
-    assert [(order.side, order.outcome, order.price, order.size) for order in orders] == [
-        ("bid", "yes", Decimal("0.5900"), Decimal("10.00")),
-        ("bid", "no", Decimal("0.3900"), Decimal("10.00")),
-    ]
-    assert all(order.market_id == book["id"] for order in orders)
+    assert order.status == "cancelled"
 
 
 async def test_report_only_performs_zero_mutations(seeded_exchange):
@@ -213,7 +327,7 @@ async def test_report_only_performs_zero_mutations(seeded_exchange):
     async with _client(auth.api_key) as client:
         actions = await ArbPolicy(client, ArbConfig()).tick(instrument)
 
-    assert {action.kind for action in actions} == {"would_buy", "would_quote"}
+    assert {action.kind for action in actions} == {"would_buy"}
     assert amm.q == q_before
     assert app.state.book.engine.orders == {}
     assert app.state.risk.get_account(auth.account_id).available_balance == balance_before
