@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import math
 import os
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
@@ -14,6 +15,29 @@ import httpx
 
 def _decimal(value: Any) -> Decimal:
     return Decimal(str(value))
+
+
+_PRICE_EPS = Decimal("0.0001")
+
+
+def _budget_to_reach(price: Decimal, anchor: Decimal, b: Decimal) -> Decimal:
+    """Credits to move a binary LMSR's YES price to ``anchor`` from ``price``.
+
+    Closed form: buying YES to raise the price p0->p1 costs
+    ``b * ln((1 - p0) / (1 - p1))``; buying NO to lower it costs
+    ``b * ln(p0 / p1)``. Sizing to the anchor this way targets it exactly
+    instead of the depth-blind ``budget_cap * gap``, which overshoots a thin
+    (small-b) AMM and sends the agent into a price-flipping oscillation that
+    bleeds LMSR spread every tick. If the cap later binds, the agent moves
+    part-way and converges over successive ticks rather than overshooting.
+    """
+    p0 = min(Decimal("1") - _PRICE_EPS, max(_PRICE_EPS, price))
+    p1 = min(Decimal("1") - _PRICE_EPS, max(_PRICE_EPS, anchor))
+    if p1 > p0:
+        ratio = (Decimal("1") - p0) / (Decimal("1") - p1)
+    else:
+        ratio = p0 / p1
+    return b * Decimal(str(math.log(float(ratio))))
 
 
 @dataclass
@@ -192,9 +216,12 @@ class ArbPolicy:
                 yes = _decimal(market["prices"]["yes"])
                 gap = abs(yes - anchor)
                 if gap > _decimal(self.config.spread_thr):
+                    # Size to the anchor via the AMM's own depth (b), capped —
+                    # not budget_cap * gap, which is depth-blind and overshoots
+                    # thin markets into an oscillation.
+                    needed = _budget_to_reach(yes, anchor, _decimal(market["b"]))
                     budget = min(
-                        _decimal(self.config.budget_cap),
-                        _decimal(self.config.budget_cap) * gap,
+                        _decimal(self.config.budget_cap), needed,
                     ).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
                     outcome = "yes" if yes < anchor else "no"
                     action = ArbAction(

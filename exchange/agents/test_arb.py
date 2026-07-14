@@ -88,6 +88,42 @@ async def test_distorted_amm_moves_toward_net_anchor_in_bounded_steps(
     assert anchor - after < anchor - before
 
 
+async def test_thin_amm_converges_without_overshoot_oscillation(seeded_exchange):
+    """Adversarial twin of the bounded-steps test: a *thin* (small-b) AMM.
+
+    The depth-blind ``budget_cap * gap`` sizing blew a thin AMM past the
+    anchor and flipped sides every tick (0.78 -> 0.17 -> 0.98 -> 0.04 ...),
+    bleeding LMSR spread. Sizing to the anchor via the AMM's own b must
+    instead converge and stop, buying only one side.
+    """
+    auth, _, _, _ = seeded_exchange
+    thin, _ = app.state.me.create_market(
+        "B", "arb-test", "b-thin", {}, b=Decimal("3")
+    )
+    instrument = {
+        "instrumentId": "thin-b",
+        "title": "B",
+        "listings": [
+            {"venue": "net", "marketId": "g1"},        # anchor 0.60
+            {"venue": "amm", "marketId": str(thin.id)},
+        ],
+    }
+    anchor = Decimal("0.60")
+    start = app.state.risk.get_account(auth.account_id).available_balance
+
+    async with _client(auth.api_key) as client:
+        policy = ArbPolicy(client, ArbConfig(report_only=False))
+        buys = []
+        for _ in range(8):
+            buys.extend(a for a in await policy.tick(instrument) if a.kind == "buy")
+
+    final_yes = prices(thin.q, thin.b)["yes"]
+    spent = start - app.state.risk.get_account(auth.account_id).available_balance
+    assert abs(final_yes - anchor) < Decimal("0.02")      # converged, not oscillating
+    assert {b.outcome for b in buys} == {"yes"}           # never flipped sides
+    assert spent < Decimal("5")                           # no per-tick spread bleed
+
+
 async def test_book_gets_two_sided_quotes_at_anchor_delta(seeded_exchange):
     auth, instrument, _, book = seeded_exchange
     async with _client(auth.api_key) as client:
