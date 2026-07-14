@@ -228,6 +228,11 @@ class ArbPolicy:
         )
         actions: list[ArbAction] = []
         book_orders: list[dict] | None = None
+        # Spend only what keeps the account at or above min_balance AFTER this
+        # tick. The top-of-tick gate proves we're above the floor now; without
+        # reserving, one tick's AMM buy + book collateral could still dip
+        # below it. Every spend below draws down this running reserve.
+        spendable = _decimal(account["available"]) - _decimal(self.config.min_balance)
 
         for listing in listings:
             if len(actions) >= self.config.action_cap:
@@ -242,11 +247,14 @@ class ArbPolicy:
                 if gap > _decimal(self.config.spread_thr):
                     # Size to the anchor via the AMM's own depth (b), capped —
                     # not budget_cap * gap, which is depth-blind and overshoots
-                    # thin markets into an oscillation.
+                    # thin markets into an oscillation. Also capped by the
+                    # floor reserve.
                     needed = _budget_to_reach(yes, anchor, _decimal(market["b"]))
                     budget = min(
-                        _decimal(self.config.budget_cap), needed,
+                        _decimal(self.config.budget_cap), needed, spendable,
                     ).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+                    if budget <= Decimal("0"):
+                        continue
                     outcome = "yes" if yes < anchor else "no"
                     action = ArbAction(
                         "would_buy" if self.config.report_only else "buy",
@@ -254,6 +262,7 @@ class ArbPolicy:
                         budget=budget, anchor=anchor,
                     )
                     actions.append(action)
+                    spendable -= budget
                     if not self.config.report_only:
                         await self.client.buy_amm(market_id, outcome, budget)
             elif venue == "book":
@@ -262,8 +271,8 @@ class ArbPolicy:
                     continue
                 if book_orders is None:
                     book_orders = await self.client.book_orders()
-                await self._quote_book(
-                    instrument_id, market_id, anchor, book_orders, actions,
+                spendable = await self._quote_book(
+                    instrument_id, market_id, anchor, book_orders, actions, spendable,
                 )
         return actions
 
@@ -274,7 +283,8 @@ class ArbPolicy:
         anchor: Decimal,
         all_orders: list[dict],
         actions: list[ArbAction],
-    ) -> None:
+        spendable: Decimal,
+    ) -> Decimal:
         quantum = Decimal("0.0001")
         desired = {
             "yes": (anchor - _decimal(self.config.delta)).quantize(
@@ -310,10 +320,11 @@ class ArbPolicy:
             else:
                 stale.append(order)
 
-        # Cancel stale quotes before posting replacements.
+        # Cancel stale quotes before posting replacements. Cancels free
+        # collateral, so they don't draw the floor reserve.
         for order in stale:
             if len(actions) >= self.config.action_cap:
-                return
+                return spendable
             action = ArbAction(
                 "would_cancel" if self.config.report_only else "cancel",
                 instrument_id, "book", market_id,
@@ -330,15 +341,22 @@ class ArbPolicy:
             if outcome in keep:
                 continue
             if len(actions) >= self.config.action_cap:
-                return
+                return spendable
+            # A bid to buy `size` at `price` locks up to price*size; skip it
+            # if posting would breach the floor reserve.
+            collateral = price * size
+            if collateral > spendable:
+                continue
             action = ArbAction(
                 "would_quote" if self.config.report_only else "quote",
                 instrument_id, "book", market_id, outcome=outcome,
                 price=price, size=size, anchor=anchor,
             )
             actions.append(action)
+            spendable -= collateral
             if not self.config.report_only:
                 await self.client.place_book_order(market_id, outcome, price, size)
+        return spendable
 
 
 def _env_decimal(name: str, default: str) -> Decimal:

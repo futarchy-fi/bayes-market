@@ -160,6 +160,29 @@ async def test_anchor_smoothing_blunts_a_transient_net_spike(seeded_exchange):
     assert smoothed_chase < raw_chase / 2         # EMA blunts it by more than half
 
 
+async def test_spend_reserves_the_balance_floor(seeded_exchange):
+    """With only a little headroom above min_balance, the tick must spend at
+    most that headroom — the floor is reserved against the spend, not merely
+    checked before it."""
+    auth, instrument, amm, _ = seeded_exchange
+    instrument = {**instrument, "listings": instrument["listings"][:2]}  # net + amm
+    account = app.state.risk.get_account(auth.account_id)
+    # Leave exactly 3 credits of headroom above a 50 floor.
+    app.state.risk.transfer_available(
+        account.id, app.state.joint.treasury_account_id,
+        account.available_balance - Decimal("53"), reason="test_headroom",
+    )
+
+    async with _client(auth.api_key) as client:
+        await ArbPolicy(
+            client, ArbConfig(report_only=False, min_balance=Decimal("50")),
+        ).tick(instrument)
+
+    after = app.state.risk.get_account(auth.account_id).available_balance
+    assert after >= Decimal("50")          # floor held
+    assert after <= Decimal("53")          # and it did use the headroom it had
+
+
 async def test_book_gets_two_sided_quotes_at_anchor_delta(seeded_exchange):
     auth, instrument, _, book = seeded_exchange
     async with _client(auth.api_key) as client:
