@@ -1,5 +1,6 @@
 """HTTP-backed policy proofs for the resident arbitrage agent."""
 
+import argparse
 import json
 import os
 from copy import deepcopy
@@ -11,6 +12,7 @@ import pytest
 os.environ.setdefault("FUTARCHY_ADMIN_KEY", "test-admin-key")
 os.environ.setdefault("FUTARCHY_STATE", "/tmp/futarchy_test_state.json")
 
+import exchange.agents.arb as arb_module
 import exchange.core.api as api_module
 from exchange.agents.arb import ArbConfig, ArbPolicy, HttpExchange
 from exchange.core.api import _authenticate_github_identity, app
@@ -114,12 +116,29 @@ async def test_report_only_performs_zero_mutations(seeded_exchange):
     balance_before = app.state.risk.get_account(auth.account_id).available_balance
 
     async with _client(auth.api_key) as client:
-        actions = await ArbPolicy(client, ArbConfig()).tick(instrument)
+        args = arb_module._parser().parse_args(["--execute"])
+        actions = await ArbPolicy(
+            client, ArbConfig(report_only=not arb_module._execution_enabled(args)),
+        ).tick(instrument)
 
     assert {action.kind for action in actions} == {"would_buy", "would_quote"}
     assert amm.q == q_before
     assert app.state.book.engine.orders == {}
     assert app.state.risk.get_account(auth.account_id).available_balance == balance_before
+
+
+def test_execute_requires_live_trading_activation(capsys):
+    assert not arb_module._execution_enabled(argparse.Namespace(execute=True))
+    assert not arb_module._execution_enabled(
+        arb_module._parser().parse_args(["--execute"])
+    )
+    assert not arb_module._execution_enabled(
+        arb_module._parser().parse_args(["--enable-live-trading"])
+    )
+    assert arb_module._execution_enabled(arb_module._parser().parse_args([
+        "--execute", "--enable-live-trading",
+    ]))
+    assert "live trading disabled" in capsys.readouterr().out
 
 
 async def test_balance_floor_refuses_all_actions(seeded_exchange):

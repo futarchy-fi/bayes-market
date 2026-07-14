@@ -12,6 +12,14 @@ from typing import Any, Protocol
 import httpx
 
 
+def _execution_enabled(args: argparse.Namespace) -> bool:
+    requested = bool(getattr(args, "execute", False))
+    enabled = requested and bool(getattr(args, "enable_live_trading", False))
+    if requested and not enabled:
+        print("REPORT live trading disabled; add --enable-live-trading to activate", flush=True)
+    return enabled
+
+
 def _decimal(value: Any) -> Decimal:
     return Decimal(str(value))
 
@@ -297,8 +305,15 @@ def _env_decimal(name: str, default: str) -> Decimal:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--execute", action="store_true", help="perform intended actions")
+    mode.add_argument(
+        "--execute", action="store_true",
+        help="request execution (also requires --enable-live-trading)",
+    )
     mode.add_argument("--report-only", action="store_true", help="print without mutating (default)")
+    parser.add_argument(
+        "--enable-live-trading", action="store_true",
+        help="allow --execute to mutate markets",
+    )
     parser.add_argument("--once", action="store_true", help="run one pass and exit")
     parser.add_argument("--api-url", default=os.getenv("FUTARCHY_API_URL", "http://127.0.0.1:8000"))
     parser.add_argument("--api-key", default=os.getenv("FUTARCHY_API_KEY", ""))
@@ -315,6 +330,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 async def run(args: argparse.Namespace) -> None:
+    args.execute = _execution_enabled(args)
     config = ArbConfig(
         spread_thr=args.spread_thr, budget_cap=args.budget_cap,
         size_cap=args.size_cap, delta=args.delta,
