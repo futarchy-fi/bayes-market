@@ -26,7 +26,6 @@ export function AppLayout() {
         {!exchangeMode && <span style={exchangeBadgeStyle}>paper mode</span>}
         <nav style={{ display: "flex", gap: "var(--space-md)" }}>
           <NavLink to="/markets" style={navLinkStyle}>Markets</NavLink>
-          <NavLink to="/compare" style={navLinkStyle}>Compare</NavLink>
           <NavLink to="/portfolio" style={navLinkStyle}>Portfolio</NavLink>
           <NavLink to="/leaderboard" style={navLinkStyle}>Leaderboard</NavLink>
           <NavLink to="/system" style={navLinkStyle}>System</NavLink>

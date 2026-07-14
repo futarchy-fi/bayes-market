@@ -1,19 +1,35 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ErrorMessage, LoadingPage } from "@/components/ui/Spinner";
+import { MarketCombobox } from "@/features/compare/MarketCombobox";
+import { RelatedMarketChips, relatedMarketsFor } from "@/features/compare/RelatedMarketChips";
 import { jointDistribution } from "@/features/compare/jointMath";
-import { useMarket, useMarkets } from "@/lib/query/hooks";
+import { useMarket, useMarkets, useNetwork } from "@/lib/query/hooks";
 
 const percent = (value: number) => `${(value * 100).toFixed(2)}%`;
 
 export default function Compare() {
   const [searchParams, setSearchParams] = useSearchParams();
   const marketsQuery = useMarkets();
+  const networkQuery = useNetwork();
   const markets = marketsQuery.data?.markets ?? [];
   const requestedA = searchParams.get("a");
   const requestedB = searchParams.get("b");
   const a = markets.some((market) => market.id === requestedA) ? requestedA! : (markets[0]?.id ?? "");
-  const b = markets.some((market) => market.id === requestedB) ? requestedB! : (markets[1]?.id ?? markets[0]?.id ?? "");
+  const networkEdges = networkQuery.data?.edges ?? [];
+  const relatedMarkets = useMemo(
+    () => relatedMarketsFor(a, markets, networkEdges),
+    [a, markets, networkEdges],
+  );
+  const requestedBIsValid = markets.some((market) => market.id === requestedB);
+  const waitingForDefaultB = requestedB === null && networkQuery.isLoading;
+  const b = requestedBIsValid
+    ? requestedB!
+    : waitingForDefaultB
+      ? ""
+      : requestedB === null
+        ? (relatedMarkets[0]?.id ?? markets[1]?.id ?? markets[0]?.id ?? "")
+        : (markets[1]?.id ?? markets[0]?.id ?? "");
 
   const marketA = useMarket(a, { enabled: a.length > 0 });
   const variableA = marketA.data?.market.variableId ?? "";
@@ -60,9 +76,18 @@ export default function Compare() {
         <p style={mutedStyle}>Joint probabilities inferred from the current Bayes network.</p>
       </header>
 
-      <section style={{ ...cardStyle, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "var(--space-md)" }}>
-        <MarketPicker label="Market A" value={a} markets={markets} onChange={(value) => selectMarket("a", value)} />
-        <MarketPicker label="Market B" value={b} markets={markets} onChange={(value) => selectMarket("b", value)} />
+      <section style={{ ...cardStyle, display: "grid", gap: "var(--space-md)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "var(--space-md)" }}>
+          <MarketCombobox label="Market A" value={a} markets={markets} onChange={(value) => selectMarket("a", value)} />
+          <MarketCombobox label="Market B" value={b} markets={markets} onChange={(value) => selectMarket("b", value)} />
+        </div>
+        <RelatedMarketChips
+          marketId={a}
+          markets={markets}
+          networkEdges={networkEdges}
+          onSelect={(value) => selectMarket("b", value)}
+          label="Related to A:"
+        />
       </section>
 
       {isLoading && !joint && <LoadingPage />}
@@ -115,22 +140,6 @@ export default function Compare() {
   );
 }
 
-function MarketPicker({ label, value, markets, onChange }: {
-  label: string;
-  value: string;
-  markets: { id: string; title: string }[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label style={{ display: "grid", gap: "var(--space-xs)" }}>
-      <span style={labelStyle}>{label}</span>
-      <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} style={selectStyle}>
-        {markets.map((market) => <option key={market.id} value={market.id}>{market.title}</option>)}
-      </select>
-    </label>
-  );
-}
-
 function Cell({ value, marginal = false }: { value: number; marginal?: boolean }) {
   return <td style={{ ...cellStyle, color: marginal ? "var(--color-text-muted)" : "var(--color-text)" }}>{percent(value)}</td>;
 }
@@ -142,8 +151,6 @@ function Stat({ label, value }: { label: string; value: string }) {
 const cardStyle: React.CSSProperties = { padding: "var(--space-lg)", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border)", background: "var(--color-bg-surface)" };
 const sectionTitle: React.CSSProperties = { fontSize: "1rem", fontWeight: 600, marginBottom: "var(--space-md)" };
 const mutedStyle: React.CSSProperties = { color: "var(--color-text-muted)" };
-const labelStyle: React.CSSProperties = { fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-muted)" };
-const selectStyle: React.CSSProperties = { padding: "10px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "var(--color-bg)", color: "var(--color-text)" };
 const tableStyle: React.CSSProperties = { width: "100%", borderCollapse: "collapse", textAlign: "center" };
 const cellStyle: React.CSSProperties = { padding: "var(--space-md)", border: "1px solid var(--color-border)", fontFamily: "var(--font-mono)", fontWeight: 600 };
 const statStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: "var(--space-md)", padding: "var(--space-sm) 0", borderBottom: "1px solid var(--color-border)" };

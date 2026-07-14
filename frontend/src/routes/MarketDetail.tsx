@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMarket, useMarkets, useMarketEvents, useAccountRisk, useEngineStats, queryKeys } from "@/lib/query/hooks";
+import { useMarket, useMarkets, useMarketEvents, useAccountRisk, useEngineStats, useNetwork, queryKeys } from "@/lib/query/hooks";
 import { useSession } from "@/features/session/context";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ProbabilityBar } from "@/components/ui/ProbabilityBar";
@@ -27,6 +27,8 @@ import { isExchangeMode } from "@/lib/exchangeMode";
 import { ExchangeUnavailable } from "@/components/ui/ExchangeUnavailable";
 import { useInstruments } from "@/lib/exchange/hooks";
 import { VenuePanels } from "@/routes/InstrumentDetail";
+import { MarketCombobox } from "@/features/compare/MarketCombobox";
+import { RelatedMarketChips } from "@/features/compare/RelatedMarketChips";
 
 export default function MarketDetail() {
   const { marketId } = useParams<{ marketId: string }>();
@@ -53,8 +55,10 @@ export default function MarketDetail() {
 
   // Graph view toggle and toolbar state
   const [graphView, setGraphView] = useState<GraphView>("flow");
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const marketsQuery = useMarkets();
+  const networkQuery = useNetwork();
   const instruments = useInstruments(exchangeMode);
   const engineStatsQuery = useEngineStats(marketId!, { enabled: !exchangeMode });
   const allMarkets = marketsQuery.data?.markets ?? [];
@@ -82,6 +86,11 @@ export default function MarketDetail() {
   ) : undefined;
   const selectedMarket =
     effectiveSelectedId === m.id ? m : selectedMarketQuery.data?.market ?? m;
+  const comparisonMarkets = [m, ...allMarkets.filter((market) => market.id !== m.id)];
+
+  function compareWith(otherMarketId: string) {
+    navigate(`/compare?a=${encodeURIComponent(m.id)}&b=${encodeURIComponent(otherMarketId)}`);
+  }
 
   return (
     <HistoryProvider>
@@ -91,6 +100,25 @@ export default function MarketDetail() {
         <div style={{ display: "flex", gap: "var(--space-md)", alignItems: "center", marginBottom: "var(--space-sm)" }}>
           <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>{m.title}</h1>
           <StatusBadge status={m.status} />
+        </div>
+        <div style={compareRowStyle}>
+          <div style={{ width: 260 }}>
+            <MarketCombobox
+              label="Compare with…"
+              value=""
+              markets={comparisonMarkets.filter((market) => market.id !== m.id)}
+              onChange={compareWith}
+              placeholder="Compare with…"
+              showLabel={false}
+            />
+          </div>
+          <RelatedMarketChips
+            marketId={m.id}
+            markets={comparisonMarkets}
+            networkEdges={networkQuery.data?.edges ?? []}
+            onSelect={compareWith}
+            label="Related:"
+          />
         </div>
         <p style={{ color: "var(--color-text-muted)", marginBottom: "var(--space-md)" }}>{m.description}</p>
         {exchangeMode ? (
@@ -278,6 +306,7 @@ function EventRow({ event }: { event: MarketEvent }) {
 
 const thStyle: React.CSSProperties = { textAlign: "left", padding: "6px 12px", fontWeight: 500 };
 const tdStyle: React.CSSProperties = { padding: "6px 12px" };
+const compareRowStyle: React.CSSProperties = { display: "flex", alignItems: "center", flexWrap: "wrap", gap: "var(--space-sm)", marginBottom: "var(--space-sm)" };
 
 const positionCardStyle: React.CSSProperties = {
   padding: "var(--space-sm) var(--space-md)",
