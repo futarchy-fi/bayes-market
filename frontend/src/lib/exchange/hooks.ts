@@ -50,6 +50,7 @@ export function useMeNet() {
     queryKey: [...exchangeQueryKeys.portfolio(), session.githubLogin],
     queryFn: () => exchange.getMeNet(session.apiKey),
     enabled: isSignedIn,
+    refetchInterval: 15000,
   });
 }
 

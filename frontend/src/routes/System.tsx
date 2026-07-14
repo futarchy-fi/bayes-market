@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useHealth, useServiceIndex, useMarkets } from "@/lib/query/hooks";
-import { LoadingPage } from "@/components/ui/Spinner";
+import { ErrorMessage, LoadingPage } from "@/components/ui/Spinner";
+import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import { formatCurrency } from "@/lib/utils/format";
 
 export default function System() {
@@ -34,6 +35,7 @@ export default function System() {
 
       {/* Health beacon */}
       <div style={cardStyle}>
+        {health.error && health.data && <ReconnectingHint />}
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
           <div style={{
             width: 12,
@@ -51,7 +53,7 @@ export default function System() {
             </span>
           )}
         </div>
-        {health.isError && (
+        {health.isError && !health.data && (
           <div style={{ marginTop: "var(--space-sm)", fontSize: "0.8rem", color: "var(--color-danger)" }}>
             {health.error instanceof Error ? health.error.message : "Connection failed"}
           </div>
@@ -74,7 +76,10 @@ export default function System() {
       {/* Market counts by status */}
       <div style={cardStyle}>
         <h2 style={sectionTitle}>Markets</h2>
-        {allMarkets.isLoading ? (
+        {allMarkets.error && allMarkets.data && <ReconnectingHint />}
+        {allMarkets.error && !allMarkets.data ? (
+          <ErrorMessage message="Could not load market statistics." />
+        ) : allMarkets.isLoading ? (
           <LoadingPage />
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "var(--space-sm)" }}>
@@ -88,8 +93,10 @@ export default function System() {
       </div>
 
       {/* API info */}
+      {index.error && !index.data && <ErrorMessage message="Could not load the API surface." />}
       {index.data && (
         <div style={cardStyle}>
+          {index.error && <ReconnectingHint />}
           <h2 style={sectionTitle}>API Surface</h2>
           <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: "var(--space-sm)" }}>
             Version: {index.data.meta.apiVersion}

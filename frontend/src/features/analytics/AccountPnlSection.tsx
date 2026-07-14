@@ -1,5 +1,6 @@
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ErrorMessage, LoadingPage } from "@/components/ui/Spinner";
+import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import type { AccountPnlResponse } from "@/lib/api/types";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatSignedCurrency } from "./chartUtils";
@@ -34,12 +35,15 @@ export function AccountPnlSection({
 
       {accountId && isLoading && <LoadingPage />}
 
-      {accountId && !isLoading && !!error && (
+      {accountId && !isLoading && !!error && !data && (
         <ErrorMessage message="Unable to load account P&L right now. Market analytics is still available." />
       )}
 
-      {accountId && !isLoading && !error && data && (
-        <AccountPnlContent data={data} selectedMarketId={selectedMarketId} />
+      {accountId && !isLoading && data && (
+        <>
+          {error && <ReconnectingHint />}
+          <AccountPnlContent data={data} selectedMarketId={selectedMarketId} />
+        </>
       )}
     </section>
   );

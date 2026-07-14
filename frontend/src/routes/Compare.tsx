@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ErrorMessage, LoadingPage } from "@/components/ui/Spinner";
+import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import { MarketCombobox } from "@/features/compare/MarketCombobox";
 import { RelatedMarketChips, relatedMarketsFor } from "@/features/compare/RelatedMarketChips";
 import { jointDistribution } from "@/features/compare/jointMath";
@@ -48,10 +49,11 @@ export default function Compare() {
   }, [a, b, requestedA, requestedB, setSearchParams]);
 
   if (marketsQuery.isLoading && markets.length === 0) return <LoadingPage />;
-  if (marketsQuery.error) return <ErrorMessage message="Failed to load markets" />;
+  if (marketsQuery.error && !marketsQuery.data) return <ErrorMessage message="Failed to load markets" />;
   if (markets.length < 2) return <ErrorMessage message="At least two markets are needed to compare." />;
 
   const error = marketA.error ?? marketBGivenA.error ?? marketBGivenNotA.error;
+  const hasComparisonData = Boolean(marketA.data && marketBGivenA.data && marketBGivenNotA.data);
   const isLoading = marketA.isLoading || marketBGivenA.isLoading || marketBGivenNotA.isLoading;
   const pA = marketA.data?.market.marginals.yes;
   const pBGivenA = marketBGivenA.data?.market.marginals.yes;
@@ -71,6 +73,7 @@ export default function Compare() {
 
   return (
     <div style={{ display: "grid", gap: "var(--space-lg)" }}>
+      {(marketsQuery.error || (error && hasComparisonData)) && <ReconnectingHint />}
       <header>
         <h1 style={{ fontSize: "1.6rem", fontWeight: 600 }}>Compare Markets</h1>
         <p style={mutedStyle}>Joint probabilities inferred from the current Bayes network.</p>
@@ -91,7 +94,7 @@ export default function Compare() {
       </section>
 
       {isLoading && !joint && <LoadingPage />}
-      {error && <ErrorMessage message={error instanceof Error ? error.message : "Failed to infer comparison"} />}
+      {error && !hasComparisonData && <ErrorMessage message={error instanceof Error ? error.message : "Failed to infer comparison"} />}
 
       {joint && (
         <>

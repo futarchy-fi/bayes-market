@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import { AssumptionProvider, useAssumptions } from "@/features/assumptions/AssumptionContext";
 import { AssumptionBar } from "@/features/assumptions/AssumptionBar";
 import { NetworkMap } from "@/features/graph/NetworkMap";
-import { useMarkets } from "@/lib/query/hooks";
 import { isExchangeMode } from "@/lib/exchangeMode";
 
 /**
@@ -21,8 +20,6 @@ export default function Landing() {
 function LandingContent() {
   const exchangeMode = isExchangeMode();
   const { assumptions } = useAssumptions();
-  const { data } = useMarkets();
-  const marketCount = data?.markets.length ?? 0;
 
   return (
     <div style={{ display: "grid", gap: "var(--space-lg)" }}>
@@ -31,7 +28,7 @@ function LandingContent() {
           A live belief network over AI futures
         </h1>
         <p style={{ color: "var(--color-text-muted)", fontSize: "0.95rem", lineHeight: 1.55 }}>
-          {marketCount || 16} linked prediction markets form one coherent probability model.
+          Linked prediction markets form one coherent probability model.
           Click any market below, assume an outcome, and watch every connected price update
           by exact Bayesian inference — forward to consequences and backward to causes.
         </p>

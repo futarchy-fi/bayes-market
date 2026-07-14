@@ -1,6 +1,8 @@
 import { useMemo, useState, useCallback, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
 import { useGraphMarkets } from "@/lib/query/hooks";
+import { ErrorMessage } from "@/components/ui/Spinner";
+import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import { useOptionalAssumptions } from "@/features/assumptions/AssumptionContext";
 import type { GraphMarket } from "@/lib/api/types";
 import {
@@ -44,7 +46,7 @@ export function NetworkMap() {
   const context = assumptionState?.contextPayload ?? [];
   const assumptionMode = context.length > 0;
 
-  const { data, isLoading } = useGraphMarkets(context);
+  const { data, isLoading, error } = useGraphMarkets(context);
   const markets = useMemo(() => data?.markets ?? [], [data]);
 
   const marketById = useMemo(() => new Map(markets.map((m) => [m.id, m])), [markets]);
@@ -137,6 +139,10 @@ export function NetworkMap() {
     );
   }
 
+  if (error && !data) {
+    return <div style={panelStyle}><ErrorMessage message="Failed to load the market network" /></div>;
+  }
+
   if (markets.length === 0) {
     return (
       <div style={panelStyle}>
@@ -152,6 +158,7 @@ export function NetworkMap() {
 
   return (
     <div style={panelStyle}>
+      {error && <ReconnectingHint />}
       <div style={toolbarStyle}>
         <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>
           {markets.length.toLocaleString()} markets · {layout.edges.length.toLocaleString()} links

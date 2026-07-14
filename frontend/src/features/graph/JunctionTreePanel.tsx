@@ -2,6 +2,8 @@ import { useEngineStats } from "@/lib/query/hooks";
 import type { EngineStatsResponse, CliqueSummary } from "@/lib/api/types";
 import { isExchangeMode } from "@/lib/exchangeMode";
 import { ExchangeUnavailable } from "@/components/ui/ExchangeUnavailable";
+import { ErrorMessage } from "@/components/ui/Spinner";
+import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 
 interface JunctionTreePanelProps {
   marketId: string;
@@ -91,7 +93,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function JunctionTreePanel({ marketId }: JunctionTreePanelProps) {
-  const { data, isLoading } = useEngineStats(marketId);
+  const { data, isLoading, error } = useEngineStats(marketId);
 
   if (isExchangeMode()) return <ExchangeUnavailable title="Junction Tree & Inference" />;
 
@@ -103,6 +105,7 @@ export function JunctionTreePanel({ marketId }: JunctionTreePanelProps) {
     );
   }
 
+  if (error && !data) return <div style={panelStyle}><ErrorMessage message="Failed to load engine stats" /></div>;
   if (!data) return null;
 
   const { engine, cliques, diagnostics } = data;
@@ -111,6 +114,7 @@ export function JunctionTreePanel({ marketId }: JunctionTreePanelProps) {
 
   return (
     <div style={panelStyle}>
+      {error && <ReconnectingHint />}
       <h3 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "var(--space-sm)" }}>
         Junction Tree & Inference
       </h3>

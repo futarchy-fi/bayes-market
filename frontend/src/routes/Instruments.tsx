@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { ErrorMessage, LoadingPage } from "@/components/ui/Spinner";
+import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import { useInstruments } from "@/lib/exchange/hooks";
 import { instrumentPriceChips } from "@/lib/exchange/venues";
 
@@ -7,10 +8,11 @@ export default function Instruments() {
   const instruments = useInstruments();
 
   if (instruments.isLoading) return <LoadingPage />;
-  if (instruments.error) return <ErrorMessage message="Could not load exchange instruments." />;
+  if (instruments.error && !instruments.data) return <ErrorMessage message="Could not load exchange instruments." />;
 
   return (
     <div style={{ display: "grid", gap: "var(--space-lg)" }}>
+      {instruments.error && <ReconnectingHint />}
       <div>
         <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>Exchange</h1>
         <p style={noteStyle}>Trade the same question across NET, AMM, and order-book venues.</p>

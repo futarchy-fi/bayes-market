@@ -6,6 +6,7 @@ import { useSession } from "@/features/session/context";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ProbabilityBar } from "@/components/ui/ProbabilityBar";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
+import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import { formatCurrency, timeUntil, truncateHash, formatRelativeTime } from "@/lib/utils/format";
 import { AssumptionProvider, useAssumptions, useOptionalAssumptions } from "@/features/assumptions/AssumptionContext";
 import { AssumptionPanel } from "@/features/assumptions/AssumptionPanel";
@@ -77,7 +78,7 @@ export default function MarketDetail() {
   }, [queryClient]);
 
   if (isLoading) return <LoadingPage />;
-  if (error) return <ErrorMessage message={error instanceof Error ? error.message : "Market not found"} />;
+  if (error && !data) return <ErrorMessage message={error instanceof Error ? error.message : "Market not found"} />;
   if (!data) return null;
 
   const m = data.market;
@@ -96,6 +97,7 @@ export default function MarketDetail() {
     <HistoryProvider>
     <AssumptionProvider>
     <div style={{ display: "grid", gap: "var(--space-lg)" }}>
+      {error && <ReconnectingHint />}
       <div>
         <div style={{ display: "flex", gap: "var(--space-md)", alignItems: "center", marginBottom: "var(--space-sm)" }}>
           <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>{m.title}</h1>
@@ -183,6 +185,8 @@ export default function MarketDetail() {
       {exchangeMode ? <ExchangeUnavailable title="Event Journal" /> : <div>
         <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--space-sm)" }}>Event Journal</h2>
         {events.isLoading && <LoadingPage />}
+        {events.error && !events.data && <ErrorMessage message="Failed to load market events" />}
+        {events.error && events.data && <ReconnectingHint />}
         {events.data && events.data.events.length === 0 && (
           <span style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>No events yet.</span>
         )}

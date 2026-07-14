@@ -1,13 +1,15 @@
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
+import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import { useLeaderboard } from "@/lib/exchange/hooks";
 
 export default function Leaderboard() {
   const leaderboard = useLeaderboard();
   if (leaderboard.isLoading) return <LoadingPage />;
-  if (leaderboard.error) return <ErrorMessage message="Could not load the credits leaderboard." />;
+  if (leaderboard.error && !leaderboard.data) return <ErrorMessage message="Could not load the credits leaderboard." />;
 
   return (
     <div style={{ display: "grid", gap: "var(--space-lg)" }}>
+      {leaderboard.error && <ReconnectingHint />}
       <div>
         <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>Credits leaderboard</h1>
         <p style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>Top exchange accounts by total credits.</p>
