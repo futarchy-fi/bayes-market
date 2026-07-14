@@ -12,7 +12,9 @@ os.environ.setdefault("FUTARCHY_ADMIN_KEY", "test-admin-key")
 os.environ.setdefault("FUTARCHY_STATE", "/tmp/futarchy_test_state.json")
 
 import exchange.core.api as api_module
-from exchange.agents.arb import ArbConfig, ArbPolicy, HttpExchange, run_pass
+from exchange.agents.arb import (
+    ArbConfig, ArbPolicy, HttpExchange, _backoff_delay, run_pass,
+)
 from exchange.core.api import _authenticate_github_identity, app
 from exchange.core.lmsr import prices
 from exchange.core.models import reset_counters
@@ -262,8 +264,9 @@ async def test_run_pass_survives_a_failing_tick():
     run(), tear down the process and crash-loop under systemd)."""
     client = _FlakyClient([{"instrumentId": "a"}, {"instrumentId": "b"}])
     policy = _RaisingPolicy()
-    await run_pass(client, policy, selected=None)   # must not raise
+    errors = await run_pass(client, policy, selected=None)  # must not raise
     assert policy.seen == ["a", "b"]                # both attempted despite the first failing
+    assert errors == 2                              # both failures counted for backoff
 
 
 async def test_run_pass_survives_a_failing_instruments_fetch():
@@ -271,4 +274,13 @@ async def test_run_pass_survives_a_failing_instruments_fetch():
         async def instruments(self):
             raise RuntimeError("exchange GET /v1/instruments failed (429)")
 
-    await run_pass(_DeadClient(), _RaisingPolicy(), selected=None)  # must not raise
+    errors = await run_pass(_DeadClient(), _RaisingPolicy(), selected=None)  # must not raise
+    assert errors == 1
+
+
+def test_backoff_delay_grows_then_caps_and_resets():
+    base, cap = 30.0, 600.0
+    assert _backoff_delay(base, 0, cap) == base          # a clean pass resets to base
+    assert _backoff_delay(base, 1, cap) == 60.0          # doubles per erroring pass
+    assert _backoff_delay(base, 2, cap) == 120.0
+    assert _backoff_delay(base, 100, cap) == cap         # never exceeds the cap

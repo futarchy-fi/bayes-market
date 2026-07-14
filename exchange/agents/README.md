@@ -41,10 +41,13 @@ loop** — each guardrail exists because its absence was a demonstrated failure
 3. **The balance floor is reserved, not just checked.** A tick spends at most
    `available - min_balance` across all its AMM buys and book collateral, so
    it never dips the account below the floor mid-tick.
-4. **A transient error never tears down the loop.** `run_pass` isolates the
-   instruments fetch and each per-instrument tick; a failure is logged and
-   the sweep continues, retrying next interval rather than crash-looping
-   under systemd.
+4. **A transient error never tears down the loop, and sustained failure
+   backs off.** `run_pass` isolates the instruments fetch and each
+   per-instrument tick; a failure is logged and the sweep continues rather
+   than crash-looping under systemd. `run` counts a pass's errors and applies
+   exponential backoff (base `interval`, doubling per consecutive erroring
+   pass, capped at `ARB_BACKOFF_CAP`), so a rate-limit storm settles instead
+   of hammering at the fixed interval; a clean pass resets to `interval`.
 
 ## Known limitations (deliberately not yet fixed)
 
@@ -56,8 +59,5 @@ loop** — each guardrail exists because its absence was a demonstrated failure
   quoting and an inventory limit. Left as a design task, not a quick patch,
   precisely because a half-built inventory manager in money code is worse
   than a documented gap.
-- **No backoff on sustained failure.** `run_pass` survives a transient error,
-  but repeated failures just retry every `interval`. A backoff/circuit-breaker
-  is a sensible follow-up.
 - **Per-instrument, not portfolio-level, risk.** Caps apply per tick per
   instrument; there is no global exposure or loss budget across instruments.

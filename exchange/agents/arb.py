@@ -386,20 +386,23 @@ def _parser() -> argparse.ArgumentParser:
 
 async def run_pass(
     client: ExchangeClient, policy: ArbPolicy, selected: set[str] | None,
-) -> None:
-    """One coherence sweep over all instruments.
+) -> int:
+    """One coherence sweep over all instruments; returns the error count.
 
     Every remote call is fallible (a busy pass can hit the 60/min rate
     limit and 429), and a live agent must not die on a transient error and
     crash-loop under systemd. So the instruments fetch and each per-instrument
     tick are isolated: a failure is logged and the pass moves on, retrying on
-    the next interval rather than tearing down the process.
+    the next interval rather than tearing down the process. The returned
+    count lets the caller back off when a pass is erroring (e.g. sustained
+    rate-limiting) instead of hammering at the fixed interval.
     """
     try:
         instruments = await client.instruments()
     except Exception as err:  # noqa: BLE001 — a fetch failure must not kill the loop
         print(f"ERROR fetching instruments: {err}", flush=True)
-        return
+        return 1
+    errors = 0
     for instrument in instruments:
         if selected is not None and instrument["instrumentId"] not in selected:
             continue
@@ -407,12 +410,26 @@ async def run_pass(
             actions = await policy.tick(instrument)
         except Exception as err:  # noqa: BLE001 — one bad market must not kill the loop
             print(f"ERROR instrument={instrument.get('instrumentId')}: {err}", flush=True)
+            errors += 1
             continue
         if actions:
             for action in actions:
                 print(action, flush=True)
         else:
             print(f"NOOP instrument={instrument['instrumentId']}", flush=True)
+    return errors
+
+
+def _backoff_delay(base: float, consecutive_error_passes: int, cap: float) -> float:
+    """Exponential backoff: base doubles per consecutive erroring pass, capped.
+
+    A pass with no errors resets the caller's counter to 0, so a transient
+    blip costs one longer sleep and recovers; a sustained outage (or a
+    rate-limit storm) settles at ``cap`` instead of retrying every ``base``
+    seconds and deepening the storm."""
+    if consecutive_error_passes <= 0:
+        return base
+    return min(cap, base * (2 ** min(consecutive_error_passes, 6)))
 
 
 async def run(args: argparse.Namespace) -> None:
@@ -430,11 +447,24 @@ async def run(args: argparse.Namespace) -> None:
         args.api_url, args.api_key,
     ) as client:
         policy = ArbPolicy(client, config)
+        consecutive_error_passes = 0
+        backoff_cap = max(args.interval, float(os.getenv("ARB_BACKOFF_CAP", "600")))
         while True:
-            await run_pass(client, policy, selected)
+            errors = await run_pass(client, policy, selected)
             if args.once:
                 return
-            await asyncio.sleep(args.interval)
+            consecutive_error_passes = (
+                consecutive_error_passes + 1 if errors else 0
+            )
+            delay = _backoff_delay(
+                args.interval, consecutive_error_passes, backoff_cap
+            )
+            if consecutive_error_passes:
+                print(
+                    f"BACKOFF passes={consecutive_error_passes} sleep={delay:.0f}s",
+                    flush=True,
+                )
+            await asyncio.sleep(delay)
 
 
 def main() -> None:
