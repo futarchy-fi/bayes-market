@@ -46,9 +46,16 @@ The live Bayes server in `backend/server.py` is untouched and runs separately.
 
 ## Resident arbitrage agent
 
-The resident agent uses each instrument's NET listing as its price anchor. It
-trades a materially displaced AMM and maintains two-sided order-book bids around
-the anchor. Runs are report-only unless `--execute` is supplied.
+The resident agent moves economically identical listings toward a configurable
+reference. NET is the default reference, not authoritative truth. AMM movement
+is bounded through a dedicated, fail-closed target-price endpoint. This first
+pass does not post order-book liquidity and cancels legacy book quotes. Runs are
+report-only unless `--execute` is supplied.
+
+Only listings with identical payouts, oracle, condition, resolution criteria,
+outcome mapping, and VOID payoff may share an instrument. See
+[`docs/market-contracts-and-settlement.md`](../docs/market-contracts-and-settlement.md)
+and [`exchange/agents/README.md`](agents/README.md) for the safety contract.
 
 Preview one pass without mutating exchange state:
 
@@ -68,12 +75,16 @@ python -m exchange.agents.arb --execute --interval 30
 | `FUTARCHY_API_KEY` | Trading account API key (required) |
 | `ARB_INSTRUMENTS` | Comma-separated instrument IDs, or `all` (`all`) |
 | `SPREAD_THR` | AMM deviation required before trading (`0.02`) |
-| `BUDGET_CAP` | Maximum AMM spend per action (`25`) |
-| `SIZE_CAP` | Order-book quote size (`10`) |
-| `DELTA` | Distance of book quotes from the NET anchor (`0.01`) |
-| `REQUOTE_THR` | Drift required before replacing book quotes (`0.005`) |
-| `MIN_BALANCE` | Available-balance floor below which no actions run (`50`) |
-| `ACTION_CAP` | Maximum actions per tick (`10`) |
+| `REFERENCE_VENUE` | Reference venue: `net`, `amm`, or `book` (`net`) |
+| `ANCHOR_ALPHA` | Confirmed reference sample's EMA weight (`0.3`) |
+| `ANCHOR_MAX_AGE` | Maximum NET age / sample gap in seconds (`120`) |
+| `ANCHOR_MAX_JUMP` | One-sample reference jump held for confirmation (`0.10`) |
+| `MAX_PRICE_MOVE` | Maximum AMM probability movement per action (`0.02`) |
+| `BUDGET_CAP` | Maximum AMM debit per action (`25`) |
+| `INSTRUMENT_BUDGET_CAP` | AMM debit budget per instrument tick (`25`) |
+| `INVENTORY_CAP` | Gross shares split across traded listings (`50`) |
+| `MIN_BALANCE` | Available-credit reserve (`50`) |
+| `ACTION_CAP` | Action ceiling before new trades stop; safety cancellations may exceed it (`10`) |
 | `ARB_INTERVAL` | Seconds between ticks (`30`) |
 
 The reference Farol user unit is `deploy/futarchy-arb.service`; it loads

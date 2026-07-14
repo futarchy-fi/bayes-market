@@ -2,9 +2,9 @@
 
 from copy import deepcopy
 from dataclasses import asdict
-from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
+from decimal import Decimal, ROUND_FLOOR
 
-from exchange.core.lmsr import amount_for_cost, cost_to_buy, prices
+from exchange.core.lmsr import cost_to_buy, prices
 from exchange.core.market_engine import MarketEngine
 from exchange.core.models import ZERO
 from exchange.core.risk_engine import InsufficientBalance
@@ -67,38 +67,16 @@ class AmmVenue:
         return market
 
     def _quote_buy(self, market_id, account_id, outcome, budget) -> dict:
-        market = self._open_market(market_id)
-        if outcome not in market.outcomes:
-            raise InvalidOutcome(f"unknown outcome: {outcome}")
-        available = self.engine.risk.get_account(account_id).available_balance
-        if budget > available:
-            raise InsufficientCredits(
-                f"account {account_id}: need {budget}, have {available}"
-            )
-
-        amount_quantum = Decimal(10) ** -market.amount_precision
-        price_quantum = Decimal(10) ** -market.price_precision
-        tokens = amount_for_cost(
-            market.q, market.b, outcome, budget
-        ).quantize(amount_quantum, rounding=ROUND_FLOOR)
-        if tokens <= ZERO:
+        try:
+            quote = self.engine.quote_buy(
+                market_id, account_id, outcome, budget)
+        except InsufficientBalance as err:
+            raise InsufficientCredits(str(err)) from err
+        except ValueError as err:
+            raise self._map_engine_error(err) from err
+        if quote is None:
             raise TradeRejected("budget too small for any tokens")
-        avg_price = (cost_to_buy(market.q, market.b, outcome, tokens) / tokens).quantize(
-            price_quantum, rounding=ROUND_CEILING
-        )
-        cost = tokens * avg_price
-        if cost > available:
-            tokens -= amount_quantum
-            if tokens <= ZERO:
-                raise TradeRejected("budget too small for any tokens")
-            avg_price = (
-                cost_to_buy(market.q, market.b, outcome, tokens) / tokens
-            ).quantize(price_quantum, rounding=ROUND_CEILING)
-            cost = tokens * avg_price
-        if cost > available:
-            raise InsufficientCredits(
-                f"account {account_id}: need {cost}, have {available}"
-            )
+        tokens, avg_price, cost = quote
         return {
             "estimatedShares": str(tokens),
             "averagePrice": str(avg_price),

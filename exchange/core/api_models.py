@@ -136,6 +136,16 @@ class BuyRequest(BaseModel):
     outcome: str
     budget: str
 
+
+class TargetBuyRequest(BaseModel):
+    outcome: str
+    targetPrice: str
+    maxBudget: str
+    maxPriceMove: str
+    positionLimit: str
+    minBalance: str
+
+
 class SellRequest(BaseModel):
     outcome: str
     amount: str
@@ -236,6 +246,7 @@ class NetMarket(BaseModel):
     outcomes: list[dict]
     marginals: dict[str, float]
     parents: list[str] = []
+    observedAt: str | None = None
 
 class NetMarketList(BaseModel):
     markets: list[NetMarket]

@@ -846,6 +846,84 @@ class TestTradingErrors:
                                  json={"outcome": "yes", "budget": "abc"})
         assert resp.status_code == 400
 
+    @pytest.mark.parametrize(
+        "target", ["0", "0.00001", "0.99999", "1", "NaN", "Infinity"],
+    )
+    async def test_buy_rejects_invalid_target(self, client, target):
+        mid, headers = await self._setup(client)
+        resp = await client.post(
+            f"/v1/markets/{mid}/buy-to-price", headers=headers,
+            json={
+                "outcome": "yes", "targetPrice": target, "maxBudget": "10",
+                "maxPriceMove": "0.02", "positionLimit": "50",
+                "minBalance": "50",
+            },
+        )
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "invalid_target"
+
+    async def test_target_buy_is_atomic_bounded_and_idempotent(self, client):
+        mid, headers = await self._setup(client)
+        first = await client.post(
+            f"/v1/markets/{mid}/buy-to-price", headers=headers,
+            json={
+                "outcome": "yes", "maxBudget": "25", "targetPrice": "0.9",
+                "maxPriceMove": "0.02", "positionLimit": "50",
+                "minBalance": "50",
+            },
+        )
+        assert first.status_code == 200
+        market = (await client.get(f"/v1/markets/{mid}")).json()
+        assert Decimal("0.5") < Decimal(market["prices"]["yes"]) <= Decimal("0.52")
+        assert Decimal(first.json()["value"]) <= Decimal("25")
+
+        # A stale caller whose target has already been crossed is a true no-op.
+        before = market["q"]
+        noop = await client.post(
+            f"/v1/markets/{mid}/buy-to-price", headers=headers,
+            json={
+                "outcome": "yes", "maxBudget": "25", "targetPrice": "0.51",
+                "maxPriceMove": "0.02", "positionLimit": "50",
+                "minBalance": "50",
+            },
+        )
+        assert noop.status_code == 204
+        assert (await client.get(f"/v1/markets/{mid}")).json()["q"] == before
+
+    async def test_concurrent_target_buys_serialize_without_crossing(self, client):
+        mid, headers = await self._setup(client)
+        responses = await asyncio.gather(*[
+            client.post(
+                f"/v1/markets/{mid}/buy-to-price", headers=headers,
+                json={
+                    "outcome": "yes", "maxBudget": "25",
+                    "targetPrice": "0.6", "maxPriceMove": "0.02",
+                    "positionLimit": "50", "minBalance": "50",
+                },
+            )
+            for _ in range(4)
+        ])
+
+        assert {response.status_code for response in responses} <= {200, 204}
+        market = (await client.get(f"/v1/markets/{mid}")).json()
+        assert Decimal(market["prices"]["yes"]) <= Decimal("0.6")
+
+    async def test_target_buy_reserves_balance_floor_under_the_lock(self, client):
+        mid, headers = await self._setup(client)
+        response = await client.post(
+            f"/v1/markets/{mid}/buy-to-price", headers=headers,
+            json={
+                "outcome": "yes", "maxBudget": "25", "targetPrice": "0.9",
+                "maxPriceMove": "0.02", "positionLimit": "50",
+                "minBalance": "999",
+            },
+        )
+
+        assert response.status_code == 200
+        account = (await client.get("/v1/me", headers=headers)).json()
+        assert Decimal(account["available"]) >= Decimal("999")
+        assert Decimal(response.json()["value"]) <= Decimal("1")
+
 
 # ---------------------------------------------------------------------------
 # Admin

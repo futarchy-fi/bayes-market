@@ -1,4 +1,4 @@
-"""Keep AMM and book listings aligned to an instrument's net listing."""
+"""Keep identical cross-venue listings near a configured reference."""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ import asyncio
 import math
 import os
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from datetime import datetime, timezone
+from decimal import Decimal, ROUND_FLOOR
+from time import monotonic
 from typing import Any, Protocol
 
 import httpx
@@ -21,15 +23,12 @@ _PRICE_EPS = Decimal("0.0001")
 
 
 def _budget_to_reach(price: Decimal, anchor: Decimal, b: Decimal) -> Decimal:
-    """Credits to move a binary LMSR's YES price to ``anchor`` from ``price``.
+    """Credits to move a binary LMSR's YES price from ``price`` to ``anchor``.
 
     Closed form: buying YES to raise the price p0->p1 costs
     ``b * ln((1 - p0) / (1 - p1))``; buying NO to lower it costs
-    ``b * ln(p0 / p1)``. Sizing to the anchor this way targets it exactly
-    instead of the depth-blind ``budget_cap * gap``, which overshoots a thin
-    (small-b) AMM and sends the agent into a price-flipping oscillation that
-    bleeds LMSR spread every tick. If the cap later binds, the agent moves
-    part-way and converges over successive ticks rather than overshooting.
+    ``b * ln(p0 / p1)``. The caller passes a bounded one-tick target, avoiding
+    the thin-market overshoot caused by the old depth-blind sizing rule.
     """
     p0 = min(Decimal("1") - _PRICE_EPS, max(_PRICE_EPS, price))
     p1 = min(Decimal("1") - _PRICE_EPS, max(_PRICE_EPS, anchor))
@@ -44,19 +43,48 @@ def _budget_to_reach(price: Decimal, anchor: Decimal, b: Decimal) -> Decimal:
 class ArbConfig:
     spread_thr: Decimal = Decimal("0.02")
     budget_cap: Decimal = Decimal("25")
-    size_cap: Decimal = Decimal("10")
-    delta: Decimal = Decimal("0.01")
-    requote_thr: Decimal = Decimal("0.005")
+    instrument_budget_cap: Decimal = Decimal("25")
     min_balance: Decimal = Decimal("50")
+    inventory_cap: Decimal = Decimal("50")
+    max_price_move: Decimal = Decimal("0.02")
     action_cap: int = 10
-    # Anchor smoothing: the agent follows an EMA of the net marginal, not the
-    # instantaneous reading, so a transient net spike can't be converted into
-    # a permanent AMM move in one tick. anchor_alpha is the weight on each new
-    # reading (1.0 = no smoothing = follow instantly; lower = slower to trust
-    # a change). A manipulator must now HOLD the net off-true for many ticks
-    # (sustained stake + exposure) to move the agent, instead of one blip.
+    reference_venue: str = "net"
     anchor_alpha: Decimal = Decimal("0.3")
+    anchor_max_age: Decimal = Decimal("120")
+    anchor_max_jump: Decimal = Decimal("0.10")
     report_only: bool = True
+
+    def __post_init__(self) -> None:
+        self.reference_venue = self.reference_venue.lower()
+        if self.reference_venue not in {"net", "amm", "book"}:
+            raise ValueError("reference_venue must be net, amm, or book")
+        positive = (
+            "budget_cap", "instrument_budget_cap", "inventory_cap",
+            "max_price_move", "anchor_alpha", "anchor_max_age",
+            "anchor_max_jump",
+        )
+        nonnegative = ("spread_thr", "min_balance")
+        for name in positive:
+            value = _decimal(getattr(self, name))
+            if not value.is_finite() or value <= 0:
+                raise ValueError(f"{name} must be finite and positive")
+        for name in nonnegative:
+            value = _decimal(getattr(self, name))
+            if not value.is_finite() or value < 0:
+                raise ValueError(f"{name} must be finite and non-negative")
+        if _decimal(self.anchor_alpha) > 1:
+            raise ValueError("anchor_alpha must be at most 1")
+        if _decimal(self.anchor_max_jump) >= 1 or _decimal(self.max_price_move) >= 1:
+            raise ValueError("anchor_max_jump and max_price_move must be below 1")
+        if self.action_cap <= 0:
+            raise ValueError("action_cap must be positive")
+
+
+@dataclass
+class _AnchorState:
+    raw: Decimal
+    sampled_at: float
+    ema: Decimal | None = None
 
 
 @dataclass
@@ -66,8 +94,6 @@ class ArbAction:
     venue: str
     market_id: str
     outcome: str | None = None
-    price: Decimal | None = None
-    size: Decimal | None = None
     budget: Decimal | None = None
     order_id: int | None = None
     anchor: Decimal | None = None
@@ -79,7 +105,7 @@ class ArbAction:
             f"instrument={self.instrument_id}", f"venue={self.venue}",
             f"market={self.market_id}",
         ]
-        for name in ("outcome", "price", "size", "budget", "order_id", "anchor"):
+        for name in ("outcome", "budget", "order_id", "anchor"):
             value = getattr(self, name)
             if value is not None:
                 fields.append(f"{name}={value}")
@@ -89,11 +115,17 @@ class ArbAction:
 class ExchangeClient(Protocol):
     async def account(self) -> dict: ...
     async def market(self, venue: str, market_id: str) -> dict: ...
-    async def buy_amm(self, market_id: str, outcome: str, budget: Decimal) -> dict: ...
+    async def buy_amm(
+        self,
+        market_id: str,
+        outcome: str,
+        budget: Decimal,
+        target_price: Decimal,
+        max_price_move: Decimal,
+        position_limit: Decimal,
+        min_balance: Decimal,
+    ) -> dict | None: ...
     async def book_orders(self) -> list[dict]: ...
-    async def place_book_order(
-        self, market_id: str, outcome: str, price: Decimal, size: Decimal,
-    ) -> dict: ...
     async def cancel_book_order(self, order_id: int) -> dict: ...
 
 
@@ -134,7 +166,7 @@ class HttpExchange:
             raise RuntimeError(
                 f"exchange {method} {path} failed ({response.status_code}): {detail}"
             ) from err
-        return response.json()
+        return None if response.status_code == 204 else response.json()
 
     async def instruments(self) -> list[dict]:
         return await self._request("GET", "/v1/instruments")
@@ -150,30 +182,34 @@ class HttpExchange:
         }
         return await self._request("GET", prefixes[venue] + str(market_id))
 
-    async def buy_amm(self, market_id: str, outcome: str, budget: Decimal) -> dict:
+    async def buy_amm(
+        self,
+        market_id: str,
+        outcome: str,
+        budget: Decimal,
+        target_price: Decimal,
+        max_price_move: Decimal,
+        position_limit: Decimal,
+        min_balance: Decimal,
+    ) -> dict | None:
         return await self._request(
-            "POST", f"/v1/markets/{market_id}/buy",
-            json={"outcome": outcome, "budget": str(budget)},
+            "POST", f"/v1/markets/{market_id}/buy-to-price",
+            json={
+                "outcome": outcome,
+                "maxBudget": str(budget),
+                "targetPrice": str(target_price),
+                "maxPriceMove": str(max_price_move),
+                "positionLimit": str(position_limit),
+                "minBalance": str(min_balance),
+            },
         )
 
     async def book_orders(self) -> list[dict]:
         result = await self._request("GET", "/v1/book/orders/mine")
         return result["orders"]
 
-    async def place_book_order(
-        self, market_id: str, outcome: str, price: Decimal, size: Decimal,
-    ) -> dict:
-        return await self._request(
-            "POST", "/v1/book/orders",
-            json={
-                "marketId": int(market_id), "side": "bid", "outcome": outcome,
-                "price": f"{price:.4f}", "size": f"{size:.2f}",
-            },
-        )
-
     async def cancel_book_order(self, order_id: int) -> dict:
         return await self._request("DELETE", f"/v1/book/orders/{order_id}")
-
 
 
 _TERMINAL_STATUSES = {"resolved", "void", "voided", "closed"}
@@ -189,174 +225,215 @@ def _tradable(market: dict) -> bool:
     return str(market.get("status", "open")).lower() not in _TERMINAL_STATUSES
 
 
+def _binary_market(venue: str, market: dict) -> bool:
+    """Require the exact YES/NO contract shape used by the sizing math."""
+    try:
+        outcomes = market["outcomes"]
+        outcome_ids = (
+            {str(item["id"]).lower() for item in outcomes}
+            if venue == "net" else {str(item).lower() for item in outcomes}
+        )
+    except (KeyError, TypeError):
+        return False
+    return outcome_ids == {"yes", "no"} and len(outcomes) == 2
+
+
+def _yes_price(venue: str, market: dict) -> Decimal | None:
+    try:
+        if venue == "net":
+            value = market.get("marginals", {}).get("yes")
+        elif venue == "amm":
+            value = market.get("prices", {}).get("yes")
+        else:
+            bid, ask = _decimal(market["bestBid"]), _decimal(market["bestAsk"])
+            if (
+                not bid.is_finite() or not ask.is_finite()
+                or not _PRICE_EPS <= bid <= ask <= 1 - _PRICE_EPS
+            ):
+                return None
+            value = (bid + ask) / 2
+        if value is None:
+            return None
+        price = _decimal(value)
+    except (AttributeError, KeyError, TypeError, ValueError, ArithmeticError):
+        return None
+    if not price.is_finite() or not _PRICE_EPS <= price <= 1 - _PRICE_EPS:
+        return None
+    return price
+
+
+def _fresh_net_observation(market: dict, max_age: Decimal) -> bool:
+    try:
+        observed = datetime.fromisoformat(
+            str(market["observedAt"]).replace("Z", "+00:00")
+        )
+        if observed.tzinfo is None:
+            return False
+        age = (datetime.now(timezone.utc) - observed).total_seconds()
+    except (KeyError, TypeError, ValueError):
+        return False
+    return -5 <= age <= float(max_age)
+
+
 class ArbPolicy:
     def __init__(self, client: ExchangeClient, config: ArbConfig) -> None:
         self.client = client
         self.config = config
-        self._anchor_ema: dict[str, Decimal] = {}
+        self._anchors: dict[str, _AnchorState] = {}
 
-    def _smooth_anchor(self, instrument_id: str, raw: Decimal) -> Decimal:
-        """EMA-smooth the net marginal, clamped to (0, 1).
-
-        The clamp keeps a net pushed to an extreme from producing runaway
-        edits; the EMA means the agent chases a *sustained* net move, not a
-        single-tick spike (the manipulation-resistance point — see
-        ArbConfig.anchor_alpha)."""
-        clamped = min(Decimal("1") - _PRICE_EPS, max(_PRICE_EPS, raw))
+    def _accept_anchor(self, instrument_id: str, raw: Decimal) -> Decimal | None:
+        """Confirm two nearby samples, then return the smoothed reference."""
+        now = monotonic()
+        max_age = float(_decimal(self.config.anchor_max_age))
+        previous = self._anchors.get(instrument_id)
+        if previous is None or now - previous.sampled_at > max_age:
+            self._anchors[instrument_id] = _AnchorState(raw, now)
+            # A dry run may preview an unconfirmed sample because it cannot
+            # mutate state. Execution always waits for the follow-up sample.
+            return raw if self.config.report_only else None
+        if abs(raw - previous.raw) > _decimal(self.config.anchor_max_jump):
+            # Require one nearby follow-up before accepting a large step.
+            self._anchors[instrument_id] = _AnchorState(raw, now, ema=previous.ema)
+            return None
         alpha = _decimal(self.config.anchor_alpha)
-        prev = self._anchor_ema.get(instrument_id)
-        smoothed = clamped if prev is None else alpha * clamped + (1 - alpha) * prev
-        self._anchor_ema[instrument_id] = smoothed
+        smoothed = raw if previous.ema is None else (
+            alpha * raw + (1 - alpha) * previous.ema
+        )
+        self._anchors[instrument_id] = _AnchorState(raw, now, smoothed)
         return smoothed
+
+    async def _cancel_untraded_book_quotes(
+        self, instrument_id: str, listings: list[dict], actions: list[ArbAction],
+    ) -> None:
+        market_ids = {
+            str(item["marketId"]) for item in listings if item["venue"] == "book"
+        }
+        if not market_ids:
+            return
+        orders = await self.client.book_orders()
+        for order in orders:
+            if (
+                str(order["marketId"]) not in market_ids
+                or order["status"] not in ("open", "partial")
+            ):
+                continue
+            action = ArbAction(
+                "would_cancel" if self.config.report_only else "cancel",
+                instrument_id, "book", str(order["marketId"]),
+                outcome=order["outcome"], order_id=order["orderId"],
+            )
+            if not self.config.report_only:
+                await self.client.cancel_book_order(order["orderId"])
+            actions.append(action)
 
     async def tick(self, instrument: dict) -> list[ArbAction]:
         """Run at most one coherence pass for one registry instrument."""
+        instrument_id = instrument["instrumentId"]
+        listings = instrument["listings"]
+        actions: list[ArbAction] = []
+        await self._cancel_untraded_book_quotes(
+            instrument_id, listings, actions,
+        )
+        if len(actions) >= self.config.action_cap:
+            return actions
+
         account = await self.client.account()
         if _decimal(account["available"]) < _decimal(self.config.min_balance):
-            return []
+            return actions
 
-        listings = instrument["listings"]
-        anchor_listing = next((item for item in listings if item["venue"] == "net"), None)
-        if anchor_listing is None:
-            return []
-        anchor_market = await self.client.market("net", anchor_listing["marketId"])
-        if not _tradable(anchor_market):
-            return []
-        instrument_id = instrument["instrumentId"]
-        anchor = self._smooth_anchor(
-            instrument_id, _decimal(anchor_market["marginals"]["yes"])
+        anchor_listing = next(
+            (item for item in listings if item["venue"] == self.config.reference_venue),
+            None,
         )
-        actions: list[ArbAction] = []
-        book_orders: list[dict] | None = None
-        # Spend only what keeps the account at or above min_balance AFTER this
-        # tick. The top-of-tick gate proves we're above the floor now; without
-        # reserving, one tick's AMM buy + book collateral could still dip
-        # below it. Every spend below draws down this running reserve.
-        spendable = _decimal(account["available"]) - _decimal(self.config.min_balance)
+        if anchor_listing is None:
+            return actions
+        anchor_market = await self.client.market(
+            self.config.reference_venue, anchor_listing["marketId"],
+        )
+        if (
+            not _tradable(anchor_market)
+            or not _binary_market(self.config.reference_venue, anchor_market)
+        ):
+            return actions
+        if self.config.reference_venue == "net" and not _fresh_net_observation(
+            anchor_market, _decimal(self.config.anchor_max_age),
+        ):
+            return actions
+        raw_anchor = _yes_price(self.config.reference_venue, anchor_market)
+        if raw_anchor is None:
+            return actions
+        anchor = self._accept_anchor(instrument_id, raw_anchor)
+        if anchor is None:
+            return actions
 
-        for listing in listings:
+        reference_key = (
+            self.config.reference_venue, str(anchor_listing["marketId"]),
+        )
+        traded = [
+            item for item in listings
+            if (item["venue"], str(item["marketId"])) != reference_key
+            and item["venue"] == "amm"
+        ]
+        if not traded:
+            return actions
+        position_limit = _decimal(self.config.inventory_cap) / len(traded)
+        spendable = min(
+            _decimal(account["available"]) - _decimal(self.config.min_balance),
+            _decimal(self.config.instrument_budget_cap),
+        )
+        if spendable <= 0:
+            return actions
+
+        for listing in traded:
             if len(actions) >= self.config.action_cap:
                 break
             venue, market_id = listing["venue"], str(listing["marketId"])
-            if venue == "amm":
-                market = await self.client.market(venue, market_id)
-                if not _tradable(market):
+            market = await self.client.market(venue, market_id)
+            if not _tradable(market) or not _binary_market(venue, market):
+                continue
+            yes = _yes_price("amm", market)
+            if yes is None:
+                continue
+            gap = abs(yes - anchor)
+            if gap > _decimal(self.config.spread_thr):
+                move = _decimal(self.config.max_price_move)
+                bounded = (
+                    min(anchor, yes + move) if yes < anchor
+                    else max(anchor, yes - move)
+                )
+                needed = _budget_to_reach(yes, bounded, _decimal(market["b"]))
+                budget = min(
+                    _decimal(self.config.budget_cap), needed, spendable,
+                ).quantize(Decimal("0.000001"), rounding=ROUND_FLOOR)
+                if budget <= Decimal("0"):
                     continue
-                yes = _decimal(market["prices"]["yes"])
-                gap = abs(yes - anchor)
-                if gap > _decimal(self.config.spread_thr):
-                    # Size to the anchor via the AMM's own depth (b), capped —
-                    # not budget_cap * gap, which is depth-blind and overshoots
-                    # thin markets into an oscillation. Also capped by the
-                    # floor reserve.
-                    needed = _budget_to_reach(yes, anchor, _decimal(market["b"]))
-                    budget = min(
-                        _decimal(self.config.budget_cap), needed, spendable,
-                    ).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
-                    if budget <= Decimal("0"):
-                        continue
-                    outcome = "yes" if yes < anchor else "no"
-                    action = ArbAction(
-                        "would_buy" if self.config.report_only else "buy",
-                        instrument_id, venue, market_id, outcome=outcome,
-                        budget=budget, anchor=anchor,
-                    )
+                outcome = "yes" if yes < anchor else "no"
+                target_price = anchor if outcome == "yes" else 1 - anchor
+                action = ArbAction(
+                    "would_buy" if self.config.report_only else "buy",
+                    instrument_id, venue, market_id, outcome=outcome,
+                    budget=budget, anchor=anchor,
+                )
+                if self.config.report_only:
                     actions.append(action)
                     spendable -= budget
-                    if not self.config.report_only:
-                        await self.client.buy_amm(market_id, outcome, budget)
-            elif venue == "book":
-                market = await self.client.market(venue, market_id)
-                if not _tradable(market):
                     continue
-                if book_orders is None:
-                    book_orders = await self.client.book_orders()
-                spendable = await self._quote_book(
-                    instrument_id, market_id, anchor, book_orders, actions, spendable,
+                result = await self.client.buy_amm(
+                    market_id, outcome, budget, target_price,
+                    _decimal(self.config.max_price_move), position_limit,
+                    _decimal(self.config.min_balance),
                 )
+                if result is None:
+                    continue
+                actual = _decimal(result["value"])
+                if not actual.is_finite() or not 0 < actual <= budget:
+                    raise RuntimeError(
+                        f"AMM debit {actual} exceeded requested budget {budget}"
+                    )
+                action.budget = actual
+                actions.append(action)
+                spendable -= actual
         return actions
-
-    async def _quote_book(
-        self,
-        instrument_id: str,
-        market_id: str,
-        anchor: Decimal,
-        all_orders: list[dict],
-        actions: list[ArbAction],
-        spendable: Decimal,
-    ) -> Decimal:
-        quantum = Decimal("0.0001")
-        desired = {
-            "yes": (anchor - _decimal(self.config.delta)).quantize(
-                quantum, rounding=ROUND_HALF_UP
-            ),
-            "no": (Decimal("1") - anchor - _decimal(self.config.delta)).quantize(
-                quantum, rounding=ROUND_HALF_UP
-            ),
-        }
-        desired = {
-            outcome: min(Decimal("0.9999"), max(quantum, price))
-            for outcome, price in desired.items()
-        }
-        live = [
-            order for order in all_orders
-            if str(order["marketId"]) == market_id
-            and order["status"] in ("open", "partial")
-        ]
-
-        keep: set[str] = set()
-        stale: list[dict] = []
-        for order in live:
-            outcome = order["outcome"]
-            close = (
-                order["side"] == "bid"
-                and outcome in desired
-                and abs(_decimal(order["price"]) - desired[outcome])
-                <= _decimal(self.config.requote_thr)
-                and outcome not in keep
-            )
-            if close:
-                keep.add(outcome)
-            else:
-                stale.append(order)
-
-        # Cancel stale quotes before posting replacements. Cancels free
-        # collateral, so they don't draw the floor reserve.
-        for order in stale:
-            if len(actions) >= self.config.action_cap:
-                return spendable
-            action = ArbAction(
-                "would_cancel" if self.config.report_only else "cancel",
-                instrument_id, "book", market_id,
-                outcome=order["outcome"], order_id=order["orderId"], anchor=anchor,
-            )
-            actions.append(action)
-            if not self.config.report_only:
-                await self.client.cancel_book_order(order["orderId"])
-
-        size = _decimal(self.config.size_cap).quantize(
-            Decimal("0.01"), rounding=ROUND_HALF_UP
-        )
-        for outcome, price in desired.items():
-            if outcome in keep:
-                continue
-            if len(actions) >= self.config.action_cap:
-                return spendable
-            # A bid to buy `size` at `price` locks up to price*size; skip it
-            # if posting would breach the floor reserve.
-            collateral = price * size
-            if collateral > spendable:
-                continue
-            action = ArbAction(
-                "would_quote" if self.config.report_only else "quote",
-                instrument_id, "book", market_id, outcome=outcome,
-                price=price, size=size, anchor=anchor,
-            )
-            actions.append(action)
-            spendable -= collateral
-            if not self.config.report_only:
-                await self.client.place_book_order(market_id, outcome, price, size)
-        return spendable
 
 
 def _env_decimal(name: str, default: str) -> Decimal:
@@ -375,12 +452,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--instruments", default=os.getenv("ARB_INSTRUMENTS", "all"))
     parser.add_argument("--spread-thr", type=Decimal, default=_env_decimal("SPREAD_THR", "0.02"))
     parser.add_argument("--budget-cap", type=Decimal, default=_env_decimal("BUDGET_CAP", "25"))
-    parser.add_argument("--size-cap", type=Decimal, default=_env_decimal("SIZE_CAP", "10"))
-    parser.add_argument("--delta", type=Decimal, default=_env_decimal("DELTA", "0.01"))
-    parser.add_argument("--requote-thr", type=Decimal, default=_env_decimal("REQUOTE_THR", "0.005"))
+    parser.add_argument("--instrument-budget-cap", type=Decimal, default=_env_decimal("INSTRUMENT_BUDGET_CAP", "25"))
     parser.add_argument("--min-balance", type=Decimal, default=_env_decimal("MIN_BALANCE", "50"))
+    parser.add_argument("--inventory-cap", type=Decimal, default=_env_decimal("INVENTORY_CAP", "50"))
+    parser.add_argument("--max-price-move", type=Decimal, default=_env_decimal("MAX_PRICE_MOVE", "0.02"))
     parser.add_argument("--action-cap", type=int, default=int(os.getenv("ACTION_CAP", "10")))
+    parser.add_argument("--reference-venue", default=os.getenv("REFERENCE_VENUE", "net"))
     parser.add_argument("--anchor-alpha", type=Decimal, default=_env_decimal("ANCHOR_ALPHA", "0.3"))
+    parser.add_argument("--anchor-max-age", type=Decimal, default=_env_decimal("ANCHOR_MAX_AGE", "120"))
+    parser.add_argument("--anchor-max-jump", type=Decimal, default=_env_decimal("ANCHOR_MAX_JUMP", "0.10"))
     return parser
 
 
@@ -438,9 +518,12 @@ def _backoff_delay(base: float, consecutive_error_passes: int, cap: float) -> fl
 async def run(args: argparse.Namespace) -> None:
     config = ArbConfig(
         spread_thr=args.spread_thr, budget_cap=args.budget_cap,
-        size_cap=args.size_cap, delta=args.delta,
-        requote_thr=args.requote_thr, min_balance=args.min_balance,
-        action_cap=args.action_cap, anchor_alpha=args.anchor_alpha,
+        instrument_budget_cap=args.instrument_budget_cap,
+        min_balance=args.min_balance,
+        inventory_cap=args.inventory_cap, max_price_move=args.max_price_move,
+        action_cap=args.action_cap, reference_venue=args.reference_venue,
+        anchor_alpha=args.anchor_alpha, anchor_max_age=args.anchor_max_age,
+        anchor_max_jump=args.anchor_max_jump,
         report_only=not args.execute,
     )
     selected = None if args.instruments == "all" else {

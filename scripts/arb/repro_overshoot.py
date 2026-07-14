@@ -1,21 +1,17 @@
 #!/usr/bin/env python3
-"""Repro: the resident arb agent overshoots and oscillates on a thin AMM.
+"""Regression demo: bounded LMSR sizing converges on thin and deep AMMs.
 
-The agent (exchange/agents/arb.py) sizes an AMM correction as
-``budget = budget_cap * gap`` with NO awareness of the target market's depth
-and NO post-trade convergence check. On a deep AMM that undershoots and
-converges (see test_distorted_amm_moves_toward_net_anchor_in_bounded_steps,
-which uses b=20). On a thinly-funded AMM (funding floor is 10 credits) the
-same budget blows the price past the net anchor; the next tick sees a large
-gap on the *other* side and reverses — an oscillation that bleeds LMSR spread
-every pass.
+The old depth-blind ``budget_cap * gap`` rule overshot a thin AMM and reversed
+on every pass. The current agent sizes from the listing's ``b``, limits each
+selected-outcome move, and lets the server recompute the target atomically.
+Both thin and deep cases therefore approach the reference without flipping.
 
 This drives the real ArbPolicy against the real in-process exchange over
 several ticks and prints, per tick, the AMM YES price, the gap to the net
-anchor (0.60), and the agent's balance. Run:
+anchor (0.60), and the agent's balance. Run from the repository root:
 
-    python3 scripts/arb/repro_overshoot.py            # thin (b=3): oscillates
-    python3 scripts/arb/repro_overshoot.py --b 20     # deep: converges
+    python -m scripts.arb.repro_overshoot            # thin (b=3)
+    python -m scripts.arb.repro_overshoot --b 20     # deep
 
 Standalone; uses ASGITransport against the app in-process (no network, no
 deploy). State is ephemeral under a tmp dir.

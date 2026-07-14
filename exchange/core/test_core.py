@@ -543,6 +543,72 @@ class TestCrossDomain:
 @engines_required
 class TestAdversarial:
 
+    def test_buy_never_debits_more_than_budget_after_rounding(self):
+        """The caller's budget is a hard cap, including rounded price."""
+        risk, market_eng, traders, market, amm, _ = fresh_system(b=Decimal("100"))
+        trader = traders[0]
+        before = trader.available_balance
+
+        trade = market_eng.buy(market.id, trader.id, "yes", Decimal("10"))
+
+        debit = before - trader.available_balance
+        assert debit == trade.amount * trade.price
+        assert debit <= Decimal("10")
+
+    @pytest.mark.parametrize(
+        ("outcome", "target"),
+        [("yes", Decimal("0.6")), ("no", Decimal("0.6"))],
+    )
+    def test_target_buy_never_crosses_in_either_direction(self, outcome, target):
+        _, market_eng, traders, market, _, _ = fresh_system(b=Decimal("20"))
+
+        while market_eng.buy_to_price(
+            market.id, traders[0].id, outcome, target, Decimal("1")
+        ) is not None:
+            assert prices(market.q, market.b)[outcome] <= target
+
+        assert prices(market.q, market.b)[outcome] <= target
+
+    def test_target_buy_uses_live_price_for_atomic_move_limit(self):
+        _, market_eng, traders, market, _, _ = fresh_system(b=Decimal("20"))
+        market_eng.buy(market.id, traders[1].id, "yes", Decimal("2"))
+        before = prices(market.q, market.b)["yes"]
+
+        market_eng.buy_to_price(
+            market.id, traders[0].id, "yes", Decimal("0.9"), Decimal("25"),
+            max_price_move=Decimal("0.02"),
+        )
+        after = prices(market.q, market.b)["yes"]
+
+        assert before < after <= before + Decimal("0.02")
+
+    def test_crossed_target_is_noop_even_when_budget_exceeds_balance(self):
+        _, market_eng, traders, market, _, _ = fresh_system(b=Decimal("20"))
+        before = dict(market.q)
+
+        trade = market_eng.buy_to_price(
+            market.id, traders[0].id, "yes", Decimal("0.4"), Decimal("99999"),
+        )
+
+        assert trade is None
+        assert market.q == before
+
+    def test_gross_position_limit_cannot_be_evaded_by_switching_sides(self):
+        _, market_eng, traders, market, _, _ = fresh_system(b=Decimal("20"))
+        trader = traders[0]
+
+        market_eng.buy_to_price(
+            market.id, trader.id, "yes", Decimal("0.9"), Decimal("25"),
+            position_limit=Decimal("5"),
+        )
+        second = market_eng.buy_to_price(
+            market.id, trader.id, "no", Decimal("0.9"), Decimal("25"),
+            position_limit=Decimal("5"),
+        )
+
+        assert sum(market.position(trader.id).values(), ZERO) <= Decimal("5")
+        assert second is None
+
     def test_cant_sell_more_than_held(self):
         """Selling more tokens than position. Must fail, no state change."""
         risk, market_eng, traders, market, amm, _ = fresh_system()

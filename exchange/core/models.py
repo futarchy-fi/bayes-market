@@ -363,7 +363,7 @@ class TrackedRepo:
 
 @dataclass
 class Instrument:
-    """One question cross-listed on multiple venue markets."""
+    """One economically identical payout contract cross-listed across venues."""
     instrument_id: str
     title: str
     listings: list[dict[str, str]]
