@@ -110,6 +110,7 @@ describe("Compare", () => {
     renderWithProviders(<Compare />, { initialEntries: ["/compare?a=a"] });
 
     await waitFor(() => expect(screen.getByLabelText("Market B")).toHaveValue("Needle market C"));
-    expect(api.getMarket).toHaveBeenCalledWith("c-target", [{ variableId: "var-a", outcomeId: "yes" }]);
+    // The conditional fetch waits for market A's variableId to load first.
+    await waitFor(() => expect(api.getMarket).toHaveBeenCalledWith("c-target", [{ variableId: "var-a", outcomeId: "yes" }]));
   });
 });
