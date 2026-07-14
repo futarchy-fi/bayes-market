@@ -284,3 +284,4 @@ def test_backoff_delay_grows_then_caps_and_resets():
     assert _backoff_delay(base, 1, cap) == 60.0          # doubles per erroring pass
     assert _backoff_delay(base, 2, cap) == 120.0
     assert _backoff_delay(base, 100, cap) == cap         # never exceeds the cap
+    assert _backoff_delay(1.0, 100, cap) == cap          # no fixed exponent ceiling

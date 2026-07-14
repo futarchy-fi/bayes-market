@@ -429,7 +429,10 @@ def _backoff_delay(base: float, consecutive_error_passes: int, cap: float) -> fl
     seconds and deepening the storm."""
     if consecutive_error_passes <= 0:
         return base
-    return min(cap, base * (2 ** min(consecutive_error_passes, 6)))
+    if base <= 0 or cap <= base:
+        return min(base, cap)
+    max_doublings = math.ceil(math.log2(cap / base))
+    return min(cap, base * (2 ** min(consecutive_error_passes, max_doublings)))
 
 
 async def run(args: argparse.Namespace) -> None:
