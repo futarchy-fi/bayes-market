@@ -1,4 +1,4 @@
-"""Keep identical cross-venue listings near their NET reference."""
+"""Keep identical cross-venue listings near a configured reference."""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ import asyncio
 import math
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_FLOOR
+from time import monotonic
 from typing import Any, Protocol
 
 import httpx
@@ -46,13 +48,20 @@ class ArbConfig:
     inventory_cap: Decimal = Decimal("50")
     max_price_move: Decimal = Decimal("0.02")
     action_cap: int = 10
+    reference_venue: str = "net"
     anchor_alpha: Decimal = Decimal("0.3")
+    anchor_max_age: Decimal = Decimal("120")
+    anchor_max_jump: Decimal = Decimal("0.10")
     report_only: bool = True
 
     def __post_init__(self) -> None:
+        self.reference_venue = self.reference_venue.lower()
+        if self.reference_venue not in {"net", "amm", "book"}:
+            raise ValueError("reference_venue must be net, amm, or book")
         positive = (
             "budget_cap", "instrument_budget_cap", "inventory_cap",
-            "max_price_move", "anchor_alpha",
+            "max_price_move", "anchor_alpha", "anchor_max_age",
+            "anchor_max_jump",
         )
         nonnegative = ("spread_thr", "min_balance")
         for name in positive:
@@ -65,10 +74,17 @@ class ArbConfig:
                 raise ValueError(f"{name} must be finite and non-negative")
         if _decimal(self.anchor_alpha) > 1:
             raise ValueError("anchor_alpha must be at most 1")
-        if _decimal(self.max_price_move) >= 1:
-            raise ValueError("max_price_move must be below 1")
+        if _decimal(self.anchor_max_jump) >= 1 or _decimal(self.max_price_move) >= 1:
+            raise ValueError("anchor_max_jump and max_price_move must be below 1")
         if self.action_cap <= 0:
             raise ValueError("action_cap must be positive")
+
+
+@dataclass
+class _AnchorState:
+    raw: Decimal
+    sampled_at: float
+    ema: Decimal | None = None
 
 
 @dataclass
@@ -209,22 +225,81 @@ def _tradable(market: dict) -> bool:
     return str(market.get("status", "open")).lower() not in _TERMINAL_STATUSES
 
 
+def _binary_market(venue: str, market: dict) -> bool:
+    """Require the exact YES/NO contract shape used by the sizing math."""
+    try:
+        outcomes = market["outcomes"]
+        outcome_ids = (
+            {str(item["id"]).lower() for item in outcomes}
+            if venue == "net" else {str(item).lower() for item in outcomes}
+        )
+    except (KeyError, TypeError):
+        return False
+    return outcome_ids == {"yes", "no"} and len(outcomes) == 2
+
+
+def _yes_price(venue: str, market: dict) -> Decimal | None:
+    try:
+        if venue == "net":
+            value = market.get("marginals", {}).get("yes")
+        elif venue == "amm":
+            value = market.get("prices", {}).get("yes")
+        else:
+            bid, ask = _decimal(market["bestBid"]), _decimal(market["bestAsk"])
+            if (
+                not bid.is_finite() or not ask.is_finite()
+                or not _PRICE_EPS <= bid <= ask <= 1 - _PRICE_EPS
+            ):
+                return None
+            value = (bid + ask) / 2
+        if value is None:
+            return None
+        price = _decimal(value)
+    except (AttributeError, KeyError, TypeError, ValueError, ArithmeticError):
+        return None
+    if not price.is_finite() or not _PRICE_EPS <= price <= 1 - _PRICE_EPS:
+        return None
+    return price
+
+
+def _fresh_net_observation(market: dict, max_age: Decimal) -> bool:
+    try:
+        observed = datetime.fromisoformat(
+            str(market["observedAt"]).replace("Z", "+00:00")
+        )
+        if observed.tzinfo is None:
+            return False
+        age = (datetime.now(timezone.utc) - observed).total_seconds()
+    except (KeyError, TypeError, ValueError):
+        return False
+    return -5 <= age <= float(max_age)
+
+
 class ArbPolicy:
     def __init__(self, client: ExchangeClient, config: ArbConfig) -> None:
         self.client = client
         self.config = config
-        self._anchor_ema: dict[str, Decimal] = {}
+        self._anchors: dict[str, _AnchorState] = {}
 
-    def _smooth_anchor(self, instrument_id: str, raw: Decimal) -> Decimal:
-        """EMA-smooth the NET marginal, clamped to (0, 1)."""
-        clamped = min(Decimal("1") - _PRICE_EPS, max(_PRICE_EPS, raw))
+    def _accept_anchor(self, instrument_id: str, raw: Decimal) -> Decimal | None:
+        """Confirm two nearby samples, then return the smoothed reference."""
+        now = monotonic()
+        max_age = float(_decimal(self.config.anchor_max_age))
+        previous = self._anchors.get(instrument_id)
+        if previous is None or now - previous.sampled_at > max_age:
+            self._anchors[instrument_id] = _AnchorState(raw, now)
+            # A dry run may preview an unconfirmed sample because it cannot
+            # mutate state. Execution always waits for the follow-up sample.
+            return raw if self.config.report_only else None
+        if abs(raw - previous.raw) > _decimal(self.config.anchor_max_jump):
+            # Require one nearby follow-up before accepting a large step.
+            self._anchors[instrument_id] = _AnchorState(raw, now, ema=previous.ema)
+            return None
         alpha = _decimal(self.config.anchor_alpha)
-        previous = self._anchor_ema.get(instrument_id)
-        smoothed = (
-            clamped if previous is None
-            else alpha * clamped + (1 - alpha) * previous
+        smoothed = raw if previous.ema is None else (
+            alpha * raw + (1 - alpha) * previous.ema
         )
-        self._anchor_ema[instrument_id] = smoothed
+        self._anchors[instrument_id] = _AnchorState(raw, now, smoothed)
         return smoothed
 
     async def _cancel_untraded_book_quotes(
@@ -267,18 +342,37 @@ class ArbPolicy:
             return actions
 
         anchor_listing = next(
-            (item for item in listings if item["venue"] == "net"), None,
+            (item for item in listings if item["venue"] == self.config.reference_venue),
+            None,
         )
         if anchor_listing is None:
             return actions
-        anchor_market = await self.client.market("net", anchor_listing["marketId"])
-        if not _tradable(anchor_market):
+        anchor_market = await self.client.market(
+            self.config.reference_venue, anchor_listing["marketId"],
+        )
+        if (
+            not _tradable(anchor_market)
+            or not _binary_market(self.config.reference_venue, anchor_market)
+        ):
             return actions
-        anchor = self._smooth_anchor(
-            instrument_id, _decimal(anchor_market["marginals"]["yes"]),
+        if self.config.reference_venue == "net" and not _fresh_net_observation(
+            anchor_market, _decimal(self.config.anchor_max_age),
+        ):
+            return actions
+        raw_anchor = _yes_price(self.config.reference_venue, anchor_market)
+        if raw_anchor is None:
+            return actions
+        anchor = self._accept_anchor(instrument_id, raw_anchor)
+        if anchor is None:
+            return actions
+
+        reference_key = (
+            self.config.reference_venue, str(anchor_listing["marketId"]),
         )
         traded = [
-            item for item in listings if item["venue"] == "amm"
+            item for item in listings
+            if (item["venue"], str(item["marketId"])) != reference_key
+            and item["venue"] == "amm"
         ]
         if not traded:
             return actions
@@ -295,9 +389,11 @@ class ArbPolicy:
                 break
             venue, market_id = listing["venue"], str(listing["marketId"])
             market = await self.client.market(venue, market_id)
-            if not _tradable(market):
+            if not _tradable(market) or not _binary_market(venue, market):
                 continue
-            yes = _decimal(market["prices"]["yes"])
+            yes = _yes_price("amm", market)
+            if yes is None:
+                continue
             gap = abs(yes - anchor)
             if gap > _decimal(self.config.spread_thr):
                 move = _decimal(self.config.max_price_move)
@@ -361,7 +457,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--inventory-cap", type=Decimal, default=_env_decimal("INVENTORY_CAP", "50"))
     parser.add_argument("--max-price-move", type=Decimal, default=_env_decimal("MAX_PRICE_MOVE", "0.02"))
     parser.add_argument("--action-cap", type=int, default=int(os.getenv("ACTION_CAP", "10")))
+    parser.add_argument("--reference-venue", default=os.getenv("REFERENCE_VENUE", "net"))
     parser.add_argument("--anchor-alpha", type=Decimal, default=_env_decimal("ANCHOR_ALPHA", "0.3"))
+    parser.add_argument("--anchor-max-age", type=Decimal, default=_env_decimal("ANCHOR_MAX_AGE", "120"))
+    parser.add_argument("--anchor-max-jump", type=Decimal, default=_env_decimal("ANCHOR_MAX_JUMP", "0.10"))
     return parser
 
 
@@ -422,7 +521,9 @@ async def run(args: argparse.Namespace) -> None:
         instrument_budget_cap=args.instrument_budget_cap,
         min_balance=args.min_balance,
         inventory_cap=args.inventory_cap, max_price_move=args.max_price_move,
-        action_cap=args.action_cap, anchor_alpha=args.anchor_alpha,
+        action_cap=args.action_cap, reference_venue=args.reference_venue,
+        anchor_alpha=args.anchor_alpha, anchor_max_age=args.anchor_max_age,
+        anchor_max_jump=args.anchor_max_jump,
         report_only=not args.execute,
     )
     selected = None if args.instruments == "all" else {

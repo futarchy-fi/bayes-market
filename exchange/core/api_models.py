@@ -245,6 +245,7 @@ class NetMarket(BaseModel):
     outcomes: list[dict]
     marginals: dict[str, float]
     parents: list[str] = []
+    observedAt: str | None = None
 
 class NetMarketList(BaseModel):
     markets: list[NetMarket]

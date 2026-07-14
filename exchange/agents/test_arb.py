@@ -99,6 +99,7 @@ async def test_distorted_amm_moves_toward_net_anchor_in_bounded_steps(
     async with _client(auth.api_key) as client:
         policy = ArbPolicy(client, ArbConfig(report_only=False))
         executed = []
+        assert await policy.tick(instrument) == []  # first sample only warms up
         for _ in range(3):
             actions = await policy.tick(instrument)
             executed.extend(actions)
@@ -208,6 +209,61 @@ async def test_anchor_smoothing_blunts_a_small_transient_net_spike(seeded_exchan
     assert smoothed_chase == Decimal("0")         # EMA keeps it below the trade band
 
 
+@pytest.mark.parametrize("bad_sample", ["stale", "invalid"])
+async def test_stale_or_invalid_net_reference_never_trades(
+    seeded_exchange, bad_sample,
+):
+    auth, instrument, amm, _ = seeded_exchange
+    instrument = {**instrument, "listings": instrument["listings"][:2]}
+    q_before = deepcopy(amm.q)
+    balance_before = app.state.risk.get_account(auth.account_id).available_balance
+
+    async with _client(auth.api_key) as client:
+        real_market = client.market
+
+        async def bad_market(venue, market_id):
+            market = await real_market(venue, market_id)
+            if venue == "net":
+                if bad_sample == "stale":
+                    market["observedAt"] = "2000-01-01T00:00:00Z"
+                else:
+                    market["marginals"]["yes"] = "NaN"
+            return market
+
+        client.market = bad_market
+        policy = ArbPolicy(client, ArbConfig(report_only=False))
+        assert [await policy.tick(instrument) for _ in range(3)] == [[], [], []]
+
+    assert amm.q == q_before
+    assert app.state.risk.get_account(auth.account_id).available_balance == balance_before
+
+
+async def test_large_anchor_jump_needs_confirmation_and_stays_move_capped(
+    seeded_exchange,
+):
+    auth, instrument, amm, _ = seeded_exchange
+    instrument = {**instrument, "listings": instrument["listings"][:2]}
+    attacker = app.state.risk.create_account(balance=Decimal("100000"))
+
+    async with _client(auth.api_key) as client:
+        policy = ArbPolicy(client, ArbConfig(report_only=False))
+        for _ in range(7):
+            await policy.tick(instrument)
+        app.state.joint.place_edit(attacker.id, "gcx_a", "yes", 0.85)
+        before = prices(amm.q, amm.b)["yes"]
+        balance_before = app.state.risk.get_account(auth.account_id).available_balance
+
+        assert await policy.tick(instrument) == []  # first large sample is only a candidate
+        assert prices(amm.q, amm.b)["yes"] == before
+        assert app.state.risk.get_account(auth.account_id).available_balance == balance_before
+
+        actions = await policy.tick(instrument)
+
+    after = prices(amm.q, amm.b)["yes"]
+    assert [action.outcome for action in actions] == ["yes"]
+    assert Decimal("0") < after - before <= Decimal("0.0201")
+
+
 async def test_downward_correction_buys_no_and_moves_at_most_two_points(
     seeded_exchange,
 ):
@@ -220,6 +276,7 @@ async def test_downward_correction_buys_no_and_moves_at_most_two_points(
 
     async with _client(auth.api_key) as client:
         policy = ArbPolicy(client, ArbConfig(report_only=False))
+        assert await policy.tick(instrument) == []
         actions = await policy.tick(instrument)
 
     after = prices(amm.q, amm.b)["yes"]
@@ -227,6 +284,59 @@ async def test_downward_correction_buys_no_and_moves_at_most_two_points(
     assert [action.outcome for action in actions] == ["no"]
     assert Decimal("0") < before - after <= Decimal("0.0201")
     assert spent == actions[0].budget
+
+
+async def test_reference_venue_is_configurable_and_not_traded(seeded_exchange):
+    auth, _, reference, _ = seeded_exchange
+    follower, _ = app.state.me.create_market(
+        "A2", "arb-test", "a-follower", {}, b=Decimal("20")
+    )
+    attacker = app.state.risk.create_account(balance=Decimal("1000"))
+    app.state.me.buy(reference.id, attacker.id, "yes", Decimal("10"))
+    reference_before = deepcopy(reference.q)
+    instrument = {
+        "instrumentId": "amm-reference", "title": "A",
+        "listings": [
+            {"venue": "amm", "marketId": str(reference.id)},
+            {"venue": "amm", "marketId": str(follower.id)},
+        ],
+    }
+
+    async with _client(auth.api_key) as client:
+        policy = ArbPolicy(client, ArbConfig(
+            report_only=False, reference_venue="amm", anchor_alpha=Decimal("1"),
+        ))
+        assert await policy.tick(instrument) == []
+        actions = await policy.tick(instrument)
+
+    assert [(action.market_id, action.outcome) for action in actions] == [
+        (str(follower.id), "yes")
+    ]
+    assert reference.q == reference_before
+    movement = prices(follower.q, follower.b)["yes"] - Decimal("0.5")
+    assert Decimal("0") < movement <= Decimal("0.02")
+
+
+async def test_non_binary_listing_is_never_traded(seeded_exchange):
+    auth, instrument, _, _ = seeded_exchange
+    market, _ = app.state.me.create_market(
+        "Three-way", "arb-test", "three-way", {}, b=Decimal("20"),
+        outcomes=["yes", "no", "maybe"],
+    )
+    instrument = {
+        **instrument,
+        "listings": [
+            instrument["listings"][0],
+            {"venue": "amm", "marketId": str(market.id)},
+        ],
+    }
+    before = deepcopy(market.q)
+
+    async with _client(auth.api_key) as client:
+        policy = ArbPolicy(client, ArbConfig(report_only=False))
+        assert [await policy.tick(instrument) for _ in range(3)] == [[], [], []]
+
+    assert market.q == before
 
 
 async def test_instrument_budget_and_per_listing_inventory_caps(seeded_exchange):
@@ -250,6 +360,7 @@ async def test_instrument_budget_and_per_listing_inventory_caps(seeded_exchange)
             instrument_budget_cap=Decimal("0.75"),
             inventory_cap=Decimal("2"),
         ))
+        assert await policy.tick(instrument) == []
         actions = await policy.tick(instrument)
 
     spent = balance_before - app.state.risk.get_account(auth.account_id).available_balance
@@ -296,24 +407,34 @@ async def test_spend_reserves_the_balance_floor(seeded_exchange):
             client, ArbConfig(report_only=False, min_balance=Decimal("50")),
         )
         await policy.tick(instrument)
+        await policy.tick(instrument)
 
     after = app.state.risk.get_account(auth.account_id).available_balance
     assert after >= Decimal("50")          # floor held
     assert after <= Decimal("53")          # and it did use the headroom it had
 
 
-async def test_agent_cancels_legacy_book_quotes(seeded_exchange):
+async def test_stale_reference_cancels_legacy_book_quotes(seeded_exchange):
     auth, instrument, _, book = seeded_exchange
     order = app.state.book.engine.place_order(
         auth.account_id, book["id"], "bid", "yes",
         Decimal("0.5000"), Decimal("1.00"),
     )
     async with _client(auth.api_key) as client:
+        real_market = client.market
+
+        async def stale_market(venue, market_id):
+            market = await real_market(venue, market_id)
+            if venue == "net":
+                market["observedAt"] = "2000-01-01T00:00:00Z"
+            return market
+
+        client.market = stale_market
         actions = await ArbPolicy(
             client, ArbConfig(report_only=False)
         ).tick(instrument)
 
-    assert [(action.kind, action.order_id) for action in actions if action.kind == "cancel"] == [
+    assert [(action.kind, action.order_id) for action in actions] == [
         ("cancel", order.id)
     ]
     assert order.status == "cancelled"

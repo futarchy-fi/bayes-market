@@ -1662,6 +1662,7 @@ def _to_net_market(record: dict) -> NetMarket:
         outcomes=[dict(o) for o in record.get("outcomes", [])],
         marginals={o: float(p) for o, p in record["marginals"].items()},
         parents=list(record.get("parents", [])),
+        observedAt=_paper_timestamp(),
     )
 
 
