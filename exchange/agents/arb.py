@@ -366,6 +366,37 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+async def run_pass(
+    client: ExchangeClient, policy: ArbPolicy, selected: set[str] | None,
+) -> None:
+    """One coherence sweep over all instruments.
+
+    Every remote call is fallible (a busy pass can hit the 60/min rate
+    limit and 429), and a live agent must not die on a transient error and
+    crash-loop under systemd. So the instruments fetch and each per-instrument
+    tick are isolated: a failure is logged and the pass moves on, retrying on
+    the next interval rather than tearing down the process.
+    """
+    try:
+        instruments = await client.instruments()
+    except Exception as err:  # noqa: BLE001 — a fetch failure must not kill the loop
+        print(f"ERROR fetching instruments: {err}", flush=True)
+        return
+    for instrument in instruments:
+        if selected is not None and instrument["instrumentId"] not in selected:
+            continue
+        try:
+            actions = await policy.tick(instrument)
+        except Exception as err:  # noqa: BLE001 — one bad market must not kill the loop
+            print(f"ERROR instrument={instrument.get('instrumentId')}: {err}", flush=True)
+            continue
+        if actions:
+            for action in actions:
+                print(action, flush=True)
+        else:
+            print(f"NOOP instrument={instrument['instrumentId']}", flush=True)
+
+
 async def run(args: argparse.Namespace) -> None:
     config = ArbConfig(
         spread_thr=args.spread_thr, budget_cap=args.budget_cap,
@@ -382,18 +413,7 @@ async def run(args: argparse.Namespace) -> None:
     ) as client:
         policy = ArbPolicy(client, config)
         while True:
-            for instrument in await client.instruments():
-                if selected is not None and instrument["instrumentId"] not in selected:
-                    continue
-                actions = await policy.tick(instrument)
-                if actions:
-                    for action in actions:
-                        print(action, flush=True)
-                else:
-                    print(
-                        f"NOOP instrument={instrument['instrumentId']}",
-                        flush=True,
-                    )
+            await run_pass(client, policy, selected)
             if args.once:
                 return
             await asyncio.sleep(args.interval)

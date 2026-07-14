@@ -12,7 +12,7 @@ os.environ.setdefault("FUTARCHY_ADMIN_KEY", "test-admin-key")
 os.environ.setdefault("FUTARCHY_STATE", "/tmp/futarchy_test_state.json")
 
 import exchange.core.api as api_module
-from exchange.agents.arb import ArbConfig, ArbPolicy, HttpExchange
+from exchange.agents.arb import ArbConfig, ArbPolicy, HttpExchange, run_pass
 from exchange.core.api import _authenticate_github_identity, app
 from exchange.core.lmsr import prices
 from exchange.core.models import reset_counters
@@ -211,3 +211,41 @@ async def test_balance_floor_refuses_all_actions(seeded_exchange):
     assert actions == []
     assert amm.q == q_before
     assert app.state.book.engine.orders == {}
+
+
+class _FlakyClient:
+    """Instruments listing OK; the tick will fail on one instrument."""
+
+    def __init__(self, instruments):
+        self._instruments = instruments
+
+    async def instruments(self):
+        return self._instruments
+
+
+class _RaisingPolicy:
+    """Stand-in policy whose tick raises — models a 429/transient error."""
+
+    def __init__(self):
+        self.seen = []
+
+    async def tick(self, instrument):
+        self.seen.append(instrument["instrumentId"])
+        raise RuntimeError("exchange GET /v1/... failed (429): rate_limited")
+
+
+async def test_run_pass_survives_a_failing_tick():
+    """A transient error on one instrument must not abort the pass (or, in
+    run(), tear down the process and crash-loop under systemd)."""
+    client = _FlakyClient([{"instrumentId": "a"}, {"instrumentId": "b"}])
+    policy = _RaisingPolicy()
+    await run_pass(client, policy, selected=None)   # must not raise
+    assert policy.seen == ["a", "b"]                # both attempted despite the first failing
+
+
+async def test_run_pass_survives_a_failing_instruments_fetch():
+    class _DeadClient:
+        async def instruments(self):
+            raise RuntimeError("exchange GET /v1/instruments failed (429)")
+
+    await run_pass(_DeadClient(), _RaisingPolicy(), selected=None)  # must not raise
