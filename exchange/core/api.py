@@ -1184,6 +1184,7 @@ async def list_instruments() -> list[dict]:
 
 @app.post("/v1/admin/instruments")
 async def admin_create_instrument(req: InstrumentRequest, _: AdminDep) -> dict:
+    """Register listings that an admin asserts are the same payout contract."""
     slug = req.instrumentId.strip()
     if not _INSTRUMENT_SLUG.fullmatch(slug):
         raise APIError(

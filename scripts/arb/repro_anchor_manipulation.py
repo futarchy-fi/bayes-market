@@ -1,23 +1,14 @@
 #!/usr/bin/env python3
-"""Repro: a transient net-marginal spike drives a lasting AMM move.
+"""Repro: reference filters bound a manipulated NET anchor.
 
-The arb agent takes the `net` venue's marginal as ground truth and marks the
-AMM/book to it. The net is *tradable* — a probability edit moves the marginal
-(for a frozen stake). So an attacker can spike the net for a moment, let the
-agent chase the AMM to the spiked value with real credits, then let the net
-revert — leaving the AMM stranded off-true and the agent's balance spent. It
-is the textbook oracle-manipulation shape: the consumer trusts an
-instantaneous reading.
+The NET venue is tradable, so its marginal is a reference rather than truth.
+This scenario first shows that a one-sample 0.60 -> 0.95 spike is rejected.
+It then holds the spike for a confirming sample and shows that EMA smoothing
+plus the atomic two-percentage-point action cap bounds the resulting AMM move.
 
-Fix (anchor_alpha < 1): the agent follows an EMA of the marginal, so a
-one-tick spike barely moves it and a manipulator must HOLD the net off-true
-for many ticks (sustained stake + exposure) to move the agent at all.
+Run from the repository root:
 
-Scenario per run: converge the AMM to the true net (0.60); an attacker spikes
-gcx_a to 0.95 for ONE tick; the net reverts to 0.60; the agent runs a few
-more ticks. We report the peak AMM displacement and credits the agent burned.
-
-    python3 scripts/arb/repro_anchor_manipulation.py                # both
+    python -m scripts.arb.repro_anchor_manipulation
 """
 
 from __future__ import annotations
@@ -45,7 +36,7 @@ SPIKE = 0.95                 # attacker's transient push
 VARIABLE = "gcx_a"           # g1's variableId
 
 
-async def scenario(alpha: Decimal, label: str) -> None:
+async def scenario() -> None:
     tmp = tempfile.mkdtemp(prefix="arb-manip-")
     seeds = os.path.join(tmp, "seeds.json")
     tiny = json.loads(json.dumps(TINY_SEEDS))
@@ -79,43 +70,46 @@ async def scenario(alpha: Decimal, label: str) -> None:
 
         start_bal = bal()
         async with HttpExchange("http://test", agent.api_key, transport=transport) as client:
-            policy = ArbPolicy(client, ArbConfig(report_only=False, anchor_alpha=alpha))
+            policy = ArbPolicy(client, ArbConfig(report_only=False))
 
             # 1) converge to the true net
             for _ in range(6):
                 await policy.tick(instrument)
             converged = amm_yes()
 
-            # 2) attacker spikes the net for ONE tick, agent reacts, net reverts
+            # 2) One spike sample is rejected, then the reference reverts.
             app.state.joint.place_edit(attacker.id, VARIABLE, "yes", SPIKE)
             await policy.tick(instrument)
-            after_spike = amm_yes()
+            after_one_spike = amm_yes()
             app.state.joint.place_edit(attacker.id, VARIABLE, "yes", float(TRUE))
+            await policy.tick(instrument)
+            await policy.tick(instrument)
 
-            # 3) let the agent settle back
-            peak = after_spike
-            for _ in range(6):
-                await policy.tick(instrument)
-                peak = max(peak, amm_yes())
+            # 3) A sustained spike clears the two-sample filter, but one AMM
+            # action remains capped at two percentage points.
+            before_sustained = amm_yes()
+            app.state.joint.place_edit(attacker.id, VARIABLE, "yes", SPIKE)
+            await policy.tick(instrument)
+            after_first_sustained = amm_yes()
+            await policy.tick(instrument)
+            after_confirmed = amm_yes()
 
         burned = start_bal - bal()
-        displacement = after_spike - converged
-        print(f"\n[{label}] anchor_alpha={alpha}")
-        print(f"  converged AMM (true 0.60):     {converged:.4f}")
-        print(f"  AMM after 1-tick net spike→.95: {after_spike:.4f}  "
-              f"(chased +{displacement:.4f})")
-        print(f"  peak AMM displacement:          {peak:.4f}")
-        print(f"  agent credits burned on the manipulation round: {burned:.2f}")
+        print(f"  converged AMM (true 0.60):       {converged:.4f}")
+        print(f"  after one-sample spike to 0.95:  {after_one_spike:.4f}")
+        print(f"  after first sustained sample:    {after_first_sustained:.4f}")
+        print(f"  after confirming spike sample:   {after_confirmed:.4f}")
+        print(f"  confirmed one-tick AMM movement: "
+              f"{after_confirmed - before_sustained:.4f}")
+        print(f"  total agent credits spent:       {burned:.2f}")
+
+        assert after_one_spike == converged
+        assert after_first_sustained == before_sustained
+        assert after_confirmed - before_sustained <= Decimal("0.02")
 
 
 async def main() -> None:
-    # The knob is a tradeoff, shown explicitly: smaller alpha = a transient
-    # spike does less damage, but legitimate net moves are also followed more
-    # slowly. It converts one-shot manipulation into sustained-cost
-    # manipulation; it does not eliminate it.
-    await scenario(Decimal("1.0"), "CURRENT — no smoothing")
-    await scenario(Decimal("0.3"), "FIXED — alpha 0.30 (default)")
-    await scenario(Decimal("0.1"), "FIXED — alpha 0.10 (more resistant)")
+    await scenario()
 
 
 if __name__ == "__main__":

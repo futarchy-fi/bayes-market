@@ -1,63 +1,69 @@
-# exchange/agents — resident arbitrage agent
+# exchange/agents — resident coherence agent
 
-`arb.py` is a resident bot that keeps an instrument's AMM and book listings
-aligned to its **net** (Bayes-network) listing. For each registry instrument
-it reads the net marginal as the reference price, nudges the AMM toward it,
-and two-sided-quotes the book around it. It runs headless under systemd
-(`deploy/futarchy-arb.service`, `--execute --interval 30`).
+`arb.py` keeps economically identical listings near a configured reference
+venue. NET is the default reference, but it is a tradable signal, not an
+oracle or ground truth. The agent runs report-only unless both `--execute` and
+`--enable-live-trading` are set.
 
-This file is the contract the agent is written against. It is a naive
-price-follower by design; the notes below are the guardrails that keep that
-naivety from misbehaving, and the limits that are known and deliberately not
-yet addressed. **Read this before changing the sizing, the anchor, or the
-loop** — each guardrail exists because its absence was a demonstrated failure
-(see `scripts/arb/repro_*.py`).
+Only listings with identical payouts, oracle, condition, resolution criteria,
+outcome mapping, and VOID payoff may share an instrument. Creating an
+instrument is currently the administrator's assertion that this is true; the
+agent never infers equivalence from titles. See
+[Market contracts and settlement](../../docs/market-contracts-and-settlement.md).
 
-## What the agent assumes
+## Safety contract
 
-- **Binary markets.** AMM sizing and book quoting assume `yes`/`no`. A
-  multi-outcome AMM would be mis-sized.
-- **The net marginal is a *reference*, not gospel.** It is a tradable venue;
-  anyone can move it. The agent must never treat a single reading as truth
-  (see anchor smoothing below).
-- **Every remote call can fail.** The agent holds a user API key subject to
-  the 60/min rate limit and will occasionally 429.
-- **Play credits.** Balances are exchange credits, not fiat. Caps are sized
-  for that; revisit every cap before any real-value deployment.
+- Exact YES/NO markets only; other outcome sets are rejected. A reference may
+  be `net`, `amm`, or `book`; a book reference requires both a best bid and
+  best ask.
+- A NET response must contain a fresh server-observation `observedAt`; this
+  detects cached responses, not an economically stale belief that the server
+  still considers current. Execution needs two nearby valid reference samples
+  before use (a mutation-free report may preview the first).
+  Non-finite/out-of-range samples are ignored,
+  one jump larger than `ANCHOR_MAX_JUMP` is held for confirmation, and accepted
+  samples feed an EMA (`ANCHOR_ALPHA`). In-memory confirmation intentionally
+  warms up again after restart or a long observation gap.
+- AMM orders use the dedicated atomic `buy-to-price` endpoint. An older API
+  returns 404 instead of silently ignoring its required safety fields. The
+  server rereads the live market under its lock, no-ops after a crossing,
+  limits the selected outcome's move, enforces a per-listing gross-share cap,
+  and never debits more than the submitted budget. Executed actions record the
+  returned debit.
+- `INSTRUMENT_BUDGET_CAP` is shared by all new AMM debits in one instrument
+  tick. It is also bounded by `available - MIN_BALANCE`.
+- `INVENTORY_CAP` is split equally across the AMM listings the agent may trade,
+  and the server enforces each resulting per-listing limit atomically.
+- The first pass never posts order-book liquidity. It cancels the account's
+  existing live book orders for registered listings before sampling a
+  reference. A book may still be configured as a read-only reference when it
+  has both a best bid and best ask.
+- Remote failures are isolated per instrument. Repeated erroring passes back
+  off exponentially up to `ARB_BACKOFF_CAP`.
 
-## Invariants the code enforces (do not regress)
+These are play-credit limits, not a claim that the strategy is risk-free.
+The instrument budget resets each tick and simultaneous agent processes can
+multiply it. The inventory allocation covers the follower AMMs traded in the
+current registry; it does not unwind legacy or reference-venue holdings. There
+is still no portfolio-wide loss cap, durable anchor history, or hedge on the
+reference venue.
 
-1. **Sized to the anchor, not to the gap.** An AMM correction spends the
-   credits that move the LMSR price *to* the anchor
-   (`b·ln((1-p0)/(1-p1))` / `b·ln(p0/p1)`), capped at `budget_cap`. The old
-   `budget_cap * gap` was depth-blind and oscillated a thin AMM, bleeding
-   spread every tick. Repro: `scripts/arb/repro_overshoot.py`.
-2. **Follows an EMA of the anchor, not the instant reading.**
-   `anchor_alpha` (default 0.3) smooths the net marginal so a one-tick spike
-   can't be converted into a permanent AMM move; a manipulator must *hold*
-   the net off-true for many ticks. Mitigation, not elimination — the knob
-   trades resistance against speed of following real moves. Repro:
-   `scripts/arb/repro_anchor_manipulation.py`.
-3. **The balance floor is reserved, not just checked.** A tick spends at most
-   `available - min_balance` across all its AMM buys and book collateral, so
-   it never dips the account below the floor mid-tick.
-4. **A transient error never tears down the loop, and sustained failure
-   backs off.** `run_pass` isolates the instruments fetch and each
-   per-instrument tick; a failure is logged and the sweep continues rather
-   than crash-looping under systemd. `run` counts a pass's errors and applies
-   exponential backoff (base `interval`, doubling per consecutive erroring
-   pass, capped at `ARB_BACKOFF_CAP`), so a rate-limit storm settles instead
-   of hammering at the fixed interval; a clean pass resets to `interval`.
+## Configuration
 
-## Known limitations (deliberately not yet fixed)
+| Option / environment | Default | Meaning |
+| --- | ---: | --- |
+| `--reference-venue` / `REFERENCE_VENUE` | `net` | `net`, `amm`, or `book` |
+| `ANCHOR_ALPHA` | `0.3` | Weight of a confirmed sample in the EMA |
+| `ANCHOR_MAX_AGE` | `120` | Maximum observation age/gap in seconds |
+| `ANCHOR_MAX_JUMP` | `0.10` | One-sample reference jump requiring confirmation |
+| `SPREAD_THR` | `0.02` | AMM gap required before action |
+| `MAX_PRICE_MOVE` | `0.02` | Maximum selected-outcome movement per AMM action |
+| `BUDGET_CAP` | `25` | Maximum debit for one AMM action |
+| `INSTRUMENT_BUDGET_CAP` | `25` | New AMM debit budget per instrument tick |
+| `INVENTORY_CAP` | `50` | Gross shares split across traded listings |
+| `MIN_BALANCE` | `50` | Available-credit reserve |
+| `ACTION_CAP` | `10` | Action ceiling before new trades stop; safety cancellations may exceed it |
 
-- **One-sided book inventory.** The agent only ever posts *bids* (both
-  sides), never asks, and has no inventory manager. Asymmetric fills
-  accumulate a directional position it never unwinds. Positions are acquired
-  at favorable prices (inside the anchor ± delta spread), so this is exposure
-  growth, not an immediate loss — but a real market-making bot needs ask-side
-  quoting and an inventory limit. Left as a design task, not a quick patch,
-  precisely because a half-built inventory manager in money code is worse
-  than a documented gap.
-- **Per-instrument, not portfolio-level, risk.** Caps apply per tick per
-  instrument; there is no global exposure or loss budget across instruments.
+`scripts/arb/repro_overshoot.py` demonstrates bounded thin/deep AMM
+convergence; `scripts/arb/repro_anchor_manipulation.py` demonstrates the
+reference filters. The reference user unit is `deploy/futarchy-arb.service`.
