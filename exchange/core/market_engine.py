@@ -40,7 +40,7 @@ from exchange.core.models import (
     ASSET_PRECISION,
 )
 from exchange.core.lmsr import (
-    cost as lmsr_cost, cost_to_buy, amount_for_cost, prices,
+    cost as lmsr_cost, cost_to_buy, cost_to_move_price, amount_for_cost, prices,
     liquidity_cost, b_for_funding, max_loss,
 )
 from exchange.core.risk_engine import RiskEngine, InsufficientBalance
@@ -48,6 +48,7 @@ from exchange.core.risk_engine import RiskEngine, InsufficientBalance
 
 # Credit precision quantum (ASSET_PRECISION)
 _CREDIT_QUANTUM = Decimal(10) ** -ASSET_PRECISION.get("CREDITS", 6)
+_TARGET_EPS = Decimal("0.0001")
 
 
 class MarketEngine:
@@ -239,6 +240,95 @@ class MarketEngine:
     # Trading
     # ------------------------------------------------------------------
 
+    def quote_buy(self, market_id: int, account_id: int, outcome: str,
+                  budget: Decimal, *, target_price: Decimal | None = None,
+                  max_price_move: Decimal | None = None,
+                  position_limit: Decimal | None = None,
+                  ) -> tuple[Decimal, Decimal, Decimal] | None:
+        """Return cap-safe ``(tokens, average_price, debit)`` for a buy.
+
+        ``target_price`` is the selected outcome's marginal. Targeted quotes
+        use the market's current state, stop when that marginal is already at
+        or above the target, and never cross the effective target. The binary
+        search works in amount-precision ticks so price rounding can never
+        make the actual debit exceed ``budget``.
+        """
+        market = self._get_open_market(market_id)
+        if outcome not in market.outcomes:
+            raise ValueError(f"unknown outcome: {outcome}")
+        if not budget.is_finite() or budget <= ZERO:
+            raise ValueError("budget must be finite and positive")
+
+        effective_target = None
+        if target_price is not None:
+            if (
+                not target_price.is_finite()
+                or not _TARGET_EPS <= target_price <= Decimal("1") - _TARGET_EPS
+            ):
+                raise ValueError("target price must be between 0.0001 and 0.9999")
+            if max_price_move is not None and (
+                not max_price_move.is_finite()
+                or not ZERO < max_price_move < Decimal("1")
+            ):
+                raise ValueError("max price move must be finite and below 1")
+            current = prices(market.q, market.b)[outcome]
+            if current >= target_price:
+                return None
+            effective_target = target_price
+            if max_price_move is not None:
+                effective_target = min(target_price, current + max_price_move)
+
+        available = self.risk.get_account(account_id).available_balance
+        if budget > available:
+            raise InsufficientBalance(
+                f"account {account_id}: need {budget}, have {available}")
+
+        if target_price is not None:
+            target_tokens, _ = cost_to_move_price(
+                market.q, market.b, outcome, effective_target)
+            token_limit = target_tokens
+        else:
+            token_limit = amount_for_cost(market.q, market.b, outcome, budget)
+
+        if position_limit is not None:
+            if not position_limit.is_finite() or position_limit <= ZERO:
+                raise ValueError("position limit must be finite and positive")
+            gross_position = sum(market.position(account_id).values(), ZERO)
+            token_limit = min(token_limit, position_limit - gross_position)
+
+        amount_quantum = Decimal(10) ** -market.amount_precision
+        price_quantum = Decimal(10) ** -market.price_precision
+        high = int((token_limit / amount_quantum).to_integral_value(
+            rounding=ROUND_FLOOR))
+        if high <= 0:
+            return None
+
+        def candidate(ticks: int) -> tuple[Decimal, Decimal, Decimal, bool]:
+            tokens = amount_quantum * ticks
+            exact_cost = cost_to_buy(market.q, market.b, outcome, tokens)
+            avg_price = (exact_cost / tokens).quantize(
+                price_quantum, rounding=ROUND_CEILING)
+            debit = tokens * avg_price
+            allowed = debit <= budget
+            if allowed and effective_target is not None:
+                q_after = dict(market.q)
+                q_after[outcome] += tokens
+                allowed = prices(q_after, market.b)[outcome] <= effective_target
+            return tokens, avg_price, debit, allowed
+
+        low, best = 1, None
+        while low <= high:
+            mid = (low + high) // 2
+            quoted = candidate(mid)
+            if quoted[3]:
+                best = quoted
+                low = mid + 1
+            else:
+                high = mid - 1
+        if best is None:
+            return None
+        return best[:3]
+
     def buy(self, market_id: int, account_id: int,
             outcome: str, budget: Decimal) -> Trade:
         """
@@ -250,45 +340,28 @@ class MarketEngine:
         = tokens * price is exact at ASSET_PRECISION.
         """
         market = self._get_open_market(market_id)
-        if outcome not in market.outcomes:
-            raise ValueError(f"unknown outcome: {outcome}")
-
-        available = self.risk.get_account(account_id).available_balance
-        if budget > available:
-            raise InsufficientBalance(
-                f"account {account_id}: need {budget}, have {available}")
-
-        amount_quantum = Decimal(10) ** -market.amount_precision
-        price_quantum = Decimal(10) ** -market.price_precision
-
-        # Compute tokens from budget, quantize DOWN (fewer tokens)
-        tokens_raw = amount_for_cost(market.q, market.b, outcome, budget)
-        tokens = tokens_raw.quantize(amount_quantum, rounding=ROUND_FLOOR)
-        if tokens <= ZERO:
+        quote = self.quote_buy(market_id, account_id, outcome, budget)
+        if quote is None:
             raise ValueError("budget too small for any tokens")
+        tokens, avg_price, trade_value = quote
+        return self._execute_trade(
+            market, account_id, outcome, tokens, avg_price, trade_value)
 
-        # Compute average price (ROUND_CEILING — trader pays more)
-        exact_cost = cost_to_buy(market.q, market.b, outcome, tokens)
-        avg_price = (exact_cost / tokens).quantize(
-            price_quantum, rounding=ROUND_CEILING)
-
-        # Trade value: exact at ASSET_PRECISION (no rounding needed)
-        trade_value = tokens * avg_price
-
-        # Price rounding may push cost above available — reduce by one tick
-        if trade_value > available:
-            tokens -= amount_quantum
-            if tokens <= ZERO:
-                raise ValueError("budget too small for any tokens")
-            exact_cost = cost_to_buy(market.q, market.b, outcome, tokens)
-            avg_price = (exact_cost / tokens).quantize(
-                price_quantum, rounding=ROUND_CEILING)
-            trade_value = tokens * avg_price
-
-        if trade_value > available:
-            raise InsufficientBalance(
-                f"account {account_id}: need {trade_value}, have {available}")
-
+    def buy_to_price(self, market_id: int, account_id: int, outcome: str,
+                     target_price: Decimal, max_budget: Decimal, *,
+                     max_price_move: Decimal | None = None,
+                     position_limit: Decimal | None = None) -> Trade | None:
+        """Atomically buy toward a selected-outcome marginal without crossing it."""
+        market = self._get_open_market(market_id)
+        quote = self.quote_buy(
+            market_id, account_id, outcome, max_budget,
+            target_price=target_price,
+            max_price_move=max_price_move,
+            position_limit=position_limit,
+        )
+        if quote is None:
+            return None
+        tokens, avg_price, trade_value = quote
         return self._execute_trade(
             market, account_id, outcome, tokens, avg_price, trade_value)
 

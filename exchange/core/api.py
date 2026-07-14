@@ -22,7 +22,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, Query, Request, Response
 from fastapi.responses import FileResponse, RedirectResponse
 
 from exchange.core.api_errors import (
@@ -34,7 +34,7 @@ from exchange.core.api_models import (
     AccountResponse, AccountActivityEntry, AccountActivityPage, LockResponse,
     MarketSummary, MarketDetail, PositionEntry, TradeResponse, Candle,
     DepthEntry, DepthResponse,
-    BuyRequest, SellRequest, TradeResult,
+    BuyRequest, TargetBuyRequest, SellRequest, TradeResult,
     CreateAccountResponse,
     CreateServiceAccountRequest, CreateServiceAccountResponse,
     MintRequest, MintResponse,
@@ -2021,13 +2021,13 @@ async def get_my_activity(
 
 @app.post("/v1/markets/{market_id}/buy")
 async def buy(market_id: int, req: BuyRequest, user: AuthUser) -> TradeResult:
-    """Buy outcome tokens."""
+    """Buy outcome tokens with a hard maximum debit."""
     try:
         budget = Decimal(req.budget)
-    except InvalidOperation:
+    except (InvalidOperation, ValueError):
         raise APIError(400, "invalid_amount", f"Invalid budget: {req.budget}")
-    if budget <= ZERO:
-        raise APIError(400, "invalid_amount", "Budget must be positive")
+    if not budget.is_finite() or budget <= ZERO:
+        raise APIError(400, "invalid_amount", "Budget must be finite and positive")
 
     async with app.state.lock:
         try:
@@ -2037,6 +2037,71 @@ async def buy(market_id: int, req: BuyRequest, user: AuthUser) -> TradeResult:
         except (ValueError, InsufficientBalance) as e:
             raise translate_engine_error(e)
 
+    return TradeResult(
+        trade_id=trade.id,
+        outcome=trade.outcome,
+        amount=str(trade.amount),
+        price=str(trade.price),
+        value=str(trade.amount * trade.price),
+    )
+
+
+@app.post("/v1/markets/{market_id}/buy-to-price")
+async def buy_to_price(
+    market_id: int, req: TargetBuyRequest, user: AuthUser,
+):
+    """Atomically buy toward a target under required hard risk limits.
+
+    This dedicated endpoint intentionally fails closed against older servers:
+    they return 404 instead of silently ignoring safety fields on ``/buy``.
+    """
+    try:
+        target = Decimal(req.targetPrice)
+        max_budget = Decimal(req.maxBudget)
+        max_move = Decimal(req.maxPriceMove)
+        position_limit = Decimal(req.positionLimit)
+        min_balance = Decimal(req.minBalance)
+    except (InvalidOperation, ValueError):
+        raise APIError(400, "invalid_target", "Invalid target constraint")
+    if (
+        not target.is_finite()
+        or not Decimal("0.0001") <= target <= Decimal("0.9999")
+    ):
+        raise APIError(
+            400, "invalid_target",
+            "targetPrice must be between 0.0001 and 0.9999",
+        )
+    if not max_budget.is_finite() or max_budget <= ZERO:
+        raise APIError(400, "invalid_amount", "maxBudget must be finite and positive")
+    if not max_move.is_finite() or not ZERO < max_move < Decimal("1"):
+        raise APIError(
+            400, "invalid_target", "maxPriceMove must be finite and below 1",
+        )
+    if not position_limit.is_finite() or position_limit <= ZERO:
+        raise APIError(400, "invalid_target", "positionLimit must be finite and positive")
+    if not min_balance.is_finite() or min_balance < ZERO:
+        raise APIError(400, "invalid_target", "minBalance must be finite and non-negative")
+
+    async with app.state.lock:
+        try:
+            available = app.state.risk.get_account(
+                user.account_id).available_balance
+            spendable = min(max_budget, available - min_balance)
+            trade = (
+                app.state.me.buy_to_price(
+                    market_id, user.account_id, req.outcome, target, spendable,
+                    max_price_move=max_move,
+                    position_limit=position_limit,
+                )
+                if spendable > ZERO else None
+            )
+            if trade is not None:
+                _save()
+        except (ValueError, InsufficientBalance) as e:
+            raise translate_engine_error(e)
+
+    if trade is None:
+        return Response(status_code=204)
     return TradeResult(
         trade_id=trade.id,
         outcome=trade.outcome,
