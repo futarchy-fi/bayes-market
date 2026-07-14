@@ -96,7 +96,7 @@ day_cap_reached() {
     local pr_num="$2"
     local prefix encoded dates streak previous expected
 
-    prefix="${repo}#${pr_num}"
+    prefix="${repo}#${pr_num}@"
     encoded="$(urlencode "${prefix}")"
     dates="$(
         api_get "/markets?category=pr_merge&category_id=${encoded}" | \
@@ -168,7 +168,7 @@ resolve_recent_closed_prs() {
                 continue
             fi
 
-            prefix="${repo}#${pr_num}"
+            prefix="${repo}#${pr_num}@"
             while IFS= read -r market; do
                 [ -z "${market}" ] && continue
 

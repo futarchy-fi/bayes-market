@@ -388,6 +388,24 @@ details.lmsr-ref .ref-content p { margin: 4px 0; }
   function isConditional(m) {
     return m.metadata && m.metadata.market_type === 'conditional';
   }
+  function resolverLabel(m) {
+    const resolver = m.resolver || (m.metadata && m.metadata.resolver) || {};
+    if (resolver.type === 'creator') {
+      const accountId = m.creator_account_id || (m.metadata && m.metadata.creator_account_id);
+      const githubId = m.metadata && m.metadata.creator_github_id;
+      const login = m.metadata && m.metadata.creator_login;
+      const identity = login ? '@' + login : 'Market creator';
+      const ids = [];
+      if (githubId) ids.push('GitHub ID ' + githubId);
+      if (accountId) ids.push('account #' + accountId);
+      return identity + (ids.length ? ' (' + ids.join(', ') + ')' : '');
+    }
+    if (resolver.type === 'github_pr') {
+      return (resolver.repo || 'GitHub') + '#' + (resolver.pr_number || '?');
+    }
+    if (resolver.type === 'admin') return 'Futarchy administrators';
+    return 'Not specified';
+  }
   function badgeClass(status) {
     return 'badge badge-' + status;
   }
@@ -884,6 +902,8 @@ details.lmsr-ref .ref-content p { margin: 4px 0; }
       const prUrl = m.metadata && m.metadata.pr_url;
       const repo = marketRepo(m);
       const conditional = isConditional(m);
+      const resolver = m.resolver || (m.metadata && m.metadata.resolver) || {};
+      const githubPr = resolver.type === 'github_pr';
       const auth = getAuth();
 
       let resolution = '';
@@ -893,15 +913,19 @@ details.lmsr-ref .ref-content p { margin: 4px 0; }
         resolution = `<div class="resolution-banner void">Market voided \u2014 all positions refunded${m.resolved_at ? ' on ' + fmtTime(m.resolved_at) : ''}</div>`;
       }
 
-      let rulesBox = '';
-      if (conditional) {
-        rulesBox = `<div class="rules-box">
-          <strong>Conditional Market</strong>${m.deadline ? ' \u2014 closes ' + fmtDate(m.deadline) : ''}
-          <div class="rule-row"><span class="rule-label rule-yes">YES</span> PR is merged</div>
-          <div class="rule-row"><span class="rule-label rule-no">NO</span> PR is closed without merge</div>
-          <div class="rule-row"><span class="rule-label rule-void">VOID</span> Deadline expires with no resolution \u2014 positions refunded</div>
-        </div>`;
-      }
+      const recordedCriteria = m.metadata && (m.metadata.resolution_criteria || m.metadata.resolution_rules);
+      const criteria = recordedCriteria
+        ? recordedCriteria
+        : conditional || githubPr
+          ? 'YES if the PR merges; NO if it closes without merging.'
+          : 'Not published for this market.';
+      const voidRule = 'VOID refunds positions. Published resolution criteria define when it applies.';
+      const rulesBox = `<div class="rules-box">
+        <strong>${githubPr ? 'GitHub PR Market Contract' : conditional ? 'Conditional Market Contract' : 'Market Contract'}</strong>${m.deadline ? ' \u2014 closes ' + fmtDate(m.deadline) : ''}
+        <div class="rule-row"><span class="rule-label">ORACLE</span> ${esc(resolverLabel(m))}</div>
+        <div class="rule-row"><span class="rule-label">RULES</span> ${esc(criteria)}</div>
+        <div class="rule-row"><span class="rule-label rule-void">VOID</span> ${esc(voidRule)}</div>
+      </div>`;
 
       // Your position (if logged in)
       let yourPosition = '';

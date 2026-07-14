@@ -14,6 +14,7 @@ describe("AppLayout", () => {
     renderWithProviders(<AppLayout />);
 
     expect(screen.getByRole("link", { name: "Markets" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Compare" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Exchange" })).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Account ID")).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Agent ID (optional)")).not.toBeInTheDocument();

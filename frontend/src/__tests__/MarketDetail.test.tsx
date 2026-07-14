@@ -3,13 +3,15 @@ import { screen, waitFor, fireEvent } from "@testing-library/react";
 import { renderWithProviders } from "./helpers";
 import MarketDetail from "@/routes/MarketDetail";
 
+const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }));
+
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom");
-  return { ...actual, useParams: () => ({ marketId: "m1" }) };
+  return { ...actual, useParams: () => ({ marketId: "m1" }), useNavigate: () => mockNavigate };
 });
 
 vi.mock("@/features/session/context", async () => {
@@ -118,6 +120,7 @@ import {
   useEventTrade,
   useProbabilityEdit,
   useCpt,
+  useNetwork,
 } from "@/lib/query/hooks";
 import { useInstruments } from "@/lib/exchange/hooks";
 import { EXCHANGE_MODE_KEY } from "@/lib/exchangeMode";
@@ -134,6 +137,7 @@ const mockUseResolveMarket = vi.mocked(useResolveMarket);
 const mockUseEventTrade = vi.mocked(useEventTrade);
 const mockUseProbabilityEdit = vi.mocked(useProbabilityEdit);
 const mockUseCpt = vi.mocked(useCpt);
+const mockUseNetwork = vi.mocked(useNetwork);
 const mockUseInstruments = vi.mocked(useInstruments);
 
 // ---------------------------------------------------------------------------
@@ -228,8 +232,11 @@ const mockEngineStats = {
 };
 
 const mockMarketsListData = {
-  markets: [{ id: "m1", title: "ETH Price > $3000 on March 15", status: "active" as const, liquidity: 150000, volume: 45000, expires_at: "2026-12-31T23:59:59Z" }],
-  count: 1,
+  markets: [
+    { id: "m1", variableId: "eth_price_gt_3000_mar15", title: "ETH Price > $3000 on March 15", status: "active" as const, liquidity: 150000, volume: 45000, expires_at: "2026-12-31T23:59:59Z" },
+    { id: "m2", variableId: "btc_price", title: "BTC > $100K", status: "active" as const, liquidity: 200000, volume: 80000, expires_at: "2026-12-31T23:59:59Z" },
+  ],
+  count: 2,
   meta: { apiVersion: "1.0", timestamp: "2026-04-08T00:00:00Z" },
 };
 
@@ -278,6 +285,7 @@ beforeEach(() => {
   mockUsePostMarketComment.mockReturnValue(defaultMutationState() as any);
   mockUseProbabilityEdit.mockReturnValue(defaultMutationState() as any);
   mockUseCpt.mockReturnValue(defaultQueryState(undefined) as any);
+  mockUseNetwork.mockReturnValue(defaultQueryState(undefined) as any);
   mockUseInstruments.mockReturnValue(defaultQueryState([]) as any);
 });
 
@@ -305,6 +313,30 @@ describe("MarketDetail", () => {
     await waitFor(() => {
       expect(screen.getByText("active")).toBeInTheDocument();
     });
+  });
+
+  it("navigates to compare after choosing a market", async () => {
+    renderWithProviders(<MarketDetail />);
+    const picker = await screen.findByPlaceholderText("Compare with…");
+
+    fireEvent.focus(picker);
+    fireEvent.change(picker, { target: { value: "BTC" } });
+    fireEvent.keyDown(picker, { key: "Enter" });
+
+    expect(mockNavigate).toHaveBeenCalledWith("/compare?a=m1&b=m2");
+  });
+
+  it("navigates to compare from a related-market chip", async () => {
+    mockUseNetwork.mockReturnValue(defaultQueryState({
+      nodes: [],
+      edges: [{ from: "m1", to: "m2", fromVariableId: "eth_price_gt_3000_mar15", toVariableId: "btc_price" }],
+      meta: mockMarketsListData.meta,
+    }) as any);
+    renderWithProviders(<MarketDetail />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "BTC > $100K" }));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/compare?a=m1&b=m2");
   });
 
   it("renders extra venue panels under a cross-listed market", () => {

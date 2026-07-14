@@ -35,6 +35,12 @@ def _deadline(delta: timedelta = timedelta(days=1)) -> str:
     return (FIXED_NOW + delta).isoformat().replace("+00:00", "Z")
 
 
+RESOLUTION_CRITERIA = (
+    "Resolve YES if the release is publicly available by the deadline; "
+    "otherwise resolve NO."
+)
+
+
 @pytest.fixture
 async def client(tmp_path, monkeypatch):
     reset_counters()
@@ -68,6 +74,7 @@ async def _create_amm(client, key: str, **overrides):
         "question": "Will self-serve markets work?",
         "deadline": _deadline(),
         "funding": "25",
+        "resolution_criteria": RESOLUTION_CRITERIA,
     }
     payload.update(overrides)
     return await client.post("/v1/markets", headers=_headers(key), json=payload)
@@ -93,6 +100,35 @@ async def test_amm_creation_uses_exact_creator_funding(client):
     assert detail["creator_account_id"] == creator.account_id
     assert detail["resolver"] == {"type": "creator"}
     assert detail["metadata"]["funding_account_id"] == creator.account_id
+    assert detail["metadata"]["creator_github_id"] == 1
+    assert detail["metadata"]["creator_login"] == "creator"
+    assert detail["metadata"]["resolution_criteria"] == RESOLUTION_CRITERIA
+
+
+@pytest.mark.parametrize("criteria", ["", "   ", "x" * 4001])
+async def test_amm_rejects_invalid_resolution_criteria(client, criteria):
+    creator = await _user(100, "criteria")
+    response = await _create_amm(
+        client, creator.api_key, resolution_criteria=criteria,
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_resolution_criteria"
+
+
+@pytest.mark.parametrize("criteria", ["", "   ", "x" * 4001])
+async def test_book_rejects_invalid_resolution_criteria(client, criteria):
+    creator = await _user(101, "book-criteria")
+    response = await client.post(
+        "/v1/book/markets",
+        headers=_headers(creator.api_key),
+        json={
+            "question": "Are these criteria valid?",
+            "deadline": _deadline(),
+            "resolution_criteria": criteria,
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_resolution_criteria"
 
 
 async def test_insufficient_funding_has_zero_state_change(client):
@@ -164,7 +200,11 @@ async def test_cap_is_shared_between_amm_and_book(client, monkeypatch):
     assert (
         await client.post(
             "/v1/book/markets", headers=_headers(creator.api_key),
-            json={"question": "Book question?", "deadline": _deadline()},
+            json={
+                "question": "Book question?",
+                "deadline": _deadline(),
+                "resolution_criteria": RESOLUTION_CRITERIA,
+            },
         )
     ).status_code == 200
 
@@ -246,12 +286,19 @@ async def test_book_creator_metadata_and_resolution(client, monkeypatch):
     other = await _user(81, "book-other")
     created = await client.post(
         "/v1/book/markets", headers=_headers(creator.api_key),
-        json={"question": "Will the book settle?", "deadline": _deadline()},
+        json={
+            "question": "Will the book settle?",
+            "deadline": _deadline(),
+            "resolution_criteria": RESOLUTION_CRITERIA,
+        },
     )
     assert created.status_code == 200
     market_id = created.json()["id"]
     assert created.json()["creatorAccountId"] == creator.account_id
     assert created.json()["resolver"] == {"type": "creator"}
+    assert created.json()["metadata"]["creator_github_id"] == 80
+    assert created.json()["metadata"]["creator_login"] == "book-creator"
+    assert created.json()["metadata"]["resolution_criteria"] == RESOLUTION_CRITERIA
 
     early = await client.post(
         f"/v1/book/markets/{market_id}/resolve", headers=_headers(creator.api_key),
@@ -271,6 +318,43 @@ async def test_book_creator_metadata_and_resolution(client, monkeypatch):
         json={"outcome": "yes"},
     )
     assert resolved.status_code == 200
+
+
+async def test_legacy_creation_without_resolution_criteria_still_works(client):
+    creator = await _user(83, "book-criteria")
+    book = await client.post(
+        "/v1/book/markets", headers=_headers(creator.api_key),
+        json={"question": "Legacy book client?", "deadline": _deadline()},
+    )
+    amm = await _create_amm(
+        client, creator.api_key, resolution_criteria=None,
+    )
+    assert book.status_code == 200
+    assert "resolution_criteria" not in book.json()["metadata"]
+    assert amm.status_code == 200
+    detail = (await client.get(f"/v1/markets/{amm.json()['market_id']}")).json()
+    assert "resolution_criteria" not in detail["metadata"]
+
+
+async def test_book_creator_can_void_after_deadline(client, monkeypatch):
+    creator = await _user(82, "book-voider")
+    created = await client.post(
+        "/v1/book/markets", headers=_headers(creator.api_key),
+        json={
+            "question": "Will the book condition be met?",
+            "deadline": _deadline(),
+            "resolution_criteria": RESOLUTION_CRITERIA,
+        },
+    )
+    market_id = created.json()["id"]
+    monkeypatch.setattr(api_module, "_now", lambda: FIXED_NOW + timedelta(days=2))
+
+    response = await client.post(
+        f"/v1/book/markets/{market_id}/void",
+        headers=_headers(creator.api_key),
+    )
+    assert response.status_code == 200
+    assert response.json()["market"]["status"] == "void"
 
 
 async def test_admin_created_markets_default_to_admin_resolver(client):
@@ -307,7 +391,6 @@ async def test_github_pr_market_keeps_webhook_resolver(client):
     assert detail["resolver"] == {
         "type": "github_pr", "repo": "owner/repo", "pr_number": 9,
     }
-
     user = await _user(90, "not-webhook")
     denied = await client.post(
         f"/v1/markets/{market_id}/resolve", headers=_headers(user.api_key),
