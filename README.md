@@ -47,31 +47,52 @@ Authenticated users can create an AMM market with `POST /v1/markets`:
 
 ```json
 {
-  "question": "Will the release ship this week?",
+  "question": "Will the release ship this week if proposal ABC is approved?",
   "outcomes": ["yes", "no"],
   "deadline": "2030-01-02T12:00:00Z",
-  "funding": "25"
+  "funding": "25",
+  "resolution_criteria": "If ABC is approved, YES if a public release is available by the deadline and NO otherwise. If ABC is rejected, VOID."
 }
 ```
 
 The funding is transferred from the creator's credits into the AMM. It must
 be between `MIN_USER_FUNDING` (default `10`) and `MAX_USER_FUNDING` (default
 `500`). A deadline is required, must be in the future, and may be at most 400
-days away. `POST /v1/book/markets` accepts `question` and `deadline`; book
-markets require no subsidy. `USER_MARKET_CAP` (default `10`) limits each
-account's open self-serve markets across both venues.
+days away. New clients should provide resolution criteria; supplied criteria
+may contain at most 4,000 characters. `POST /v1/book/markets` accepts the same
+`question`, `deadline`, and optional `resolution_criteria`; book markets
+require no subsidy.
+`USER_MARKET_CAP` (default `10`) limits each account's open self-serve markets
+across both venues.
 
-Every market publishes its creator and resolver on its public detail route.
-Self-serve markets use a `creator` resolver, admin-created markets use
-`admin`, and pull-request webhook markets use `github_pr`. Creators may call
-`POST /v1/markets/{id}/resolve` (or the corresponding `/void` route) only at
-or after the deadline; the book venue uses the same operations below
-`/v1/book/markets/{id}`.
+AMM and book detail routes publish their named resolver (oracle). New
+self-serve markets also publish their creator's GitHub identity and, when
+provided, resolution criteria; missing terms are labelled as not published.
+Self-serve markets use the authenticated creator as resolver, admin-created
+markets use `admin`, and pull-request webhook markets use `github_pr`. The
+named resolver may choose an outcome or VOID under the published criteria.
+That discretion, including the possibility of a bad or self-serving decision,
+is oracle risk rather than an authorization error. NET and batch do not yet
+publish equivalent per-market oracle metadata.
+
+The current exchange requires creators to wait until the deadline before
+calling `POST /v1/markets/{id}/resolve` or the corresponding `/void` route;
+the book venue uses the same operations below `/v1/book/markets/{id}`.
+Deadline passage alone does not settle a creator-resolved market. The legacy
+AMM expiry worker automatically voids other markets at their deadline; the
+target design replaces that resolver-based rule with an explicit contract
+policy through a versioned migration.
+For a conditional NET order `X if Y`, `Y = false` currently calls off that
+order and returns its stake. This is distinct from ambiguity about X and from
+declaring Y itself VOID. AMM and book listings do not yet encode conditions.
 
 Administrators can resolve or void any market at any time. This is the
-dispute override: use the admin key with the venue's settlement route, or use
-the existing AMM admin routes at `/v1/admin/markets/{id}/resolve` and
-`/v1/admin/markets/{id}/void`.
+temporary test-money override: use the admin key with the venue's settlement
+route, or use the existing AMM admin routes at
+`/v1/admin/markets/{id}/resolve` and `/v1/admin/markets/{id}/void`.
+
+The intended cross-venue contract, oracle, curation, and settlement model is
+documented in [Market contracts and settlement](docs/market-contracts-and-settlement.md).
 
 ### Sealed batch venue
 

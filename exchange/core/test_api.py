@@ -1435,6 +1435,30 @@ class TestWebhook:
         assert detail["status"] == "resolved"
         assert detail["resolution"] == "no"
 
+    async def test_pr_close_does_not_settle_prefix_collision(self, client):
+        await self._setup_repo(client)
+
+        first = await self._post_webhook(
+            client, _make_webhook_payload("opened", pr_number=1), self.SECRET,
+        )
+        tenth = await self._post_webhook(
+            client, _make_webhook_payload("opened", pr_number=10), self.SECRET,
+        )
+        await self._post_webhook(
+            client,
+            _make_webhook_payload("closed", pr_number=1, merged=True),
+            self.SECRET,
+        )
+
+        first_detail = (
+            await client.get(f"/v1/markets/{first.json()['market_id']}")
+        ).json()
+        tenth_detail = (
+            await client.get(f"/v1/markets/{tenth.json()['market_id']}")
+        ).json()
+        assert first_detail["resolution"] == "yes"
+        assert tenth_detail["status"] == "open"
+
     async def test_untracked_repo_rejected(self, client):
         # Don't add any repo — post directly
         if not hasattr(app.state, "tracked_repos"):

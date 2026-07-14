@@ -68,9 +68,15 @@ describe("InstrumentDetail", () => {
     } }) as ReturnType<typeof useNetMarket>);
     vi.mocked(useAmmMarket).mockReturnValue(createMockQueryResult({ data: {
       market_id: 2, question: "Will it ship?", status: "open", outcomes: ["yes", "no"], prices: { yes: "0.61", no: "0.39" },
+      creator_account_id: 7,
+      resolver: { type: "creator" },
+      metadata: { creator_github_id: 700, creator_login: "amm-oracle", resolution_criteria: "Resolve from the public release page." },
     } }) as ReturnType<typeof useAmmMarket>);
     vi.mocked(useBookMarket).mockReturnValue(createMockQueryResult({ data: {
       id: 3, question: "Will it ship?", status: "open", outcomes: ["yes", "no"], bestBid: null, bestAsk: null, lastPrice: null,
+      creatorAccountId: 8,
+      resolver: { type: "creator" },
+      metadata: { creator_github_id: 800, creator_login: "book-oracle", resolution_rules: "Resolve from the signed release announcement." },
     } }) as ReturnType<typeof useBookMarket>);
     vi.mocked(useBookDepth).mockReturnValue(createMockQueryResult({ data: {
       marketId: 3, bids: [], asks: [], outcomes: { yes: { bids: [], asks: [] }, no: { bids: [], asks: [] } },
@@ -91,6 +97,13 @@ describe("InstrumentDetail", () => {
     expect(screen.getByTestId("amm-panel")).toBeInTheDocument();
     expect(screen.getByTestId("book-panel")).toBeInTheDocument();
     expect(screen.getByText("NET trade controls")).toBeInTheDocument();
+    expect(screen.getByTestId("net-resolution-details")).toHaveTextContent("Not published by the current NET API.");
+    expect(screen.getByTestId("amm-resolution-details")).toHaveTextContent("@amm-oracle");
+    expect(screen.getByTestId("amm-resolution-details")).toHaveTextContent("GitHub ID 700, account #7");
+    expect(screen.getByTestId("amm-resolution-details")).toHaveTextContent("Resolve from the public release page.");
+    expect(screen.getByTestId("book-resolution-details")).toHaveTextContent("@book-oracle");
+    expect(screen.getByTestId("book-resolution-details")).toHaveTextContent("GitHub ID 800, account #8");
+    expect(screen.getByTestId("book-resolution-details")).toHaveTextContent("Resolve from the signed release announcement.");
     expect(screen.getAllByText(/Sign in with GitHub/)).toHaveLength(2);
   });
 });

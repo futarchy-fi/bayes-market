@@ -527,13 +527,32 @@ def _validate_user_funding(raw: str) -> Decimal:
     return funding
 
 
-def _creator_metadata(account_id: int, *, funded: bool = False) -> dict:
+def _validate_resolution_criteria(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    criteria = raw.strip()
+    if not criteria or len(criteria) > 4000:
+        raise APIError(
+            400,
+            "invalid_resolution_criteria",
+            "Resolution criteria must contain 1 to 4000 characters",
+        )
+    return criteria
+
+
+def _creator_metadata(
+    user, resolution_criteria: str | None, *, funded: bool = False,
+) -> dict:
     metadata = {
-        "creator_account_id": account_id,
+        "creator_account_id": user.account_id,
+        "creator_github_id": user.github_id,
+        "creator_login": user.github_login,
         "resolver": {"type": "creator"},
     }
+    if resolution_criteria is not None:
+        metadata["resolution_criteria"] = resolution_criteria
     if funded:
-        metadata["funding_account_id"] = account_id
+        metadata["funding_account_id"] = user.account_id
     return metadata
 
 
@@ -928,11 +947,14 @@ async def create_user_market(
     question, outcomes = _validate_user_market(req.question, req.outcomes)
     _validate_user_deadline(req.deadline)
     funding = _validate_user_funding(req.funding)
+    resolution_criteria = _validate_resolution_criteria(req.resolution_criteria)
     b = funding / Decimal(str(math.log(len(outcomes))))
 
     async with app.state.lock:
         _enforce_creator_cap(user.account_id)
-        metadata = _creator_metadata(user.account_id, funded=True)
+        metadata = _creator_metadata(
+            user, resolution_criteria, funded=True,
+        )
         try:
             market, amm = app.state.me.create_market(
                 question=question,
@@ -1419,10 +1441,17 @@ async def create_book_market(
     if user is None:
         question = req.question
         metadata = {"resolver": {"type": "admin"}}
+        resolution_criteria = _validate_resolution_criteria(
+            req.resolution_criteria,
+        )
+        if resolution_criteria is not None:
+            metadata["resolution_criteria"] = resolution_criteria
     else:
         question, _ = _validate_user_market(req.question, None)
         _validate_user_deadline(req.deadline)
-        metadata = _creator_metadata(user.account_id)
+        metadata = _creator_metadata(
+            user, _validate_resolution_criteria(req.resolution_criteria),
+        )
 
     async with app.state.lock:
         if user is not None:
@@ -2546,7 +2575,7 @@ async def _handle_pr_closed(pr: dict, repo_slug: str) -> WebhookResponse:
     pr_num = pr.get("number")
     merged = pr.get("merged", False)
     outcome = "yes" if merged else "no"
-    category_prefix = f"{repo_slug}#{pr_num}"
+    category_prefix = f"{repo_slug}#{pr_num}@"
 
     resolved_ids = []
     async with app.state.lock:
