@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import math
 import os
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
@@ -56,6 +57,7 @@ class ArbAction:
 
 
 class ExchangeClient(Protocol):
+    async def instruments(self) -> list[dict]: ...
     async def account(self) -> dict: ...
     async def market(self, venue: str, market_id: str) -> dict: ...
     async def buy_amm(self, market_id: str, outcome: str, budget: Decimal) -> dict: ...
@@ -64,6 +66,17 @@ class ExchangeClient(Protocol):
         self, market_id: str, outcome: str, price: Decimal, size: Decimal,
     ) -> dict: ...
     async def cancel_book_order(self, order_id: int) -> dict: ...
+
+
+class ExchangeHTTPError(RuntimeError):
+    """HTTP failure with the status needed for retry decisions."""
+
+    def __init__(
+        self, message: str, status_code: int, retry_after: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.retry_after = retry_after
 
 
 class HttpExchange:
@@ -98,10 +111,12 @@ class HttpExchange:
         except httpx.HTTPStatusError as err:
             try:
                 detail = response.json().get("error", {}).get("message")
-            except ValueError:
+            except (AttributeError, ValueError):
                 detail = response.text
-            raise RuntimeError(
-                f"exchange {method} {path} failed ({response.status_code}): {detail}"
+            raise ExchangeHTTPError(
+                f"exchange {method} {path} failed ({response.status_code}): {detail}",
+                response.status_code,
+                response.headers.get("Retry-After"),
             ) from err
         return response.json()
 
@@ -314,22 +329,29 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _rate_limit_delay(error: Exception) -> float | None:
+    if not isinstance(error, ExchangeHTTPError) or error.status_code != 429:
+        return None
+    try:
+        delay = float(error.retry_after or "")
+    except ValueError:
+        return 60.0
+    return delay if delay > 0 and math.isfinite(delay) else 60.0
+
+
 async def run_pass(
     client: ExchangeClient, policy: ArbPolicy, selected: set[str] | None,
-) -> None:
+) -> float | None:
     """One coherence sweep over all instruments.
 
-    Every remote call is fallible (a busy pass can hit the 60/min rate
-    limit and 429), and a live agent must not die on a transient error and
-    crash-loop under systemd. So the instruments fetch and each per-instrument
-    tick are isolated: a failure is logged and the pass moves on, retrying on
-    the next interval rather than tearing down the process.
+    Ordinary failures remain isolated to one instrument. A 429 is account-wide,
+    so stop the pass and return the server's requested cooldown.
     """
     try:
         instruments = await client.instruments()
     except Exception as err:  # noqa: BLE001 — a fetch failure must not kill the loop
         print(f"ERROR fetching instruments: {err}", flush=True)
-        return
+        return _rate_limit_delay(err)
     for instrument in instruments:
         if selected is not None and instrument["instrumentId"] not in selected:
             continue
@@ -337,12 +359,16 @@ async def run_pass(
             actions = await policy.tick(instrument)
         except Exception as err:  # noqa: BLE001 — one bad market must not kill the loop
             print(f"ERROR instrument={instrument.get('instrumentId')}: {err}", flush=True)
+            delay = _rate_limit_delay(err)
+            if delay is not None:
+                return delay
             continue
         if actions:
             for action in actions:
                 print(action, flush=True)
         else:
             print(f"NOOP instrument={instrument['instrumentId']}", flush=True)
+    return None
 
 
 async def run(args: argparse.Namespace) -> None:
@@ -360,10 +386,13 @@ async def run(args: argparse.Namespace) -> None:
     ) as client:
         policy = ArbPolicy(client, config)
         while True:
-            await run_pass(client, policy, selected)
+            cooldown = await run_pass(client, policy, selected)
             if args.once:
                 return
-            await asyncio.sleep(args.interval)
+            delay = args.interval if cooldown is None else max(args.interval, cooldown)
+            if cooldown is not None:
+                print(f"RATE_LIMIT sleep={delay:g}", flush=True)
+            await asyncio.sleep(delay)
 
 
 def main() -> None:

@@ -12,7 +12,14 @@ os.environ.setdefault("FUTARCHY_ADMIN_KEY", "test-admin-key")
 os.environ.setdefault("FUTARCHY_STATE", "/tmp/futarchy_test_state.json")
 
 import exchange.core.api as api_module
-from exchange.agents.arb import ArbConfig, ArbPolicy, HttpExchange, run_pass
+import exchange.agents.arb as arb_module
+from exchange.agents.arb import (
+    ArbConfig,
+    ArbPolicy,
+    ExchangeHTTPError,
+    HttpExchange,
+    run_pass,
+)
 from exchange.core.api import _authenticate_github_identity, app
 from exchange.core.lmsr import prices
 from exchange.core.models import reset_counters
@@ -152,28 +159,93 @@ class _FlakyClient:
 
 
 class _RaisingPolicy:
-    """Stand-in policy whose tick raises — models a 429/transient error."""
+    """Stand-in policy whose tick fails for one broken instrument."""
 
     def __init__(self):
         self.seen = []
 
     async def tick(self, instrument):
         self.seen.append(instrument["instrumentId"])
-        raise RuntimeError("exchange GET /v1/... failed (429): rate_limited")
+        if instrument["instrumentId"] == "a":
+            raise ExchangeHTTPError("missing market", 404)
+        return []
 
 
-async def test_run_pass_survives_a_failing_tick():
-    """A transient error on one instrument must not abort the pass (or, in
-    run(), tear down the process and crash-loop under systemd)."""
+class _RateLimitedPolicy:
+    def __init__(self, retry_after):
+        self.retry_after = retry_after
+        self.seen = []
+
+    async def tick(self, instrument):
+        self.seen.append(instrument["instrumentId"])
+        raise ExchangeHTTPError("rate limited", 429, self.retry_after)
+
+
+@pytest.mark.parametrize("payload", [{"error": {"message": "rate limited"}}, []])
+async def test_http_error_preserves_status_and_retry_after(payload):
+    transport = httpx.MockTransport(lambda _request: httpx.Response(
+        429,
+        headers={"Retry-After": "17"},
+        json=payload,
+    ))
+    async with HttpExchange("http://test", "key", transport=transport) as client:
+        with pytest.raises(ExchangeHTTPError) as caught:
+            await client.instruments()
+
+    assert caught.value.status_code == 429
+    assert caught.value.retry_after == "17"
+
+
+@pytest.mark.parametrize(
+    ("retry_after", "expected"),
+    [("17", 17.0), (None, 60.0), ("bad", 60.0), ("0", 60.0),
+     ("nan", 60.0), ("inf", 60.0)],
+)
+async def test_run_pass_stops_on_rate_limit(retry_after, expected):
+    client = _FlakyClient([{"instrumentId": "a"}, {"instrumentId": "b"}])
+    policy = _RateLimitedPolicy(retry_after)
+
+    assert await run_pass(client, policy, selected=None) == expected
+    assert policy.seen == ["a"]
+
+
+async def test_run_pass_keeps_non_rate_limited_failures_local():
     client = _FlakyClient([{"instrumentId": "a"}, {"instrumentId": "b"}])
     policy = _RaisingPolicy()
-    await run_pass(client, policy, selected=None)   # must not raise
-    assert policy.seen == ["a", "b"]                # both attempted despite the first failing
+    assert await run_pass(client, policy, selected=None) is None
+    assert policy.seen == ["a", "b"]
 
 
-async def test_run_pass_survives_a_failing_instruments_fetch():
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [(RuntimeError("network unavailable"), None),
+     (ExchangeHTTPError("rate limited", 429, "17"), 17.0)],
+)
+async def test_run_pass_handles_a_failing_instruments_fetch(error, expected):
     class _DeadClient:
         async def instruments(self):
-            raise RuntimeError("exchange GET /v1/instruments failed (429)")
+            raise error
 
-    await run_pass(_DeadClient(), _RaisingPolicy(), selected=None)  # must not raise
+    assert await run_pass(_DeadClient(), _RaisingPolicy(), selected=None) == expected
+
+
+@pytest.mark.parametrize(
+    ("cooldown", "expected"),
+    [(45.0, 45.0), (17.0, 30.0), (None, 30.0)],
+)
+async def test_run_uses_rate_limit_cooldown(monkeypatch, cooldown, expected):
+    class _StopLoop(Exception):
+        pass
+
+    async def fake_run_pass(*_args):
+        return cooldown
+
+    async def fake_sleep(delay):
+        assert delay == expected
+        raise _StopLoop
+
+    monkeypatch.setattr(arb_module, "run_pass", fake_run_pass)
+    monkeypatch.setattr(arb_module.asyncio, "sleep", fake_sleep)
+
+    with pytest.raises(_StopLoop):
+        await arb_module.run(arb_module._parser().parse_args(["--interval", "30"]))
