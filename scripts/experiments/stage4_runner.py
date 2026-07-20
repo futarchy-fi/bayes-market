@@ -145,19 +145,21 @@ class ExchangeBackend:
     _UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 
-    def _post(self, path, body):
+    def _send(self, path, body):
+        """Always POSTs (used by read-only preview and by execute). Returns
+        (status, parsed_response)."""
         payload = json.dumps(body).encode()
         headers = {"Content-Type": "application/json", "User-Agent": self._UA,
                    "Accept": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        if not self.execute:
-            print(f"  DRY-RUN POST {path}  {json.dumps(body)}")
-            return {"dryRun": True}
         req = urllib.request.Request(self.base + path, data=payload,
                                      headers=headers, method="POST")
-        with urllib.request.urlopen(req, timeout=20, context=self.ctx) as r:
-            return json.loads(r.read().decode())
+        try:
+            with urllib.request.urlopen(req, timeout=20, context=self.ctx) as r:
+                return r.status, json.loads(r.read().decode())
+        except urllib.error.HTTPError as e:
+            return e.code, e.read()[:200].decode("utf-8", "ignore")
 
     def _order_body(self, act):
         vid = self.var_of.get(act.get("question"))
@@ -178,7 +180,7 @@ class ExchangeBackend:
         for act in decision:
             body = self._order_body(act)
             if body:
-                out.append((body, self._post("/v1/net/orders/preview", body)))
+                out.append((body, self._send("/v1/net/orders/preview", body)))
         return out
 
     def apply(self, decision, combinatorial=True):
@@ -186,8 +188,12 @@ class ExchangeBackend:
         # a flat arm would post to independent AMM markets instead.
         for act in decision:
             body = self._order_body(act)
-            if body:
-                self._post("/v1/net/orders", body)
+            if not body:
+                continue
+            if not self.execute:
+                print(f"  DRY-RUN (execute=False) POST /v1/net/orders  {json.dumps(body)}")
+                continue
+            self._send("/v1/net/orders", body)
 
 
 def brier(preds: dict, outcomes: dict):
