@@ -1,0 +1,44 @@
+{
+  "_comment": "Live-run question cluster: REAL variableIds from api.futarchy.ai/v1/net (fetched 2026-07-15). Chosen for GENUINE (non-deterministic) conditional structure — the scientifically load-bearing case, per the Stage 3 finding that pure-constraint ladders only test coherence. AGI drives automation: a real conditional edge in the live net.",
+  "exchange_base": "https://api.futarchy.ai",
+  "questions": {
+    "AGI41": {
+      "variableId": "ftm_agi_by_2041",
+      "title": "AGI training requirements are met by 2041"
+    },
+    "GOODS39": {
+      "variableId": "ftm_auto_goods_t0_by_2039",
+      "title": "AI automates 5% of goods-and-services tasks by 2039"
+    },
+    "GOODS40": {
+      "variableId": "ftm_auto_goods_t0_by_2040",
+      "title": "AI automates 5% of goods-and-services tasks by 2040"
+    },
+    "RND": {
+      "variableId": "ftm_auto_rnd_t0_by_2034",
+      "title": "AI automates 5% of R&D tasks by 2034"
+    }
+  },
+  "genuine_conditional_edges": [
+    {"driver": "AGI41", "child": "GOODS39", "note": "live net edge; AGI training met -> goods automation. NON-deterministic (the load-bearing structure)."}
+  ],
+  "ladder_edges": [
+    {"from": "GOODS39", "to": "GOODS40", "note": "by-year implication; deterministic coherence only"}
+  ],
+  "agent_info_design": {
+    "_comment": "Information is split so no agent has the whole picture and some pieces are RELATIONAL (only the net/combinatorial market can absorb them). This is what makes it a real aggregation test, not a transcription task.",
+    "marginal_agents": [
+      {"n": 3, "brief": "Your models put P(AGI training requirements met by 2041) around {marginal}. You have no information about how it relates to automation."},
+      {"n": 3, "brief": "Your models put P(AI automates 5% of goods tasks by 2039) around {marginal}. No information relating it to AGI."}
+    ],
+    "relational_agents": [
+      {"n": 3, "brief": "Your research: goods-and-services automation is strongly gated by AGI-level capability. When AGI training requirements are met, 5% goods automation follows within a couple of years far more often than when they are not.", "expresses": "P(GOODS39 | AGI41)"}
+    ]
+  },
+  "measurement": {
+    "coherence_now": "monotonicity + cross-edge consistency of net vs independent AMM prices (measurable immediately)",
+    "vs_crowd_now": "net-implied conditionals vs the independent-market product (the 'model vs crowd' signal)",
+    "accuracy": "log-score on resolution — long-horizon for FTM (2039-2041); the fast accuracy verdict comes from the Stage 3 backtest, not this run",
+    "agent_pnl": "log-score payout per agent — does scoring reward the relational agents and punish false-independence polluters? (the thing the offline aggregation model could NOT test)"
+  }
+}
