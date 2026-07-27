@@ -792,12 +792,14 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 return_value={"status": "degraded", "backend": "approximate", "version": "1.2.3"},
             ) as inference_health_component,
             patch.object(server, "auth_health_component", return_value={"status": "ok", "requires_agent_id": False}) as auth_health_component,
+            patch.object(server, "joint_health_component", return_value={"status": "ok", "persistence": "disabled"}) as joint_health_component,
         ):
             components = server.v1_health_components()
 
         db_health_component.assert_called_once_with()
         inference_health_component.assert_called_once_with()
         auth_health_component.assert_called_once_with()
+        joint_health_component.assert_called_once_with()
         self.assertEqual(
             components,
             {
@@ -810,6 +812,10 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "auth": {
                     "status": "ok",
                     "requires_agent_id": False,
+                },
+                "joint": {
+                    "status": "ok",
+                    "persistence": "disabled",
                 },
             },
         )
@@ -845,6 +851,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             ) as db_health_component,
             patch.object(server, "inference_health_component", wraps=server.inference_health_component) as inference_health_component,
             patch.object(server, "auth_health_component", wraps=server.auth_health_component) as auth_health_component,
+            patch.object(server, "joint_health_component", return_value={"status": "ok", "persistence": "disabled"}) as joint_health_component,
             patch.object(server, "uptime_seconds", return_value=12.345) as uptime_seconds,
         ):
             payload = server.v1_health_payload()
@@ -853,6 +860,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
         db_health_component.assert_called_once_with()
         inference_health_component.assert_called_once_with()
         auth_health_component.assert_called_once_with()
+        joint_health_component.assert_called_once_with()
         uptime_seconds.assert_called_once_with()
         self.assertEqual(
             legacy_payload,
@@ -881,9 +889,67 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                         "status": "ok",
                         "requires_agent_id": True,
                     },
+                    "joint": {
+                        "status": "ok",
+                        "persistence": "disabled",
+                    },
                 },
             },
         )
+
+    def test_joint_health_component_disabled_without_state_path(self):
+        with patch.object(server, "JOINT_STATE_PATH", ""):
+            self.assertEqual(
+                server.joint_health_component(),
+                {"status": "ok", "persistence": "disabled"},
+            )
+
+    def test_joint_health_component_reports_fresh_restore_with_age(self):
+        with (
+            patch.object(server, "JOINT_STATE_PATH", "/tmp/joint-state.json"),
+            patch.object(
+                server,
+                "_JOINT_SNAPSHOT_INFO",
+                {"restore": "restored", "saved_at": server.utc_timestamp()},
+            ),
+        ):
+            component = server.joint_health_component()
+
+        self.assertEqual(component["status"], "ok")
+        self.assertEqual(component["restore"], "restored")
+        self.assertLess(component["ageSeconds"], 60)
+
+    def test_joint_health_component_degrades_service_on_failed_restore(self):
+        with (
+            patch.object(server, "JOINT_STATE_PATH", "/tmp/joint-state.json"),
+            patch.object(server, "_JOINT_SNAPSHOT_INFO", {"restore": "failed"}),
+        ):
+            component = server.joint_health_component()
+            payload = server.v1_health_payload()
+
+        self.assertEqual(component["status"], "degraded")
+        self.assertEqual(component["reason"], "unavailable:joint-snapshot-restore")
+        self.assertEqual(payload["status"], "degraded")
+
+    def test_joint_health_component_degrades_on_stale_snapshot(self):
+        old = (
+            (server.datetime.now(server.timezone.utc) - server.timedelta(days=2))
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+        with (
+            patch.object(server, "JOINT_STATE_PATH", "/tmp/joint-state.json"),
+            patch.object(
+                server,
+                "_JOINT_SNAPSHOT_INFO",
+                {"restore": "restored", "saved_at": old},
+            ),
+        ):
+            component = server.joint_health_component()
+
+        self.assertEqual(component["status"], "degraded")
+        self.assertEqual(component["reason"], "stale:joint-snapshot")
+        self.assertGreater(component["ageSeconds"], 86400)
 
     def test_get_market_events_serializes_cross_market_appends_while_snapshotting_events(self):
         server.emit_terminal_event({"commandId": "cmd_m1_1", "marketId": "m1"}, "CommandAccepted", {"effects": {}})
@@ -9771,7 +9837,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["version"], server.ENGINE_CONFIG.version)
         self.assertIsInstance(payload["uptime_seconds"], float)
         self.assertIsInstance(payload["components"], dict)
-        self.assertEqual(set(payload["components"]), {"db", "inference", "auth"})
+        self.assertEqual(set(payload["components"]), {"db", "inference", "auth", "joint"})
 
     def test_v1_version_http_returns_build_payload(self):
         status, payload = self.request("GET", "/v1/version")

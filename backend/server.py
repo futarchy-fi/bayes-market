@@ -1649,12 +1649,45 @@ def auth_health_component() -> dict[str, Any]:
     }
 
 
+def joint_health_component() -> dict[str, Any]:
+    """Build the joint-persistence component record for the v1 health contract.
+
+    A joint rebuilt from seed priors after a failed/aged restore is not live
+    traded state, so it degrades the service rather than reading green.
+    """
+    if not JOINT_STATE_PATH:
+        return {"status": "ok", "persistence": "disabled"}
+    restore = _JOINT_SNAPSHOT_INFO.get("restore", "not_attempted")
+    component: dict[str, Any] = {
+        "status": "ok",
+        "persistence": "enabled",
+        "restore": restore,
+    }
+    if restore == "failed":
+        component["status"] = "degraded"
+        component["reason"] = "unavailable:joint-snapshot-restore"
+        return component
+    saved_at = _JOINT_SNAPSHOT_INFO.get("saved_at")
+    if saved_at is not None:
+        age = _iso_timestamp_age_seconds(saved_at)
+        component["savedAt"] = saved_at
+        component["ageSeconds"] = age
+        if age is None:
+            component["status"] = "degraded"
+            component["reason"] = "unknown:joint-snapshot-age"
+        elif age > JOINT_SNAPSHOT_STALE_AFTER_SECONDS:
+            component["status"] = "degraded"
+            component["reason"] = "stale:joint-snapshot"
+    return component
+
+
 def v1_health_components() -> dict[str, dict[str, Any]]:
     """Build v1 health component records from in-process configuration only."""
     return {
         "db": db_health_component(),
         "inference": inference_health_component(),
         "auth": auth_health_component(),
+        "joint": joint_health_component(),
     }
 
 
@@ -1915,6 +1948,36 @@ def _build_joint_maker() -> "JointMarket | FactoredMarket | None":
 
 JOINT_STATE_PATH = os.environ.get("BAYES_JOINT_STATE_PATH") or ""
 
+# Past this age the persisted joint snapshot is reported stale, never green.
+JOINT_SNAPSHOT_STALE_AFTER_SECONDS = read_non_negative_int_env(
+    "BAYES_JOINT_SNAPSHOT_STALE_AFTER_SECONDS", 86400
+)
+
+# Restore/persist provenance for the health surface: a joint rebuilt from
+# seed priors after a failed restore must not read as live traded prices.
+_JOINT_SNAPSHOT_INFO: dict[str, Any] = {"restore": "not_attempted"}
+
+
+def _iso_timestamp_age_seconds(saved_at: object) -> float | None:
+    """Age of an ISO-8601 Zulu timestamp at read time; None if unparseable."""
+    if not isinstance(saved_at, str) or not saved_at:
+        return None
+    try:
+        saved = datetime.fromisoformat(saved_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return max(0.0, (datetime.now(timezone.utc) - saved).total_seconds())
+
+
+def _joint_snapshot_saved_at() -> str | None:
+    """Read the savedAt marker off the persisted joint snapshot, if any."""
+    try:
+        data = json.loads(Path(JOINT_STATE_PATH).read_text())
+    except (OSError, ValueError):
+        return None
+    saved_at = data.get("savedAt")
+    return saved_at if isinstance(saved_at, str) else None
+
 
 def _load_joint_snapshot() -> "JointMarket | FactoredMarket | None":
     """Restore a persisted joint if it matches the current variable space.
@@ -1973,8 +2036,10 @@ def persist_joint_market() -> None:
     try:
         path = Path(JOINT_STATE_PATH)
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(market.snapshot()))
+        saved_at = utc_timestamp()
+        tmp.write_text(json.dumps({**market.snapshot(), "savedAt": saved_at}))
         tmp.replace(path)
+        _JOINT_SNAPSHOT_INFO["saved_at"] = saved_at
     except OSError:
         pass
 
@@ -1989,11 +2054,23 @@ def get_joint_market() -> "JointMarket | FactoredMarket | None":
     reset_joint_market() (used by state resets).
     """
     if _JOINT_MARKET_STATE["market"] is None:
-        restored = _load_joint_snapshot()
-        if restored is not None:
-            _JOINT_MARKET_STATE["market"] = restored
-            resync_marginals_from_joint()
-            return restored
+        if not JOINT_STATE_PATH:
+            _JOINT_SNAPSHOT_INFO["restore"] = "disabled"
+        elif not Path(JOINT_STATE_PATH).exists():
+            _JOINT_SNAPSHOT_INFO["restore"] = "no_snapshot"
+        else:
+            restored = _load_joint_snapshot()
+            if restored is not None:
+                _JOINT_SNAPSHOT_INFO["restore"] = "restored"
+                _JOINT_SNAPSHOT_INFO["saved_at"] = _joint_snapshot_saved_at()
+                _JOINT_MARKET_STATE["market"] = restored
+                resync_marginals_from_joint()
+                return restored
+            # A snapshot exists but could not be restored: the joint is
+            # rebuilt from seed priors below and served as prices — the
+            # health surface must not call that green.
+            _JOINT_SNAPSHOT_INFO["restore"] = "failed"
+            _JOINT_SNAPSHOT_INFO.pop("saved_at", None)
         maker = _build_joint_maker()
         if maker is None:
             return None
@@ -2004,6 +2081,8 @@ def get_joint_market() -> "JointMarket | FactoredMarket | None":
 def reset_joint_market() -> None:
     """Drop the market maker so it rebuilds from the (restored) seeds."""
     _JOINT_MARKET_STATE["market"] = None
+    _JOINT_SNAPSHOT_INFO["restore"] = "no_snapshot" if JOINT_STATE_PATH else "disabled"
+    _JOINT_SNAPSHOT_INFO.pop("saved_at", None)
     if JOINT_STATE_PATH:
         try:
             Path(JOINT_STATE_PATH).unlink(missing_ok=True)
