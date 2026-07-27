@@ -125,6 +125,12 @@ class JointVenue:
             for market_id, record in self._markets.items()
         }
 
+        # Set by from_snapshot when the persisted FactoredMarket failed
+        # verification and the venue fell back to a seeds-only rebuild —
+        # marginals are then priors, not traded prices, and the health
+        # surface must say so instead of serving them green.
+        self.fm_restore_note: str | None = None
+
         # Markets never change post-construction in Plan A, so both of
         # these are computed once here and never rebuilt: market_ids()
         # returns this same list object (O(1)), and _vb_lock_market_id
@@ -764,6 +770,10 @@ class JointVenue:
             try:
                 venue._fm = FactoredMarket.from_snapshot(fm_data, max_width=max_width)
             except Exception as err:  # noqa: BLE001 - deliberately broad, see docstring
+                venue.fm_restore_note = (
+                    f"fm snapshot failed verification ({type(err).__name__}); "
+                    "marginals are seed priors, not traded prices"
+                )
                 logger.warning(
                     "JointVenue.from_snapshot: fm snapshot failed structure "
                     "verification (%s: %s); falling back to a fresh rebuild "

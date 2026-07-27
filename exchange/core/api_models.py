@@ -512,6 +512,11 @@ class LeaderboardResponse(BaseModel):
     entries: list[LeaderboardEntry]
 
 
+class SnapshotHealth(BaseModel):
+    savedAt: str | None          # ISO-8601 write time of the durable snapshot
+    ageSeconds: float | None     # age of that write at read time; None = unknown
+
+
 class HealthResponse(BaseModel):
     status: str
     markets: int
@@ -519,6 +524,12 @@ class HealthResponse(BaseModel):
     users: int
     net: NetHealth
     venues: dict[str, dict]
+    # Freshness of the durable state behind the live process. None means no
+    # snapshot has been saved or loaded this run. `degraded` lists the
+    # reasons status is not "ok" (e.g. "stale:snapshot",
+    # "unavailable:net-fm-restore") — missing/stale data never reads green.
+    snapshot: SnapshotHealth | None = None
+    degraded: list[str] = []
 
 
 # --- Tracked Repos ---

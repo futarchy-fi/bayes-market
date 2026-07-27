@@ -30,6 +30,7 @@ os.environ["INITIAL_CREDITS"] = "1000"
 
 from exchange.core.api import app, _authenticate_github_identity, _candles
 from exchange.core.auth import AuthStore
+from exchange.core import persistence
 from exchange.core.middleware import rate_limiter, RateLimiter
 from exchange.core.models import reset_counters
 from exchange.core.risk_engine import RiskEngine
@@ -52,6 +53,7 @@ async def client():
     app.state.lock = asyncio.Lock()
     app.state.joint = None
     app.state.venues = {}
+    persistence._LAST_SNAPSHOT = None
 
     # Reset rate limiter
     rate_limiter.buckets.clear()
@@ -115,6 +117,59 @@ class TestHealth:
         assert data["markets"] == 1
         assert data["ledger_accounts"] == 3
         assert data["users"] == 2
+
+    async def test_health_reports_snapshot_freshness(self, client):
+        resp = await client.get("/v1/health")
+        data = resp.json()
+        # Nothing persisted yet this run: no snapshot claim, still ok.
+        assert data["status"] == "ok"
+        assert data["snapshot"] is None
+        assert data["degraded"] == []
+
+        persistence._LAST_SNAPSHOT = {
+            "savedAt": datetime.now(timezone.utc).isoformat()
+        }
+        resp = await client.get("/v1/health")
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["snapshot"]["ageSeconds"] < 60
+
+    async def test_health_fails_closed_on_stale_snapshot(self, client):
+        persistence._LAST_SNAPSHOT = {
+            "savedAt": (
+                datetime.now(timezone.utc) - timedelta(days=2)
+            ).isoformat()
+        }
+        resp = await client.get("/v1/health")
+        data = resp.json()
+        assert data["status"] == "degraded"
+        assert "stale:snapshot" in data["degraded"]
+        assert data["snapshot"]["ageSeconds"] > 86400
+
+    async def test_health_fails_closed_on_unknown_snapshot_age(self, client):
+        # Pre-savedAt snapshots load with savedAt None — unknown age is
+        # not green.
+        persistence._LAST_SNAPSHOT = {"savedAt": None}
+        resp = await client.get("/v1/health")
+        data = resp.json()
+        assert data["status"] == "degraded"
+        assert "unknown:snapshot-age" in data["degraded"]
+
+    async def test_health_fails_closed_on_joint_fm_restore_fallback(self, client):
+        class FallbackJoint:
+            fm_restore_note = "fm snapshot failed verification; priors served"
+
+            def market_ids(self):
+                return ["m1"]
+
+            def orders_count(self):
+                return 0
+
+        app.state.joint = FallbackJoint()
+        resp = await client.get("/v1/health")
+        data = resp.json()
+        assert data["status"] == "degraded"
+        assert "unavailable:net-fm-restore" in data["degraded"]
 
 
 # ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ leaves the previous snapshot intact.
 import dataclasses
 import json
 import os
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from exchange.core.models import (
@@ -206,6 +207,27 @@ def _apply_migrations(state: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Snapshot freshness tracking
+# ---------------------------------------------------------------------------
+#
+# The health surface must be able to tell how old the durable state behind
+# the live process is — an undated "ok" hides a stale or unpersisted
+# snapshot. Updated on every successful save/load.
+
+_LAST_SNAPSHOT: dict | None = None
+
+
+def _record_snapshot(saved_at: str | None) -> None:
+    global _LAST_SNAPSHOT
+    _LAST_SNAPSHOT = {"savedAt": saved_at}
+
+
+def last_snapshot_info() -> dict | None:
+    """Last known snapshot save/load, or None if nothing was persisted yet."""
+    return dict(_LAST_SNAPSHOT) if _LAST_SNAPSHOT is not None else None
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -237,8 +259,10 @@ def save_snapshot(risk: RiskEngine, market_engine: MarketEngine,
     if batch_venue is not None:
         venues_section["batch"] = batch_venue.snapshot()
 
+    saved_at = datetime.now(timezone.utc).isoformat()
     state = {
         "version": CURRENT_VERSION,
+        "savedAt": saved_at,
         "counters": dict(_counters),
         "accounts": [_serialize(acc) for acc in risk.accounts.values()],
         "transactions": [_serialize(tx) for tx in risk.transactions],
@@ -259,6 +283,7 @@ def save_snapshot(risk: RiskEngine, market_engine: MarketEngine,
     with open(tmp, "w") as f:
         json.dump(state, f, indent=2)
     os.replace(tmp, path)
+    _record_snapshot(saved_at)
 
 
 def _serialize_auth(auth_store) -> dict:
@@ -393,5 +418,9 @@ def load_snapshot(path: str) -> tuple:
     venues = state.get("venues", {})
 
     instruments = _load_instruments(state.get("instruments", {}))
+
+    # Snapshots written before savedAt existed report None — the health
+    # surface treats an unknown age as not-green rather than assuming fresh.
+    _record_snapshot(state.get("savedAt"))
 
     return risk, me, auth_store, tracked_repos, venues, instruments

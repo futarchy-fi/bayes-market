@@ -39,7 +39,7 @@ from exchange.core.api_models import (
     CreateServiceAccountRequest, CreateServiceAccountResponse,
     MintRequest, MintResponse,
     CreateMarketRequest, UserCreateMarketRequest, CreateMarketResponse,
-    ResolveRequest, HealthResponse, NetHealth,
+    ResolveRequest, HealthResponse, NetHealth, SnapshotHealth,
     AddLiquidityRequest, AddLiquidityResponse,
     InstrumentRequest,
     UpdateMetadataRequest,
@@ -68,7 +68,7 @@ from exchange.core.middleware import (
     DynamicCORSMiddleware, BodySizeLimitMiddleware,
 )
 from exchange.core.models import ZERO, Instrument, TrackedRepo, reset_counters
-from exchange.core.persistence import save_snapshot, load_snapshot
+from exchange.core.persistence import save_snapshot, load_snapshot, last_snapshot_info
 from exchange.core.risk_engine import RiskEngine, InsufficientBalance
 from exchange.venues.amm import AmmVenue
 from exchange.venues.base import Venue, VenueError
@@ -81,6 +81,9 @@ logger = logging.getLogger(__name__)
 
 
 STATE_PATH = os.environ.get("FUTARCHY_STATE", "./futarchy_state.json")
+# Past this age the durable snapshot is reported stale, never green.
+SNAPSHOT_STALE_AFTER_SECONDS = int(
+    os.environ.get("FUTARCHY_SNAPSHOT_STALE_AFTER_SECONDS", "86400"))
 INITIAL_CREDITS = Decimal(os.environ.get("INITIAL_CREDITS", "1000"))
 GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
@@ -718,12 +721,38 @@ async def install_script():
     return FileResponse(
         STATIC_DIR / "install.sh", media_type="text/plain; charset=utf-8")
 
+def _snapshot_age_seconds(saved_at: str | None) -> float | None:
+    """Age of the durable snapshot at read time; None when unparseable."""
+    if not saved_at:
+        return None
+    try:
+        saved = datetime.fromisoformat(saved_at)
+    except ValueError:
+        return None
+    if saved.tzinfo is None:
+        saved = saved.replace(tzinfo=timezone.utc)
+    return max(0.0, (datetime.now(timezone.utc) - saved).total_seconds())
+
+
 @app.get("/v1/health")
 async def health() -> HealthResponse:
     auth_store = app.state.auth_store
     joint = getattr(app.state, "joint", None)
+    degraded: list[str] = []
+    snapshot_info = last_snapshot_info()
+    snapshot = None
+    if snapshot_info is not None:
+        saved_at = snapshot_info.get("savedAt")
+        age = _snapshot_age_seconds(saved_at)
+        snapshot = SnapshotHealth(savedAt=saved_at, ageSeconds=age)
+        if age is None:
+            degraded.append("unknown:snapshot-age")
+        elif age > SNAPSHOT_STALE_AFTER_SECONDS:
+            degraded.append("stale:snapshot")
+    if joint is not None and getattr(joint, "fm_restore_note", None):
+        degraded.append("unavailable:net-fm-restore")
     return HealthResponse(
-        status="ok",
+        status="degraded" if degraded else "ok",
         markets=len(app.state.me.markets),
         ledger_accounts=len(app.state.risk.accounts),
         users=(
@@ -739,6 +768,8 @@ async def health() -> HealthResponse:
             kind: venue.stats()
             for kind, venue in getattr(app.state, "venues_by_kind", {}).items()
         },
+        snapshot=snapshot,
+        degraded=degraded,
     )
 
 
