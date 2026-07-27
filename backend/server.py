@@ -4338,6 +4338,11 @@ def get_market_events(market_id: str, query: dict[str, list[str]]) -> tuple[dict
             "genesisHash": GENESIS_EVENT_HASH,
             "headSeq": head_seq,
             "headHash": head_hash,
+            # The journal is process-local: after a restart a market with
+            # real history shows the same blank genesis head as a market
+            # that never traded. Consumers must not treat this head as
+            # durable history until it is persisted.
+            "persisted": False,
         },
         "pagination": {
             "fromSeq": from_seq,

@@ -1951,6 +1951,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "genesisHash": server.GENESIS_EVENT_HASH,
                 "headSeq": 0,
                 "headHash": server.GENESIS_EVENT_HASH,
+                "persisted": False,
             },
         )
         self.assertEqual(
@@ -1963,6 +1964,15 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             },
         )
         self.assertTrue(payload["meta"]["timestamp"].endswith("Z"))
+
+    def test_market_events_chain_declares_journal_not_persisted(self):
+        # The head hash is session-scoped: after a restart a market with real
+        # history shows the same blank genesis head as one that never traded.
+        # The payload must say so instead of presenting it as durable.
+        payload, status = server.route_request("GET", "/v1/markets/m1/events")
+
+        self.assertEqual(status, 200)
+        self.assertIs(payload["chain"]["persisted"], False)
 
     def test_market_events_returns_canonical_events_with_chain_head(self):
         first_write, first_status = server.route_request(
@@ -2002,6 +2012,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "genesisHash": server.GENESIS_EVENT_HASH,
                 "headSeq": 2,
                 "headHash": payload["events"][1]["eventHash"],
+                "persisted": False,
             },
         )
         self.assertEqual(
@@ -5187,6 +5198,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "genesisHash": server.GENESIS_EVENT_HASH,
                 "headSeq": event["seq"],
                 "headHash": event["eventHash"],
+                "persisted": False,
             },
         )
         self.assertEqual(second_payload["result"], first_payload["result"])
@@ -5293,6 +5305,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                 "genesisHash": server.GENESIS_EVENT_HASH,
                 "headSeq": event["seq"],
                 "headHash": event["eventHash"],
+                "persisted": False,
             },
         )
 
@@ -5571,6 +5584,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                         "genesisHash": server.GENESIS_EVENT_HASH,
                         "headSeq": event["seq"],
                         "headHash": event["eventHash"],
+                        "persisted": False,
                     },
                 )
                 self.assertEqual(second_payload["result"], first_payload["result"])
@@ -6508,6 +6522,7 @@ class BayesMarketEventTradeTests(unittest.TestCase):
                 "genesisHash": server.GENESIS_EVENT_HASH,
                 "headSeq": 2,
                 "headHash": events_payload["events"][1]["eventHash"],
+                "persisted": False,
             },
         )
 
@@ -7061,6 +7076,7 @@ class BayesMarketEventTradeTests(unittest.TestCase):
                 "genesisHash": server.GENESIS_EVENT_HASH,
                 "headSeq": 1,
                 "headHash": rejection_event["eventHash"],
+                "persisted": False,
             },
         )
 
@@ -8271,6 +8287,7 @@ class BayesMarketApiMarketInvariantTests(unittest.TestCase):
                 "genesisHash": server.GENESIS_EVENT_HASH,
                 "headSeq": 0,
                 "headHash": server.GENESIS_EVENT_HASH,
+                "persisted": False,
             },
         )
         self.assertEqual(server.MARKET_EVENT_SEQUENCES.get(market_id, 0), 0)
@@ -10974,6 +10991,7 @@ class BayesMarketApiIntegrationTests(unittest.TestCase):
                 "genesisHash": server.GENESIS_EVENT_HASH,
                 "headSeq": 1,
                 "headHash": events_payload["events"][0]["eventHash"],
+                "persisted": False,
             },
         )
         self.assertEqual(
