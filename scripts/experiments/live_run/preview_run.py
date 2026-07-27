@@ -108,13 +108,26 @@ def agent_briefs(prices: dict[str, float]) -> list[dict]:
 
 
 def emit_prompts():
+    """DUAL ELICITATION (design corrected 2026-07-26 after adversarial review):
+    each agent brief is elicited TWICE — once with the flat-only interface
+    (marginal actions only → applied to the local flat book) and once with the
+    full interface (→ applied to the live net). A single decision stream
+    applied to both arms measures only the mechanism holding behavior fixed;
+    separate elicitations also capture the behavioral response (e.g. a
+    flat-constrained agent converting relational knowledge into correlated
+    marginal trades). For one-shot LLM traders the flat book's liveness is
+    unobservable (the prompt is identical either way), so a local flat book
+    is behaviorally equivalent to live isolated AMMs — and a no-edge
+    FactoredMarket is numerically identical to independent binary LMSRs
+    (verified: cost/shares match the closed form; no cross-movement)."""
     prices = live_prices()
     print(f"# live cluster prices: " + ", ".join(f"{k}={round(v*100)}%" for k, v in prices.items()),
           file=sys.stderr)
     specs = []
     for b in agent_briefs(prices):
-        specs.append({"id": b["id"], "class": b["class"],
-                      "prompt": build_prompt(QUESTIONS, prices, b["info"], b["allow_conditional"])})
+        for arm, allow in (("comb", True), ("flat", False)):
+            specs.append({"id": f"{b['id']}-{arm}", "arm": arm, "class": b["class"],
+                          "prompt": build_prompt(QUESTIONS, prices, b["info"], allow)})
     print(json.dumps(specs, indent=1))
 
 

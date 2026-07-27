@@ -70,21 +70,43 @@ Hand back to the runner: **(1)** the service-account API keys (one per agent),
 **(2)** confirmation of the flat-arm AMM market ids, **(3)** the experiment
 category/namespace. Then the runner does the rest.
 
-## Run procedure
+## Run procedure (v2 — design corrected 2026-07-26 after adversarial review)
 
-1. Orchestrator elicits each agent's decision via `stage4_runner.build_prompt`
-   (neutral; both trade types offered), using its private brief from
-   `question_set.json` and live prices from `GET /v1/net/markets`.
-2. `ExchangeBackend(execute=False)` → **preview** every intended order first
-   (confirm stakes/acceptance). Only then flip `execute=True` with the
-   service-account key.
-3. Net venue = combinatorial arm; independent AMM markets = flat arm.
-4. Measure (see `question_set.json`): coherence + vs-crowd now; agent P&L via
-   log-score payout (does scoring arbitrage away the false-independence
-   pollution? — the thing the offline model couldn't test); resolution accuracy
-   is long-horizon (the fast verdict stays with the Stage 3 backtest).
+**What changed and why:** the original protocol elicited ONE decision per agent
+and applied it to both arms. Two independent adversarial reviews (Kimi + Codex
+panel) correctly objected that this measures only the *mechanism effect holding
+behavior fixed* — decisions elicited under the full interface are endogenous to
+the combinatorial arm, so copying them to a flat book is a replay, not a flat
+experimental arm. (This also retroactively narrows the Stage 1b claim: 1b is a
+mechanism/replay result, not a behavioral one.) v2 fixes the estimand:
 
-## Flat-arm parameters (for Kelvin to create the AMM markets)
+1. **Dual elicitation.** Each agent brief is elicited twice via
+   `preview_run.py --prompts`: a **flat-interface** variant (marginal actions
+   only) and a **full-interface** variant. Same briefs, same live prices,
+   separate decisions — capturing the behavioral response (e.g. a
+   flat-constrained agent converting relational knowledge into correlated
+   marginal trades).
+2. **Flat arm = local flat book**, initialized to the live net's prices: a
+   no-edge FactoredMarket, which is *numerically identical* to independent
+   binary LMSRs at the same b (verified against the closed form; no
+   cross-movement). For one-shot LLM traders the book's liveness is
+   unobservable — the prompt is the same either way — so this is behaviorally
+   equivalent to live isolated AMMs and removes the admin dependency for the
+   flat arm entirely.
+3. **Comb arm = live net venue.** `ExchangeBackend(execute=False)` →
+   **preview** every intended order first (stakes/acceptance); only then
+   `execute=True` with a service-account key.
+4. **Measure, with claims labeled by what each supports:**
+   - *live comb arm:* deployment behavior + agent P&L via log-score payout
+     (does scoring arbitrage away false-independence pollution? — the thing
+     the offline model couldn't test);
+   - *flat-vs-comb comparison:* interface-level behavioral difference in
+     aggregate accuracy/coherence (per-agent-contribution deltas, since
+     outside actors can move the live net during the window);
+   - resolution accuracy stays long-horizon (the fast verdict remains the
+     Stage 3 backtest).
+
+## Flat-arm parameters (superseded by v2 — kept for the live-AMM variant if ever wanted)
 
 Match the net venue's depth so the comparison is fair: net **b=50**. For a
 binary AMM, `max_loss = b·ln 2`, so **funding ≈ 34.7 credits** per market gives
