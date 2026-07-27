@@ -1122,6 +1122,126 @@ def reset_state() -> None:
     COMMENT_COUNTER = 0
 
 
+# --- durable state ---------------------------------------------------------
+# ponytail: one atomic snapshot of exactly the globals reset_state() clears.
+# EVENTS already carries its own hash chain, so persisting the state persists
+# the event journal with it — no reducer, no replay, nothing to drift.
+# Ceiling: the whole state is rewritten per terminal command. If write volume
+# outgrows that, append events to a JSONL and snapshot on an interval instead.
+STATE_PATH = os.environ.get("BAYES_STATE_PATH") or ""
+STATE_SCHEMA = "bayes-state/v1"
+
+# Deliberately NOT durable: MARKET_WRITE_LOCKS and the rate-limit windows are
+# per-process runtime, CACHE_INVALIDATION_MANAGER is a cache, and the joint
+# market keeps its own snapshot under BAYES_JOINT_STATE_PATH.
+_DURABLE_TABLES = (
+    "MARKETS",
+    "CONDITIONAL_MARGINALS",
+    "ORDERS",
+    "COMMANDS",
+    "EVENTS",
+    "COMMENTS",
+    "TERMINAL_OUTCOMES",
+    "COMMENT_POST_OUTCOMES",
+    "MARKET_EVENT_SEQUENCES",
+    "MARKET_COMMENT_SEQUENCES",
+    "LAST_EVENT_HASHES",
+    "ACCOUNT_RISK",
+    "ACCOUNT_EXPOSURE",
+    "MARKET_ENGINE_STATS",
+)
+_DURABLE_COUNTERS = ("ORDER_COUNTER", "COMMAND_COUNTER", "EVENT_COUNTER", "COMMENT_COUNTER")
+_STATE_PERSIST = {"error": "", "digest": "", "at": ""}
+
+
+def state_snapshot() -> dict[str, Any]:
+    """Capture every global that must survive a restart."""
+    scope = globals()
+    state: dict[str, Any] = {name: deepcopy(scope[name]) for name in _DURABLE_TABLES}
+    # tuple keys are not JSON object keys; round-trip them as pairs.
+    state["IDEMPOTENCY_KEYS"] = [[list(key), value] for key, value in IDEMPOTENCY_KEYS.items()]
+    state["counters"] = {name: scope[name] for name in _DURABLE_COUNTERS}
+    return {"schemaVersion": STATE_SCHEMA, "capturedAt": utc_timestamp(), "state": state}
+
+
+def state_digest() -> str:
+    """Content hash of the durable state, for before/after restart verification."""
+    return canonical_json_hash(state_snapshot()["state"])
+
+
+def persist_state() -> None:
+    """Write durable state atomically; no-op when persistence is off.
+
+    A write failure is never swallowed: it is recorded and reported as an
+    unhealthy db component, because an exchange that cannot durably record the
+    trade it just accepted is not healthy.
+    """
+    if not STATE_PATH:
+        return
+    try:
+        snapshot = state_snapshot()
+        path = Path(STATE_PATH)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(snapshot))
+        tmp.replace(path)
+    except (OSError, TypeError, ValueError) as exc:
+        _STATE_PERSIST["error"] = f"{type(exc).__name__}: {exc}"
+        print(
+            f"bayes-market: durable state write FAILED: {_STATE_PERSIST['error']}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+    _STATE_PERSIST["error"] = ""
+    _STATE_PERSIST["digest"] = canonical_json_hash(snapshot["state"])
+    _STATE_PERSIST["at"] = str(snapshot["capturedAt"])
+
+
+def restore_state() -> bool:
+    """Load durable state at boot. Return False when there is nothing to restore.
+
+    Fail-closed: a snapshot that exists but cannot be read aborts startup. Coming
+    up empty on top of an unreadable snapshot would erase the exchange's history
+    at exactly the moment it matters most.
+    """
+    global ORDER_COUNTER, COMMAND_COUNTER, EVENT_COUNTER, COMMENT_COUNTER
+    if not STATE_PATH:
+        return False
+    path = Path(STATE_PATH)
+    if not path.exists():
+        return False
+    try:
+        data = json.loads(path.read_text())
+        if data.get("schemaVersion") != STATE_SCHEMA:
+            raise ValueError(f"unsupported schemaVersion {data.get('schemaVersion')!r}")
+        state = data["state"]
+        captured_at = str(data.get("capturedAt") or "")
+        restored = {name: state[name] for name in _DURABLE_TABLES}
+        keys = {tuple(key): value for key, value in state["IDEMPOTENCY_KEYS"]}
+        counters = {name: int(state["counters"][name]) for name in _DURABLE_COUNTERS}
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise SystemExit(
+            f"bayes-market: refusing to start — durable state at {path} is unreadable "
+            f"({type(exc).__name__}: {exc}). Move it aside to start from seeds."
+        ) from exc
+    scope = globals()
+    for name, table in restored.items():
+        scope[name].clear()
+        scope[name].update(table)
+    IDEMPOTENCY_KEYS.clear()
+    IDEMPOTENCY_KEYS.update(keys)
+    ORDER_COUNTER = counters["ORDER_COUNTER"]
+    COMMAND_COUNTER = counters["COMMAND_COUNTER"]
+    EVENT_COUNTER = counters["EVENT_COUNTER"]
+    COMMENT_COUNTER = counters["COMMENT_COUNTER"]
+    # health must report the true durable digest from the first request after a
+    # restart, not stay blank until the next write lands.
+    _STATE_PERSIST["error"] = ""
+    _STATE_PERSIST["digest"] = state_digest()
+    _STATE_PERSIST["at"] = captured_at
+    return True
+
+
 def generate_order_id() -> str:
     """Return a unique order identifier for the current process run."""
     global ORDER_COUNTER
@@ -1626,9 +1746,24 @@ def aggregate_component_status(components: dict[str, dict[str, Any]]) -> str:
 
 def db_health_component() -> dict[str, Any]:
     """Build the database component record for the v1 health contract."""
+    if not STATE_PATH:
+        return {
+            "status": "ok",
+            "kind": "in_memory",
+        }
+    if _STATE_PERSIST["error"]:
+        return {
+            "status": "unhealthy",
+            "kind": "durable_snapshot",
+            "path": STATE_PATH,
+            "error": _STATE_PERSIST["error"],
+        }
     return {
         "status": "ok",
-        "kind": "in_memory",
+        "kind": "durable_snapshot",
+        "path": STATE_PATH,
+        "lastPersistedAt": _STATE_PERSIST["at"],
+        "digest": _STATE_PERSIST["digest"],
     }
 
 
@@ -5587,6 +5722,10 @@ def build_terminal_response(
     response["result"] = build_terminal_result(event)
     response["meta"] = make_meta(**command_response_meta_kwargs(command))
     record_terminal_outcome(command, event, status, response, scope_key)
+    # every terminal command routes through here, so this is the one place the
+    # durable snapshot has to be taken — after the outcome is recorded, so the
+    # snapshot is never a half-applied command.
+    persist_state()
     return response, status
 
 
@@ -7150,6 +7289,13 @@ def parse_args() -> argparse.Namespace:
 
 def run_server(host: str = "127.0.0.1", port: int = 3205) -> None:
     """Start the HTTP server and block forever."""
+    if restore_state():
+        print(
+            f"bayes-market: restored durable state from {STATE_PATH} "
+            f"(digest {state_digest()})",
+            file=sys.stderr,
+            flush=True,
+        )
     HTTPServer((host, port), BayesHandler).serve_forever()
 
 
