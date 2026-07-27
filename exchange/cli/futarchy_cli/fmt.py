@@ -58,18 +58,26 @@ def markets_table(markets: list[dict]) -> str:
                 pr_part = question.split("PR #")[1].split(" ")[0] if "PR #" in question else ""
                 title = f"PR #{pr_part} {parts[1]}" if pr_part else parts[1]
 
-        yes_p = float(m.get("prices", {}).get("yes", 0.5))
-        no_p = float(m.get("prices", {}).get("no", 0.5))
+        # Missing prices must never render as a live-looking 0.50 — a
+        # resolved/closed market or a venue that omits prices has no price,
+        # not a coin flip. Render an explicit unavailable marker instead.
+        prices = m.get("prices") or {}
+        yes_raw = prices.get("yes")
+        no_raw = prices.get("no")
         trades = m.get("num_trades", 0)
 
-        yes_str = f"{yes_p:.2f}"
-        no_str = f"{no_p:.2f}"
+        if yes_raw is None or no_raw is None:
+            yes_cell = f"{DIM}{_pad('n/a', 7)}{RESET}"
+            no_cell = f"{DIM}{_pad('n/a', 7)}{RESET}"
+        else:
+            yes_cell = f"{GREEN}{_pad(f'{float(yes_raw):.2f}', 7)}{RESET}"
+            no_cell = f"{RED}{_pad(f'{float(no_raw):.2f}', 7)}{RESET}"
 
         lines.append(
             f"  {_pad(mid, 4)}"
             f"{_pad(_trunc(title, 28), 30)}"
-            f"{GREEN}{_pad(yes_str, 7)}{RESET}"
-            f"{RED}{_pad(no_str, 7)}{RESET}"
+            f"{yes_cell}"
+            f"{no_cell}"
             f"{_pad(str(trades), 6, right=True)}"
         )
 
@@ -80,8 +88,9 @@ def markets_table(markets: list[dict]) -> str:
 def market_detail(m: dict) -> str:
     mid = m.get("market_id", m.get("id", "?"))
     question = m.get("question", "")
-    yes_p = float(m.get("prices", {}).get("yes", 0.5))
-    no_p = float(m.get("prices", {}).get("no", 0.5))
+    prices = m.get("prices") or {}
+    yes_raw = prices.get("yes")
+    no_raw = prices.get("no")
     volume = m.get("volume", "0")
     deadline = m.get("deadline", "-")
     status = m.get("status", "-")
@@ -97,8 +106,18 @@ def market_detail(m: dict) -> str:
         f"  Status     {status_color}{status}{RESET}",
         f"  Deadline   {deadline or '-'}",
         "",
-        f"  {_bar(yes_p)}",
-        f"  {GREEN}YES  {yes_p:.2f}{RESET}    {RED}NO  {no_p:.2f}{RESET}",
+    ]
+
+    if yes_raw is None or no_raw is None:
+        # No live price to show — say so instead of drawing a 0.50 bar.
+        lines.append(f"  {DIM}Prices unavailable (status: {status}){RESET}")
+    else:
+        yes_p = float(yes_raw)
+        no_p = float(no_raw)
+        lines.append(f"  {_bar(yes_p)}")
+        lines.append(f"  {GREEN}YES  {yes_p:.2f}{RESET}    {RED}NO  {no_p:.2f}{RESET}")
+
+    lines += [
         "",
         f"  Volume     {float(volume):,.0f}",
         f"  Trades     {trades_count}",

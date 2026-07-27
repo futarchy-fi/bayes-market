@@ -56,3 +56,30 @@ def test_filter_net_markets_matches_id_variable_or_title_case_insensitively():
     assert filter_net_markets(markets, "beta") == [markets[1]]
     assert filter_net_markets(markets, "LAUNCH") == [markets[2]]
     assert filter_net_markets(markets, None) == markets
+
+
+def test_markets_table_renders_missing_prices_as_unavailable_not_050():
+    from .fmt import markets_table
+
+    table = markets_table([
+        {"id": 1, "question": "Open market", "prices": {"yes": 0.7, "no": 0.3}},
+        {"id": 2, "question": "Resolved market", "prices": {}, "status": "resolved"},
+        {"id": 3, "question": "No prices key at all", "status": "closed"},
+    ])
+
+    assert "0.70" in table and "0.30" in table
+    # The two markets without prices must not show a live-looking number.
+    assert table.count("n/a") == 4
+    assert "0.50" not in table
+
+
+def test_market_detail_without_prices_says_unavailable_not_a_half_bar():
+    from .fmt import market_detail
+
+    detail = market_detail(
+        {"id": 2, "question": "Resolved market", "prices": {}, "status": "resolved"}
+    )
+
+    assert "unavailable" in detail
+    assert "0.50" not in detail
+    assert "█" not in detail  # no fake half-filled price bar
