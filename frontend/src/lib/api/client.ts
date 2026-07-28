@@ -41,6 +41,10 @@ async function request<T>(
   session?: Session,
 ): Promise<T> {
   const headers: Record<string, string> = {
+    // Content-negotiated routes (notably the service index at "/") return the
+    // SPA's HTML shell unless the request explicitly asks for JSON, which then
+    // fails res.json(). Declare JSON by default; callers may override.
+    Accept: "application/json",
     ...(options.headers as Record<string, string>),
   };
 

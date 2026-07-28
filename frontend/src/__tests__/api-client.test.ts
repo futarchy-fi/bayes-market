@@ -40,7 +40,10 @@ describe("API Client", () => {
     const body = { markets: [], count: 0, meta: { apiVersion: "1.0", timestamp: "" } };
     mockFetch.mockResolvedValue(jsonResponse(body));
     const result = await listMarkets();
-    expect(mockFetch).toHaveBeenCalledWith("/v1/markets", expect.objectContaining({ headers: {} }));
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/v1/markets",
+      expect.objectContaining({ headers: { Accept: "application/json" } }),
+    );
     expect(result.count).toBe(0);
   });
 
@@ -143,6 +146,17 @@ describe("API Client", () => {
     const result = await getServiceIndex();
     expect(mockFetch).toHaveBeenCalledWith("/", expect.any(Object));
     expect(result.service).toBe("bayes-market");
+  });
+
+  it("getServiceIndex requests JSON so the content-negotiated / route does not return the SPA shell", async () => {
+    // Regression: the service index at "/" is content-negotiated and serves the
+    // SPA's HTML unless the request asks for JSON, which made res.json() throw
+    // and surfaced as "Could not load the API surface." on the System page.
+    const body = { service: "bayes-market", status: "ok", routes: {}, meta: { apiVersion: "1.0", timestamp: "" } };
+    mockFetch.mockResolvedValue(jsonResponse(body));
+    await getServiceIndex();
+    const headers = mockFetch.mock.calls[0]![1].headers;
+    expect(headers.Accept).toBe("application/json");
   });
 
   // --- Step 3: Paginated GET functions ---
