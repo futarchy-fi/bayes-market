@@ -298,12 +298,17 @@ def _ci95(xs: list[float]) -> tuple[float, float]:
 
 
 def _corr(xs: list[float], ys: list[float]) -> float:
+    # Pearson by hand: statistics.correlation needs Python >= 3.10 and this
+    # must run on the host default 3.9.
     if len(xs) < 2:
         return float("nan")
-    try:
-        return statistics.correlation(xs, ys)
-    except (statistics.StatisticsError, ZeroDivisionError):
+    mx, my = statistics.mean(xs), statistics.mean(ys)
+    cov = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    vx = sum((x - mx) ** 2 for x in xs)
+    vy = sum((y - my) ** 2 for y in ys)
+    if vx <= 0 or vy <= 0:
         return float("nan")
+    return cov / math.sqrt(vx * vy)
 
 
 def _pctl(xs: list[float], q: float) -> float:
