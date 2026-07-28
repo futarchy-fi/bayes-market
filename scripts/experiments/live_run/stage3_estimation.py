@@ -19,8 +19,10 @@ Design (paired, hierarchical):
         correct       : the true DAG
         under-dense   : true DAG minus one real edge  (imposes a FALSE
                         conditional independence -- the only misspecification
-                        that binds for a BN family; a spurious/reversed edge is
-                        Markov-equivalent or mere over-parameterisation)
+                        that binds for a BN family; a spurious edge is mere
+                        over-parameterisation, the family still contains the
+                        truth. NB: edge *reversal* is family-preserving only for
+                        covered reversals / 2-var cases, so no reversal is used.)
         over-dense    : true DAG plus a spurious edge (over-parameterised)
         saturated     : full DAG          (the 2^k table; no bias, max variance)
   * Score by EXPECTED held-out log-loss, computed exactly as the cross-entropy
@@ -55,7 +57,12 @@ from dataclasses import dataclass
 # ---- distributions over k binary variables --------------------------------
 # A joint is a dict: state (tuple of 0/1, length k) -> probability.
 
-CLIP = 1e-6
+# Only guards float underflow in log() -- NOT a probability floor. The truth and
+# every fitted/oracle joint are strictly positive here (smoothed conditionals),
+# so a real 1e-6 floor would spuriously inflate tiny truth cells (down to ~1e-24
+# at k=4) and make approx_error negative for truth-containing families instead of
+# exactly zero. Set far below any real state probability.
+CLIP = 1e-300
 
 
 def _states(k: int) -> list[tuple[int, ...]]:
@@ -99,13 +106,18 @@ def conditionals_from_dist(parents: dict[int, list[int]],
 def fit_family(parents: dict[int, list[int]],
                counts: dict[tuple[int, ...], int],
                n: int, alpha: float, k: int) -> dict[tuple[int, ...], float]:
-    """Smoothed-MLE fit of a BN family from training counts. The Dirichlet(alpha)
-    prior is applied at the CONDITIONAL level (per node, per parent-config),
-    identically across families, so richer families are penalised only through
-    their extra variance -- never through a different prior."""
+    """Smoothed-MLE fit of a BN family from training counts, using a BDeu-style
+    prior: each node carries a FIXED equivalent sample size (2*alpha) that is
+    SPLIT across its parent-configs (alpha_eff = alpha / 2**|parents|). This keeps
+    the total prior shrinkage per node identical across families. The earlier
+    constant-per-config prior handed a saturated node 2**|pa| times the total
+    pseudocounts of a root, so richer families were over-regularised -- the
+    'variance' gap then mixed in a prior-induced bias. With constant per-node ESS
+    the family comparison is on estimation error, not on differing priors."""
     cond1: dict[int, dict[tuple[int, ...], float]] = {}
     for i in range(k):
         pa = parents[i]
+        a = alpha / (2 ** len(pa))   # BDeu: constant ESS = 2*alpha per node
         num: dict[tuple[int, ...], float] = {}
         den: dict[tuple[int, ...], float] = {}
         for state, c in counts.items():
@@ -116,7 +128,7 @@ def fit_family(parents: dict[int, list[int]],
         # Every parent-config that can occur, smoothed.
         table: dict[tuple[int, ...], float] = {}
         for key in itertools.product((0, 1), repeat=len(pa)):
-            table[key] = (num.get(key, 0.0) + alpha) / (den.get(key, 0.0) + 2 * alpha)
+            table[key] = (num.get(key, 0.0) + a) / (den.get(key, 0.0) + 2 * a)
         cond1[i] = table
 
     out: dict[tuple[int, ...], float] = {}
@@ -246,6 +258,9 @@ class Cell:
     excess: float                # total nats above truth entropy
     excess_ci: tuple[float, float]
     win_vs_correct: float        # fraction of worlds this family beats 'correct'
+    diff_mean: float             # mean PAIRED gap excess[f] - excess[correct]
+    diff_ci: tuple[float, float]  # paired 95% CI on that gap (the honest test)
+    win_ci: tuple[float, float]  # Wilson 95% CI on the win fraction
 
 
 def _ci95(xs: list[float]) -> tuple[float, float]:
@@ -254,6 +269,18 @@ def _ci95(xs: list[float]) -> tuple[float, float]:
     m = statistics.mean(xs)
     se = statistics.stdev(xs) / math.sqrt(len(xs))
     return (m - 1.96 * se, m + 1.96 * se)
+
+
+def _wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """Wilson score interval for a binomial proportion -- honest for win rates
+    near 0/1 where a normal approximation would spill outside [0,1]."""
+    if n == 0:
+        return (float("nan"), float("nan"))
+    p = k / n
+    denom = 1.0 + z * z / n
+    centre = p + z * z / (2 * n)
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+    return ((centre - half) / denom, (centre + half) / denom)
 
 
 def run_cell(topo: Topology, n: int, strength: float, worlds: int,
@@ -284,14 +311,19 @@ def run_cell(topo: Topology, n: int, strength: float, worlds: int,
         per_world_excess.append(world)
     out: dict[str, Cell] = {}
     for f in FAMILY_ORDER:
-        wins = sum(1 for w in per_world_excess if w[f] < w["correct"]) / worlds
+        # Paired: gap to 'correct' in the SAME world -> paired CI, not marginal.
+        diffs = [w[f] - w["correct"] for w in per_world_excess]
+        nwin = sum(1 for d in diffs if d < 0.0)
         out[f] = Cell(
             topology=topo.name, n=n, strength=strength, family=f,
             approx_error=statistics.mean(approx[f]),
             est_regret=statistics.mean(regret[f]),
             excess=statistics.mean(excess[f]),
             excess_ci=_ci95(excess[f]),
-            win_vs_correct=wins,
+            win_vs_correct=nwin / worlds,
+            diff_mean=statistics.mean(diffs),
+            diff_ci=_ci95(diffs),
+            win_ci=_wilson(nwin, worlds),
         )
     return out
 
@@ -299,13 +331,19 @@ def run_cell(topo: Topology, n: int, strength: float, worlds: int,
 def _print_cell(topo: str, n: int, strength: float,
                 cells: dict[str, Cell]) -> None:
     print(f"\n[{topo}]  N={n}  dependence-strength={strength}")
-    print(f"  {'family':<14}{'excess':>9}{'= approx':>10}{'+ estim':>9}"
-          f"{'95% CI':>19}{'beats correct%':>15}")
+    print(f"  {'family':<14}{'excess':>8}{'approx':>8}{'estim':>8}"
+          f"{'Δ vs correct [95% CI]':>27}{'win% [95% CI]':>18}")
     for f in FAMILY_ORDER:
         c = cells[f]
-        ci = f"[{c.excess_ci[0]:.4f},{c.excess_ci[1]:.4f}]"
-        print(f"  {f:<14}{c.excess:>9.4f}{c.approx_error:>10.4f}"
-              f"{c.est_regret:>9.4f}{ci:>19}{c.win_vs_correct*100:>13.0f}%")
+        if f == "correct":
+            dcol, wcol = f"{'(reference)':>27}", f"{'—':>18}"
+        else:
+            d = f"{c.diff_mean:+.4f} [{c.diff_ci[0]:+.4f},{c.diff_ci[1]:+.4f}]"
+            w = (f"{c.win_vs_correct*100:.0f}% "
+                 f"[{c.win_ci[0]*100:.0f},{c.win_ci[1]*100:.0f}]")
+            dcol, wcol = f"{d:>27}", f"{w:>18}"
+        print(f"  {f:<14}{c.excess:>8.4f}{c.approx_error:>8.4f}"
+              f"{c.est_regret:>8.4f}{dcol}{wcol}")
 
 
 def main() -> None:
@@ -319,7 +357,7 @@ def main() -> None:
     ap.add_argument("--ns", type=int, nargs="+",
                     default=[20, 50, 100, 200, 500, 2000])
     ap.add_argument("--topologies", nargs="+",
-                    default=["chain", "collider", "fork"])
+                    default=["chain", "collider", "fork", "chain4"])
     ap.add_argument("--seed", type=int, default=20260728)
     args = ap.parse_args()
 
