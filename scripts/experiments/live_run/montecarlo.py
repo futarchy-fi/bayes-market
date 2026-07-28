@@ -249,6 +249,133 @@ def mutual_info_agi_g39(t: Truth) -> float:
     return info
 
 
+# ---- non-market baselines --------------------------------------------------
+#
+# The reviewers' central challenge (see PR discussion): comb-vs-flat alone
+# cannot tell whether any gain comes from *the market mechanism* or merely from
+# *structured joint aggregation of the reports*. To separate them we feed the
+# IDENTICAL per-agent reports the markets receive to two textbook opinion pools
+# and score them the same way (KL to the ground-truth joint). If a plain pool
+# matches the market's KL, the LMSR is not the active ingredient -- it is doing
+# no more than the pool. (LMSR is in fact known to be a logarithmic opinion
+# pool of the trades it absorbs; log_pool below is the sharp, structure-
+# preserving analog, linear_pool the structure-breaking mixture contrast.)
+
+
+def _factored_joint(pa: float, gy: float, gn: float, p40: float,
+                    prnd: float) -> dict[tuple[str, str, str, str], float]:
+    """Build the 4-var joint from one factored report, same factorization the
+    markets read out in market_joint()."""
+    out: dict[tuple[str, str, str, str], float] = {}
+    for a in OUT:
+        p_a = pa if a == "yes" else 1 - pa
+        gc = gy if a == "yes" else gn
+        for g in OUT:
+            p_g = gc if g == "yes" else 1 - gc
+            for h in OUT:
+                p_h = p40 if h == "yes" else 1 - p40
+                for r in OUT:
+                    p_r = prnd if r == "yes" else 1 - prnd
+                    out[(a, g, h, r)] = p_a * p_g * p_h * p_r
+    return out
+
+
+def agent_joint(ag: Agent, arm: str) -> dict[tuple[str, str, str, str], float]:
+    """The joint an agent's report expresses under a given arm's interface --
+    exactly the target run_agents() nudges the corresponding market toward, so
+    the pool consumes the same report stream, not a privileged one.
+
+      comb: relational agents express the conditional split; marginal agents
+            express G39 as independent of AGI (gy == gn).
+      flat: every agent collapses to the implied marginal (AGI independent).
+    """
+    if arm == "comb":
+        if ag.relational:
+            gy, gn = ag.b_g39_y, ag.b_g39_n
+        else:
+            gy = gn = ag.b_g39_marg
+    elif arm == "flat":
+        if ag.relational:
+            m = ag.b_agi * ag.b_g39_y + (1 - ag.b_agi) * ag.b_g39_n
+        else:
+            m = ag.b_g39_marg
+        gy = gn = m
+    else:  # pragma: no cover
+        raise ValueError(f"arm must be 'comb' or 'flat', got {arm!r}")
+    return _factored_joint(ag.b_agi, gy, gn, ag.b_g40, ag.b_rnd)
+
+
+def linear_pool(joints: list[dict]) -> dict:
+    """Arithmetic mean of the agent joints (LinOP). A mixture of products is
+    NOT a product, so LinOP can express dependence even from independent
+    reports -- it is the aggregator, not the contract space, that carries it."""
+    n = len(joints)
+    states = joints[0].keys()
+    return {s: sum(j[s] for j in joints) / n for s in states}
+
+
+def log_pool(joints: list[dict]) -> dict:
+    """Normalized geometric mean of the agent joints (LogOP). Note the caveat
+    baked into agent_joint: a marginal agent's joint asserts AGI-G39
+    independence, so this pool treats a *missing* conditional report as an
+    independence *vote* -- the relational contrast is attenuated by the
+    relational fraction. modular_pool below removes that imputation."""
+    n = len(joints)
+    states = joints[0].keys()
+    acc = {s: sum(math.log(max(j[s], 1e-12)) for j in joints) / n
+           for s in states}
+    z = sum(math.exp(v) for v in acc.values())
+    return {s: math.exp(v) / z for s, v in acc.items()}
+
+
+def _logit(p: float) -> float:
+    p = min(max(p, 1e-12), 1.0 - 1e-12)
+    return math.log(p / (1.0 - p))
+
+
+def _expit(x: float) -> float:
+    return 1.0 / (1.0 + math.exp(-x))
+
+
+def _logit_mean(ps: list[float]) -> float:
+    return _expit(sum(_logit(p) for p in ps) / len(ps))
+
+
+def modular_pool(agents: list[Agent], arm: str) -> dict:
+    """Per-parameter logit pool that treats missing reports as missing, not as
+    independence votes: each parameter is averaged (in log-odds) only over the
+    agents whose interface actually expresses it. Mirrors the market's modular
+    reporting semantics without any LMSR machinery -- if the market only
+    matches THIS pool, its edge over log_pool is report-encoding, not market
+    aggregation.
+
+      comb: G39|AGI=yes and G39|AGI=no pooled among relational agents only;
+            marginal-only agents contribute nothing to the conditional split
+            (their G39 level info is dropped -- the price of no imputation).
+            If no agent reported conditionals, fall back to the pooled
+            marginal applied to both strata.
+      flat: only the marginal is expressible; pool every agent's implied or
+            direct marginal, AGI-independent.
+    All agents pool AGI, G40, RND identically in both arms."""
+    pa = _logit_mean([ag.b_agi for ag in agents])
+    p40 = _logit_mean([ag.b_g40 for ag in agents])
+    prnd = _logit_mean([ag.b_rnd for ag in agents])
+    marginals = [ag.b_agi * ag.b_g39_y + (1 - ag.b_agi) * ag.b_g39_n
+                 if ag.relational else ag.b_g39_marg for ag in agents]
+    if arm == "comb":
+        rel = [ag for ag in agents if ag.relational]
+        if rel:
+            gy = _logit_mean([ag.b_g39_y for ag in rel])
+            gn = _logit_mean([ag.b_g39_n for ag in rel])
+        else:
+            gy = gn = _logit_mean(marginals)
+    elif arm == "flat":
+        gy = gn = _logit_mean(marginals)
+    else:  # pragma: no cover
+        raise ValueError(f"arm must be 'comb' or 'flat', got {arm!r}")
+    return _factored_joint(pa, gy, gn, p40, prnd)
+
+
 # ---- experiment ------------------------------------------------------------
 
 
@@ -286,6 +413,31 @@ class Summary:
     realized_gap_p10: float
     realized_gap_p90: float
     clip_rate: float
+    # Non-market baselines fed the identical per-agent reports (see the
+    # baselines section). *_lin = linear opinion pool, *_log = logarithmic pool.
+    # delta_kl_pool mirrors mean_delta_kl but for the pool; market_minus_pool is
+    # the paired mean (market KL - pool KL) on the comb arm -- ~0 means the LMSR
+    # bought nothing over the pool given the same reports; win_market_vs_pool is
+    # the fraction of runs the market strictly beat the pool.
+    mean_kl_comb_lin: float = float("nan")
+    mean_kl_flat_lin: float = float("nan")
+    mean_kl_comb_log: float = float("nan")
+    mean_kl_flat_log: float = float("nan")
+    mean_delta_kl_lin: float = float("nan")
+    mean_delta_kl_log: float = float("nan")
+    market_minus_lin_comb: float = float("nan")
+    market_minus_log_comb: float = float("nan")
+    mm_log_comb_ci: tuple[float, float] = (float("nan"), float("nan"))
+    win_market_vs_log_comb: float = float("nan")
+    # Modular pool: per-parameter logit pooling among reporters only (missing
+    # reports stay missing). If the market matches this but beats log_pool, its
+    # advantage is report-encoding semantics, not market aggregation.
+    mean_kl_comb_mod: float = float("nan")
+    mean_kl_flat_mod: float = float("nan")
+    mean_delta_kl_mod: float = float("nan")
+    market_minus_mod_comb: float = float("nan")
+    mm_mod_comb_ci: tuple[float, float] = (float("nan"), float("nan"))
+    win_market_vs_mod_comb: float = float("nan")
     deltas: list[float] = field(default_factory=list)
 
 
@@ -325,6 +477,9 @@ def run_condition(cond: Condition, runs: int, seed: int) -> Summary:
     deltas, kl_flat, kl_comb = [], [], []
     gaps, spread_comb, spread_flat = [], [], []
     infos, delta_minus_info, realized_gaps = [], [], []
+    kc_lin_l, kf_lin_l, kc_log_l, kf_log_l = [], [], [], []
+    d_lin_l, d_log_l, mm_lin_l, mm_log_l = [], [], [], []
+    kc_mod_l, kf_mod_l, d_mod_l, mm_mod_l = [], [], [], []
     n_clipped = 0
     for _ in range(runs):
         truth = sample_truth(rng, cond.dependence)
@@ -342,6 +497,25 @@ def run_condition(cond: Condition, runs: int, seed: int) -> Summary:
         infos.append(info)
         delta_minus_info.append((kf - kc) - info)
         realized_gaps.append(truth.gap)          # post-clip by construction
+        # Non-market baselines on the IDENTICAL agent reports.
+        cj = [agent_joint(ag, "comb") for ag in agents]
+        fj = [agent_joint(ag, "flat") for ag in agents]
+        kc_lin, kf_lin = kl(gt, linear_pool(cj)), kl(gt, linear_pool(fj))
+        kc_log, kf_log = kl(gt, log_pool(cj)), kl(gt, log_pool(fj))
+        kc_lin_l.append(kc_lin)
+        kf_lin_l.append(kf_lin)
+        kc_log_l.append(kc_log)
+        kf_log_l.append(kf_log)
+        d_lin_l.append(kf_lin - kc_lin)
+        d_log_l.append(kf_log - kc_log)
+        mm_lin_l.append(kc - kc_lin)   # market - linpool (comb arm), paired
+        mm_log_l.append(kc - kc_log)   # market - logpool (comb arm), paired
+        kc_mod = kl(gt, modular_pool(agents, "comb"))
+        kf_mod = kl(gt, modular_pool(agents, "flat"))
+        kc_mod_l.append(kc_mod)
+        kf_mod_l.append(kf_mod)
+        d_mod_l.append(kf_mod - kc_mod)
+        mm_mod_l.append(kc - kc_mod)   # market - modular pool (comb), paired
         if _hit_clip(truth):
             n_clipped += 1
         spread_comb.append(
@@ -367,6 +541,22 @@ def run_condition(cond: Condition, runs: int, seed: int) -> Summary:
         realized_gap_p10=_pctl(realized_gaps, 0.10),
         realized_gap_p90=_pctl(realized_gaps, 0.90),
         clip_rate=n_clipped / runs,
+        mean_kl_comb_lin=statistics.mean(kc_lin_l),
+        mean_kl_flat_lin=statistics.mean(kf_lin_l),
+        mean_kl_comb_log=statistics.mean(kc_log_l),
+        mean_kl_flat_log=statistics.mean(kf_log_l),
+        mean_delta_kl_lin=statistics.mean(d_lin_l),
+        mean_delta_kl_log=statistics.mean(d_log_l),
+        market_minus_lin_comb=statistics.mean(mm_lin_l),
+        market_minus_log_comb=statistics.mean(mm_log_l),
+        mm_log_comb_ci=_ci95(mm_log_l),
+        win_market_vs_log_comb=sum(1 for d in mm_log_l if d < 0) / len(mm_log_l),
+        mean_kl_comb_mod=statistics.mean(kc_mod_l),
+        mean_kl_flat_mod=statistics.mean(kf_mod_l),
+        mean_delta_kl_mod=statistics.mean(d_mod_l),
+        market_minus_mod_comb=statistics.mean(mm_mod_l),
+        mm_mod_comb_ci=_ci95(mm_mod_l),
+        win_market_vs_mod_comb=sum(1 for d in mm_mod_l if d < 0) / len(mm_mod_l),
         deltas=deltas,
     )
 
@@ -445,6 +635,40 @@ def _print_table(results: list[Summary]) -> None:
               f"{s.clip_rate*100:>6.0f}%")
 
 
+def _print_baselines(results: list[Summary]) -> None:
+    """Market vs non-market pools on the identical reports, comb arm.
+    Reading guide: if the market matched log_pool everywhere, the LMSR would be
+    doing no more than joint pooling. If it beats log_pool but matches
+    modular_pool, its edge is the report-encoding semantics (missing
+    conditionals stay missing / marginal trades preserve the contrast), which
+    the modular pool replicates without any market machinery. Paired 95% CIs
+    on the market-minus-pool differences; win% = share of runs the market's
+    comb-arm KL is strictly lower than the pool's."""
+    header = (f"{'condition':<40}"
+              f"{'KLc mkt':>8}{'KLc lin':>8}{'KLc log':>8}{'KLc mod':>8}"
+              f"{'mkt-log [95% CI]':>25}{'win%':>5}"
+              f"{'mkt-mod [95% CI]':>25}{'win%':>5}")
+    print(header)
+    print("-" * len(header))
+    for s in results:
+        ci_log = f"{s.market_minus_log_comb:+.4f} [{s.mm_log_comb_ci[0]:+.4f},{s.mm_log_comb_ci[1]:+.4f}]"
+        ci_mod = f"{s.market_minus_mod_comb:+.4f} [{s.mm_mod_comb_ci[0]:+.4f},{s.mm_mod_comb_ci[1]:+.4f}]"
+        print(f"{s.condition:<40}"
+              f"{s.mean_kl_comb:>8.4f}{s.mean_kl_comb_lin:>8.4f}"
+              f"{s.mean_kl_comb_log:>8.4f}{s.mean_kl_comb_mod:>8.4f}"
+              f"{ci_log:>25}{s.win_market_vs_log_comb*100:>4.0f}%"
+              f"{ci_mod:>25}{s.win_market_vs_mod_comb*100:>4.0f}%")
+    print()
+    header2 = (f"{'condition':<40}"
+               f"{'ΔKL mkt':>9}{'ΔKL lin':>9}{'ΔKL log':>9}{'ΔKL mod':>9}")
+    print(header2)
+    print("-" * len(header2))
+    for s in results:
+        print(f"{s.condition:<40}"
+              f"{s.mean_delta_kl:>+9.4f}{s.mean_delta_kl_lin:>+9.4f}"
+              f"{s.mean_delta_kl_log:>+9.4f}{s.mean_delta_kl_mod:>+9.4f}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", type=int, default=500,
@@ -467,6 +691,14 @@ def main() -> None:
     for i, cond in enumerate(conditions):
         results.append(run_condition(cond, args.runs, args.seed + i * 1000))
     _print_table(results)
+
+    print("\nNon-market baselines (identical agent reports; is the LMSR the "
+          "active ingredient?):")
+    print("KLc = comb-arm KL to truth per aggregator (mkt=market, lin/log = "
+          "opinion pools over agent joints,\nmod = per-parameter logit pool "
+          "among reporters only);  mkt-* = paired mean difference, negative "
+          "=> market better.\n")
+    _print_baselines(results)
 
     sweep: list[Summary] = []
     if args.sweep:
