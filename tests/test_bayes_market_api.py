@@ -671,13 +671,15 @@ class BayesMarketApiUnitTests(unittest.TestCase):
     def test_aggregate_platform_stats_returns_initial_totals_without_orders(self):
         markets = list(server.INITIAL_MARKETS.values())
 
+        # Seed market volumes must NOT inflate platform total_volume when no
+        # EventTrades exist (hub-wahp): empty venue reads as zero activity.
         self.assertEqual(
             server.aggregate_platform_stats(),
             {
                 "total_markets": len(markets),
                 "active_markets": sum(1 for market in markets if market["status"] == "active"),
                 "resolved_markets": sum(1 for market in markets if market["status"] == "resolved"),
-                "total_volume": server.round_risk_value(sum(float(market["volume"]) for market in markets)),
+                "total_volume": 0.0,
                 "total_trades": 0,
                 "total_accounts": 0,
             },
@@ -704,12 +706,14 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     "type": "ProbabilityEdit",
                     "status": "filled",
                     "accountId": "acct_a",
+                    "notional": 99.0,  # ignored: not an EventTrade
                 },
                 "o2": {
                     "id": "o2",
                     "type": "EventTrade",
                     "status": "filled",
                     "accountId": "acct_b",
+                    "notional": 1.234564,
                 },
                 "o3": {
                     "id": "o3",
@@ -722,6 +726,7 @@ class BayesMarketApiUnitTests(unittest.TestCase):
                     "type": "EventTrade",
                     "status": "filled",
                     "accountId": "acct_b",
+                    "notional": 0.8888926,
                 },
                 "o5": {
                     "id": "o5",
@@ -732,17 +737,48 @@ class BayesMarketApiUnitTests(unittest.TestCase):
             }
         )
 
+        # EventTrade fills only (o2, o4); volume = sum of their notionals,
+        # rounded once via round_risk_value. ProbabilityEdits do not count.
         self.assertEqual(
             server.aggregate_platform_stats(),
             {
                 "total_markets": 3,
                 "active_markets": 1,
                 "resolved_markets": 1,
-                "total_volume": 2.123457,
-                "total_trades": 3,
-                "total_accounts": 2,
+                "total_volume": server.round_risk_value(1.234564 + 0.8888926),
+                "total_trades": 2,
+                "total_accounts": 1,
             },
         )
+
+    def test_aggregate_platform_stats_probability_edits_alone_read_as_zero_activity(self):
+        """hub-wahp: ProbabilityEdit-only venue must not look like an active exchange."""
+        custom_markets = {
+            "m1": deepcopy(server.INITIAL_MARKETS["m1"]),
+        }
+        custom_markets["m1"]["volume"] = 650000.0  # seed attribute — must not surface
+
+        server.MARKETS.clear()
+        server.MARKETS.update(custom_markets)
+        server.ORDERS.clear()
+        server.ORDERS.update(
+            {
+                f"pe{i}": {
+                    "id": f"pe{i}",
+                    "type": "ProbabilityEdit",
+                    "status": "filled",
+                    "accountId": "acct_seed",
+                    "notional": 1.0,
+                }
+                for i in range(105)
+            }
+        )
+
+        stats = server.aggregate_platform_stats()
+        self.assertEqual(stats["total_trades"], 0)
+        self.assertEqual(stats["total_volume"], 0.0)
+        self.assertEqual(stats["total_accounts"], 0)
+        self.assertEqual(stats["total_markets"], 1)
 
     def test_aggregate_component_status_returns_ok_when_all_components_are_ok(self):
         components = {

@@ -3827,15 +3827,25 @@ def get_account_pnl(account_id: str) -> tuple[dict[str, Any], int]:
 
 
 def aggregate_platform_stats() -> dict[str, int | float]:
-    """Aggregate platform-wide totals for the stats read model."""
+    """Aggregate platform-wide totals for the stats read model.
+
+    ``total_trades`` and ``total_volume`` count filled **EventTrade** orders
+    only — the same population as ``GET /v1/markets/{id}/trades``.
+
+    ProbabilityEdit fills are market-making edits, not trades; summing seeded
+    ``market['volume']`` attributes is not traded flow. A venue with zero
+    EventTrades must report zero trades and zero volume (hub-wahp / hub-eif7:
+    empty must not render as busy).
+    """
     market_snapshot = list(MARKETS.values())
     order_snapshot = list(ORDERS.values())
     trade_orders = [
         order
         for order in order_snapshot
-        if order["status"] == "filled" and order["type"] in {"ProbabilityEdit", "EventTrade"}
+        if order["status"] == "filled" and order["type"] == "EventTrade"
     ]
-    total_volume = sum(float(market["volume"]) for market in market_snapshot)
+    # Traded notional from the fills themselves — not seed market attributes.
+    total_volume = sum(float(order.get("notional", 0.0)) for order in trade_orders)
 
     return {
         "total_markets": len(market_snapshot),
