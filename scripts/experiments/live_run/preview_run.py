@@ -26,7 +26,6 @@ import json
 import os
 import ssl
 import sys
-import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -52,8 +51,12 @@ def _ctx():
 
 
 def _key():
-    return (os.environ.get("FUTARCHY_API_KEY")
-            or os.environ.get("FUTARCHY_EXP_KEY_47", ""))
+    key = (os.environ.get("FUTARCHY_API_KEY")
+           or os.environ.get("FUTARCHY_EXP_KEY_47"))
+    if not key:
+        sys.exit("no FUTARCHY_API_KEY / FUTARCHY_EXP_KEY_47 in env — "
+                 "source ~/.config/futarchy-exp/agent-keys.env first")
+    return key
 
 
 def live_marginal(variable_id: str, context: dict | None = None) -> float | None:
@@ -77,7 +80,15 @@ def live_marginal(variable_id: str, context: dict | None = None) -> float | None
 
 
 def live_prices() -> dict[str, float]:
-    return {k: (live_marginal(v) or 0.5) for k, v in VAR_OF.items()}
+    prices = {}
+    for k, v in VAR_OF.items():
+        p = live_marginal(v)
+        if p is None:
+            # never silently fall back to 50% — prompts built on wrong
+            # marginals would poison the dual elicitation
+            sys.exit(f"could not fetch live price for {v} (auth/network?) — aborting")
+        prices[k] = p
+    return prices
 
 
 def agent_briefs(prices: dict[str, float]) -> list[dict]:
@@ -85,18 +96,10 @@ def agent_briefs(prices: dict[str, float]) -> list[dict]:
     specs, filling {marginal} placeholders with live prices."""
     design = CONFIG["agent_info_design"]
     out, idx = [], 0
-    # map a brief's target question by keyword, for the {marginal} fill
-    def fill(brief):
-        for k in QUESTIONS:
-            if VAR_OF[k].split("_by_")[0].split("_in_")[0] in brief.lower() or k in brief:
-                return brief
-        return brief
     for grp in design.get("marginal_agents", []):
-        # infer which question this marginal group is about from its brief
-        qkey = next((k for k in QUESTIONS if QUESTIONS[k].split()[2].lower() in grp["brief"].lower()
-                     or k in grp["brief"]), list(QUESTIONS)[0])
+        qkey = grp["question"]  # explicit in question_set.json; KeyError = bad config
         for _ in range(grp["n"]):
-            info = grp["brief"].replace("{marginal}", f"{round(prices.get(qkey,0.5)*100)}%")
+            info = grp["brief"].replace("{marginal}", f"{round(prices[qkey]*100)}%")
             out.append({"id": f"marg{idx}", "class": "marginal", "info": info, "allow_conditional": True})
             idx += 1
     for grp in design.get("relational_agents", []):

@@ -144,7 +144,10 @@ def classify_and_apply(market: FactoredMarket, actions: list, combinatorial: boo
     for act in actions:
         kind = act.get("action")
         q = act.get("question")
-        p = float(act.get("probability"))
+        try:
+            p = float(act.get("probability"))
+        except (TypeError, ValueError):
+            continue  # malformed agent action; skip rather than crash the run
         p = min(0.98, max(0.02, p))
         if kind == "set_marginal" and q in VARS:
             used.add("marginal")

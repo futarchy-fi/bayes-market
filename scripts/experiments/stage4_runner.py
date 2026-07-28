@@ -18,7 +18,7 @@ Two deployment shapes:
      their own. That is the production form; this harness is the measured,
      scored version of the same loop.
 
-SAFETY: ExecutBackend defaults to DRY-RUN — it prints the exact POST it would
+SAFETY: ExchangeBackend defaults to DRY-RUN — it prints the exact POST it would
 send and sends nothing. Live trading requires execute=True AND a
 FUTARCHY_API_KEY, and should target a separate experiment namespace, not the
 public leaderboard. Nothing here fires a live trade without both.
@@ -31,6 +31,8 @@ from __future__ import annotations
 import json
 import os
 import ssl
+import sys
+import urllib.error
 import urllib.request
 
 from backend.inference.factored_market import FactoredMarket
@@ -99,7 +101,11 @@ class LocalBackend:
         m = self.comb if combinatorial else self.flat
         return {v: m.marginal(v, {})[YES] for v in self.var_ids}
 
-    def apply(self, decision, combinatorial, alpha=0.2):
+    def apply(self, decision, combinatorial, alpha=1.0):
+        # alpha=1.0 = full-target moves, matching ExchangeBackend's live LMSR
+        # semantics — the local flat arm must aggregate like the live comb arm
+        # or the arm comparison confounds mechanism with damping. Pass a lower
+        # alpha only for multi-round damped replays (stages 1b/2 style).
         m = self.comb if combinatorial else self.flat
         for act in decision:
             q = act.get("question")
@@ -186,14 +192,22 @@ class ExchangeBackend:
     def apply(self, decision, combinatorial=True):
         # combinatorial=True -> net venue (conditional edits propagate);
         # a flat arm would post to independent AMM markets instead.
+        # Returns [(body, (status, resp))] — the live run's per-order record.
+        out = []
         for act in decision:
             body = self._order_body(act)
             if not body:
                 continue
             if not self.execute:
                 print(f"  DRY-RUN (execute=False) POST /v1/net/orders  {json.dumps(body)}")
+                out.append((body, ("dry-run", None)))
                 continue
-            self._send("/v1/net/orders", body)
+            status, resp = self._send("/v1/net/orders", body)
+            if status != 200:
+                print(f"  ORDER FAILED {status}: {json.dumps(body)} -> {str(resp)[:120]}",
+                      file=sys.stderr)
+            out.append((body, (status, resp)))
+        return out
 
 
 def brier(preds: dict, outcomes: dict):

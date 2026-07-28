@@ -28,8 +28,8 @@
   "agent_info_design": {
     "_comment": "Information is split so no agent has the whole picture and some pieces are RELATIONAL (only the net/combinatorial market can absorb them). This is what makes it a real aggregation test, not a transcription task.",
     "marginal_agents": [
-      {"n": 3, "brief": "Your models put P(AGI training requirements met by 2041) around {marginal}. You have no information about how it relates to automation."},
-      {"n": 3, "brief": "Your models put P(AI automates 5% of goods tasks by 2039) around {marginal}. No information relating it to AGI."}
+      {"n": 3, "question": "AGI41", "brief": "Your models put P(AGI training requirements met by 2041) around {marginal}. You have no information about how it relates to automation."},
+      {"n": 3, "question": "GOODS39", "brief": "Your models put P(AI automates 5% of goods tasks by 2039) around {marginal}. No information relating it to AGI."}
     ],
     "relational_agents": [
       {"n": 3, "brief": "Your research: goods-and-services automation is strongly gated by AGI-level capability. When AGI training requirements are met, 5% goods automation follows within a couple of years far more often than when they are not.", "expresses": "P(GOODS39 | AGI41)"}
