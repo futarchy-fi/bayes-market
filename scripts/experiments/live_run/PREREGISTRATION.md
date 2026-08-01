@@ -115,7 +115,18 @@ pre-registered before the confirmatory run.
       preservation under re-expression, exact flat-arm order invariance,
       last-writer-wins pinned as a regression, flat arm cannot express
       dependence, arms start identical, target normalized)
-- [ ] Replicates with fresh elicitation, not only structural ideal agents
-- [ ] Live-path implementation checks (fees, rounding, target tolerance,
-      boundary behaviour, replay reproducibility)
+- [x] Replicates with fresh elicitation (3 total, distinct pre-registered sign
+      draws, mixed sonnet/haiku/opus, model-to-role rotated across replicates):
+      delta_KL = +0.050 / +0.050 / +0.056, comb near-exact on target in all
+      three. Relational agents declined to trade in the flat interface in 9/9
+      elicitations across replicates. The comb-interface no-op observed earlier
+      is STOCHASTIC, not model-deterministic: across haiku comb trials it was
+      empty/trade/empty — report as a no-op rate, not a capability claim.
+- [x] Live-path implementation checks (read-only, against api.futarchy.ai):
+      preview stake matches the closed-form b*log((1-p)/(1-q)) to 4 dp (the
+      engine's rounding of the returned fill); target==price previews a ~0.005
+      stake (harmless; the runner's 1e-4 tolerance skips such orders anyway);
+      targets 0.0/1.0 rejected with a clean 400 invalid_target; extreme
+      0.001/0.999 accepted with bounded ~300-credit stakes; conditional
+      preview quotes the live conditional price correctly.
 - [ ] Cost ceiling and capped canary before the full run
