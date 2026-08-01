@@ -30,7 +30,9 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from scripts.experiments.stage4_runner import build_prompt, ExchangeBackend  # noqa: E402
+import signal_design as sig  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 CONFIG = json.loads((HERE / "question_set.json").read_text())
@@ -91,26 +93,32 @@ def live_prices() -> dict[str, float]:
     return prices
 
 
-def agent_briefs(prices: dict[str, float]) -> list[dict]:
-    """Expand the info design into concrete per-agent (id, private_info, allow)
-    specs, filling {marginal} placeholders with live prices."""
+def agent_briefs(prices: dict[str, float], replicate: int = 0
+                 ) -> tuple[list[dict], object, list[dict]]:
+    """Expand the info design into concrete per-agent briefs from the
+    PRE-REGISTERED signal design (see signal_design.py).
+
+    The earlier version filled each marginal brief with the current live price,
+    which handed those agents a belief identical to the market's and therefore
+    no reason to trade at all (LMSR is strictly proper: moving the price away
+    from your own belief has negative expected score). Two adversarial reviews
+    confirmed the six marginal agents were no-ops and the flat arm was starved
+    of information. Now the signs are drawn from a seed BEFORE any price is
+    read, and the live snapshot enters only as the frozen common prior both
+    arms start from.
+
+    Returns (briefs, preregistration, realized_signals)."""
     design = CONFIG["agent_info_design"]
-    out, idx = [], 0
-    for grp in design.get("marginal_agents", []):
-        qkey = grp["question"]  # explicit in question_set.json; KeyError = bad config
-        for _ in range(grp["n"]):
-            info = grp["brief"].replace("{marginal}", f"{round(prices[qkey]*100)}%")
-            out.append({"id": f"marg{idx}", "class": "marginal", "info": info, "allow_conditional": True})
-            idx += 1
-    for grp in design.get("relational_agents", []):
-        for _ in range(grp["n"]):
-            out.append({"id": f"rel{idx}", "class": "relational", "info": grp["brief"],
-                        "allow_conditional": True})
-            idx += 1
-    return out
+    sd = CONFIG.get("signal_design", {})
+    prereg = sig.preregister(design, seed=int(sd.get("seed", 20260728)),
+                             replicate=replicate,
+                             accuracy=float(sd.get("accuracy", 0.60)),
+                             odds_ratio=float(sd.get("odds_ratio", 4.0)))
+    realized = sig.realize(prereg, prices)
+    return sig.render_briefs(realized, QUESTIONS, prices), prereg, realized
 
 
-def emit_prompts():
+def emit_prompts(replicate: int = 0):
     """DUAL ELICITATION (design corrected 2026-07-26 after adversarial review):
     each agent brief is elicited TWICE — once with the flat-only interface
     (marginal actions only → applied to the local flat book) and once with the
@@ -124,14 +132,24 @@ def emit_prompts():
     FactoredMarket is numerically identical to independent binary LMSRs
     (verified: cost/shares match the closed form; no cross-movement)."""
     prices = live_prices()
-    print(f"# live cluster prices: " + ", ".join(f"{k}={round(v*100)}%" for k, v in prices.items()),
+    print(f"# frozen common prior pi0 (live snapshot): "
+          + ", ".join(f"{k}={round(v*100)}%" for k, v in prices.items()),
           file=sys.stderr)
+    briefs, prereg, realized = agent_briefs(prices, replicate)
+    target = sig.full_information_target(prereg, prices, list(QUESTIONS))
+    print(f"# preregistration digest={prereg.digest()} replicate={replicate} "
+          f"delta={prereg.delta:.4f} OR={prereg.odds_ratio}", file=sys.stderr)
     specs = []
-    for b in agent_briefs(prices):
+    for b in briefs:
         for arm, allow in (("comb", True), ("flat", False)):
             specs.append({"id": f"{b['id']}-{arm}", "arm": arm, "class": b["class"],
                           "prompt": build_prompt(QUESTIONS, prices, b["info"], allow)})
-    print(json.dumps(specs, indent=1))
+    print(json.dumps({"preregistration": prereg.to_dict(),
+                      "digest": prereg.digest(),
+                      "pi0": prices,
+                      "realized_signals": realized,
+                      "full_information_target": target,
+                      "prompts": specs}, indent=1))
 
 
 def preview(decisions_path: str):
@@ -161,11 +179,12 @@ def preview(decisions_path: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--prompts", action="store_true", help="emit agent prompts (live prices)")
+    ap.add_argument("--prompts", action="store_true", help="emit agent prompts (frozen prior + pre-registered signals)")
+    ap.add_argument("--replicate", type=int, default=0, help="pre-registration replicate index")
     ap.add_argument("--preview", metavar="FILE", help="preview collected decisions (read-only)")
     args = ap.parse_args()
     if args.prompts:
-        emit_prompts()
+        emit_prompts(args.replicate)
     elif args.preview:
         preview(args.preview)
     else:
