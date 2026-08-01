@@ -57,6 +57,8 @@ def build_prompt(questions: dict[str, str], prices: dict[str, float],
             f"Questions:\n{q_lines}\n\nActions (use whichever fit your evidence):\n"
             + "\n".join(actions)
             + f"\n\nYour private evidence:\n  {private_info}\n\n"
+            f"Trade only where your evidence gives you an edge over the current "
+            f"price. If no action is warranted, return an empty array [].\n"
             f"Return ONLY the JSON array.")
 
 

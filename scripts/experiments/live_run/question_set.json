@@ -1,5 +1,5 @@
 {
-  "_comment": "Live-run question cluster: REAL variableIds from api.futarchy.ai/v1/net (fetched 2026-07-15). Chosen for GENUINE (non-deterministic) conditional structure — the scientifically load-bearing case, per the Stage 3 finding that pure-constraint ladders only test coherence. AGI drives automation: a real conditional edge in the live net.",
+  "_comment": "Live-run question cluster: REAL variableIds from api.futarchy.ai/v1/net (fetched 2026-07-15). Chosen for GENUINE (non-deterministic) conditional structure \u2014 the scientifically load-bearing case, per the Stage 3 finding that pure-constraint ladders only test coherence. AGI drives automation: a real conditional edge in the live net.",
   "exchange_base": "https://api.futarchy.ai",
   "questions": {
     "AGI41": {
@@ -20,25 +20,56 @@
     }
   },
   "genuine_conditional_edges": [
-    {"driver": "AGI41", "child": "GOODS39", "note": "live net edge; AGI training met -> goods automation. NON-deterministic (the load-bearing structure)."}
+    {
+      "driver": "AGI41",
+      "child": "GOODS39",
+      "note": "live net edge; AGI training met -> goods automation. NON-deterministic (the load-bearing structure)."
+    }
   ],
   "ladder_edges": [
-    {"from": "GOODS39", "to": "GOODS40", "note": "by-year implication; deterministic coherence only"}
+    {
+      "from": "GOODS39",
+      "to": "GOODS40",
+      "note": "by-year implication; deterministic coherence only"
+    }
   ],
   "agent_info_design": {
     "_comment": "Information is split so no agent has the whole picture and some pieces are RELATIONAL (only the net/combinatorial market can absorb them). This is what makes it a real aggregation test, not a transcription task.",
     "marginal_agents": [
-      {"n": 3, "question": "AGI41", "brief": "Your models put P(AGI training requirements met by 2041) around {marginal}. You have no information about how it relates to automation."},
-      {"n": 3, "question": "GOODS39", "brief": "Your models put P(AI automates 5% of goods tasks by 2039) around {marginal}. No information relating it to AGI."}
+      {
+        "n": 3,
+        "question": "AGI41",
+        "brief": "(superseded by signal_design: brief text now rendered by signal_design.MARGINAL_BRIEF)"
+      },
+      {
+        "n": 3,
+        "question": "GOODS39",
+        "brief": "(superseded by signal_design: brief text now rendered by signal_design.MARGINAL_BRIEF)"
+      }
     ],
     "relational_agents": [
-      {"n": 3, "brief": "Your research: goods-and-services automation is strongly gated by AGI-level capability. When AGI training requirements are met, 5% goods automation follows within a couple of years far more often than when they are not.", "expresses": "P(GOODS39 | AGI41)"}
+      {
+        "n": 3,
+        "brief": "(superseded by signal_design: rendered by signal_design.RELATIONAL_BRIEF)",
+        "expresses": "P(GOODS39 | AGI41)",
+        "driver": "AGI41",
+        "child": "GOODS39"
+      }
     ]
   },
   "measurement": {
     "coherence_now": "monotonicity + cross-edge consistency of net vs independent AMM prices (measurable immediately)",
     "vs_crowd_now": "net-implied conditionals vs the independent-market product (the 'model vs crowd' signal)",
-    "accuracy": "log-score on resolution — long-horizon for FTM (2039-2041); the fast accuracy verdict comes from the Stage 3 backtest, not this run",
-    "agent_pnl": "log-score payout per agent — does scoring reward the relational agents and punish false-independence polluters? (the thing the offline aggregation model could NOT test)"
+    "accuracy": "log-score on resolution \u2014 long-horizon for FTM (2039-2041); the fast accuracy verdict comes from the Stage 3 backtest, not this run",
+    "agent_pnl": "log-score payout per agent \u2014 does scoring reward the relational agents and punish false-independence polluters? (the thing the offline aggregation model could NOT test)"
+  },
+  "signal_design": {
+    "_comment": "Pre-registered private signals (see signal_design.py). Fixes the defect where marginal briefs were filled with the live price, leaving those agents with zero edge and no reason to trade under a strictly proper LMSR. Signs are derived from `seed` BEFORE any price is read; the live snapshot enters only as the frozen common prior pi0.",
+    "seed": 20260728,
+    "accuracy": 0.6,
+    "_accuracy_note": "binary signal accuracy alpha -> delta = log(alpha/(1-alpha)) = log 1.5; at pi0=43% this gives 53%/34%, at 58% gives 67%/48%",
+    "odds_ratio": 4.0,
+    "_odds_ratio_note": "dependence injected by the relational agents, applied MARGINAL-PRESERVINGLY so the relational treatment cannot leak into the marginals the flat arm can trade",
+    "replicates": "pass --replicate N to redraw the residual signs; balanced within even-sized question groups"
   }
 }
