@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import re
 import sys
@@ -27,6 +26,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_seeds_external import clamp, year_from_title  # noqa: E402  same clamp/expiry rule
 
 MCP_URL = "https://radiant.metaculus.com/mcp"
+# Refuse redirects so the bearer token never follows a 3xx to another host.
+_OPENER = urllib.request.build_opener(type("NoRedirect", (urllib.request.HTTPRedirectHandler,),
+                                           {"redirect_request": lambda *a, **k: None})())
 READ_TOOLS = frozenset({"read_canvas", "simulate_forecast_model", "get_metaculus_posts"})
 CONTEXT = "Reading a forecasting canvas to import its binary variables into a prediction market."
 
@@ -34,8 +36,8 @@ CONTEXT = "Reading a forecasting canvas to import its binary variables into a pr
 class Radiant:
     """Minimal MCP (streamable HTTP) client restricted to READ_TOOLS."""
 
-    def __init__(self, token: str, url: str = MCP_URL):
-        self.url, self.token, self.session, self.n = url, token, None, 0
+    def __init__(self, token: str):
+        self.token, self.session, self.n = token, None, 0
 
     def _post(self, body: dict) -> dict | None:
         headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json",
@@ -43,8 +45,8 @@ class Radiant:
                    "User-Agent": "bayes-market-radiant-seeds/1"}  # urllib's default UA gets 403
         if self.session:
             headers["Mcp-Session-Id"] = self.session
-        req = urllib.request.Request(self.url, json.dumps(body).encode(), headers)
-        with urllib.request.urlopen(req, timeout=180) as resp:
+        req = urllib.request.Request(MCP_URL, json.dumps(body).encode(), headers)
+        with _OPENER.open(req, timeout=180) as resp:
             self.session = resp.headers.get("Mcp-Session-Id") or self.session
             raw = resp.read().decode()
             if "text/event-stream" in (resp.headers.get("Content-Type") or ""):
@@ -85,23 +87,18 @@ def binary_kind(node: dict) -> str | None:
     return None
 
 
-def skip_key(node: dict) -> str:
-    meta = (node.get("data") or {}).get("metaculus")
-    return f"metaculus:{meta.get('type')}" if meta else node["node_type"]
-
-
 def fetch(client: Radiant, project_id: str) -> tuple[dict, dict, dict | None]:
     """Canvas, {post_id: post}, and simulation (None if no probability formulas)."""
     canvas = client.call("read_canvas", {"project_id": project_id})
     kinds = [(binary_kind(n), n) for n in canvas["nodes"]]
     post_ids = sorted({int(n["data"]["metaculus"]["post_id"]) for k, n in kinds if k == "metaculus"})
-    posts = {}
-    for i in range(0, len(post_ids), 100):
-        got = client.call("get_metaculus_posts", {"post_ids": post_ids[i:i + 100]})
-        posts.update({int(p["id"]): p for p in got["posts"]})
+    posts = {int(p["id"]): p for p in client.call("get_metaculus_posts", {"post_ids": post_ids})["posts"]} \
+        if post_ids else {}
     has_formula = any(k == "formula" for k, _ in kinds)
     sim = client.call("simulate_forecast_model",
                       {"project_id": project_id, "seed": 1, "iterations": 10000}) if has_formula else None
+    if sim is not None and sim.get("status") != "ok":
+        sys.exit(f"simulation failed: {sim.get('status')}")  # never a seeds file missing every formula
     return canvas, posts, sim
 
 
@@ -111,13 +108,13 @@ def build(project_id: str, canvas: dict, posts: dict, sim: dict | None, now: str
     listed: list[dict] = []
     markets: dict[str, dict] = {}
     vid_of: dict[str, str] = {}  # node id -> variableId
-    prefix = "r" + re.sub(r"[^a-z0-9]", "", project_id.lower())[:8] + "_"
-    sim_nodes = (sim or {}).get("nodes", {}) if (sim or {}).get("status") == "ok" else {}
+    prefix = f"r{project_id[:8].lower()}_"
+    sim_nodes = (sim or {}).get("nodes", {})
 
     for node in canvas["nodes"]:
         kind, d = binary_kind(node), node.get("data") or {}
         if kind is None:
-            skipped[skip_key(node)] += 1
+            skipped[f"metaculus:{d['metaculus'].get('type')}" if d.get("metaculus") else node["node_type"]] += 1
             continue
         ref = (d.get("forecasting") or {}).get("ref") or ""
         meta, post, reason = d.get("metaculus") or {}, None, None
@@ -126,18 +123,17 @@ def build(project_id: str, canvas: dict, posts: dict, sim: dict | None, now: str
             q = (post or {}).get("question") or {}
             latest = ((q.get("aggregations") or {}).get("recency_weighted") or {}).get("latest") or {}
             prob = (latest.get("centers") or [None])[0]
-            if post and (post.get("status") == "resolved" or q.get("resolution") is not None):
-                reason = "resolved"
+            if post and (post.get("status") != "open" or (post.get("scheduled_close_time") or now) < now):
+                reason = "closed"  # resolved, or closed and awaiting resolution
         elif kind == "probability":
             prob = (d.get("forecasting") or {}).get("probability")
         else:
             prob = (sim_nodes.get(ref) or {}).get("mean")
         vid = (prefix + re.sub(r"[^a-z0-9_]", "_", ref.lower()))[:64]
-        if reason is None and not (isinstance(prob, (int, float)) and not isinstance(prob, bool)
-                                   and math.isfinite(prob) and 0.0 <= prob <= 1.0):
+        if reason is None and not (isinstance(prob, (int, float)) and 0 <= prob <= 1):
             reason = {"metaculus": "no_community_prediction", "probability": "no_probability",
                       "formula": "no_simulation_mean"}[kind]
-        if reason is None and (not ref or vid in markets):
+        if reason is None and vid in markets:
             reason = "id_collision"
         if reason:
             skipped[reason] += 1
@@ -146,6 +142,7 @@ def build(project_id: str, canvas: dict, posts: dict, sim: dict | None, now: str
 
         p = clamp(float(prob))
         title = (d.get("title") or meta.get("title") or ref).strip()
+        year = year_from_title(title)  # a past year in a title is a baseline, not the deadline
         prov = {"source": "radiant", "project_id": project_id, "node_id": node["id"], "ref": ref,
                 "method": "radiant-import-v1", "parents": []}
         market = {
@@ -160,11 +157,11 @@ def build(project_id: str, canvas: dict, posts: dict, sim: dict | None, now: str
             "liquidity": 10000.0,
             "volume": 0.0,
             "created_at": now,
-            "expires_at": f"{year_from_title(title)}-12-31T23:59:59Z",
+            "expires_at": f"{year if year >= int(now[:4]) else 2031}-12-31T23:59:59Z",
             "provenance": prov,
         }
         if kind == "metaculus":
-            url = meta.get("url") or f"https://www.metaculus.com/questions/{meta['post_id']}/"
+            url = meta["url"]
             market["expires_at"] = post.get("scheduled_close_time") or market["expires_at"]
             prov.update(url=url, forecasters=latest.get("forecaster_count"))
             market["anchor"] = {"source": "metaculus", "ref": str(meta["post_id"]), "url": url,
@@ -176,7 +173,7 @@ def build(project_id: str, canvas: dict, posts: dict, sim: dict | None, now: str
     for e in canvas.get("edges", []):
         direction = (e.get("data") or {}).get("arrow_direction")
         src, dst = vid_of.get(e["source_node_id"]), vid_of.get(e["target_node_id"])
-        if src and dst and src != dst and direction in ("forward", "backward"):
+        if src and dst and direction in ("forward", "backward"):
             parent, child = (src, dst) if direction == "forward" else (dst, src)
             parents[child].add(parent)
     for child, ps in parents.items():
@@ -190,12 +187,9 @@ def main():
     ap.add_argument("--project", required=True, help="Radiant project uuid")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
-    token = os.environ.get("RADIANT_API_TOKEN")
-    if not token:
-        sys.exit("RADIANT_API_TOKEN is not set")
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    seeds, skipped, listed = build(args.project, *fetch(Radiant(token), args.project), now)
+    seeds, skipped, listed = build(args.project, *fetch(Radiant(os.environ["RADIANT_API_TOKEN"]), args.project), now)
     Path(args.out).write_text(json.dumps(seeds, indent=1))
     print(json.dumps({"project": args.project, "markets": len(seeds["markets"]),
                       "skipped": dict(skipped), "skipped_binary": listed}, indent=1), file=sys.stderr)
