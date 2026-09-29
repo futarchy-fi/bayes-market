@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.request
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
@@ -67,9 +68,14 @@ class Radiant:
             self._rpc("initialize", {"protocolVersion": "2025-03-26", "capabilities": {},
                                      "clientInfo": {"name": "bayes-market-radiant-seeds", "version": "1"}})
             self._post({"jsonrpc": "2.0", "method": "notifications/initialized"})
-        res = self._rpc("tools/call", {"name": name, "arguments":
-                                       {**args, "context": CONTEXT, "llm_model": "unknown"}})
-        text = res["content"][0]["text"]
+        for attempt in (1, 2):  # one retry after Radiant's rate-limit pause
+            res = self._rpc("tools/call", {"name": name, "arguments":
+                                           {**args, "context": CONTEXT, "llm_model": "unknown"}})
+            text = res["content"][0]["text"]
+            if not (res.get("isError") and "TOO_MANY_REQUESTS" in text and attempt == 1):
+                break
+            m = re.search(r'retry_after\W+(\d+)', text)
+            time.sleep(int(m.group(1)) if m else 10)
         if res.get("isError"):
             raise RuntimeError(f"{name}: {text[:300]}")
         return json.loads(text)
@@ -148,7 +154,7 @@ def build(project_id: str, canvas: dict, posts: dict, sim: dict | None, now: str
         market = {
             "id": vid,
             "title": title[:160],
-            "description": (f"{title}. Imported from Radiant project {project_id} "
+            "description": (f"{title.rstrip('.')}{'' if title[-1:] in '?!' else '.'} Imported from Radiant project {project_id} "
                             f"(node {ref}, {kind}). Value at import ({now}): {float(prob):.1%}."),
             "variableId": vid,
             "status": "active",
