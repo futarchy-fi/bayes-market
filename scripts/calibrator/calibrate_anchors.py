@@ -6,9 +6,9 @@ probability edit under the calibrator account, so it leaves an auditable order
 trail, pays/stakes like any other participant, and propagates through the
 combinatorial joint to every linked market.
 
-Anchor refresh: Manifold values are fetched live (public API). Metaculus is
-auth-gated — with METACULUS_TOKEN set we refresh via the API; otherwise the
-stored value from the last browser harvest is used and its age is logged.
+Anchor refresh: Manifold values are fetched live (public API). Metaculus
+community predictions are read through Radiant's MCP when RADIANT_API_TOKEN is
+set; otherwise the stored value is used until it is STALE_WARN_HOURS old.
 
 Exchange (report-only by default): set FUTARCHY_API_KEY and optionally
 FUTARCHY_API_URL, then pass --execute to trade. Use --paper (or
@@ -66,16 +66,30 @@ def fetch_manifold(ref: str) -> float | None:
         return None
 
 
-def fetch_metaculus(ref: str, token: str) -> float | None:
+def fetch_metaculus_cps(anchors: list[dict]) -> dict[str, float]:
+    """Live Metaculus community predictions for open questions, by post id.
+
+    Read through Radiant's MCP (RADIANT_API_TOKEN): the Metaculus REST API
+    returns no aggregations for our keys. Empty on any failure, so anchors
+    fall back to their stored value until it is stale.
+    """
+    refs = sorted({int(a["ref"]) for a in anchors if a["source"] == "metaculus"})
+    token = os.environ.get("RADIANT_API_TOKEN", "")
+    if not refs or not token:
+        return {}
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "import"))
+    from radiant_seeds import Radiant  # read-only client, refuses write tools
+
+    client, cps = Radiant(token), {}
     try:
-        q = http_json(f"https://www.metaculus.com/api/posts/{ref}/",
-                      headers={"Authorization": f"Token {token}"})
-        agg = (q.get("question") or {}).get("aggregations", {})
-        latest = (agg.get("recency_weighted") or {}).get("latest") or {}
-        centers = latest.get("centers") or []
-        return float(centers[0]) if centers else None
-    except (urllib.error.URLError, ValueError, KeyError, IndexError):
-        return None
+        for i in range(0, len(refs), 100):
+            for post in client.call("get_metaculus_posts", {"post_ids": refs[i:i + 100]})["posts"]:
+                latest = post["question"]["aggregations"]["recency_weighted"]["latest"] or {}
+                if post.get("status") == "open" and latest.get("centers"):
+                    cps[str(post["id"])] = float(latest["centers"][0])
+    except (OSError, RuntimeError, ValueError, KeyError, TypeError) as err:
+        LOG.warning("Radiant Metaculus fetch failed: %s", str(err)[:200])
+    return cps
 
 
 def anchor_age_hours(fetched_at: str) -> float:
@@ -86,7 +100,7 @@ def anchor_age_hours(fetched_at: str) -> float:
         return 1e9
 
 
-def fetch_anchor(anchor: dict, token: str) -> tuple[float | None, bool]:
+def fetch_anchor(anchor: dict, metaculus: dict[str, float]) -> tuple[float | None, bool]:
     """Return the live/fresh-enough anchor and whether a miss was stale."""
     source, ref = anchor["source"], anchor["ref"]
     target = None
@@ -95,8 +109,7 @@ def fetch_anchor(anchor: dict, token: str) -> tuple[float | None, bool]:
         target = fetch_manifold(ref)
         time.sleep(0.35)
     elif source == "metaculus":
-        if token:
-            target = fetch_metaculus(ref, token)
+        target = metaculus.get(str(ref))
         if target is None:
             age = anchor_age_hours(anchor.get("fetchedAt", ""))
             if age <= STALE_WARN_HOURS:
@@ -176,7 +189,7 @@ def run_exchange(
     client: HttpExchange,
     config: ExchangeConfig,
     *,
-    token: str = "",
+    metaculus: dict[str, float] | None = None,
     log_path: Path = LOG_PATH,
 ) -> dict:
     """Calibrate the exchange book within balance and new-stake limits."""
@@ -198,7 +211,7 @@ def run_exchange(
     spent = Decimal("0")
     for anchor in anchors:
         stats["checked"] += 1
-        target, stale = fetch_anchor(anchor, token)
+        target, stale = fetch_anchor(anchor, metaculus or {})
         if target is None:
             stats["stale_skipped" if stale else "fetch_failed"] += 1
             continue
@@ -264,7 +277,7 @@ def run_paper() -> None:
         sys.exit("BAYES_API is required (e.g. http://127.0.0.1:3206)")
     doc = json.loads(ANCHORS_PATH.read_text())
     anchors = doc["anchors"]
-    token = os.environ.get("METACULUS_TOKEN", "")
+    metaculus = fetch_metaculus_cps(anchors)
     LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -275,7 +288,7 @@ def run_paper() -> None:
     for anchor in anchors:
         stats["checked"] += 1
         source, ref = anchor["source"], anchor["ref"]
-        target, stale = fetch_anchor(anchor, token)
+        target, stale = fetch_anchor(anchor, metaculus)
         if target is None:
             stats["stale_skipped" if stale else "fetch_failed"] += 1
             continue
@@ -367,7 +380,7 @@ def main() -> None:
         os.environ.get("FUTARCHY_API_URL", "http://127.0.0.1:3210"), api_key,
     ) as client:
         stats = run_exchange(
-            anchors, client, config, token=os.environ.get("METACULUS_TOKEN", ""),
+            anchors, client, config, metaculus=fetch_metaculus_cps(anchors),
         )
     print(json.dumps(stats))
 
