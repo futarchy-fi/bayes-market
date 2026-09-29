@@ -1,0 +1,1871 @@
+{
+"canvas": {
+"edges": [],
+"nodes": [
+{
+"data": {
+"forecasting": {
+"expression": "if(d_blk >= 0, 1, 0)",
+"outputType": "probability",
+"ref": "c_blk"
+},
+"title": "Canary: Georgia Black share of early vote \u2265 2022 level (~27%)"
+},
+"id": "c_blk",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(gb_now + gb_drift >= 7, 1, 0)",
+"outputType": "probability",
+"ref": "c_gb"
+},
+"title": "Canary: generic ballot still \u2265 D+7 on Nov 2"
+},
+"id": "c_gb",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(d_hisp >= 1, 1, 0)",
+"outputType": "probability",
+"ref": "c_hisp"
+},
+"title": "Canary: Hispanic margin improves \u2265 1 pt for Talarico / Nixon in late TX & FL polls"
+},
+"id": "c_hisp",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(poll_ia + gb_drift + 1.0*d_wwc + 0.4*d_sub + 0.3*d_yng > 0 and poll_oh + 0.9*gb_drift + 0.9*d_wwc + 0.5*d_sub + 0.4*d_blk + 0.3*d_yng > 0, 1, 0)",
+"outputType": "probability",
+"ref": "c_mw"
+},
+"title": "Canary: Turek (IA) and Brown (OH) both still lead their final polling averages"
+},
+"id": "c_mw",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(d_sub >= 1, 1, 0)",
+"outputType": "probability",
+"ref": "c_sub"
+},
+"title": "Canary: suburban / college-white margin improves \u2265 1 pt for Dems in late GA/NC/TX polls"
+},
+"id": "c_sub",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(poll_tx + 0.9*gb_drift + 0.4*d_wwc + 0.7*d_sub + 0.9*d_hisp + 0.3*d_blk + 0.4*d_yng > 0, 1, 0)",
+"outputType": "probability",
+"ref": "c_tx"
+},
+"title": "Canary: Talarico still leads the final Texas polling average"
+},
+"id": "c_tx",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(d_wwc >= 0, 1, 0)",
+"outputType": "probability",
+"ref": "c_wwc"
+},
+"title": "Canary: late-Oct crosstabs show white non-college margin no worse for Dems than today"
+},
+"id": "c_wwc",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(d_yng >= 0, 1, 0)",
+"outputType": "probability",
+"ref": "c_yng"
+},
+"title": "Canary: 18\u201329 share of early vote \u2265 2022 level in MI / GA / NC"
+},
+"id": "c_yng",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -2,
+"p90": 2
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "d_blk",
+"unit": "pts"
+},
+"title": "Black turnout & support: drift (next 5 wks)"
+},
+"id": "d_blk",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -2,
+"p90": 2
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "d_hisp",
+"unit": "pts"
+},
+"title": "Hispanic: drift (next 5 wks)"
+},
+"id": "d_hisp",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -2,
+"p90": 2
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "d_sub",
+"unit": "pts"
+},
+"title": "White college / suburban: drift (next 5 wks)"
+},
+"id": "d_sub",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -2,
+"p90": 2
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "d_wwc",
+"unit": "pts"
+},
+"title": "White non-college: drift (next 5 wks)"
+},
+"id": "d_wwc",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -2,
+"p90": 2
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "d_yng",
+"unit": "pts"
+},
+"title": "Under-30 turnout: drift (next 5 wks)"
+},
+"id": "d_yng",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(dem_seats == 50, 1, 0)",
+"outputType": "probability",
+"ref": "dem_5050"
+},
+"title": "Exactly 50\u201350 (R control by tiebreak)"
+},
+"id": "dem_5050",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "dem_base",
+"unit": "seats",
+"value": 43
+},
+"title": "Democratic floor: seats not modeled"
+},
+"id": "dem_base",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(dem_seats >= 51, 1, 0)",
+"outputType": "probability",
+"ref": "dem_majority"
+},
+"title": "Democrats win Senate majority (\u2265 51 seats)"
+},
+"id": "dem_majority",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "dem_seats - 47",
+"outputType": "numeric",
+"ref": "dem_net_flips",
+"unit": "seats"
+},
+"title": "Net Democratic seat change"
+},
+"id": "dem_net_flips",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "dem_base + win_nc + win_oh + win_tx + win_ak + win_me + win_ia + win_ks + win_fl + win_ne + win_ga + win_nh + win_mi + win_mn",
+"outputType": "numeric",
+"ref": "dem_seats",
+"unit": "seats"
+},
+"title": "Democratic caucus seats after Nov 3 (distribution)"
+},
+"id": "dem_seats",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -2.5,
+"p90": 2.5
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "e_blk",
+"unit": "pts"
+},
+"title": "Black turnout & support: polling miss"
+},
+"id": "e_blk",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -3,
+"p50": -0.5,
+"p90": 2
+},
+"type": "skewed"
+},
+"outputType": "numeric",
+"ref": "e_hisp",
+"unit": "pts"
+},
+"title": "Hispanic: polling miss"
+},
+"id": "e_hisp",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -2.5,
+"p90": 2.5
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "e_sub",
+"unit": "pts"
+},
+"title": "White college / suburban: polling miss"
+},
+"id": "e_sub",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -3,
+"p50": -0.5,
+"p90": 2
+},
+"type": "skewed"
+},
+"outputType": "numeric",
+"ref": "e_wwc",
+"unit": "pts"
+},
+"title": "White non-college: polling miss"
+},
+"id": "e_wwc",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -2.5,
+"p90": 2.5
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "e_yng",
+"unit": "pts"
+},
+"title": "Under-30 turnout: polling miss"
+},
+"id": "e_yng",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -5,
+"p90": 5
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "err_ak",
+"unit": "pts"
+},
+"title": "AK \u00b7 state-specific noise (RCV)"
+},
+"id": "err_ak",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -4,
+"p90": 4
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "err_fl",
+"unit": "pts"
+},
+"title": "FL \u00b7 state-specific noise"
+},
+"id": "err_fl",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -3.5,
+"p90": 3.5
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "err_ga",
+"unit": "pts"
+},
+"title": "GA \u00b7 state-specific noise"
+},
+"id": "err_ga",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -3.5,
+"p90": 3.5
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "err_ia",
+"unit": "pts"
+},
+"title": "IA \u00b7 state-specific noise"
+},
+"id": "err_ia",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -4.5,
+"p90": 4.5
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "err_ks",
+"unit": "pts"
+},
+"title": "KS \u00b7 state-specific noise"
+},
+"id": "err_ks",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -4,
+"p90": 4
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "err_me",
+"unit": "pts"
+},
+"title": "ME \u00b7 state-specific noise"
+},
+"id": "err_me",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -3.5,
+"p90": 3.5
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "err_mi",
+"unit": "pts"
+},
+"title": "MI \u00b7 state-specific noise"
+},
+"id": "err_mi",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -3.5,
+"p90": 3.5
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "err_mn",
+"unit": "pts"
+},
+"title": "MN \u00b7 state-specific noise"
+},
+"id": "err_mn",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -3.5,
+"p90": 3.5
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "err_nc",
+"unit": "pts"
+},
+"title": "NC \u00b7 state-specific noise"
+},
+"id": "err_nc",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -6,
+"p90": 6
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "err_ne",
+"unit": "pts"
+},
+"title": "NE \u00b7 state-specific noise"
+},
+"id": "err_ne",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -3.5,
+"p90": 3.5
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "err_nh",
+"unit": "pts"
+},
+"title": "NH \u00b7 state-specific noise"
+},
+"id": "err_nh",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -3.5,
+"p90": 3.5
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "err_oh",
+"unit": "pts"
+},
+"title": "OH \u00b7 state-specific noise"
+},
+"id": "err_oh",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -3.5,
+"p90": 3.5
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "err_tx",
+"unit": "pts"
+},
+"title": "TX \u00b7 state-specific noise"
+},
+"id": "err_tx",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "d_blk + e_blk",
+"outputType": "numeric",
+"ref": "f_blk",
+"unit": "pts"
+},
+"title": "Factor: Black turnout & support swing"
+},
+"id": "f_blk",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "d_hisp + e_hisp",
+"outputType": "numeric",
+"ref": "f_hisp",
+"unit": "pts"
+},
+"title": "Factor: Hispanic swing"
+},
+"id": "f_hisp",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "d_sub + e_sub",
+"outputType": "numeric",
+"ref": "f_sub",
+"unit": "pts"
+},
+"title": "Factor: white college / suburban swing"
+},
+"id": "f_sub",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "d_wwc + e_wwc",
+"outputType": "numeric",
+"ref": "f_wwc",
+"unit": "pts"
+},
+"title": "Factor: white non-college swing"
+},
+"id": "f_wwc",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "d_yng + e_yng",
+"outputType": "numeric",
+"ref": "f_yng",
+"unit": "pts"
+},
+"title": "Factor: under-30 turnout swing"
+},
+"id": "f_yng",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "fund_ak",
+"unit": "pts (D\u2212R)",
+"value": -2
+},
+"title": "AK \u00b7 fundamentals prior"
+},
+"id": "fund_ak",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "fund_fl",
+"unit": "pts (D\u2212R)",
+"value": -7
+},
+"title": "FL \u00b7 fundamentals prior"
+},
+"id": "fund_fl",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "fund_ga",
+"unit": "pts (D\u2212R)",
+"value": 9
+},
+"title": "GA \u00b7 fundamentals prior"
+},
+"id": "fund_ga",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "fund_ia",
+"unit": "pts (D\u2212R)",
+"value": -3
+},
+"title": "IA \u00b7 fundamentals prior"
+},
+"id": "fund_ia",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "fund_ks",
+"unit": "pts (D\u2212R)",
+"value": -8
+},
+"title": "KS \u00b7 fundamentals prior"
+},
+"id": "fund_ks",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "fund_me",
+"unit": "pts (D\u2212R)",
+"value": 2
+},
+"title": "ME \u00b7 fundamentals prior"
+},
+"id": "fund_me",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "fund_mi",
+"unit": "pts (D\u2212R)",
+"value": 6
+},
+"title": "MI \u00b7 fundamentals prior"
+},
+"id": "fund_mi",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "fund_mn",
+"unit": "pts (D\u2212R)",
+"value": 10
+},
+"title": "MN \u00b7 fundamentals prior"
+},
+"id": "fund_mn",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "fund_nc",
+"unit": "pts (D\u2212R)",
+"value": 7
+},
+"title": "NC \u00b7 fundamentals prior"
+},
+"id": "fund_nc",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "fund_ne",
+"unit": "pts (I\u2212R)",
+"value": -7
+},
+"title": "NE \u00b7 fundamentals prior"
+},
+"id": "fund_ne",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "fund_nh",
+"unit": "pts (D\u2212R)",
+"value": 8
+},
+"title": "NH \u00b7 fundamentals prior"
+},
+"id": "fund_nh",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "fund_oh",
+"unit": "pts (D\u2212R)",
+"value": 1
+},
+"title": "OH \u00b7 fundamentals prior"
+},
+"id": "fund_oh",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "fund_tx",
+"unit": "pts (D\u2212R)",
+"value": -2
+},
+"title": "TX \u00b7 fundamentals prior"
+},
+"id": "fund_tx",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -3,
+"p90": 2
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "gb_drift",
+"unit": "pts"
+},
+"title": "Generic-ballot drift to Election Day"
+},
+"id": "gb_drift",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "gb_now",
+"unit": "pts (D\u2212R)",
+"value": 9.2
+},
+"title": "Generic ballot today (LV-adjusted)"
+},
+"id": "gb_now",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "w_polls*poll_ak + (1 - w_polls)*fund_ak + 1.0*nat_shift + 0.7*f_wwc + 0.3*f_sub + 0.05*f_hisp + 0.05*f_blk + 0.3*f_yng + err_ak",
+"outputType": "numeric",
+"ref": "m_ak",
+"unit": "pts (D\u2212R)"
+},
+"title": "AK \u00b7 simulated margin"
+},
+"id": "m_ak",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "w_polls*poll_fl + (1 - w_polls)*fund_fl + 0.9*nat_shift + 0.4*f_wwc + 0.5*f_sub + 0.8*f_hisp + 0.4*f_blk + 0.3*f_yng + r_sun + err_fl",
+"outputType": "numeric",
+"ref": "m_fl",
+"unit": "pts (D\u2212R)"
+},
+"title": "FL \u00b7 simulated margin"
+},
+"id": "m_fl",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "w_polls*poll_ga + (1 - w_polls)*fund_ga + 0.8*nat_shift + 0.4*f_wwc + 0.7*f_sub + 0.2*f_hisp + 0.9*f_blk + 0.4*f_yng + r_sun + err_ga",
+"outputType": "numeric",
+"ref": "m_ga",
+"unit": "pts (D\u2212R)"
+},
+"title": "GA \u00b7 simulated margin"
+},
+"id": "m_ga",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "w_polls*poll_ia + (1 - w_polls)*fund_ia + 1.0*nat_shift + 1.0*f_wwc + 0.4*f_sub + 0.05*f_hisp + 0.05*f_blk + 0.3*f_yng + r_mw + err_ia",
+"outputType": "numeric",
+"ref": "m_ia",
+"unit": "pts (D\u2212R)"
+},
+"title": "IA \u00b7 simulated margin"
+},
+"id": "m_ia",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "w_polls*poll_ks + (1 - w_polls)*fund_ks + 1.0*nat_shift + 0.7*f_wwc + 0.6*f_sub + 0.2*f_hisp + 0.1*f_blk + 0.2*f_yng + r_mw + err_ks",
+"outputType": "numeric",
+"ref": "m_ks",
+"unit": "pts (D\u2212R)"
+},
+"title": "KS \u00b7 simulated margin"
+},
+"id": "m_ks",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "w_polls*poll_me + (1 - w_polls)*fund_me + 1.1*nat_shift + 0.8*f_wwc + 0.4*f_sub + 0.3*f_yng + r_ne + err_me",
+"outputType": "numeric",
+"ref": "m_me",
+"unit": "pts (D\u2212R)"
+},
+"title": "ME \u00b7 simulated margin"
+},
+"id": "m_me",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "w_polls*poll_mi + (1 - w_polls)*fund_mi + 1.0*nat_shift + 0.7*f_wwc + 0.6*f_sub + 0.05*f_hisp + 0.5*f_blk + 0.5*f_yng + r_mw + err_mi",
+"outputType": "numeric",
+"ref": "m_mi",
+"unit": "pts (D\u2212R)"
+},
+"title": "MI \u00b7 simulated margin"
+},
+"id": "m_mi",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "w_polls*poll_mn + (1 - w_polls)*fund_mn + 1.0*nat_shift + 0.6*f_wwc + 0.6*f_sub + 0.05*f_hisp + 0.1*f_blk + 0.4*f_yng + r_mw + err_mn",
+"outputType": "numeric",
+"ref": "m_mn",
+"unit": "pts (D\u2212R)"
+},
+"title": "MN \u00b7 simulated margin"
+},
+"id": "m_mn",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "w_polls*poll_nc + (1 - w_polls)*fund_nc + 0.9*nat_shift + 0.5*f_wwc + 0.7*f_sub + 0.15*f_hisp + 0.7*f_blk + 0.4*f_yng + r_sun + err_nc",
+"outputType": "numeric",
+"ref": "m_nc",
+"unit": "pts (D\u2212R)"
+},
+"title": "NC \u00b7 simulated margin"
+},
+"id": "m_nc",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "w_polls*poll_ne + (1 - w_polls)*fund_ne + 0.9*nat_shift + 0.8*f_wwc + 0.4*f_sub + 0.15*f_hisp + 0.05*f_blk + 0.2*f_yng + r_mw + err_ne",
+"outputType": "numeric",
+"ref": "m_ne",
+"unit": "pts (I\u2212R)"
+},
+"title": "NE \u00b7 simulated margin"
+},
+"id": "m_ne",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "w_polls*poll_nh + (1 - w_polls)*fund_nh + 1.1*nat_shift + 0.6*f_wwc + 0.7*f_sub + 0.3*f_yng + r_ne + err_nh",
+"outputType": "numeric",
+"ref": "m_nh",
+"unit": "pts (D\u2212R)"
+},
+"title": "NH \u00b7 simulated margin"
+},
+"id": "m_nh",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "w_polls*poll_oh + (1 - w_polls)*fund_oh + 0.9*nat_shift + 0.9*f_wwc + 0.5*f_sub + 0.05*f_hisp + 0.4*f_blk + 0.3*f_yng + r_mw + err_oh",
+"outputType": "numeric",
+"ref": "m_oh",
+"unit": "pts (D\u2212R)"
+},
+"title": "OH \u00b7 simulated margin"
+},
+"id": "m_oh",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "w_polls*poll_tx + (1 - w_polls)*fund_tx + 0.9*nat_shift + 0.4*f_wwc + 0.7*f_sub + 0.9*f_hisp + 0.3*f_blk + 0.4*f_yng + r_sun + err_tx",
+"outputType": "numeric",
+"ref": "m_tx",
+"unit": "pts (D\u2212R)"
+},
+"title": "TX \u00b7 simulated margin"
+},
+"id": "m_tx",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -3.5,
+"p90": 3.5
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "nat_miss",
+"unit": "pts"
+},
+"title": "National polling miss (Election Day)"
+},
+"id": "nat_miss",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "gb_drift + nat_miss",
+"outputType": "numeric",
+"ref": "nat_shift",
+"unit": "pts"
+},
+"title": "National shift vs. today's polls"
+},
+"id": "nat_shift",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "probability",
+"ref": "p_osborn_caucus",
+"value": 0.55
+},
+"title": "P(Osborn caucuses with Democrats if he wins)"
+},
+"id": "p_osborn_caucus",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "poll_ak",
+"unit": "pts (D\u2212R)",
+"value": 2.3
+},
+"title": "AK \u00b7 polling average (final-round H2H)"
+},
+"id": "poll_ak",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "poll_fl",
+"unit": "pts (D\u2212R)",
+"value": -6.5
+},
+"title": "FL (special) \u00b7 polling average"
+},
+"id": "poll_fl",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "poll_ga",
+"unit": "pts (D\u2212R)",
+"value": 8
+},
+"title": "GA \u00b7 polling average"
+},
+"id": "poll_ga",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "poll_ia",
+"unit": "pts (D\u2212R)",
+"value": 1.2
+},
+"title": "IA \u00b7 polling average"
+},
+"id": "poll_ia",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "poll_ks",
+"unit": "pts (D\u2212R)",
+"value": -1.5
+},
+"title": "KS \u00b7 polling average"
+},
+"id": "poll_ks",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "poll_me",
+"unit": "pts (D\u2212R)",
+"value": 1.5
+},
+"title": "ME \u00b7 polling average"
+},
+"id": "poll_me",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "poll_mi",
+"unit": "pts (D\u2212R)",
+"value": 3.1
+},
+"title": "MI \u00b7 polling average"
+},
+"id": "poll_mi",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "poll_mn",
+"unit": "pts (D\u2212R)",
+"value": 1.8
+},
+"title": "MN \u00b7 polling average"
+},
+"id": "poll_mn",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "poll_nc",
+"unit": "pts (D\u2212R)",
+"value": 8
+},
+"title": "NC \u00b7 polling average"
+},
+"id": "poll_nc",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "poll_ne",
+"unit": "pts (I\u2212R)",
+"value": -2
+},
+"title": "NE \u00b7 polling average (assumed)"
+},
+"id": "poll_ne",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "poll_nh",
+"unit": "pts (D\u2212R)",
+"value": 6.4
+},
+"title": "NH \u00b7 polling average"
+},
+"id": "poll_nh",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "poll_oh",
+"unit": "pts (D\u2212R)",
+"value": 4
+},
+"title": "OH (special) \u00b7 polling average"
+},
+"id": "poll_oh",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "poll_tx",
+"unit": "pts (D\u2212R)",
+"value": 3
+},
+"title": "TX \u00b7 polling average"
+},
+"id": "poll_tx",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -2,
+"p90": 2
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "r_mw",
+"unit": "pts"
+},
+"title": "Regional miss: Midwest / Plains (OH, IA, MI, MN, KS, NE)"
+},
+"id": "r_mw",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -2,
+"p90": 2
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "r_ne",
+"unit": "pts"
+},
+"title": "Regional miss: Northern New England (ME, NH)"
+},
+"id": "r_ne",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"p10": -2,
+"p90": 2
+},
+"type": "bell_curve"
+},
+"outputType": "numeric",
+"ref": "r_sun",
+"unit": "pts"
+},
+"title": "Regional miss: Sun Belt (TX, GA, NC, FL)"
+},
+"id": "r_sun",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"title": "Democratic-held seats \u2014 defenses (GA, NH, MI, MN)"
+},
+"id": "t_dheld",
+"node_type": "text-node"
+},
+{
+"data": {
+"title": "How to read: each margin formula's constants are the loadings (0.9\u00b7f_hisp = Texas moves 0.9 pt per 1 pt Hispanic swing). Elasticity is the constant on nat_shift. Dem floor 43 = 34 caucus seats not up + 9 safe D seats up; 51 needed (VP Vance breaks 50\u201350 for R). Inputs as of 28 Sep 2026 (Silver Bulletin, RCP averages)."
+},
+"id": "t_howto",
+"node_type": "text-node"
+},
+{
+"data": {
+"title": "Republican-held seats \u2014 flip targets (NC, OH, TX, AK, ME, IA, KS, FL, NE)"
+},
+"id": "t_rheld",
+"node_type": "text-node"
+},
+{
+"data": {
+"title": "1 \u00b7 National environment (shared by every race)"
+},
+"id": "t_sec1",
+"node_type": "text-node"
+},
+{
+"data": {
+"title": "2 \u00b7 Demographic & regional swing factors. Row 1 = drift over the next 5 weeks (observable). Row 2 = Election-Day polling miss (unobservable). Row 3 = factor = drift + miss."
+},
+"id": "t_sec2",
+"node_type": "text-node"
+},
+{
+"data": {
+"title": "3 \u00b7 Canaries \u2014 observable before Nov 3. Each is a child of the drift nodes above; if you observe one, narrow the parent drift distribution and re-simulate."
+},
+"id": "t_sec3",
+"node_type": "text-node"
+},
+{
+"data": {
+"title": "4 \u00b7 Competitive races only (safe seats excluded). Margin = 0.75\u00b7polls + 0.25\u00b7fundamentals + elasticity\u00b7national shift + \u03a3 loading\u00b7factor + state noise. Positive = Democrat wins."
+},
+"id": "t_sec4",
+"node_type": "text-node"
+},
+{
+"data": {
+"title": "5 \u00b7 Seat count & majority (target)"
+},
+"id": "t_sec5",
+"node_type": "text-node"
+},
+{
+"data": {
+"title": "2026 U.S. Senate \u2014 will Democrats win a majority? (Silver-style correlated Monte Carlo)"
+},
+"id": "t_title",
+"node_type": "text-node"
+},
+{
+"data": {
+"forecasting": {
+"distribution": {
+"parameters": {
+"max": 1,
+"min": 0
+},
+"type": "uniform"
+},
+"outputType": "numeric",
+"ref": "u_osborn"
+},
+"title": "Osborn caucus draw (uniform 0\u20131)"
+},
+"id": "u_osborn",
+"node_type": "forecast-distribution-node"
+},
+{
+"data": {
+"forecasting": {
+"outputType": "numeric",
+"ref": "w_polls",
+"value": 0.75
+},
+"title": "Weight on polls vs. fundamentals"
+},
+"id": "w_polls",
+"node_type": "forecast-parameter-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(m_ak > 0, 1, 0)",
+"outputType": "probability",
+"ref": "win_ak"
+},
+"title": "Alaska: Peltola (D) wins"
+},
+"id": "win_ak",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(m_fl > 0, 1, 0)",
+"outputType": "probability",
+"ref": "win_fl"
+},
+"title": "Florida: Nixon (D) wins"
+},
+"id": "win_fl",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(m_ga > 0, 1, 0)",
+"outputType": "probability",
+"ref": "win_ga"
+},
+"title": "Georgia: Ossoff (D) holds"
+},
+"id": "win_ga",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(m_ia > 0, 1, 0)",
+"outputType": "probability",
+"ref": "win_ia"
+},
+"title": "Iowa: Turek (D) wins"
+},
+"id": "win_ia",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(m_ks > 0, 1, 0)",
+"outputType": "probability",
+"ref": "win_ks"
+},
+"title": "Kansas: Hamilton (D) wins"
+},
+"id": "win_ks",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(m_me > 0, 1, 0)",
+"outputType": "probability",
+"ref": "win_me"
+},
+"title": "Maine: Jackson (D) wins"
+},
+"id": "win_me",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(m_mi > 0, 1, 0)",
+"outputType": "probability",
+"ref": "win_mi"
+},
+"title": "Michigan: El-Sayed (D) holds"
+},
+"id": "win_mi",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(m_mn > 0, 1, 0)",
+"outputType": "probability",
+"ref": "win_mn"
+},
+"title": "Minnesota: Flanagan (D) holds"
+},
+"id": "win_mn",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(m_nc > 0, 1, 0)",
+"outputType": "probability",
+"ref": "win_nc"
+},
+"title": "North Carolina: Cooper (D) wins"
+},
+"id": "win_nc",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(m_ne > 0 and u_osborn < p_osborn_caucus, 1, 0)",
+"outputType": "probability",
+"ref": "win_ne"
+},
+"title": "Nebraska: Osborn wins & caucuses with Dems"
+},
+"id": "win_ne",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(m_nh > 0, 1, 0)",
+"outputType": "probability",
+"ref": "win_nh"
+},
+"title": "New Hampshire: Pappas (D) holds"
+},
+"id": "win_nh",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(m_oh > 0, 1, 0)",
+"outputType": "probability",
+"ref": "win_oh"
+},
+"title": "Ohio: Brown (D) wins"
+},
+"id": "win_oh",
+"node_type": "forecast-formula-node"
+},
+{
+"data": {
+"forecasting": {
+"expression": "if(m_tx > 0, 1, 0)",
+"outputType": "probability",
+"ref": "win_tx"
+},
+"title": "Texas: Talarico (D) wins"
+},
+"id": "win_tx",
+"node_type": "forecast-formula-node"
+}
+]
+},
+"posts": {},
+"sim": {
+"nodes": {
+"c_blk": {
+"mean": 0.5024
+},
+"c_gb": {
+"mean": 0.8147
+},
+"c_hisp": {
+"mean": 0.2581
+},
+"c_mw": {
+"mean": 0.6092
+},
+"c_sub": {
+"mean": 0.2477
+},
+"c_tx": {
+"mean": 0.8296
+},
+"c_wwc": {
+"mean": 0.5037
+},
+"c_yng": {
+"mean": 0.5068
+},
+"d_blk": {
+"mean": 0.00654940015504604
+},
+"d_hisp": {
+"mean": 0.010642889244425403
+},
+"d_sub": {
+"mean": -0.013103627958046286
+},
+"d_wwc": {
+"mean": 0.006258934390976433
+},
+"d_yng": {
+"mean": 0.03086685939687694
+},
+"dem_5050": {
+"mean": 0.0956
+},
+"dem_base": {
+"mean": 43
+},
+"dem_majority": {
+"mean": 0.5187
+},
+"dem_seats": {
+"mean": 50.2625
+},
+"e_blk": {
+"mean": -0.014803777314156802
+},
+"e_hisp": {
+"mean": -0.5053681268020065
+},
+"e_sub": {
+"mean": -0.014102211254784067
+},
+"e_wwc": {
+"mean": -0.49834514022069215
+},
+"e_yng": {
+"mean": -0.06319671115901888
+},
+"err_ak": {
+"mean": 0.02091076017309938
+},
+"err_fl": {
+"mean": -0.02673115661382819
+},
+"err_ga": {
+"mean": -0.005613490870888546
+},
+"err_ia": {
+"mean": -0.01808247235551664
+},
+"err_ks": {
+"mean": -0.010868189898955851
+},
+"err_me": {
+"mean": -0.0029953526183239126
+},
+"err_mi": {
+"mean": 0.019817021575176615
+},
+"err_mn": {
+"mean": -0.041317792251132905
+},
+"err_nc": {
+"mean": -0.009147543860072133
+},
+"err_ne": {
+"mean": 0.09567367283290891
+},
+"err_nh": {
+"mean": -0.06629393057943563
+},
+"err_oh": {
+"mean": 0.017354097218863856
+},
+"err_tx": {
+"mean": -0.04329112628427407
+},
+"f_blk": {
+"mean": -0.008254377159110827
+},
+"f_hisp": {
+"mean": -0.49472523755758174
+},
+"f_sub": {
+"mean": -0.02720583921283032
+},
+"f_wwc": {
+"mean": -0.49208620582971496
+},
+"f_yng": {
+"mean": -0.03232985176214173
+},
+"fund_ak": {
+"mean": -2
+},
+"fund_fl": {
+"mean": -7
+},
+"fund_ga": {
+"mean": 9
+},
+"fund_ia": {
+"mean": -3
+},
+"fund_ks": {
+"mean": -8
+},
+"fund_me": {
+"mean": 2
+},
+"fund_mi": {
+"mean": 6
+},
+"fund_mn": {
+"mean": 10
+},
+"fund_nc": {
+"mean": 7
+},
+"fund_ne": {
+"mean": -7
+},
+"fund_nh": {
+"mean": 8
+},
+"fund_oh": {
+"mean": 1
+},
+"fund_tx": {
+"mean": -2
+},
+"gb_drift": {
+"mean": -0.4886188104767765
+},
+"gb_now": {
+"mean": 9.199999999998308
+},
+"m_ak": {
+"mean": 0.3665496186924106
+},
+"m_fl": {
+"mean": -7.718646878814927
+},
+"m_ga": {
+"mean": 7.510693698801351
+},
+"m_ia": {
+"mean": -0.9141993270275481
+},
+"m_ks": {
+"mean": -4.1111888699800225
+},
+"m_me": {
+"mean": 0.6773909629330244
+},
+"m_mi": {
+"mean": 2.930704420735461
+},
+"m_mn": {
+"mean": 2.950312963531982
+},
+"m_nc": {
+"mean": 6.9351490516017265
+},
+"m_ne": {
+"mean": -4.0990763683155595
+},
+"m_nh": {
+"mean": 5.879347874374023
+},
+"m_oh": {
+"mean": 2.3140253581399794
+},
+"m_tx": {
+"mean": 0.5824719124559696
+},
+"nat_miss": {
+"mean": -0.0032722988947846395
+},
+"nat_shift": {
+"mean": -0.4918911093715613
+},
+"p_osborn_caucus": {
+"mean": 0.5500000000001022
+},
+"poll_ak": {
+"mean": 2.299999999999577
+},
+"poll_fl": {
+"mean": -6.5
+},
+"poll_ga": {
+"mean": 8
+},
+"poll_ia": {
+"mean": 1.2000000000001434
+},
+"poll_ks": {
+"mean": -1.5
+},
+"poll_me": {
+"mean": 1.5
+},
+"poll_mi": {
+"mean": 3.0999999999994494
+},
+"poll_mn": {
+"mean": 1.799999999999662
+},
+"poll_nc": {
+"mean": 8
+},
+"poll_ne": {
+"mean": -2
+},
+"poll_nh": {
+"mean": 6.400000000001016
+},
+"poll_oh": {
+"mean": 4
+},
+"poll_tx": {
+"mean": 3
+},
+"r_mw": {
+"mean": -0.016409267521146912
+},
+"r_ne": {
+"mean": 0.010716791737609336
+},
+"r_sun": {
+"mean": -0.004995425390070378
+},
+"u_osborn": {
+"mean": 0.4964623533516889
+},
+"w_polls": {
+"mean": 0.75
+},
+"win_ak": {
+"mean": 0.5239
+},
+"win_fl": {
+"mean": 0.0849
+},
+"win_ga": {
+"mean": 0.917
+},
+"win_ia": {
+"mean": 0.431
+},
+"win_ks": {
+"mean": 0.2365
+},
+"win_me": {
+"mean": 0.5498
+},
+"win_mi": {
+"mean": 0.7019
+},
+"win_mn": {
+"mean": 0.7102
+},
+"win_nc": {
+"mean": 0.8996
+},
+"win_ne": {
+"mean": 0.1458
+},
+"win_nh": {
+"mean": 0.8556
+},
+"win_oh": {
+"mean": 0.6663
+},
+"win_tx": {
+"mean": 0.54
+}
+},
+"status": "ok"
+}
+}
