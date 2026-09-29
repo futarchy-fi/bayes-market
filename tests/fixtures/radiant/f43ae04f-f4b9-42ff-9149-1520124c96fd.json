@@ -1,0 +1,807 @@
+{
+"canvas": {
+"edges": [
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-attribution-target",
+"source_node_id": "constraint-attribution",
+"target_node_id": "target-policy-window"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-bio-target",
+"source_node_id": "trigger-bio",
+"target_node_id": "target-policy-window"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-bounded-target",
+"source_node_id": "enable-bounded",
+"target_node_id": "target-policy-window"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-bridge-target",
+"source_node_id": "enable-bridge",
+"target_node_id": "target-policy-window"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-bubble-reframe",
+"source_node_id": "trigger-bubble",
+"target_node_id": "scenario-reframe"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-bubble-target",
+"source_node_id": "trigger-bubble",
+"target_node_id": "target-policy-window"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-coalition-bridge",
+"source_node_id": "action-coalition",
+"target_node_id": "enable-bridge"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-cyber-target",
+"source_node_id": "trigger-cyber",
+"target_node_id": "target-policy-window"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-dashboard-main",
+"source_node_id": "action-dashboard",
+"target_node_id": "main-pacing"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-dc-faction",
+"source_node_id": "trigger-datacenter",
+"target_node_id": "f-dc-action"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-dc-target",
+"source_node_id": "trigger-datacenter",
+"target_node_id": "target-policy-window"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-deal-scenario",
+"source_node_id": "f-deal",
+"target_node_id": "scenario-deal"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-demos-verification",
+"source_node_id": "action-demos",
+"target_node_id": "enable-verification"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-election-partisan",
+"source_node_id": "constraint-election",
+"target_node_id": "f-partisan"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-election-target",
+"source_node_id": "constraint-election",
+"target_node_id": "target-policy-window"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-h1-main",
+"source_node_id": "horizon-1m",
+"target_node_id": "main-pacing"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-h3-main",
+"source_node_id": "horizon-3m",
+"target_node_id": "main-pacing"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-he-main",
+"source_node_id": "horizon-early27",
+"target_node_id": "main-pacing"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-hf-target",
+"source_node_id": "trigger-hf",
+"target_node_id": "target-policy-window"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-incident-crack",
+"source_node_id": "f-incident",
+"target_node_id": "scenario-crackdown"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-incident-deal",
+"source_node_id": "f-incident",
+"target_node_id": "f-deal"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-jobs-f",
+"source_node_id": "trigger-jobs",
+"target_node_id": "f-jobs"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-jobs-target",
+"source_node_id": "trigger-jobs",
+"target_node_id": "target-policy-window"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-lab-demos",
+"source_node_id": "known-lab-milestone",
+"target_node_id": "action-demos"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-lab-verification",
+"source_node_id": "known-lab-milestone",
+"target_node_id": "enable-verification"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-lameduck-h3",
+"source_node_id": "action-lameduck",
+"target_node_id": "horizon-3m"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-main-target",
+"source_node_id": "main-pacing",
+"target_node_id": "target-policy-window"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-mc-china-race",
+"source_node_id": "mc-us-china-ai-deal",
+"target_node_id": "constraint-race"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-mc-congress-h3",
+"source_node_id": "mc-2026-congress-control",
+"target_node_id": "horizon-3m"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-mc-safety-deal",
+"source_node_id": "mc-us-ai-safety-2026",
+"target_node_id": "f-deal"
+},
+{
+"data": {
+"arrow_direction": "backward"
+},
+"id": "e-notes-main",
+"source_node_id": "forecast-notes",
+"target_node_id": "main-pacing"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-package-target",
+"source_node_id": "action-package",
+"target_node_id": "target-policy-window"
+},
+{
+"data": {
+"arrow_direction": "backward"
+},
+"id": "e-packets-cyber",
+"source_node_id": "action-packets",
+"target_node_id": "trigger-cyber"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-partisan-stalemate",
+"source_node_id": "f-partisan",
+"target_node_id": "scenario-stalemate"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-plateau-f",
+"source_node_id": "trigger-plateau",
+"target_node_id": "f-plateau"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-plateau-reframe",
+"source_node_id": "trigger-plateau",
+"target_node_id": "scenario-reframe"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-plateau-target",
+"source_node_id": "trigger-plateau",
+"target_node_id": "target-policy-window"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-preemption-target",
+"source_node_id": "constraint-preemption",
+"target_node_id": "target-policy-window"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-race-target",
+"source_node_id": "constraint-race",
+"target_node_id": "target-policy-window"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-ratepayer-fdc",
+"source_node_id": "known-ratepayer",
+"target_node_id": "f-dc-action"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-target-coalition",
+"source_node_id": "target-policy-window",
+"target_node_id": "f-coalition"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-target-deal",
+"source_node_id": "target-policy-window",
+"target_node_id": "f-deal"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-trump-deal",
+"source_node_id": "f-trump",
+"target_node_id": "f-deal"
+},
+{
+"data": {
+"arrow_direction": "forward"
+},
+"id": "e-verification-target",
+"source_node_id": "enable-verification",
+"target_node_id": "target-policy-window"
+}
+],
+"nodes": [
+{
+"data": {
+"title": "4. Build a messenger matrix before the crisis"
+},
+"id": "action-coalition",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "5. Maintain a weekly trigger dashboard"
+},
+"id": "action-dashboard",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "3. Run verification demonstrations"
+},
+"id": "action-demos",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "6. Prepare two post-election pathways"
+},
+"id": "action-lameduck",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "2. Define a minimum viable pacing package"
+},
+"id": "action-package",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "1. Pre-draft four 24-hour response packets"
+},
+"id": "action-packets",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Constraint: attribution and causal ambiguity"
+},
+"id": "constraint-attribution",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Constraint: election-driven politicization"
+},
+"id": "constraint-election",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Constraint: state preemption fight"
+},
+"id": "constraint-preemption",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Constraint: race-with-China / acceleration frame"
+},
+"id": "constraint-race",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Enabler: bounded, threat-specific framing"
+},
+"id": "enable-bounded",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Enabler: unusual coalition bridge"
+},
+"id": "enable-bridge",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Enabler: verification that works in practice"
+},
+"id": "enable-verification",
+"node_type": "custom-node"
+},
+{
+"data": {
+"forecasting": {
+"probability": 0.5,
+"ref": "bounded_coalition_dec24"
+},
+"title": "By Dec 24: cross-partisan coalition around a bounded package (50%)"
+},
+"id": "f-coalition",
+"node_type": "forecast-binary-probability-node"
+},
+{
+"data": {
+"forecasting": {
+"probability": 0.7,
+"ref": "datacenter_action_dec24"
+},
+"title": "By Dec 24: additional binding data-center cost or siting action (70%)"
+},
+"id": "f-dc-action",
+"node_type": "forecast-binary-probability-node"
+},
+{
+"data": {
+"forecasting": {
+"probability": 0.4,
+"ref": "federal_commitment_dec24"
+},
+"title": "By Dec 24: concrete federal frontier-safety commitment (40%)"
+},
+"id": "f-deal",
+"node_type": "forecast-binary-probability-node"
+},
+{
+"data": {
+"forecasting": {
+"probability": 0.15,
+"ref": "major_incident_dec24"
+},
+"title": "By Dec 24: new AI-enabled incident with deaths or >$100M damage (15%)"
+},
+"id": "f-incident",
+"node_type": "forecast-binary-probability-node"
+},
+{
+"data": {
+"forecasting": {
+"probability": 0.03,
+"ref": "jobs_salience_dec24"
+},
+"title": "By Dec 24: AI job displacement becomes a top-tier national issue (35%)"
+},
+"id": "f-jobs",
+"node_type": "forecast-binary-probability-node"
+},
+{
+"data": {
+"forecasting": {
+"probability": 0.65,
+"ref": "politicization_dec24"
+},
+"title": "By Dec 24: AI pacing becomes more partisan/identity-coded (65%)"
+},
+"id": "f-partisan",
+"node_type": "forecast-binary-probability-node"
+},
+{
+"data": {
+"forecasting": {
+"probability": 0.02,
+"ref": "scaling_plateau_dec24"
+},
+"title": "By Dec 24: clear frontier scaling plateau is widely accepted (8%)"
+},
+"id": "f-plateau",
+"node_type": "forecast-binary-probability-node"
+},
+{
+"data": {
+"forecasting": {
+"probability": 0.3,
+"ref": "trump_safeguard_dec24"
+},
+"title": "By Dec 24: Trump endorses a mandatory frontier safeguard (30%)"
+},
+"id": "f-trump",
+"node_type": "forecast-binary-probability-node"
+},
+{
+"data": {
+"title": "Forecast definitions and update rule"
+},
+"id": "forecast-notes",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "ROBUST ACTIONS NOW"
+},
+"id": "hdr-actions",
+"node_type": "text-node"
+},
+{
+"data": {
+"title": "PACING THE FRONTIER"
+},
+"id": "hdr-center",
+"node_type": "text-node"
+},
+{
+"data": {
+"title": "FEASIBILITY & POLITICS"
+},
+"id": "hdr-pathways",
+"node_type": "text-node"
+},
+{
+"data": {
+"title": "HORIZONS & FORCING EVENTS"
+},
+"id": "hdr-timeline",
+"node_type": "text-node"
+},
+{
+"data": {
+"title": "POLICY-WINDOW TRIGGERS"
+},
+"id": "hdr-triggers",
+"node_type": "text-node"
+},
+{
+"data": {
+"title": "By October 24: narrative consolidation"
+},
+"id": "horizon-1m",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "By December 24: election + lame-duck window"
+},
+"id": "horizon-3m",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Early 2027: institutionalization test"
+},
+"id": "horizon-early27",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Near-term forcing event: lab security milestone"
+},
+"id": "known-lab-milestone",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Known baseline: ratepayer policy already moving"
+},
+"id": "known-ratepayer",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Pacing the frontier: 1\u20133 month world model"
+},
+"id": "main-pacing",
+"node_type": "custom-node"
+},
+{
+"data": {
+"forecasting": {
+"ref": "q34484"
+},
+"metaculus": {
+"post_id": 34484,
+"title": "Which party will control the US Congress following the 2026 midterm elections?",
+"type": "multiple_choice",
+"url": "https://www.metaculus.com/questions/34484/us-congress-control-after-2026-midterms/"
+}
+},
+"id": "mc-2026-congress-control",
+"node_type": "metaculus-question-node"
+},
+{
+"data": {
+"forecasting": {
+"ref": "q41193"
+},
+"metaculus": {
+"post_id": 41193,
+"title": "Will the U.S. enact an AI safety federal statute or executive order in 2026?",
+"type": "binary",
+"url": "https://www.metaculus.com/questions/41193/i-safety-law-enacted-in-the-us-in-2026/"
+}
+},
+"id": "mc-us-ai-safety-2026",
+"node_type": "metaculus-question-node"
+},
+{
+"data": {
+"forecasting": {
+"ref": "q44880"
+},
+"metaculus": {
+"post_id": 44880,
+"title": "Will any 2026 US-China AI agreement include semiconductor or compute export-control concessions?",
+"type": "binary",
+"url": "https://www.metaculus.com/questions/44880/will-a-2026-us-china-ai-agreement-include-export-control-concessions/"
+}
+},
+"id": "mc-us-china-ai-deal",
+"node_type": "metaculus-question-node"
+},
+{
+"data": {
+"title": "Scenario B \u2014 securitized crackdown (~25%)"
+},
+"id": "scenario-crackdown",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Scenario A \u2014 bounded bipartisan deal (~25%)"
+},
+"id": "scenario-deal",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Scenario D \u2014 economic/technical reframe (~10%)"
+},
+"id": "scenario-reframe",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Scenario C \u2014 polarized stalemate (~40%)"
+},
+"id": "scenario-stalemate",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Target outcome: a usable policy window"
+},
+"id": "target-policy-window",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Credible AI-enabled bio misuse signal"
+},
+"id": "trigger-bio",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "AI investment correction / bubble break"
+},
+"id": "trigger-bubble",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Another consequential AI-enabled cyberattack"
+},
+"id": "trigger-cyber",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Data-center costs come to a head"
+},
+"id": "trigger-datacenter",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "A more damaging \u201cHugging Face 2.0\u201d incident"
+},
+"id": "trigger-hf",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Job displacement becomes concrete"
+},
+"id": "trigger-jobs",
+"node_type": "custom-node"
+},
+{
+"data": {
+"title": "Capability plateau becomes credible"
+},
+"id": "trigger-plateau",
+"node_type": "custom-node"
+}
+]
+},
+"posts": {
+"41193": {
+"id": 41193,
+"question": {
+"aggregations": {
+"recency_weighted": {
+"latest": {
+"centers": [
+0.15
+],
+"forecaster_count": 266,
+"interval_lower_bounds": [
+0.11
+],
+"interval_upper_bounds": [
+0.2
+]
+}
+}
+},
+"resolution": null,
+"status": "open",
+"type": "binary"
+},
+"scheduled_close_time": "2026-12-31T23:00:00Z",
+"status": "open"
+},
+"44880": {
+"id": 44880,
+"question": {
+"aggregations": {
+"recency_weighted": {
+"latest": {
+"centers": [
+0.1
+],
+"forecaster_count": 8,
+"interval_lower_bounds": [
+0.099
+],
+"interval_upper_bounds": [
+0.118
+]
+}
+}
+},
+"resolution": null,
+"status": "open",
+"type": "binary"
+},
+"scheduled_close_time": "2027-01-02T01:00:00Z",
+"status": "open"
+}
+},
+"sim": null
+}
