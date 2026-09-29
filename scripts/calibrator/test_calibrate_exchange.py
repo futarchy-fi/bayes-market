@@ -133,3 +133,38 @@ def test_normal_anchor_trade_posts_net_body_and_logs_stake(tmp_path):
     assert (log["venue"], log["orderId"], log["stake"]) == (
         "net", "order-v1", "12.5",
     )
+
+
+def test_live_metaculus_cp_beats_stored_anchor_value():
+    from scripts.calibrator.calibrate_anchors import fetch_anchor
+
+    anchor = _anchor(1, value=0.8)
+    assert fetch_anchor(anchor, {"1": 0.3}) == (0.3, False)
+    assert fetch_anchor(anchor, {}) == (0.8, False)
+    stale = {**anchor, "fetchedAt": "2020-01-01T00:00:00Z"}
+    assert fetch_anchor(stale, {}) == (None, True)
+
+
+def test_metaculus_cps_reads_open_posts_only(monkeypatch):
+    import sys
+    from scripts.calibrator import calibrate_anchors as cal
+
+    calls = []
+
+    class FakeRadiant:
+        def __init__(self, token):
+            pass
+
+        def call(self, name, args):
+            calls.append((name, args))
+            post = lambda i, status, c: {"id": i, "status": status, "question": {
+                "aggregations": {"recency_weighted": {"latest": c and {"centers": [c]}}}}}
+            return {"posts": [post(1, "open", 0.3), post(2, "resolved", 0.9), post(3, "open", None)]}
+
+    monkeypatch.setenv("RADIANT_API_TOKEN", "x")
+    monkeypatch.setitem(sys.modules, "radiant_seeds", type("M", (), {"Radiant": FakeRadiant}))
+    anchors = [_anchor(1), _anchor(2), _anchor(3), {**_anchor(4), "source": "manifold"}]
+    assert cal.fetch_metaculus_cps(anchors) == {"1": 0.3}
+    assert calls == [("get_metaculus_posts", {"post_ids": [1, 2, 3]})]
+    monkeypatch.delenv("RADIANT_API_TOKEN")
+    assert cal.fetch_metaculus_cps(anchors) == {}
