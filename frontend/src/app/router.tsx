@@ -11,6 +11,7 @@ import ExchangeCallback from "@/routes/ExchangeCallback";
 import Leaderboard from "@/routes/Leaderboard";
 import Instruments from "@/routes/Instruments";
 import InstrumentDetail from "@/routes/InstrumentDetail";
+import NotFound from "@/routes/NotFound";
 import { CreateMarketForm } from "@/features/market/CreateMarketForm";
 
 export const router = createBrowserRouter(
@@ -29,6 +30,7 @@ export const router = createBrowserRouter(
         { path: "instruments/:instrumentId", element: <InstrumentDetail /> },
         { path: "exchange/callback", element: <ExchangeCallback /> },
         { path: "system", element: <System /> },
+        { path: "*", element: <NotFound /> },
       ],
     },
   ],

@@ -19,6 +19,15 @@ export interface ExchangeAccount {
   locks: Array<{ lock_id: number; market_id: number; amount: string; lock_type: string }>;
 }
 
+export interface ExchangeHealthResponse {
+  status: string;
+  markets?: number;
+  ledger_accounts?: number;
+  users?: number;
+  net?: { markets: number; orders: number; enabled: boolean };
+  venues?: Record<string, { markets: number; orders_or_trades: number }>;
+}
+
 export interface NetMarket {
   id: string;
   variableId: string;
@@ -28,6 +37,8 @@ export interface NetMarket {
   outcomes: Array<{ id: string; name: string }>;
   marginals: Record<string, number>;
   parents: string[];
+  volume?: number;
+  liquidity?: number;
 }
 
 export interface NetMarketList {
@@ -202,6 +213,7 @@ async function request<T>(path: string, options: RequestInit = {}, apiKey?: stri
   return body as T;
 }
 
+export const getExchangeHealth = () => request<ExchangeHealthResponse>("/v1/health");
 export const getMe = (apiKey: string) => request<ExchangeAccount>("/v1/me", {}, apiKey);
 export const getNetMarket = (marketId: string) =>
   request<NetMarket>(`/v1/net/markets/${encodeURIComponent(marketId)}`);

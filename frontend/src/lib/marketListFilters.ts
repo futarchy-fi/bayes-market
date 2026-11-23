@@ -18,7 +18,7 @@ export interface MarketListQueryKeyFilters {
 }
 
 const MARKET_STATUSES: MarketStatus[] = ["active", "resolved", "closed", "draft"];
-const MARKET_SORTS: MarketListSort[] = ["volume", "liquidity", "created"];
+const MARKET_SORTS: MarketListSort[] = ["volume", "liquidity", "created", "probability", "linked"];
 
 export function isMarketListStatusFilter(value: string | null): value is MarketListStatusFilter {
   return value === "all" || MARKET_STATUSES.includes(value as MarketStatus);

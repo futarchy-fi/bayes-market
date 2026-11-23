@@ -221,4 +221,122 @@ describe("NetworkMap", () => {
     fireEvent.click(screen.getByTestId("seed"));
     expect(screen.getByText("No meaningful change")).toBeInTheDocument();
   });
+
+  it("disables Assume NO when P(yes) >= 0.9995 and Assume YES when P(yes) <= 0.0005", () => {
+    const markets = [
+      market({ id: "certain-yes", variableId: "ftm_agi_by_2045", title: "Certain Yes", marginals: { yes: 0.9998, no: 0.0002 } }),
+      market({ id: "certain-no", variableId: "ftm_agi_by_2027", title: "Certain No", marginals: { yes: 0.0002, no: 0.9998 } }),
+    ];
+    const { container } = renderMap(markets);
+
+    fireEvent.click(container.querySelectorAll('circle[data-node-id="certain-yes"]')[1]!);
+    expect(screen.getByRole("button", { name: "Assume NO" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Assume YES" })).not.toBeDisabled();
+    expect(screen.getByText("Certain under current assumptions")).toBeInTheDocument();
+
+    fireEvent.click(container.querySelectorAll('circle[data-node-id="certain-no"]')[1]!);
+    expect(screen.getByRole("button", { name: "Assume YES" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Assume NO" })).not.toBeDisabled();
+  });
+
+  it("keeps previous map visible and shows inline contradiction banner with Undo on 409 context_contradicted", () => {
+    const baseMarkets = makeGraphMarkets();
+    mockUseGraphMarkets.mockImplementation((ctx: Array<{ variableId: string; outcomeId: string }> = []) => {
+      if (ctx.length > 0) {
+        return {
+          data: undefined,
+          isLoading: false,
+          error: { status: 409, code: "context_contradicted", message: "zero joint probability" },
+          isSuccess: false,
+          isError: true,
+          isFetching: false,
+        } as unknown as ReturnType<typeof useGraphMarkets>;
+      }
+      return queryState(baseMarkets);
+    });
+
+    const { container } = renderWithProviders(
+      <AssumptionProvider>
+        <Seeder variableId="ftm_agi_by_2030" outcomeId="yes" label="AGI" />
+        <NetworkMap />
+      </AssumptionProvider>,
+    );
+
+    expect(container.querySelectorAll("circle[data-node-id]").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByTestId("seed"));
+
+    // Must NOT wipe the map into "Failed to load the market network"
+    expect(screen.queryByText("Failed to load the market network")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(/Contradictory assumption/);
+    expect(container.querySelectorAll("circle[data-node-id]").length).toBeGreaterThan(0);
+
+    // Undo last assumption clears the contradiction cleanly
+    fireEvent.click(screen.getByRole("button", { name: "Undo last assumption" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("renders World-Model Snapshot KPI strip and one-click Try What-If scenario buttons", () => {
+    const markets = [
+      market({ id: "s1", variableId: "ftm_sub_agi_by_2030", title: "Weakly general AI by 2030", marginals: { yes: 0.41, no: 0.59 } }),
+      market({ id: "a32", variableId: "ftm_agi_by_2032", title: "AGI training requirements are met by 2032", marginals: { yes: 0.11, no: 0.89 } }),
+      market({ id: "a35", variableId: "ftm_agi_by_2035", title: "AGI training requirements are met by 2035", marginals: { yes: 0.27, no: 0.73 } }),
+    ];
+    renderMap(markets);
+
+    expect(screen.getByTestId("world-model-snapshot")).toBeInTheDocument();
+    expect(screen.getByText("Weakly General AI by 2030")).toBeInTheDocument();
+    expect(screen.getByText("41.0%")).toBeInTheDocument();
+    expect(screen.getByText("Strict AGI by 2035")).toBeInTheDocument();
+
+    const scenarioBtn = screen.getByRole("button", { name: "Assume AGI by 2032" });
+    fireEvent.click(scenarioBtn);
+    expect(mockUseGraphMarkets).toHaveBeenLastCalledWith([{ variableId: "ftm_agi_by_2032", outcomeId: "yes" }]);
+  });
+
+  it("shows search match count, clickable match pills, sub-row threshold labels, and directional hover arrowheads", () => {
+    const { container } = renderMap();
+
+    // Multi-tier threshold labels rendered on left margin
+    expect(screen.getByText("1e31")).toBeInTheDocument();
+
+    // Hovering a node with edges attaches directional marker-end arrowhead
+    fireEvent.mouseOver(container.querySelectorAll('circle[data-node-id="m1"]')[1]!);
+    const hotEdge = container.querySelector('path[marker-end="url(#nm-arrow-hot)"]');
+    expect(hotEdge).not.toBeNull();
+
+    // Search shows match count + clickable match pill bar
+    fireEvent.change(screen.getByLabelText("Search markets"), { target: { value: "AGI compute" } });
+    expect(screen.getByText("1 match")).toBeInTheDocument();
+    const pill = screen.getByLabelText("Search matches").querySelector("button")!;
+    fireEvent.click(pill);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("flips NodePopover left for right-edge nodes and shows prior -> posterior when conditioned", () => {
+    const markets = [
+      market({
+        id: "late",
+        variableId: "ftm_agi_by_2045",
+        title: "AGI by 2045",
+        marginals: { yes: 0.55, no: 0.45 },
+        conditionalMarginals: { yes: 0.82, no: 0.18 },
+      }),
+    ];
+    mockUseGraphMarkets.mockReturnValue(queryState(markets));
+    const { container } = renderWithProviders(
+      <AssumptionProvider>
+        <Seeder variableId="ftm_train_run_t1_by_2032" outcomeId="yes" label="1e29" />
+        <NetworkMap />
+      </AssumptionProvider>,
+    );
+    fireEvent.click(screen.getByTestId("seed"));
+    fireEvent.click(container.querySelectorAll('circle[data-node-id="late"]')[1]!);
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.getAttribute("data-flip-left")).toBe("true");
+    expect(dialog.textContent).toContain("55.0%");
+    expect(dialog.textContent).toContain("82.0%");
+    expect(dialog.textContent).toContain("+27.0 pts");
+  });
 });

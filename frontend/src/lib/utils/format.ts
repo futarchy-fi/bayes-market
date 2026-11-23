@@ -8,6 +8,29 @@ export function formatCurrency(n: number): string {
   return n.toFixed(2);
 }
 
+/**
+ * Format credit balances cleanly with fixed 2-decimal precision, eliminating
+ * IEEE-754/decimal tail noise such as "80.00000000000000000000000002".
+ */
+export function formatCredits(value: string | number): string {
+  const num = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(num)) return String(value);
+  // Avoid displaying "-0.00"
+  const normalized = Math.abs(num) < 0.005 ? 0 : num;
+  return normalized.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/**
+ * Strip accidental double periods ("..") from imported descriptions while
+ * preserving deliberate ellipses ("...").
+ */
+export function cleanDescription(text: string): string {
+  return text.replace(/(?<!\.)\.\.(?!\.)/g, ".").replace(/\.{2}$/, ".");
+}
+
 export function truncateHash(hash: string, len = 8): string {
   if (hash.startsWith("sha256:")) return `sha256:${hash.slice(7, 7 + len)}…`;
   return hash.length > len ? `${hash.slice(0, len)}…` : hash;

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent } from "@testing-library/react";
 import { renderWithProviders } from "./helpers";
 import { CreateMarketForm } from "@/features/market/CreateMarketForm";
+import { EXCHANGE_MODE_KEY } from "@/lib/exchangeMode";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -343,5 +344,13 @@ describe("CreateMarketForm", () => {
       const [args] = mockMutate.mock.calls[0]!;
       expect(args.session).toBeUndefined();
     });
+  });
+
+  it("guards /markets/new in exchange mode with a clean notice", () => {
+    window.localStorage.removeItem(EXCHANGE_MODE_KEY);
+    renderWithProviders(<CreateMarketForm />);
+    expect(screen.getByText(/governed via exchange proposals/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Market" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Back to Network/i })).toHaveAttribute("href", "/");
   });
 });
