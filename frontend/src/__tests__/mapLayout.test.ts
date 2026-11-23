@@ -4,7 +4,13 @@ import {
   parseYearFromTitle,
   FAMILY_ORDER,
   FAMILY_KEYS,
+  GROUP_COLORS,
+  GROUP_LABELS,
+  YEAR_MIN,
+  YEAR_MAX,
   buildAdjacency,
+  buildCategoryPills,
+  matchesMarketCategory,
   packYearCollisions,
   deltaToColor,
   deltaIntensity,
@@ -54,8 +60,31 @@ describe("classifyVariable", () => {
     });
   });
 
+  it("classifies dw_*, pol_*, and fut_* variables into dedicated thematic families", () => {
+    expect(classifyVariable("dw_paul_christiano_agi_by_2030", "Dwarkesh: Paul Christiano on AGI")).toEqual({
+      family: "dwarkesh",
+      tier: null,
+      year: 2030,
+    });
+    expect(classifyVariable("pol_us_compute_cap", "US federal compute cap before 2029?")).toEqual({
+      family: "policy",
+      tier: null,
+      year: 2029,
+    });
+    expect(classifyVariable("fut_existential_risk_2040", "Major AI catastrophe?")).toEqual({
+      family: "futurist",
+      tier: null,
+      year: 2040,
+    });
+    expect(classifyVariable("pol_open_weights_ban", "Will Congress restrict open weights?")).toEqual({
+      family: "policy",
+      tier: null,
+      year: null,
+    });
+  });
+
   it("classifies x_ variables as external and parses year from the title", () => {
-    expect(classifyVariable("x_0042", "Will AGI be reached before 2030? (Metaculus)")).toEqual({
+    expect(classifyVariable("x_0042", "Will AGI be reached before 2030? (Manifold)")).toEqual({
       family: "external",
       tier: null,
       year: 2030,
@@ -113,8 +142,8 @@ describe("parseYearFromTitle", () => {
   });
 });
 
-describe("FAMILY_ORDER", () => {
-  it("has the 16 bands in the specified fixed order with display labels including sub_agi", () => {
+describe("FAMILY_ORDER & GROUP_COLORS", () => {
+  it("has the 19 bands in fixed order including Dwarkesh, Policy, and Futurist", () => {
     expect(FAMILY_ORDER.map((f) => f.key)).toEqual([
       "agi",
       "sub_agi",
@@ -130,18 +159,33 @@ describe("FAMILY_ORDER", () => {
       "sw_ratio",
       "gwp_growth",
       "gwp_growth_max",
+      "dwarkesh",
+      "policy",
+      "futurist",
       "external",
       "other",
     ]);
     expect(FAMILY_ORDER[0]).toMatchObject({ label: "AGI compute threshold" });
-    expect(FAMILY_ORDER[FAMILY_ORDER.length - 1]).toMatchObject({ key: "other" });
     expect(FAMILY_ORDER[1]).toMatchObject({ key: "sub_agi", label: "Weakly general AI (Sub-AGI)", group: "agi_rampup" });
-    expect(FAMILY_KEYS.size).toBe(16);
+    expect(FAMILY_ORDER.find((f) => f.key === "dwarkesh")).toEqual({ key: "dwarkesh", label: "Dwarkesh Podcast", group: "dwarkesh" });
+    expect(FAMILY_ORDER.find((f) => f.key === "policy")).toEqual({ key: "policy", label: "AI Policy & Regulation", group: "policy" });
+    expect(FAMILY_ORDER.find((f) => f.key === "futurist")).toEqual({ key: "futurist", label: "Futurist & Doomer", group: "futurist" });
+    expect(FAMILY_ORDER.find((f) => f.key === "external")).toEqual({ key: "external", label: "External forecasts (Manifold)", group: "external_other" });
+    expect(FAMILY_ORDER[FAMILY_ORDER.length - 1]).toMatchObject({ key: "other" });
+    expect(FAMILY_KEYS.size).toBe(19);
   });
 
-  it("groups families into exactly 6 categorical color groups", () => {
+  it("groups families into 9 categorical color groups with distinct thematic colors", () => {
     const groups = new Set(FAMILY_ORDER.map((f) => f.group));
-    expect(groups.size).toBe(6);
+    expect(groups.size).toBe(9);
+    expect(GROUP_COLORS.dwarkesh).toBe("#f59e0b");
+    expect(GROUP_COLORS.policy).toBe("#14b8a6");
+    expect(GROUP_COLORS.futurist).toBe("#a855f7");
+    expect(GROUP_COLORS.external_other).toBe("#ec4899");
+    expect(GROUP_LABELS.dwarkesh).toBe("Dwarkesh");
+    expect(GROUP_LABELS.policy).toBe("Policy");
+    expect(GROUP_LABELS.futurist).toBe("Futurist");
+    expect(GROUP_LABELS.external_other).toBe("External");
   });
 });
 
@@ -206,33 +250,69 @@ describe("packYearCollisions", () => {
   });
 });
 
-describe("computeMapLayout: external band collision nudging", () => {
-  it("gives external markets sharing a year distinct y positions", () => {
+describe("computeMapLayout: short timelines 2027-2035 + 2036+ and flat bands", () => {
+  it("uses short-timelines horizon 2027..2035 and maps 2036+ years to one post column", () => {
+    expect(YEAR_MIN).toBe(2027);
+    expect(YEAR_MAX).toBe(2035);
     const markets: GraphMarketInput[] = [
+      { id: "m35", variableId: "ftm_agi_by_2035", title: "AGI 2035", status: "active" },
+      { id: "f36", variableId: "fut_civilization_by_2036", title: "Civilization 2036", status: "active" },
+      { id: "f50", variableId: "fut_dyson_by_2050", title: "Dyson 2050", status: "active" },
+    ];
+    const layout = computeMapLayout(markets);
+    expect(layout.yearMin).toBe(2027);
+    expect(layout.yearMax).toBe(2035);
+    expect(layout.hasUndated).toBe(false);
+
+    const n35 = layout.nodes.find((n) => n.id === "m35")!;
+    const n36 = layout.nodes.find((n) => n.id === "f36")!;
+    const n50 = layout.nodes.find((n) => n.id === "f50")!;
+    expect(n36.x).toBeGreaterThan(n35.x);
+    expect(n36.x).toBe(n50.x);
+    // Two futurist markets in the 2036+ bucket must stack cleanly without colliding.
+    expect(n36.y).not.toBe(n50.y);
+  });
+
+  it("omits undated column width when all markets have dates, and adds it when undated exist", () => {
+    const datedOnly = computeMapLayout([
+      { id: "m1", variableId: "ftm_agi_by_2035", title: "AGI 2035", status: "active" },
+    ]);
+    const withUndated = computeMapLayout([
+      { id: "m1", variableId: "ftm_agi_by_2035", title: "AGI 2035", status: "active" },
+      { id: "m2", variableId: "pol_liability", title: "Congress AI liability law", status: "active" },
+    ]);
+    expect(datedOnly.hasUndated).toBe(false);
+    expect(withUndated.hasUndated).toBe(true);
+    expect(withUndated.width).toBeGreaterThan(datedOnly.width);
+  });
+
+  it("gives dwarkesh, policy, futurist, and external markets sharing a year distinct y positions", () => {
+    const markets: GraphMarketInput[] = [
+      { id: "d1", variableId: "dw_ep1_by_2030", title: "Dwarkesh A", status: "active" },
+      { id: "d2", variableId: "dw_ep2_by_2030", title: "Dwarkesh B", status: "active" },
       { id: "x1", variableId: "x_0001", title: "Question A, resolves 2030", status: "active" },
       { id: "x2", variableId: "x_0002", title: "Question B, resolves 2030", status: "active" },
       { id: "x3", variableId: "x_0003", title: "Question C, resolves 2030", status: "active" },
     ];
     const layout = computeMapLayout(markets);
-    const ys = layout.nodes.map((n) => n.y);
-    expect(new Set(ys).size).toBe(3);
-    // same x (same year column)
-    const xs = new Set(layout.nodes.map((n) => n.x));
-    expect(xs.size).toBe(1);
-    const band = layout.bands.find((b) => b.family === "external")!;
-    expect(band.rows).toBeGreaterThanOrEqual(3);
+    const dwNodes = layout.nodes.filter((n) => n.family === "dwarkesh");
+    expect(new Set(dwNodes.map((n) => n.y)).size).toBe(2);
+    expect(new Set(dwNodes.map((n) => n.x)).size).toBe(1);
+
+    const extNodes = layout.nodes.filter((n) => n.family === "external");
+    expect(new Set(extNodes.map((n) => n.y)).size).toBe(3);
+    expect(new Set(extNodes.map((n) => n.x)).size).toBe(1);
+    const extBand = layout.bands.find((b) => b.family === "external")!;
+    expect(extBand.rows).toBeGreaterThanOrEqual(3);
   });
 
-  it("gives untiered ftm markets in the same family/year distinct y via collision-safe defaults", () => {
-    // Two markets with no year (undated) in the same flat "other" band should
-    // still not collide.
+  it("gives untiered markets in the same flat 'other' band distinct y positions", () => {
     const markets: GraphMarketInput[] = [
       { id: "o1", variableId: "m1", title: "Original one", status: "active" },
       { id: "o2", variableId: "m2", title: "Original two", status: "active" },
     ];
     const layout = computeMapLayout(markets);
-    const ys = layout.nodes.map((n) => n.y);
-    expect(new Set(ys).size).toBe(2);
+    expect(new Set(layout.nodes.map((n) => n.y)).size).toBe(2);
   });
 });
 
@@ -240,12 +320,13 @@ describe("computeMapLayout: general shape", () => {
   it("orders bands top-to-bottom per FAMILY_ORDER and sizes height/width from data", () => {
     const markets: GraphMarketInput[] = [
       { id: "m1", variableId: "ftm_agi_by_2030", title: "AGI", status: "active" },
+      { id: "d1", variableId: "dw_ep_by_2030", title: "Dwarkesh", status: "active" },
+      { id: "p1", variableId: "pol_act_by_2031", title: "Policy", status: "active" },
+      { id: "f1", variableId: "fut_risk_by_2035", title: "Futurist", status: "active" },
       { id: "m2", variableId: "ftm_other_family_by_2031", title: "Unknown family", status: "active" },
     ];
     const layout = computeMapLayout(markets);
-    const agiBand = layout.bands.find((b) => b.family === "agi")!;
-    const otherBand = layout.bands.find((b) => b.family === "other")!;
-    expect(agiBand.y0).toBeLessThan(otherBand.y0);
+    expect(layout.bands.map((b) => b.family)).toEqual(["agi", "dwarkesh", "policy", "futurist", "other"]);
     expect(layout.height).toBeGreaterThan(0);
     expect(layout.width).toBeGreaterThan(0);
   });
@@ -261,9 +342,9 @@ describe("computeMapLayout: general shape", () => {
     expect(n0.y).toBeLessThan(n3.y);
   });
 
-  it("puts undated markets in a column to the right of the last dated year", () => {
+  it("puts undated markets in a column to the right of the 2036+ column", () => {
     const markets: GraphMarketInput[] = [
-      { id: "m1", variableId: "ftm_agi_by_2045", title: "latest dated", status: "active" },
+      { id: "m1", variableId: "ftm_agi_by_2045", title: "post horizon", status: "active" },
       { id: "m2", variableId: "m2", title: "no year anywhere", status: "active" },
     ];
     const layout = computeMapLayout(markets);
@@ -315,7 +396,6 @@ describe("deltaIntensity / deltaToColor", () => {
     for (let i = 1; i < intensities.length; i++) {
       expect(intensities[i]).toBeGreaterThan(intensities[i - 1]!);
     }
-    // caps at 1 once |delta| reaches DELTA_CAP (0.25)
     expect(deltaIntensity(0.3)).toBe(1);
   });
 
@@ -330,7 +410,15 @@ describe("deltaIntensity / deltaToColor", () => {
 });
 
 describe("sourceTag", () => {
-  it("prefers the anchor source when present", () => {
+  it("labels thematic variableId prefixes cleanly", () => {
+    expect(sourceTag({ variableId: "dw_paul_agi_by_2030" })).toBe("Dwarkesh");
+    expect(sourceTag({ variableId: "pol_compute_cap_2029" })).toBe("Policy");
+    expect(sourceTag({ variableId: "fut_xrisk_2040" })).toBe("Futurist");
+    expect(sourceTag({ variableId: "x_0012" })).toBe("Manifold");
+    expect(sourceTag({ variableId: "ftm_agi_by_2032" })).toBe("FTM");
+  });
+
+  it("prefers the anchor source when present on non-thematic variables", () => {
     expect(sourceTag({ anchor: { source: "metaculus" } })).toBe("Metaculus");
     expect(sourceTag({ anchor: { source: "manifold" } })).toBe("Manifold");
   });
@@ -344,7 +432,31 @@ describe("sourceTag", () => {
   });
 });
 
-describe("sub_agi, empty swimlane hiding, tier labels, and probability encoding", () => {
+describe("category filter pills", () => {
+  it("only returns tabs with > 0 markets prefixed with All", () => {
+    const markets = [
+      { variableId: "ftm_agi_by_2030" },
+      { variableId: "dw_scaling_by_2029" },
+      { variableId: "dw_agents_by_2030" },
+      { variableId: "fut_extinction_by_2040" },
+    ];
+    expect(buildCategoryPills(markets).map((p) => [p.key, p.label, p.count])).toEqual([
+      ["all", "All", 4],
+      ["ftm", "Core FTM", 1],
+      ["dwarkesh", "Dwarkesh", 2],
+      ["futurist", "Futurist", 1],
+    ]);
+    expect(matchesMarketCategory({ variableId: "dw_scaling_by_2029" }, "dwarkesh")).toBe(true);
+    expect(matchesMarketCategory({ variableId: "dw_scaling_by_2029" }, "policy")).toBe(false);
+    expect(matchesMarketCategory({ variableId: "misc_1" }, "all")).toBe(true);
+  });
+
+  it("returns empty array when no markets match a known category", () => {
+    expect(buildCategoryPills([{ variableId: "eth" }, { variableId: "btc" }])).toEqual([]);
+  });
+});
+
+describe("sub_agi, empty swimlane hiding, tier labels, KPIs, and probability encoding", () => {
   it("classifies ftm_sub_agi_by_YYYY into the sub_agi family", () => {
     expect(classifyVariable("ftm_sub_agi_by_2030", "Weakly general AI by 2030")).toEqual({
       family: "sub_agi",
@@ -381,17 +493,29 @@ describe("sub_agi, empty swimlane hiding, tier labels, and probability encoding"
     expect(probabilityRadius(0.05, 3.5)).toBeLessThan(probabilityRadius(0.95, 3.5));
   });
 
-  it("selects snapshot KPIs and what-if scenarios gracefully by variableId", () => {
+  it("selects short-timelines snapshot KPIs and what-if scenarios gracefully by variableId", () => {
     const markets = [
       { id: "s1", variableId: "ftm_sub_agi_by_2030", title: "Weakly General AI by 2030", status: "active" as const, marginals: { yes: 0.42, no: 0.58 } },
-      { id: "a1", variableId: "ftm_agi_by_2032", title: "AGI by 2032", status: "active" as const, marginals: { yes: 0.12, no: 0.88 } },
-      { id: "a2", variableId: "ftm_agi_by_2035", title: "AGI by 2035", status: "active" as const, marginals: { yes: 0.28, no: 0.72 } },
+      { id: "a0", variableId: "ftm_agi_by_2030", title: "AGI by 2030", status: "active" as const, marginals: { yes: 0.08, no: 0.92 } },
+      { id: "a1", variableId: "ftm_agi_by_2032", title: "AGI by 2032", status: "active" as const, marginals: { yes: 0.16, no: 0.84 } },
+      { id: "a2", variableId: "ftm_agi_by_2035", title: "AGI by 2035", status: "active" as const, marginals: { yes: 0.34, no: 0.66 } },
+      { id: "r1", variableId: "ftm_auto_rnd_t1_by_2030", title: "20% R&D auto by 2030", status: "active" as const, marginals: { yes: 0.25, no: 0.75 } },
+      { id: "r2", variableId: "ftm_auto_rnd_t2_by_2032", title: "50% R&D auto by 2032", status: "active" as const, marginals: { yes: 0.19, no: 0.81 } },
+      { id: "g1", variableId: "ftm_gwp_growth_max_t1_by_2035", title: "10%+ GWP growth by 2035", status: "active" as const, marginals: { yes: 0.22, no: 0.78 } },
+      { id: "tr", variableId: "ftm_train_run_t1_by_2032", title: "1e29 FLOP by 2032", status: "active" as const, marginals: { yes: 0.61, no: 0.39 } },
     ];
     expect(selectSnapshotKpis(markets).map((k) => k.label)).toEqual([
       "Weakly General AI by 2030",
+      "Strict AGI by 2032",
       "Strict AGI by 2035",
+      "50% R&D Auto by 2032",
+      "10%+ GWP Growth by 2035",
     ]);
-    expect(selectWhatIfScenarios(markets).map((s) => s.label)).toEqual(["Assume AGI by 2032"]);
+    expect(selectWhatIfScenarios(markets).map((s) => [s.label, s.variableId])).toEqual([
+      ["Assume AGI by 2030", "ftm_agi_by_2030"],
+      ["Assume 20% R&D auto by 2030", "ftm_auto_rnd_t1_by_2030"],
+      ["Assume 1e29 FLOP by 2032", "ftm_train_run_t1_by_2032"],
+    ]);
   });
 
   it("detects 409 context_contradicted errors reliably", () => {

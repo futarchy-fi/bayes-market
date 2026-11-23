@@ -3,11 +3,10 @@ import { Link } from "react-router-dom";
 import { useSession } from "@/features/session/context";
 import { useAccountRisk, useMarkets } from "@/lib/query/hooks";
 import { useBookOrders, useBookPositions, useCancelBookOrder, useExchangeMe, useMeNet } from "@/lib/exchange/hooks";
-import { useExchangeSession } from "@/lib/exchange/session";
+import { GithubSignInLink, useExchangeSession } from "@/lib/exchange/session";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import { isExchangeMode } from "@/lib/exchangeMode";
-import { EXCHANGE_API } from "@/lib/exchange/client";
 import { formatCredits } from "@/lib/utils/format";
 
 export default function Portfolio() {
@@ -15,7 +14,7 @@ export default function Portfolio() {
   const exchangeMode = isExchangeMode();
   const riskQuery = useAccountRisk(session.accountId, { enabled: !exchangeMode });
   const marketsQuery = useMarkets();
-  const { isSignedIn } = useExchangeSession();
+  const { isSignedIn, sessionNotice, clearSessionNotice } = useExchangeSession();
   const exchangeMe = useExchangeMe();
   const net = useMeNet();
   const bookPositions = useBookPositions();
@@ -26,9 +25,24 @@ export default function Portfolio() {
   return (
     <div style={{ display: "grid", gap: "var(--space-lg)" }}>
       <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>Portfolio</h1>
+      {sessionNotice && !isSignedIn && (
+        <div role="status" style={sessionNoticeStyle}>
+          <span>{sessionNotice}</span>
+          <button
+            type="button"
+            onClick={clearSessionNotice}
+            aria-label="Dismiss notice"
+            style={dismissBtnStyle}
+          >
+            ×
+          </button>
+        </div>
+      )}
       {isSignedIn && <ExchangePortfolio me={exchangeMe} net={net} positions={bookPositions} orders={bookOrders} cancel={cancelBookOrder} />}
       {exchangeMode ? !isSignedIn && (
-        <div style={promptStyle}><a href={`${EXCHANGE_API}/v1/auth/github/login`}>Sign in with GitHub</a> to view your credits portfolio.</div>
+        <div style={promptStyle}>
+          <GithubSignInLink returnTo="/portfolio">Sign in with GitHub</GithubSignInLink> to view your credits portfolio.
+        </div>
       ) : (
         <PaperPortfolio isConfigured={isConfigured} riskQuery={riskQuery} marketTitles={marketTitles} />
       )}
@@ -151,3 +165,24 @@ const tableStyle: React.CSSProperties = { width: "100%", borderCollapse: "collap
 const thStyle: React.CSSProperties = { textAlign: "left", padding: "6px 12px", fontWeight: 500 };
 const tdStyle: React.CSSProperties = { padding: "6px 12px" };
 const cancelStyle: React.CSSProperties = { padding: 0, border: 0, background: "transparent", color: "var(--color-primary)", cursor: "pointer" };
+const sessionNoticeStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "10px 14px",
+  borderRadius: "var(--radius-md)",
+  border: "1px solid var(--color-warning)",
+  background: "rgba(234, 179, 8, 0.12)",
+  color: "var(--color-text)",
+  fontSize: "0.85rem",
+};
+const dismissBtnStyle: React.CSSProperties = {
+  padding: "0 4px",
+  border: 0,
+  background: "transparent",
+  color: "var(--color-text-muted)",
+  cursor: "pointer",
+  fontSize: "1rem",
+  lineHeight: 1,
+};

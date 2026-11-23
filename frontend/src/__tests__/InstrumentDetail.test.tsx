@@ -50,6 +50,8 @@ describe("InstrumentDetail", () => {
     vi.mocked(useExchangeSession).mockReturnValue({
       session: { apiKey: "", githubLogin: "" },
       isSignedIn: false,
+      sessionNotice: null,
+      clearSessionNotice: vi.fn(),
       setSession: vi.fn(),
       signOut: vi.fn(),
     });

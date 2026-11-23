@@ -6,10 +6,13 @@ import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import { useOptionalAssumptions } from "@/features/assumptions/AssumptionContext";
 import type { GraphMarket, GraphMarketsResponse } from "@/lib/api/types";
 import {
+  buildAdjacency,
+  buildCategoryPills,
   computeMapLayout,
   edgeBezierPath,
   colorForGroup,
   deltaToColor,
+  matchesMarketCategory,
   sourceTag,
   searchMatchIds,
   probabilityFillOpacity,
@@ -20,13 +23,14 @@ import {
   GROUP_COLORS,
   GROUP_LABELS,
   type GroupKey,
+  type MarketCategory,
   type PositionedMapNode,
   type MapLayout,
 } from "./mapLayout";
 
 // ---------------------------------------------------------------------------
-// The landing hero: every market (~900) and every CPT edge (~1000-1500) on
-// one structured timeline map -- X = resolution year, Y = fixed family
+// The landing hero: every market and every CPT edge on one structured
+// timeline map -- X = resolution year (2027-2035 + 2036+), Y = fixed family
 // bands. All data comes from the single bulk useGraphMarkets response; no
 // per-node queries.
 // ---------------------------------------------------------------------------
@@ -77,11 +81,31 @@ export function NetworkMap() {
   const markets = useMemo(() => effectiveData?.markets ?? [], [effectiveData]);
   const contradicted = assumptionMode && isContextContradictedError(error);
 
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState<MarketCategory>("all");
+
+  const categoryPills = useMemo(() => buildCategoryPills(markets), [markets]);
+  const effectiveCategory: MarketCategory = useMemo(() => {
+    if (activeCategory === "all") return "all";
+    return categoryPills.some((p) => p.key === activeCategory) ? activeCategory : "all";
+  }, [activeCategory, categoryPills]);
+
+  const visibleMarkets = useMemo(
+    () =>
+      effectiveCategory === "all"
+        ? markets
+        : markets.filter((m) => matchesMarketCategory(m, effectiveCategory)),
+    [markets, effectiveCategory],
+  );
+
   const marketById = useMemo(() => new Map(markets.map((m) => [m.id, m])), [markets]);
 
-  const layout: MapLayout = useMemo(
+  const fullAdjacency = useMemo(
     () =>
-      computeMapLayout(
+      buildAdjacency(
         markets.map((m) => ({
           id: m.id,
           variableId: m.variableId,
@@ -91,6 +115,20 @@ export function NetworkMap() {
         })),
       ),
     [markets],
+  );
+
+  const layout: MapLayout = useMemo(
+    () =>
+      computeMapLayout(
+        visibleMarkets.map((m) => ({
+          id: m.id,
+          variableId: m.variableId,
+          title: m.title,
+          status: m.status,
+          parents: m.parents,
+        })),
+      ),
+    [visibleMarkets],
   );
 
   const snapshotKpis = useMemo(() => selectSnapshotKpis(markets, 5), [markets]);
@@ -108,19 +146,14 @@ export function NetworkMap() {
     return ordered;
   }, [layout.bands]);
 
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [focusedId, setFocusedId] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-
   const activeId = hoveredId ?? selectedId;
   const neighborSet = activeId ? layout.neighborsOf.get(activeId) ?? new Set<string>() : null;
-  const matchIds = searchMatchIds(query, markets);
+  const matchIds = searchMatchIds(query, visibleMarkets);
 
   const matchedMarkets = useMemo(() => {
     if (!matchIds || matchIds.size === 0) return [];
-    return markets.filter((m) => matchIds.has(m.id));
-  }, [matchIds, markets]);
+    return visibleMarkets.filter((m) => matchIds.has(m.id));
+  }, [matchIds, visibleMarkets]);
 
   const isDimmed = useCallback(
     (id: string) => {
@@ -190,6 +223,17 @@ export function NetworkMap() {
     return ticks;
   }, [layout.yearMin, layout.yearMax]);
 
+  const boundaryColumns = useMemo(() => {
+    const cols: Array<{ x: number; label: string; dashed?: boolean }> = [
+      { x: layout.yearToX(layout.yearMin - 1), label: `≤${layout.yearMin - 1}` },
+      { x: layout.yearToX(layout.yearMax + 1), label: `${layout.yearMax + 1}+`, dashed: true },
+    ];
+    if (layout.hasUndated) {
+      cols.push({ x: layout.yearToX(null), label: "Undated", dashed: true });
+    }
+    return cols;
+  }, [layout]);
+
   if (isLoading && !effectiveData) {
     return (
       <div style={panelStyle}>
@@ -233,7 +277,12 @@ export function NetworkMap() {
                   <button
                     key={market.id}
                     type="button"
-                    onClick={() => setSelectedId(market.id)}
+                    onClick={() => {
+                      if (!matchesMarketCategory(market, effectiveCategory)) {
+                        setActiveCategory("all");
+                      }
+                      setSelectedId(market.id);
+                    }}
                     style={kpiCardStyle(isSelected)}
                   >
                     <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", lineHeight: 1.25 }}>
@@ -333,7 +382,9 @@ export function NetworkMap() {
 
         <div style={toolbarStyle}>
           <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>
-            {markets.length.toLocaleString()} markets · {layout.edges.length.toLocaleString()} links
+            {effectiveCategory === "all"
+              ? `${markets.length.toLocaleString()} markets · ${layout.edges.length.toLocaleString()} links`
+              : `${visibleMarkets.length.toLocaleString()} of ${markets.length.toLocaleString()} markets · ${layout.edges.length.toLocaleString()} links`}
           </span>
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             {matchIds != null && (
@@ -367,6 +418,50 @@ export function NetworkMap() {
             </div>
           </div>
         </div>
+
+        {/* Source/category filter chips — only show tabs with > 0 markets */}
+        {categoryPills.length > 0 && (
+          <div
+            role="group"
+            aria-label="Filter network by category"
+            style={categoryFilterBarStyle}
+          >
+            {categoryPills.map((pill) => {
+              const isActive = effectiveCategory === pill.key;
+              return (
+                <button
+                  key={pill.key}
+                  type="button"
+                  aria-pressed={isActive}
+                  onClick={() => {
+                    const next = isActive && pill.key !== "all" ? "all" : pill.key;
+                    setActiveCategory(next);
+                    setSelectedId(null);
+                  }}
+                  style={categoryPillStyle(isActive, pill.color)}
+                >
+                  {pill.color && (
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: "50%",
+                        background: isActive ? "#fff" : pill.color,
+                        display: "inline-block",
+                        flexShrink: 0,
+                      }}
+                    />
+                  )}
+                  <span>{pill.label}</span>
+                  <span style={{ opacity: isActive ? 0.9 : 0.65, fontVariantNumeric: "tabular-nums" }}>
+                    {pill.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Clickable match pills when searching so below-the-fold matches are one click away */}
         {matchedMarkets.length > 0 && (
@@ -449,7 +544,7 @@ export function NetworkMap() {
         <div style={{ position: "relative", overflowX: "auto", maxWidth: "100%" }}>
           <svg
             viewBox={`0 0 ${layout.width} ${layout.height}`}
-            style={{ width: "100%", minWidth: 960, height: "auto", display: "block", userSelect: "none" }}
+            style={{ width: "100%", minWidth: 820, height: "auto", display: "block", userSelect: "none" }}
             role="img"
             aria-label="Full belief network of all markets"
             onClick={handleClick}
@@ -469,7 +564,7 @@ export function NetworkMap() {
               </marker>
             </defs>
 
-            {/* Year gridlines + labels */}
+            {/* Year gridlines + labels (2027..2035) */}
             {yearTicks.map((year) => {
               const x = layout.yearToX(year);
               return (
@@ -489,21 +584,28 @@ export function NetworkMap() {
                 </g>
               );
             })}
-            {[
-              { x: layout.yearToX(2026), label: "≤2026" },
-              { x: layout.yearToX(2046), label: "2046+" },
-              { x: layout.yearToX(null), label: "Undated" },
-            ].map(({ x, label }) => (
-              <text
-                key={label}
-                x={x}
-                y={14}
-                fontSize="8.5"
-                fill="var(--color-text-muted)"
-                textAnchor="middle"
-              >
-                {label}
-              </text>
+            {boundaryColumns.map(({ x, label, dashed }) => (
+              <g key={label}>
+                <line
+                  x1={x}
+                  y1={18}
+                  x2={x}
+                  y2={layout.height - 4}
+                  stroke="var(--color-border)"
+                  strokeWidth={1}
+                  strokeDasharray={dashed ? "2 3" : undefined}
+                  opacity={0.28}
+                />
+                <text
+                  x={x}
+                  y={14}
+                  fontSize="8.5"
+                  fill="var(--color-text-muted)"
+                  textAnchor="middle"
+                >
+                  {label}
+                </text>
+              </g>
             ))}
 
             {/* Band headers, group accent bar, sub-row threshold labels, and separators */}
@@ -682,8 +784,8 @@ export function NetworkMap() {
               node={hoveredNode}
               layout={layout}
               assumptionMode={assumptionMode}
-              parentCount={layout.parentsOf.get(hoveredMarket.id)?.length ?? 0}
-              childCount={layout.childrenOf.get(hoveredMarket.id)?.length ?? 0}
+              parentCount={fullAdjacency.parentsOf.get(hoveredMarket.id)?.length ?? 0}
+              childCount={fullAdjacency.childrenOf.get(hoveredMarket.id)?.length ?? 0}
             />
           )}
 
@@ -693,8 +795,8 @@ export function NetworkMap() {
               node={selectedNode}
               layout={layout}
               assumptionMode={assumptionMode}
-              parentCount={layout.parentsOf.get(selectedMarket.id)?.length ?? 0}
-              childCount={layout.childrenOf.get(selectedMarket.id)?.length ?? 0}
+              parentCount={fullAdjacency.parentsOf.get(selectedMarket.id)?.length ?? 0}
+              childCount={fullAdjacency.childrenOf.get(selectedMarket.id)?.length ?? 0}
               onClose={() => setSelectedId(null)}
             />
           )}
@@ -1014,6 +1116,32 @@ const toolbarStyle: React.CSSProperties = {
   gap: "var(--space-sm)",
   marginBottom: "var(--space-sm)",
 };
+
+const categoryFilterBarStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  gap: 6,
+  marginBottom: "var(--space-sm)",
+};
+
+function categoryPillStyle(active: boolean, color?: string): React.CSSProperties {
+  const accent = color ?? "var(--color-primary)";
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    padding: "3px 9px",
+    borderRadius: 999,
+    border: `1px solid ${active ? accent : "var(--color-border)"}`,
+    background: active ? accent : "var(--color-bg)",
+    color: active ? "#fff" : "var(--color-text-muted)",
+    fontSize: "0.71rem",
+    fontWeight: active ? 600 : 500,
+    cursor: "pointer",
+    transition: "border-color 0.15s, background 0.15s, color 0.15s",
+  };
+}
 
 const legendRowStyle: React.CSSProperties = {
   display: "flex",

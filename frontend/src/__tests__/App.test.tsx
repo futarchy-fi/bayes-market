@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
+import { EXCHANGE_API, EXCHANGE_UNAUTHORIZED_EVENT, ExchangeApiError } from "@/lib/exchange/client";
+import { EXCHANGE_RETURN_TO_STORAGE_KEY, EXCHANGE_SESSION_STORAGE_KEY, SESSION_EXPIRED_NOTICE } from "@/lib/exchange/session";
 import { AppLayout } from "@/app/App";
 import { shouldRetryQuery } from "@/app/providers";
 import NotFound from "@/routes/NotFound";
-import { EXCHANGE_MODE_KEY } from "@/lib/exchangeMode";
 import { renderWithProviders } from "./helpers";
 
 describe("AppLayout", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "/");
-    window.localStorage.removeItem(EXCHANGE_MODE_KEY);
+    window.localStorage.clear();
+    window.sessionStorage.clear();
   });
 
   it("keeps Exchange out of the navigation and hides paper identity by default", () => {
@@ -30,6 +32,31 @@ describe("AppLayout", () => {
     expect(screen.getByText("paper mode")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Account ID")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Agent ID (optional)")).toBeInTheDocument();
+  });
+
+  it("shows session-expired notice in header on 401 recovery and stores return_to on sign-in click", () => {
+    window.localStorage.setItem(
+      EXCHANGE_SESSION_STORAGE_KEY,
+      JSON.stringify({ apiKey: "k-exp", githubLogin: "alice" }),
+    );
+    renderWithProviders(<AppLayout />, { route: "/markets?sort=volume" });
+
+    expect(screen.getByText("@alice")).toBeInTheDocument();
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(EXCHANGE_UNAUTHORIZED_EVENT, {
+          detail: { apiKey: "k-exp", error: new ExchangeApiError(401, "invalid_api_key", "expired") },
+        }),
+      );
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(SESSION_EXPIRED_NOTICE);
+    const signInLinks = screen.getAllByRole("link", { name: "Sign in with GitHub" });
+    expect(signInLinks[0]).toHaveAttribute("href", `${EXCHANGE_API}/v1/auth/github/login`);
+    signInLinks[0]!.addEventListener("click", (e) => e.preventDefault());
+    fireEvent.click(signInLinks[0]!);
+    expect(window.sessionStorage.getItem(EXCHANGE_RETURN_TO_STORAGE_KEY)).toBe("/markets?sort=volume");
   });
 });
 

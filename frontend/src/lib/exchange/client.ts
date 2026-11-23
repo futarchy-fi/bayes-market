@@ -94,8 +94,11 @@ export interface NetPortfolio {
 
 export interface LeaderboardEntry {
   login: string | null;
+  displayName?: string | null;
   accountId: number;
   total: string;
+  netOrders?: number;
+  netVolume?: string;
 }
 
 export type Venue = "net" | "amm" | "book";
@@ -195,22 +198,121 @@ export interface PlacedBookOrder extends BookOrder {
 
 export interface BookPosition { marketId: number; yes: string; no: string }
 
+export const EXCHANGE_UNAUTHORIZED_EVENT = "exchange:unauthorized";
+
+export interface ExchangeUnauthorizedDetail {
+  apiKey: string;
+  error: ExchangeApiError;
+}
+
+type UnauthorizedListener = (apiKey: string, error: ExchangeApiError) => void;
+const unauthorizedListeners = new Set<UnauthorizedListener>();
+
+export function onExchangeUnauthorized(listener: UnauthorizedListener): () => void {
+  unauthorizedListeners.add(listener);
+  return () => {
+    unauthorizedListeners.delete(listener);
+  };
+}
+
+function notifyUnauthorized(apiKey: string, error: ExchangeApiError) {
+  for (const listener of unauthorizedListeners) {
+    try {
+      listener(apiKey, error);
+    } catch {
+      // Never let a listener exception mask the underlying API error.
+    }
+  }
+  if (typeof window !== "undefined" && typeof CustomEvent === "function") {
+    try {
+      window.dispatchEvent(
+        new CustomEvent<ExchangeUnauthorizedDetail>(EXCHANGE_UNAUTHORIZED_EVENT, {
+          detail: { apiKey, error },
+        }),
+      );
+    } catch {
+      // Ignore event dispatch failures in restricted environments.
+    }
+  }
+}
+
+async function readResponseBody(response: Response): Promise<{ parsed: unknown; rawText: string }> {
+  if (typeof response.text === "function") {
+    const rawText = await response.text();
+    if (!rawText.trim()) return { parsed: null, rawText };
+    try {
+      return { parsed: JSON.parse(rawText), rawText };
+    } catch {
+      return { parsed: null, rawText };
+    }
+  }
+  if (typeof response.json === "function") {
+    try {
+      const parsed = await response.json();
+      return { parsed, rawText: "" };
+    } catch {
+      return { parsed: null, rawText: "" };
+    }
+  }
+  return { parsed: null, rawText: "" };
+}
+
+function fallbackErrorMessage(status: number, rawText: string): string {
+  const trimmed = rawText.trim();
+  if (trimmed && !trimmed.startsWith("<") && trimmed.length <= 200) {
+    return trimmed;
+  }
+  return `Exchange request failed (${status})`;
+}
+
 async function request<T>(path: string, options: RequestInit = {}, apiKey?: string): Promise<T> {
   const headers: Record<string, string> = { ...(options.headers as Record<string, string>) };
   if (options.body) headers["Content-Type"] = "application/json";
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
   const response = await fetch(`${EXCHANGE_API}${path}`, { ...options, headers });
-  const body = await response.json();
+  const { parsed, rawText } = await readResponseBody(response);
+
   if (!response.ok) {
-    const error = body?.error;
+    const error =
+      parsed && typeof parsed === "object" && "error" in parsed
+        ? (parsed as { error?: { code?: string; message?: string } }).error
+        : undefined;
+    const code = error?.code ?? (response.status === 401 ? "auth_required" : "unknown_error");
+    const message = error?.message ?? fallbackErrorMessage(response.status, rawText);
+    const apiError = new ExchangeApiError(response.status, code, message);
+    if (apiKey && response.status === 401) {
+      notifyUnauthorized(apiKey, apiError);
+    }
+    throw apiError;
+  }
+
+  if (response.status === 204 || (parsed === null && !rawText.trim())) {
+    return undefined as T;
+  }
+
+  if (parsed === null) {
     throw new ExchangeApiError(
       response.status,
-      error?.code ?? "unknown_error",
-      error?.message ?? `Exchange request failed (${response.status})`,
+      "invalid_response",
+      "Exchange returned an unexpected non-JSON response.",
     );
   }
-  return body as T;
+
+  return parsed as T;
+}
+
+/** Best-effort server-side session revocation; ignores network or HTTP errors. */
+export async function logoutExchange(apiKey: string): Promise<void> {
+  if (!apiKey || typeof fetch !== "function") return;
+  try {
+    await fetch(`${EXCHANGE_API}/v1/auth/logout`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+  } catch {
+    // Ignore network errors during best-effort logout.
+  }
 }
 
 export const getExchangeHealth = () => request<ExchangeHealthResponse>("/v1/health");

@@ -1,9 +1,8 @@
-import { Outlet, NavLink } from "react-router-dom";
+import { Outlet, NavLink, useLocation } from "react-router-dom";
 import { useSession } from "@/features/session/context";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
-import { EXCHANGE_API } from "@/lib/exchange/client";
 import { useExchangeMe } from "@/lib/exchange/hooks";
-import { useExchangeSession } from "@/lib/exchange/session";
+import { GithubSignInLink, useExchangeSession } from "@/lib/exchange/session";
 import { isExchangeMode } from "@/lib/exchangeMode";
 import { formatCredits } from "@/lib/utils/format";
 
@@ -12,6 +11,8 @@ export function AppLayout() {
   const exchange = useExchangeSession();
   const me = useExchangeMe();
   const exchangeMode = isExchangeMode();
+  const location = useLocation();
+  const showHeaderNotice = Boolean(exchange.sessionNotice && location.pathname !== "/portfolio");
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", minWidth: 0 }}>
@@ -53,13 +54,33 @@ export function AppLayout() {
             <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", fontSize: "0.8rem", flexWrap: "wrap" }}>
               <span>@{exchange.session.githubLogin || `account ${me.data?.account_id ?? ""}`}</span>
               {me.data && <span style={creditChipStyle}>{formatCredits(me.data.available)} credits</span>}
-              <button onClick={exchange.signOut} style={signOutStyle}>Sign out</button>
+              <button type="button" onClick={exchange.signOut} style={signOutStyle}>Sign out</button>
             </div>
           ) : (
-            <a href={`${EXCHANGE_API}/v1/auth/github/login`} style={{ fontSize: "0.8rem", whiteSpace: "nowrap" }}>Sign in with GitHub</a>
+            <GithubSignInLink style={{ fontSize: "0.8rem", whiteSpace: "nowrap" }}>
+              Sign in with GitHub
+            </GithubSignInLink>
           )}
         </div>
       </header>
+      {showHeaderNotice && (
+        <div role="status" style={sessionNoticeBannerStyle}>
+          <span>{exchange.sessionNotice}</span>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+            <GithubSignInLink style={{ fontWeight: 600, fontSize: "0.78rem" }}>
+              Sign in with GitHub
+            </GithubSignInLink>
+            <button
+              type="button"
+              onClick={exchange.clearSessionNotice}
+              aria-label="Dismiss notice"
+              style={dismissNoticeStyle}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
       <main className="app-main">
         <ErrorBoundary>
           <Outlet />
@@ -91,3 +112,24 @@ const headerInputStyle: React.CSSProperties = {
 const creditChipStyle: React.CSSProperties = { padding: "2px 7px", borderRadius: 999, background: "var(--color-bg-hover)", color: "var(--color-success)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap" };
 const signOutStyle: React.CSSProperties = { padding: 0, border: 0, background: "transparent", color: "var(--color-text-muted)", cursor: "pointer", fontSize: "0.7rem" };
 const exchangeBadgeStyle: React.CSSProperties = { padding: "2px 8px", borderRadius: 999, background: "var(--color-primary)", color: "#fff", fontSize: "0.7rem", fontWeight: 600, whiteSpace: "nowrap" };
+const sessionNoticeBannerStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 8,
+  padding: "8px var(--space-lg)",
+  borderBottom: "1px solid var(--color-warning)",
+  background: "rgba(234, 179, 8, 0.12)",
+  color: "var(--color-text)",
+  fontSize: "0.8rem",
+};
+const dismissNoticeStyle: React.CSSProperties = {
+  padding: "0 4px",
+  border: 0,
+  background: "transparent",
+  color: "var(--color-text-muted)",
+  cursor: "pointer",
+  fontSize: "1rem",
+  lineHeight: 1,
+};

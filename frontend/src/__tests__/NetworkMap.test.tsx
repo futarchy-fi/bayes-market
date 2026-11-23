@@ -276,22 +276,28 @@ describe("NetworkMap", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("renders World-Model Snapshot KPI strip and one-click Try What-If scenario buttons", () => {
+  it("renders short-timelines World-Model Snapshot KPI strip and one-click Try What-If scenario buttons", () => {
     const markets = [
       market({ id: "s1", variableId: "ftm_sub_agi_by_2030", title: "Weakly general AI by 2030", marginals: { yes: 0.41, no: 0.59 } }),
-      market({ id: "a32", variableId: "ftm_agi_by_2032", title: "AGI training requirements are met by 2032", marginals: { yes: 0.11, no: 0.89 } }),
+      market({ id: "a30", variableId: "ftm_agi_by_2030", title: "AGI training requirements are met by 2030", marginals: { yes: 0.06, no: 0.94 } }),
+      market({ id: "a32", variableId: "ftm_agi_by_2032", title: "AGI training requirements are met by 2032", marginals: { yes: 0.14, no: 0.86 } }),
       market({ id: "a35", variableId: "ftm_agi_by_2035", title: "AGI training requirements are met by 2035", marginals: { yes: 0.27, no: 0.73 } }),
+      market({ id: "r32", variableId: "ftm_auto_rnd_t2_by_2032", title: "50% R&D auto by 2032", marginals: { yes: 0.18, no: 0.82 } }),
+      market({ id: "g35", variableId: "ftm_gwp_growth_max_t1_by_2035", title: "10%+ GWP growth by 2035", marginals: { yes: 0.23, no: 0.77 } }),
     ];
     renderMap(markets);
 
     expect(screen.getByTestId("world-model-snapshot")).toBeInTheDocument();
     expect(screen.getByText("Weakly General AI by 2030")).toBeInTheDocument();
     expect(screen.getByText("41.0%")).toBeInTheDocument();
+    expect(screen.getByText("Strict AGI by 2032")).toBeInTheDocument();
     expect(screen.getByText("Strict AGI by 2035")).toBeInTheDocument();
+    expect(screen.getByText("50% R&D Auto by 2032")).toBeInTheDocument();
+    expect(screen.getByText("10%+ GWP Growth by 2035")).toBeInTheDocument();
 
-    const scenarioBtn = screen.getByRole("button", { name: "Assume AGI by 2032" });
+    const scenarioBtn = screen.getByRole("button", { name: "Assume AGI by 2030" });
     fireEvent.click(scenarioBtn);
-    expect(mockUseGraphMarkets).toHaveBeenLastCalledWith([{ variableId: "ftm_agi_by_2032", outcomeId: "yes" }]);
+    expect(mockUseGraphMarkets).toHaveBeenLastCalledWith([{ variableId: "ftm_agi_by_2030", outcomeId: "yes" }]);
   });
 
   it("shows search match count, clickable match pills, sub-row threshold labels, and directional hover arrowheads", () => {
@@ -338,5 +344,64 @@ describe("NetworkMap", () => {
     expect(dialog.textContent).toContain("55.0%");
     expect(dialog.textContent).toContain("82.0%");
     expect(dialog.textContent).toContain("+27.0 pts");
+  });
+
+  it("renders 2027-2035 + 2036+ horizon and hides Undated when all markets are dated", () => {
+    const datedMarkets = [
+      market({ id: "a30", variableId: "ftm_agi_by_2030", title: "AGI 2030", marginals: { yes: 0.2, no: 0.8 } }),
+      market({ id: "f40", variableId: "fut_civilization_by_2040", title: "Civilization 2040", marginals: { yes: 0.4, no: 0.6 } }),
+    ];
+    renderMap(datedMarkets);
+
+    expect(screen.getByText("2027")).toBeInTheDocument();
+    expect(screen.getByText("2035")).toBeInTheDocument();
+    expect(screen.getByText("2036+")).toBeInTheDocument();
+    expect(screen.queryByText("2036")).not.toBeInTheDocument();
+    expect(screen.queryByText("2045")).not.toBeInTheDocument();
+    expect(screen.queryByText("Undated")).not.toBeInTheDocument();
+  });
+
+  it("renders Dwarkesh, Policy, and Futurist swimlanes, tooltip source pills, and category filter chips", () => {
+    const markets = [
+      market({ id: "f1", variableId: "ftm_agi_by_2032", title: "AGI by 2032", marginals: { yes: 0.25, no: 0.75 } }),
+      market({ id: "d1", variableId: "dw_paul_agi_by_2030", title: "Dwarkesh: Paul Christiano AGI bet", marginals: { yes: 0.35, no: 0.65 } }),
+      market({ id: "p1", variableId: "pol_us_compute_cap_2029", title: "US compute cap enacted by 2029", marginals: { yes: 0.4, no: 0.6 } }),
+      market({ id: "u1", variableId: "fut_xrisk_by_2040", title: "Existential catastrophe by 2040", marginals: { yes: 0.08, no: 0.92 } }),
+      market({ id: "u2", variableId: "pol_undated_treaty", title: "Global AI treaty signed", marginals: { yes: 0.2, no: 0.8 } }),
+    ];
+    const { container } = renderMap(markets);
+
+    // Undated column appears because pol_undated_treaty has no year
+    expect(screen.getByText("Undated")).toBeInTheDocument();
+
+    // Swimlane headers rendered
+    expect(screen.getByText("Dwarkesh Podcast")).toBeInTheDocument();
+    expect(screen.getByText("AI Policy & Regulation")).toBeInTheDocument();
+    expect(screen.getByText("Futurist & Doomer")).toBeInTheDocument();
+
+    // Hovering a Dwarkesh node shows the "Dwarkesh" source pill in the tooltip
+    const dwHit = container.querySelectorAll('circle[data-node-id="d1"]')[1] as SVGCircleElement;
+    fireEvent.mouseOver(dwHit);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Dwarkesh");
+    fireEvent.mouseOut(dwHit);
+
+    // Category pills only include populated categories (Manifold is absent)
+    const filterGroup = screen.getByRole("group", { name: "Filter network by category" });
+    expect(filterGroup).toHaveTextContent("All");
+    expect(filterGroup).toHaveTextContent("Core FTM");
+    expect(filterGroup).toHaveTextContent("Dwarkesh");
+    expect(filterGroup).toHaveTextContent("Policy");
+    expect(filterGroup).toHaveTextContent("Futurist");
+    expect(filterGroup).not.toHaveTextContent("Manifold");
+
+    // Clicking Dwarkesh filters the map to only the Dwarkesh node
+    fireEvent.click(screen.getByRole("button", { name: /Dwarkesh/ }));
+    expect(screen.getByText("1 of 5 markets · 0 links")).toBeInTheDocument();
+    expect(container.querySelectorAll('circle[data-node-id="d1"]').length).toBe(2);
+    expect(container.querySelectorAll('circle[data-node-id="f1"]').length).toBe(0);
+
+    // Clicking All restores the full map
+    fireEvent.click(screen.getByRole("button", { name: /^All/ }));
+    expect(screen.getByText("5 markets · 0 links")).toBeInTheDocument();
   });
 });
