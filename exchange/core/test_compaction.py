@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from exchange.core.market_engine import MarketEngine
 from exchange.core.models import ZERO, reset_counters
-from exchange.core.persistence import load_snapshot, save_snapshot
+from exchange.core.persistence import compact_empty_batch_rounds, load_snapshot, save_snapshot
 from exchange.core.risk_engine import RiskEngine
 
 
@@ -123,3 +123,66 @@ def test_minted_base_survives_snapshot_round_trip(tmp_path):
 
     assert risk2._minted_base == e._minted_base
     assert risk2.total_minted() == minted
+
+
+def test_compact_empty_batch_rounds_strips_zero_participants_and_caps_history():
+    empty_rounds = [
+        {"round": i, "clearingPrice": "0.5", "participants": 0}
+        for i in range(1, 1001)
+    ]
+    active_rounds = [
+        {"round": 1000 + i, "clearingPrice": "0.55", "participants": 2}
+        for i in range(1, 601)
+    ]
+    state = {
+        "venues": {
+            "batch": {
+                "markets": [
+                    {"id": 1, "round_history": empty_rounds + active_rounds},
+                    {"id": 2, "round_history": [{"round": 1, "clearingPrice": "0.5", "participants": 0}]},
+                ]
+            }
+        }
+    }
+    removed = compact_empty_batch_rounds(state, max_history=500)
+    assert removed == 1000 + 100 + 1
+    m1_hist = state["venues"]["batch"]["markets"][0]["round_history"]
+    m2_hist = state["venues"]["batch"]["markets"][1]["round_history"]
+    assert len(m1_hist) == 500
+    assert m1_hist[0]["round"] == 1101
+    assert m1_hist[-1]["round"] == 1600
+    assert all(entry["participants"] > 0 for entry in m1_hist)
+    assert m2_hist == []
+    # Idempotent on a second pass.
+    assert compact_empty_batch_rounds(state, max_history=500) == 0
+
+
+def test_batch_engine_caps_round_history_and_strips_empty_on_reload():
+    from exchange.venues.batch.engine import BatchEngine, MAX_ROUND_HISTORY
+
+    reset_counters()
+    risk = RiskEngine()
+    trader = risk.create_account()
+    risk.mint(trader.id, Decimal("10000"))
+    engine = BatchEngine(risk)
+    market = engine.create_market("Retention?", b=Decimal("10"))
+
+    # Empty manual close_round never adds zero-participant records.
+    empty_res = engine.close_round(market.id)
+    assert empty_res["participants"] == 0
+    assert market.round_history == []
+
+    # Legacy bloated snapshot with empty rounds + >500 real rounds compacts on load.
+    snap = engine.snapshot()
+    snap["markets"][0]["round_history"] = [
+        {"round": i, "clearingPrice": "0.5", "participants": 0}
+        for i in range(1, 50)
+    ] + [
+        {"round": 100 + i, "clearingPrice": "0.6", "participants": 1}
+        for i in range(1, MAX_ROUND_HISTORY + 25)
+    ]
+    restored = BatchEngine.from_snapshot(snap, risk)
+    hist = restored.markets[market.id].round_history
+    assert len(hist) == MAX_ROUND_HISTORY
+    assert all(r["participants"] > 0 for r in hist)
+    assert hist[-1]["round"] == 100 + MAX_ROUND_HISTORY + 24

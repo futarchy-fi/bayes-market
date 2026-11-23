@@ -214,11 +214,20 @@ async def test_due_round_reconciliation_and_nonpositive_interval_disable(monkeyp
     monkeypatch.setattr(api_module, "BATCH_ROUND_CHECK_SECONDS", 0)
     async with api_module.lifespan(app):
         assert app.state.batch_round_task is None
+        trader = await _authenticate_github_identity({"id": 301, "login": "due-trader"})
         market = await _request(
             "POST", "/v1/batch/markets",
             body={"question": "Timed?", "roundSeconds": 10},
         )
         market_id = market.json()["id"]
+        order = await _request(
+            "POST", "/v1/batch/orders", key=trader.api_key,
+            body={
+                "marketId": market_id, "outcome": "yes",
+                "target": "0.65", "maxSpend": "3",
+            },
+        )
+        assert order.status_code == 200
         started = datetime.fromisoformat(
             app.state.batch.engine.markets[market_id].round_started_at
         )
@@ -228,26 +237,72 @@ async def test_due_round_reconciliation_and_nonpositive_interval_disable(monkeyp
         assert await api_module._close_due_batch_rounds_once(
             started + timedelta(seconds=10)
         ) == [market_id]
-        assert app.state.batch.get_market(market_id)["round"] == 2
+        public = app.state.batch.get_market(market_id)
+        assert public["round"] == 2
+        assert len(public["roundHistory"]) == 1
+        assert public["roundHistory"][0]["participants"] == 1
+
+
+async def test_empty_due_round_advances_window_without_history_or_save(monkeypatch):
+    monkeypatch.setattr(api_module, "BATCH_ROUND_CHECK_SECONDS", 0)
+    async with api_module.lifespan(app):
+        market = await _request(
+            "POST", "/v1/batch/markets",
+            body={"question": "Quiet?", "roundSeconds": 10},
+        )
+        market_id = market.json()["id"]
+        batch_market = app.state.batch.engine.markets[market_id]
+        started = datetime.fromisoformat(batch_market.round_started_at)
+
+        save_calls = 0
+        real_save = api_module._save
+
+        def counting_save():
+            nonlocal save_calls
+            save_calls += 1
+            return real_save()
+
+        monkeypatch.setattr(api_module, "_save", counting_save)
+
+        for step in range(1, 6):
+            tick = started + timedelta(seconds=10 * step)
+            assert await api_module._close_due_batch_rounds_once(tick) == []
+            assert datetime.fromisoformat(batch_market.round_started_at) == tick
+
+        assert save_calls == 0
+        public = app.state.batch.get_market(market_id)
+        assert public["round"] == 1
+        assert public["roundHistory"] == []
 
 
 async def test_overdue_persisted_round_closes_before_lifespan_yields(monkeypatch):
     monkeypatch.setattr(api_module, "BATCH_ROUND_CHECK_SECONDS", 30)
     async with api_module.lifespan(app):
+        trader = await _authenticate_github_identity({"id": 302, "login": "overdue-trader"})
         market = await _request(
             "POST", "/v1/batch/markets",
             body={"question": "Overdue?", "roundSeconds": 60},
         )
-        batch_market = app.state.batch.engine.markets[market.json()["id"]]
+        market_id = market.json()["id"]
+        order = await _request(
+            "POST", "/v1/batch/orders", key=trader.api_key,
+            body={
+                "marketId": market_id, "outcome": "yes",
+                "target": "0.7", "maxSpend": "4",
+            },
+        )
+        assert order.status_code == 200
+        batch_market = app.state.batch.engine.markets[market_id]
         batch_market.round_started_at = (
             datetime.now(timezone.utc) - timedelta(seconds=61)
         ).isoformat()
         api_module._save()
 
     async with api_module.lifespan(app):
-        restored = app.state.batch.get_market(market.json()["id"])
+        restored = app.state.batch.get_market(market_id)
         assert restored["round"] == 2
         assert len(restored["roundHistory"]) == 1
+        assert restored["roundHistory"][0]["participants"] == 1
 
 
 async def test_background_task_closes_and_persists_due_round(monkeypatch):

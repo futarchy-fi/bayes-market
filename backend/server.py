@@ -7013,8 +7013,10 @@ class BayesHandler(BaseHTTPRequestHandler):
         data: dict[str, Any],
         status: int = 200,
         extra_headers: dict[str, str] | None = None,
+        *,
+        head_only: bool = False,
     ) -> None:
-        """Write a JSON response body with the standard headers."""
+        """Write a JSON response body (or headers only for HEAD) with standard headers."""
         body = json.dumps(data).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -7024,7 +7026,8 @@ class BayesHandler(BaseHTTPRequestHandler):
             for key, value in extra_headers.items():
                 self.send_header(key, value)
         self.end_headers()
-        self.wfile.write(body)
+        if not head_only:
+            self.wfile.write(body)
 
     def _enforce_write_controls(self, method: str) -> str:
         write_request = resolve_write_request_agent(method, self.path, self.headers)
@@ -7053,7 +7056,7 @@ class BayesHandler(BaseHTTPRequestHandler):
             raise ApiError(400, "invalid_body", "payload must be an object")
         return body
 
-    def handle_api(self, method: str) -> None:
+    def handle_api(self, method: str, *, head_only: bool = False) -> None:
         """Execute one API request and translate ApiError into JSON responses."""
         extra_headers: dict[str, str] | None = None
         try:
@@ -7068,9 +7071,9 @@ class BayesHandler(BaseHTTPRequestHandler):
                 retry_after = str(exc.details.get("retryAfterSeconds", 1))
                 extra_headers = {"Retry-After": retry_after}
                 extra_headers.update(rate_limit_headers(str(exc.details.get("agentId", ""))))
-        self.send_json(payload, status, extra_headers=extra_headers)
+        self.send_json(payload, status, extra_headers=extra_headers, head_only=head_only)
 
-    def _serve_static(self, url_path: str) -> bool:
+    def _serve_static(self, url_path: str, *, head_only: bool = False) -> bool:
         """Try to serve a static file from frontend/dist/. Return True if served."""
         if not FRONTEND_DIST.is_dir():
             return False
@@ -7112,20 +7115,29 @@ class BayesHandler(BaseHTTPRequestHandler):
         elif clean.startswith("/assets/") or ext in {".js", ".css", ".woff2", ".woff", ".ttf", ".png", ".svg", ".ico"}:
             self.send_header("Cache-Control", "public, max-age=31536000, immutable")
         self.end_headers()
-        self.wfile.write(content)
+        if not head_only:
+            self.wfile.write(content)
         return True
+
+    def _handle_get_or_head(self, *, head_only: bool) -> None:
+        path = normalize_path(urlparse(self.path).path)
+        kwargs = {"head_only": True} if head_only else {}
+        if path.startswith("/v1/") or path in PUBLIC_HEALTH_ROUTES:
+            self.handle_api("GET", **kwargs)
+            return
+        if path == "/" and "application/json" in (self.headers.get("Accept") or ""):
+            self.handle_api("GET", **kwargs)
+            return
+        if not self._serve_static(self.path, **kwargs):
+            self.handle_api("GET", **kwargs)
 
     def do_GET(self) -> None:  # noqa: N802
         """Serve API routes first, fall back to static frontend files."""
-        path = normalize_path(urlparse(self.path).path)
-        if path.startswith("/v1/") or path in PUBLIC_HEALTH_ROUTES:
-            self.handle_api("GET")
-            return
-        if path == "/" and "application/json" in (self.headers.get("Accept") or ""):
-            self.handle_api("GET")
-            return
-        if not self._serve_static(self.path):
-            self.handle_api("GET")
+        self._handle_get_or_head(head_only=False)
+
+    def do_HEAD(self) -> None:  # noqa: N802
+        """Serve headers without a body for static, SPA, health, and API routes."""
+        self._handle_get_or_head(head_only=True)
 
     def do_POST(self) -> None:  # noqa: N802
         """Serve an HTTP POST request."""
