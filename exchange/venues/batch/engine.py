@@ -38,6 +38,7 @@ ONE = Decimal("1")
 HALF = Decimal("0.5")
 SHARE_QUANTUM = Decimal("0.000000000001")
 MONEY_QUANTUM = Decimal("0.000000000001")
+MAX_ROUND_HISTORY = 500
 
 
 class ClearingError(VenueError):
@@ -236,6 +237,11 @@ class BatchEngine:
         self.pending[(market.id, account_id)] = order
         return order
 
+    def has_pending_orders(self, market_id: int) -> bool:
+        """Return True if ``market_id`` has at least one pending sealed order."""
+        mid_int = int(market_id)
+        return any(mid == mid_int for mid, _ in self.pending)
+
     def close_round(self, market_id: int) -> dict[str, Any]:
         market = self._open_market(market_id)
         orders = [
@@ -408,6 +414,13 @@ class BatchEngine:
             for key in ("b", "net_cap", "posted_price"):
                 item[key] = Decimal(item[key])
             engine.risk.get_account(item["escrow_account_id"])
+            raw_history = item.get("round_history")
+            if isinstance(raw_history, list):
+                non_empty = [
+                    r for r in raw_history
+                    if isinstance(r, dict) and int(r.get("participants", 0)) > 0
+                ]
+                item["round_history"] = non_empty[-MAX_ROUND_HISTORY:]
             market = BatchMarket(**item)
             engine.markets[market.id] = market
         for raw in data.get("pending", []):
@@ -467,7 +480,10 @@ class BatchEngine:
             "clearingPrice": str(price),
             "participants": participants,
         }
-        market.round_history.append(record)
+        if participants > 0:
+            market.round_history.append(record)
+            if len(market.round_history) > MAX_ROUND_HISTORY:
+                del market.round_history[:-MAX_ROUND_HISTORY]
         market.round += 1
         return record
 

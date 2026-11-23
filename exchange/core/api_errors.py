@@ -30,11 +30,13 @@ class APIError(Exception):
     """Structured API error with HTTP status and machine-readable code."""
 
     def __init__(self, status: int, code: str, message: str,
-                 details: dict | None = None):
+                 details: dict | None = None,
+                 headers: dict[str, str] | None = None):
         self.status = status
         self.code = code
         self.message = message
         self.details = details or {}
+        self.headers = headers
 
     def response(self) -> JSONResponse:
         return JSONResponse(
@@ -44,6 +46,7 @@ class APIError(Exception):
                 "message": self.message,
                 "details": self.details,
             }},
+            headers=self.headers,
         )
 
 

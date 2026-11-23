@@ -2,10 +2,13 @@
 Auth dependencies, rate limiting, CORS, and body-size hardening middleware.
 """
 
+import logging
 import os
 import secrets
 import time
 from typing import Annotated
+
+logger = logging.getLogger(__name__)
 
 from fastapi import Depends, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -118,7 +121,7 @@ async def require_auth(request: Request, response: Response) -> User:
     for k, v in headers.items():
         response.headers[k] = v
     if not allowed:
-        raise APIError(429, "rate_limited", "Rate limit exceeded")
+        raise APIError(429, "rate_limited", "Rate limit exceeded", headers=headers)
 
     return user
 
@@ -155,8 +158,14 @@ OptionalUser = Annotated[User | None, Depends(optional_auth)]
 # CORS (Task B6)
 # ---------------------------------------------------------------------------
 
-CORS_ALLOWED_METHODS = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+CORS_ALLOWED_METHODS = ["GET", "HEAD", "POST", "PATCH", "DELETE", "OPTIONS"]
 CORS_ALLOWED_HEADERS = ["Authorization", "Content-Type"]
+CORS_EXPOSED_HEADERS = [
+    "Retry-After",
+    "X-RateLimit-Limit",
+    "X-RateLimit-Remaining",
+    "X-RateLimit-Reset",
+]
 
 
 def _cors_origins() -> list[str]:
@@ -170,7 +179,11 @@ def _cors_origins() -> list[str]:
     CORS behavior needs to vary per-request in tests.
     """
     raw = os.environ.get("CORS_ORIGINS", "*")
-    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    origins = [
+        o.strip().rstrip("/") if o.strip() != "*" else "*"
+        for o in raw.split(",")
+        if o.strip()
+    ]
     return origins or ["*"]
 
 
@@ -186,6 +199,12 @@ class DynamicCORSMiddleware:
     Starlette explicitly forbids once the app has started). Reconstructing
     a real ``CORSMiddleware`` per request keeps the actual CORS logic
     delegated to Starlette while keeping the origin list live.
+
+    Additionally wraps the inner ASGI app inside ``CORSMiddleware`` with an
+    exception guard so unhandled exceptions (500s) produce a structured JSON
+    error response that still passes through ``CORSMiddleware.send()`` instead
+    of bubbling up to Starlette's outer ``ServerErrorMiddleware`` without
+    ``Access-Control-Allow-Origin``.
 
     When the resolved origin list is exactly ``["*"]``, credentials are
     forced off — Starlette (and browsers) treat
@@ -203,12 +222,41 @@ class DynamicCORSMiddleware:
 
         origins = _cors_origins()
         allow_credentials = origins != ["*"]
+
+        async def safe_app(inner_scope, inner_receive, inner_send):
+            response_started = False
+
+            async def tracking_send(message):
+                nonlocal response_started
+                if message["type"] == "http.response.start":
+                    response_started = True
+                await inner_send(message)
+
+            try:
+                await self.app(inner_scope, inner_receive, tracking_send)
+            except Exception:
+                logger.exception("Unhandled exception while serving HTTP request")
+                if response_started:
+                    raise
+                error_response = JSONResponse(
+                    status_code=500,
+                    content={
+                        "error": {
+                            "code": "internal_error",
+                            "message": "Internal server error",
+                            "details": {},
+                        }
+                    },
+                )
+                await error_response(inner_scope, inner_receive, inner_send)
+
         cors = CORSMiddleware(
-            self.app,
+            safe_app,
             allow_origins=origins,
             allow_credentials=allow_credentials,
             allow_methods=CORS_ALLOWED_METHODS,
             allow_headers=CORS_ALLOWED_HEADERS,
+            expose_headers=CORS_EXPOSED_HEADERS,
         )
         await cors(scope, receive, send)
 

@@ -666,7 +666,8 @@ async def _close_due_batch_rounds_once(now: datetime | None = None) -> list[int]
     current = now or datetime.now(timezone.utc)
     closed: list[int] = []
     async with app.state.lock:
-        for market in app.state.batch.engine.markets.values():
+        engine = app.state.batch.engine
+        for market in engine.markets.values():
             started = _parse_deadline(market.round_started_at or market.created_at)
             if (
                 market.status != "open"
@@ -674,6 +675,11 @@ async def _close_due_batch_rounds_once(now: datetime | None = None) -> list[int]
                 or started is None
                 or (current - started).total_seconds() < market.round_seconds
             ):
+                continue
+            if not engine.has_pending_orders(market.id):
+                # Advance the round window in memory without bloating
+                # round_history or rewriting the full snapshot to disk.
+                market.round_started_at = current.isoformat()
                 continue
             try:
                 app.state.batch.close_round(market.id)
@@ -722,8 +728,21 @@ async def install_script():
 async def health() -> HealthResponse:
     auth_store = app.state.auth_store
     joint = getattr(app.state, "joint", None)
+    joint_summary = (
+        joint.summary_stats()
+        if joint is not None
+        else {
+            "netMarkets": 0,
+            "activeMarkets": 0,
+            "resolvedMarkets": 0,
+            "totalVolume": 0.0,
+            "totalLiquidity": 0.0,
+        }
+    )
     return HealthResponse(
         status="ok",
+        service="futarchy-exchange",
+        timestamp=_paper_timestamp(),
         markets=len(app.state.me.markets),
         ledger_accounts=len(app.state.risk.accounts),
         users=(
@@ -731,7 +750,7 @@ async def health() -> HealthResponse:
             len(getattr(auth_store, "local_users", {}))
         ),
         net=NetHealth(
-            markets=len(joint.market_ids()) if joint is not None else 0,
+            markets=joint_summary["netMarkets"],
             orders=joint.orders_count() if joint is not None else 0,
             enabled=joint is not None,
         ),
@@ -739,6 +758,11 @@ async def health() -> HealthResponse:
             kind: venue.stats()
             for kind, venue in getattr(app.state, "venues_by_kind", {}).items()
         },
+        netMarkets=joint_summary["netMarkets"],
+        activeMarkets=joint_summary["activeMarkets"],
+        resolvedMarkets=joint_summary["resolvedMarkets"],
+        totalVolume=joint_summary["totalVolume"],
+        totalLiquidity=joint_summary["totalLiquidity"],
     )
 
 
@@ -1656,7 +1680,13 @@ def _paper_status(record: dict) -> str:
     )
 
 
-def _graph_market(record: dict, conditional: dict[str, float] | None = None) -> dict:
+def _graph_market(
+    record: dict,
+    conditional: dict[str, float] | None = None,
+    *,
+    volume: float = 0.0,
+    liquidity: float = 0.0,
+) -> dict:
     market = {
         key: record[key]
         for key in ("id", "variableId", "title", "anchor", "ftmImplied")
@@ -1664,6 +1694,8 @@ def _graph_market(record: dict, conditional: dict[str, float] | None = None) -> 
     }
     market["marginals"] = {key: float(value) for key, value in record["marginals"].items()}
     market["status"] = _paper_status(record)
+    market["volume"] = float(volume)
+    market["liquidity"] = float(liquidity)
     if record.get("parents"):
         market["parents"] = list(record["parents"])
     if conditional is not None:
@@ -1673,7 +1705,12 @@ def _graph_market(record: dict, conditional: dict[str, float] | None = None) -> 
     return market
 
 
-def _to_net_market(record: dict) -> NetMarket:
+def _to_net_market(
+    record: dict,
+    *,
+    volume: float = 0.0,
+    liquidity: float = 0.0,
+) -> NetMarket:
     """Build a ``NetMarket`` response from a venue ``get_market()`` dict.
 
     Copies every mutable field (outcomes, marginals, parents) rather than
@@ -1691,6 +1728,8 @@ def _to_net_market(record: dict) -> NetMarket:
         outcomes=[dict(o) for o in record.get("outcomes", [])],
         marginals={o: float(p) for o, p in record["marginals"].items()},
         parents=list(record.get("parents", [])),
+        volume=float(volume),
+        liquidity=float(liquidity),
     )
 
 
@@ -1748,6 +1787,8 @@ async def list_net_markets(fields: str | None = None, context: str | None = None
     ctx = _parse_context(context) if fields == "graph" else {}
     async with app.state.lock:
         records = [joint.get_market(mid) for mid in joint.market_ids()]
+        volumes = joint.volume_by_variable()
+        liquidity = float(joint.liquidity)
         if fields == "graph":
             try:
                 conditional = joint.all_marginals(ctx) if ctx else {}
@@ -1761,6 +1802,8 @@ async def list_net_markets(fields: str | None = None, context: str | None = None
             _graph_market(
                 record,
                 conditional.get(str(record["variableId"])) if ctx else None,
+                volume=float(volumes.get(str(record["variableId"]), ZERO)),
+                liquidity=liquidity,
             )
             for record in records
             if _paper_status(record) != "resolved"
@@ -1780,7 +1823,14 @@ async def list_net_markets(fields: str | None = None, context: str | None = None
             "meta": {"timestamp": _paper_timestamp(), "filters": filters},
         }
 
-    markets = [_to_net_market(record) for record in records]
+    markets = [
+        _to_net_market(
+            record,
+            volume=float(volumes.get(str(record["variableId"]), ZERO)),
+            liquidity=liquidity,
+        )
+        for record in records
+    ]
     return NetMarketList(markets=markets, count=len(markets))
 
 
@@ -1793,7 +1843,9 @@ async def get_net_market(market_id: str) -> NetMarket:
             record = joint.get_market(market_id)
         except VenueError as err:
             raise translate_venue_error(err) from err
-    return _to_net_market(record)
+        volume = float(joint.variable_volume(str(record["variableId"])))
+        liquidity = float(joint.liquidity)
+    return _to_net_market(record, volume=volume, liquidity=liquidity)
 
 
 @app.get("/v1/net/marginal")

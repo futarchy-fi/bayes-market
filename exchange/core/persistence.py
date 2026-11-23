@@ -206,6 +206,52 @@ def _apply_migrations(state: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# State compaction helpers
+# ---------------------------------------------------------------------------
+
+DEFAULT_MAX_BATCH_ROUND_HISTORY = 500
+
+
+def compact_empty_batch_rounds(
+    state: dict,
+    *,
+    max_history: int = DEFAULT_MAX_BATCH_ROUND_HISTORY,
+) -> int:
+    """Strip zero-participant batch rounds and trim ``round_history`` in place.
+
+    Mutates ``state`` in place (if a ``venues.batch.markets`` section exists)
+    and returns the total number of ``round_history`` entries removed.
+    Safe to run idempotently on any snapshot dict for offline migration.
+    """
+    venues = state.get("venues")
+    if not isinstance(venues, dict):
+        return 0
+    batch = venues.get("batch")
+    if not isinstance(batch, dict):
+        return 0
+    markets = batch.get("markets")
+    if not isinstance(markets, list):
+        return 0
+
+    removed = 0
+    for market in markets:
+        if not isinstance(market, dict):
+            continue
+        history = market.get("round_history")
+        if not isinstance(history, list):
+            continue
+        kept = [
+            entry for entry in history
+            if isinstance(entry, dict) and int(entry.get("participants", 0)) > 0
+        ]
+        if max_history > 0 and len(kept) > max_history:
+            kept = kept[-max_history:]
+        removed += len(history) - len(kept)
+        market["round_history"] = kept
+    return removed
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 

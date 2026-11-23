@@ -365,3 +365,94 @@ class TestNetOrderRateLimiting:
             assert r2.status_code == 200
             assert r3.status_code == 429
             assert r3.json()["error"]["code"] == "rate_limited"
+
+
+# ---------------------------------------------------------------------------
+# CORS on error responses (409, 429, 500)
+# ---------------------------------------------------------------------------
+
+class TestCORSErrorResponses:
+    async def test_cors_headers_on_409_and_429_responses(self, tmp_path, monkeypatch):
+        reset_counters()
+        seeds_path = _write_seeds(tmp_path)
+        monkeypatch.setenv("EXCHANGE_SEEDS_PATH", seeds_path)
+        monkeypatch.setenv("CORS_ORIGINS", "https://futarchy.ai")
+        api_module.STATE_PATH = str(tmp_path / "state.json")
+
+        async with api_module.lifespan(app):
+            api_key, _ = await _authed_user()
+            # Resolve g1 so placing an order on gcx_a triggers 409 market_closed.
+            res = await _post(
+                "/v1/net/markets/g1/resolve",
+                body={"outcome": "yes"},
+                headers={"Authorization": "Bearer test-admin-key"},
+            )
+            assert res.status_code == 200
+
+            body = {"variableId": "gcx_a", "outcomeId": "yes", "target": 0.8}
+            r409 = await _post(
+                "/v1/net/orders",
+                body=body,
+                headers={**_headers(api_key), "Origin": "https://futarchy.ai"},
+            )
+            assert r409.status_code == 409
+            assert r409.headers.get("access-control-allow-origin") == "https://futarchy.ai"
+            assert r409.headers.get("access-control-allow-credentials") == "true"
+
+            r409_bad = await _post(
+                "/v1/net/orders",
+                body=body,
+                headers={**_headers(api_key), "Origin": "https://evil.example"},
+            )
+            assert r409_bad.status_code == 409
+            assert r409_bad.headers.get("access-control-allow-origin") is None
+
+            # Trigger 429 rate limit with an allowlisted origin.
+            rate_limiter.rate = 1
+            rate_limiter.buckets.clear()
+            ok = await _post(
+                "/v1/net/orders/preview",
+                body={"variableId": "gcx_b", "outcomeId": "yes", "target": 0.7},
+                headers={**_headers(api_key), "Origin": "https://futarchy.ai"},
+            )
+            assert ok.status_code == 200
+            r429 = await _post(
+                "/v1/net/orders/preview",
+                body={"variableId": "gcx_b", "outcomeId": "yes", "target": 0.7},
+                headers={**_headers(api_key), "Origin": "https://futarchy.ai"},
+            )
+            assert r429.status_code == 429
+            assert r429.json()["error"]["code"] == "rate_limited"
+            assert r429.headers.get("access-control-allow-origin") == "https://futarchy.ai"
+            assert r429.headers.get("access-control-allow-credentials") == "true"
+            assert r429.headers.get("retry-after") == "60"
+
+            r429_bad = await _post(
+                "/v1/net/orders/preview",
+                body={"variableId": "gcx_b", "outcomeId": "yes", "target": 0.7},
+                headers={**_headers(api_key), "Origin": "https://evil.example"},
+            )
+            assert r429_bad.status_code == 429
+            assert r429_bad.headers.get("access-control-allow-origin") is None
+
+    async def test_cors_headers_on_500_unhandled_exception(self, monkeypatch):
+        from exchange.core.middleware import DynamicCORSMiddleware
+
+        monkeypatch.setenv("CORS_ORIGINS", "https://futarchy.ai")
+
+        async def crashing_app(scope, receive, send):
+            raise RuntimeError("boom")
+
+        wrapped = DynamicCORSMiddleware(crashing_app)
+        async with AsyncClient(
+            transport=ASGITransport(app=wrapped), base_url="http://test"
+        ) as c:
+            r500 = await c.get("/boom", headers={"Origin": "https://futarchy.ai"})
+            assert r500.status_code == 500
+            assert r500.json()["error"]["code"] == "internal_error"
+            assert r500.headers.get("access-control-allow-origin") == "https://futarchy.ai"
+            assert r500.headers.get("access-control-allow-credentials") == "true"
+
+            r500_bad = await c.get("/boom", headers={"Origin": "https://evil.example"})
+            assert r500_bad.status_code == 500
+            assert r500_bad.headers.get("access-control-allow-origin") is None

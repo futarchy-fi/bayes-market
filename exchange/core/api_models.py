@@ -236,6 +236,8 @@ class NetMarket(BaseModel):
     outcomes: list[dict]
     marginals: dict[str, float]
     parents: list[str] = []
+    volume: float = 0.0
+    liquidity: float = 0.0
 
 class NetMarketList(BaseModel):
     markets: list[NetMarket]
@@ -514,11 +516,18 @@ class LeaderboardResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+    service: str = "futarchy-exchange"
+    timestamp: str = ""
     markets: int
     ledger_accounts: int
     users: int
     net: NetHealth
     venues: dict[str, dict]
+    netMarkets: int = 0
+    activeMarkets: int = 0
+    resolvedMarkets: int = 0
+    totalVolume: float = 0.0
+    totalLiquidity: float = 0.0
 
 
 # --- Tracked Repos ---

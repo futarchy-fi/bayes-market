@@ -789,11 +789,61 @@ class JointVenue:
 
         return venue
 
-    # -- public order accessors -------------------------------------------
+    # -- public order & volume accessors ----------------------------------
+
+    @property
+    def liquidity(self) -> Decimal:
+        """Joint MSR liquidity parameter ``b``."""
+        return self._liquidity
+
+    @property
+    def orders(self) -> list[dict[str, Any]]:
+        """All orders ever placed on this venue (placement order)."""
+        return self._orders
 
     def orders_count(self) -> int:
         """Total number of orders ever placed on this venue (any status)."""
         return len(self._orders)
+
+    def volume_by_variable(self) -> dict[str, Decimal]:
+        """Sum of staked volume per variableId across all orders (single pass)."""
+        totals: dict[str, Decimal] = {}
+        zero = Decimal("0")
+        for order in self._orders:
+            var_id = str(order.get("variableId", ""))
+            stake = Decimal(str(order.get("stake", 0)))
+            totals[var_id] = totals.get(var_id, zero) + stake
+        return totals
+
+    def variable_volume(self, variable_id: str) -> Decimal:
+        """Sum of staked volume for a single variableId."""
+        return sum(
+            (Decimal(str(order.get("stake", 0))) for order in self._orders_by_var.get(variable_id, ())),
+            Decimal("0"),
+        )
+
+    def summary_stats(self) -> dict[str, Any]:
+        """Lightweight aggregate stats over net markets without running inference."""
+        active = 0
+        resolved = 0
+        for record in self._markets.values():
+            status = str(record.get("status", "open"))
+            if status in ("open", "active"):
+                active += 1
+            elif status == "resolved":
+                resolved += 1
+        total_volume = sum(
+            (Decimal(str(order.get("stake", 0))) for order in self._orders),
+            Decimal("0"),
+        )
+        total_liquidity = self._liquidity * len(self._markets)
+        return {
+            "netMarkets": len(self._markets),
+            "activeMarkets": active,
+            "resolvedMarkets": resolved,
+            "totalVolume": float(total_volume),
+            "totalLiquidity": float(total_liquidity),
+        }
 
     def stats(self) -> dict[str, int]:
         return {
