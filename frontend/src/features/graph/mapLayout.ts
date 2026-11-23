@@ -7,7 +7,8 @@
  * Structured timeline map, NOT force-directed:
  *   X axis = year the market resolves (parsed from the variableId or, for
  *   markets without one, from the title). Y axis = fixed horizontal "family"
- *   bands (one row of sub-bands per FTM concept, plus external + other).
+ *   bands (one row of sub-bands per FTM concept, plus Dwarkesh, Policy,
+ *   Futurist, External, and Other).
  */
 
 import type { GraphMarket } from "@/lib/api/types";
@@ -28,6 +29,12 @@ const YEAR_IN_TITLE_RE = /20[2-6]\d/g;
 
 /** Trailing `_by_YYYY` / `_in_YYYY`, with an optional `_t<k>` tier just before it. */
 const FTM_VAR_RE = /^ftm_(.+?)(?:_t(\d))?_(?:by|in)_(\d{4})$/;
+
+/** Explicit `_by_YYYY` or `_in_YYYY` year embedded in thematic variable ids. */
+const VAR_EXPLICIT_YEAR_RE = /_(?:by|in)_(20[2-6]\d)(?:$|_)/g;
+
+/** Bare `_YYYY` token embedded in thematic variable ids. */
+const VAR_BARE_YEAR_RE = /_(20[2-6]\d)(?:$|_)/g;
 
 export const KNOWN_FTM_FAMILIES = new Set([
   "agi",
@@ -53,12 +60,32 @@ export function parseYearFromTitle(title: string): number | null {
   return Math.max(...matches.map(Number));
 }
 
+function maxCapturedYear(input: string, regex: RegExp): number | null {
+  let max: number | null = null;
+  for (const match of input.matchAll(regex)) {
+    const year = Number(match[1]);
+    if (max === null || year > max) max = year;
+  }
+  return max;
+}
+
+function parseThematicYear(varId: string, title: string): number | null {
+  return (
+    maxCapturedYear(varId, VAR_EXPLICIT_YEAR_RE) ??
+    parseYearFromTitle(title) ??
+    maxCapturedYear(varId, VAR_BARE_YEAR_RE)
+  );
+}
+
 /**
  * Classify a market by its engine variableId (falling back to its title for
  * the year, and for family/tier when the id doesn't parse):
+ *  - `dw_*` ids -> family "dwarkesh"
+ *  - `pol_*` ids -> family "policy"
+ *  - `fut_*` ids -> family "futurist"
  *  - `x_*` ids are external imports -> family "external", year from title.
  *  - `ftm_<family>[_t<tier>]_by|in_<year>` ids parse directly.
- *  - anything else (the 16 hand-authored originals, or a malformed id) ->
+ *  - anything else (hand-authored originals, or a malformed id) ->
  *    family "other", year from title if present, else undated (null).
  */
 export function classifyVariable(
@@ -66,6 +93,18 @@ export function classifyVariable(
   title: string,
 ): Classification {
   const varId = variableId ?? "";
+
+  if (varId.startsWith("dw_")) {
+    return { family: "dwarkesh", tier: null, year: parseThematicYear(varId, title) };
+  }
+
+  if (varId.startsWith("pol_")) {
+    return { family: "policy", tier: null, year: parseThematicYear(varId, title) };
+  }
+
+  if (varId.startsWith("fut_")) {
+    return { family: "futurist", tier: null, year: parseThematicYear(varId, title) };
+  }
 
   if (varId.startsWith("x_")) {
     return { family: "external", tier: null, year: parseYearFromTitle(title) };
@@ -94,6 +133,9 @@ export type GroupKey =
   | "compute"
   | "efficiency"
   | "economy"
+  | "dwarkesh"
+  | "policy"
+  | "futurist"
   | "external_other";
 
 export interface FamilyMeta {
@@ -118,7 +160,10 @@ export const FAMILY_ORDER: FamilyMeta[] = [
   { key: "sw_ratio", label: "Software efficiency", group: "efficiency" },
   { key: "gwp_growth", label: "GWP growth (in-year)", group: "economy" },
   { key: "gwp_growth_max", label: "GWP growth (ever exceeded)", group: "economy" },
-  { key: "external", label: "External forecasts (Metaculus/Manifold)", group: "external_other" },
+  { key: "dwarkesh", label: "Dwarkesh Podcast", group: "dwarkesh" },
+  { key: "policy", label: "AI Policy & Regulation", group: "policy" },
+  { key: "futurist", label: "Futurist & Doomer", group: "futurist" },
+  { key: "external", label: "External forecasts (Manifold)", group: "external_other" },
   { key: "other", label: "Other", group: "external_other" },
 ];
 
@@ -142,6 +187,9 @@ export const GROUP_LABELS: Record<GroupKey, string> = {
   compute: "Compute",
   efficiency: "Efficiency",
   economy: "Economy",
+  dwarkesh: "Dwarkesh",
+  policy: "Policy",
+  futurist: "Futurist",
   external_other: "External",
 };
 
@@ -155,11 +203,96 @@ export const GROUP_COLORS: Record<GroupKey, string> = {
   compute: "#605edc", // indigo
   efficiency: "#00925e", // teal-green
   economy: "#6f7d00", // olive / yellow-green
-  external_other: "#b73790", // magenta
+  dwarkesh: "#f59e0b", // amber
+  policy: "#14b8a6", // teal
+  futurist: "#a855f7", // violet
+  external_other: "#ec4899", // pink
 };
 
 export function colorForGroup(group: GroupKey): string {
   return GROUP_COLORS[group];
+}
+
+// ---------------------------------------------------------------------------
+// Source/category filter helpers (shared across / and /markets)
+// ---------------------------------------------------------------------------
+
+export type MarketCategory = "all" | "ftm" | "dwarkesh" | "policy" | "futurist" | "manifold";
+
+export interface MarketCategoryOption {
+  key: MarketCategory;
+  label: string;
+  color?: string;
+}
+
+export const MARKET_CATEGORIES: MarketCategoryOption[] = [
+  { key: "all", label: "All" },
+  { key: "ftm", label: "Core FTM", color: GROUP_COLORS.agi_rampup },
+  { key: "dwarkesh", label: "Dwarkesh", color: GROUP_COLORS.dwarkesh },
+  { key: "policy", label: "Policy", color: GROUP_COLORS.policy },
+  { key: "futurist", label: "Futurist", color: GROUP_COLORS.futurist },
+  { key: "manifold", label: "Manifold", color: GROUP_COLORS.external_other },
+];
+
+const VALID_MARKET_CATEGORIES = new Set<string>(MARKET_CATEGORIES.map((c) => c.key));
+
+export function isMarketCategory(value: string | null | undefined): value is MarketCategory {
+  return typeof value === "string" && VALID_MARKET_CATEGORIES.has(value);
+}
+
+export function categoryOfMarket(market: {
+  variableId?: string | null;
+  anchor?: { source: "metaculus" | "manifold" };
+}): Exclude<MarketCategory, "all"> | "other" {
+  const varId = market.variableId ?? "";
+  if (varId.startsWith("dw_")) return "dwarkesh";
+  if (varId.startsWith("pol_")) return "policy";
+  if (varId.startsWith("fut_")) return "futurist";
+  if (varId.startsWith("x_") || market.anchor?.source === "manifold") return "manifold";
+  if (varId.startsWith("ftm_")) return "ftm";
+  return "other";
+}
+
+export function matchesMarketCategory(
+  market: { variableId?: string | null; anchor?: { source: "metaculus" | "manifold" } },
+  category: MarketCategory,
+): boolean {
+  if (category === "all") return true;
+  return categoryOfMarket(market) === category;
+}
+
+export interface CategoryPillItem extends MarketCategoryOption {
+  count: number;
+}
+
+/**
+ * Returns the category filter pills that have >0 matching markets, prefixed with
+ * "All". Returns an empty array when no specific category is represented so
+ * uncategorized views stay clutter-free.
+ */
+export function buildCategoryPills(
+  markets: Array<{ variableId?: string | null; anchor?: { source: "metaculus" | "manifold" } }>,
+): CategoryPillItem[] {
+  const counts: Record<Exclude<MarketCategory, "all">, number> = {
+    ftm: 0,
+    dwarkesh: 0,
+    policy: 0,
+    futurist: 0,
+    manifold: 0,
+  };
+  for (const m of markets) {
+    const cat = categoryOfMarket(m);
+    if (cat !== "other") counts[cat] += 1;
+  }
+  const active = MARKET_CATEGORIES.filter(
+    (c): c is MarketCategoryOption & { key: Exclude<MarketCategory, "all"> } =>
+      c.key !== "all" && counts[c.key] > 0,
+  );
+  if (active.length === 0) return [];
+  return [
+    { key: "all", label: "All", count: markets.length },
+    ...active.map((c) => ({ ...c, count: counts[c.key] })),
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +301,7 @@ export function colorForGroup(group: GroupKey): string {
 
 /**
  * Maps P(yes) in [0, 1] to a resting fillOpacity in [0.14, 1.0] so the
- * probability wavefront across years 2027 -> 2045 is immediately legible at rest.
+ * probability wavefront across years 2027 -> 2035+ is immediately legible at rest.
  */
 export function probabilityFillOpacity(p: number | null | undefined): number {
   if (typeof p !== "number" || !Number.isFinite(p)) return 0.6;
@@ -253,7 +386,7 @@ export function isContextContradictedError(error: unknown): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// World-Model Snapshot KPIs & Try What-If Scenarios
+// World-Model Snapshot KPIs & Try What-If Scenarios (short timelines 2027-2035)
 // ---------------------------------------------------------------------------
 
 export interface SnapshotKpi {
@@ -270,16 +403,16 @@ export interface WhatIfScenario {
 }
 
 const SNAPSHOT_KPI_SPECS: Array<{ label: string; candidates: string[] }> = [
-  { label: "Weakly General AI by 2030", candidates: ["ftm_sub_agi_by_2030", "ftm_sub_agi_by_2031", "ftm_sub_agi_by_2032"] },
+  { label: "Weakly General AI by 2030", candidates: ["ftm_sub_agi_by_2030", "ftm_sub_agi_by_2031", "ftm_sub_agi_by_2029"] },
+  { label: "Strict AGI by 2032", candidates: ["ftm_agi_by_2032", "ftm_agi_by_2033", "ftm_agi_by_2031"] },
   { label: "Strict AGI by 2035", candidates: ["ftm_agi_by_2035", "ftm_agi_by_2034"] },
-  { label: "Strict AGI by 2040", candidates: ["ftm_agi_by_2040", "ftm_agi_by_2039", "ftm_agi_by_2041"] },
-  { label: "50% R&D Auto by 2035", candidates: ["ftm_auto_rnd_t2_by_2035", "ftm_auto_rnd_t2_by_2034"] },
-  { label: "10%+ GWP Growth by 2040", candidates: ["ftm_gwp_growth_max_t1_by_2040", "ftm_gwp_growth_t1_in_2040", "ftm_gwp_growth_max_t1_by_2039"] },
+  { label: "50% R&D Auto by 2032", candidates: ["ftm_auto_rnd_t2_by_2032", "ftm_auto_rnd_t2_by_2033", "ftm_auto_rnd_t2_by_2031"] },
+  { label: "10%+ GWP Growth by 2035", candidates: ["ftm_gwp_growth_max_t1_by_2035", "ftm_gwp_growth_t1_in_2035", "ftm_gwp_growth_max_t1_by_2034"] },
   { label: "1e29 FLOP Run by 2030", candidates: ["ftm_train_run_t1_by_2030", "ftm_train_run_t1_by_2031"] },
 ];
 
 const WHAT_IF_SPECS: Array<{ label: string; candidates: string[]; outcomeId: "yes" | "no" }> = [
-  { label: "Assume AGI by 2032", candidates: ["ftm_agi_by_2032", "ftm_agi_by_2034"], outcomeId: "yes" },
+  { label: "Assume AGI by 2030", candidates: ["ftm_agi_by_2030", "ftm_agi_by_2031", "ftm_agi_by_2032"], outcomeId: "yes" },
   { label: "Assume 20% R&D auto by 2030", candidates: ["ftm_auto_rnd_t1_by_2030", "ftm_auto_rnd_t1_by_2031"], outcomeId: "yes" },
   { label: "Assume 1e29 FLOP by 2032", candidates: ["ftm_train_run_t1_by_2032", "ftm_train_run_t1_by_2031"], outcomeId: "yes" },
 ];
@@ -327,14 +460,28 @@ export function selectWhatIfScenarios(markets: GraphMarket[]): WhatIfScenario[] 
 // Source tag
 // ---------------------------------------------------------------------------
 
-export type SourceTag = "FTM" | "Metaculus" | "Manifold" | "market";
+export type SourceTag =
+  | "FTM"
+  | "Dwarkesh"
+  | "Policy"
+  | "Futurist"
+  | "Metaculus"
+  | "Manifold"
+  | "market";
 
 export function sourceTag(market: {
+  variableId?: string | null;
   anchor?: { source: "metaculus" | "manifold" };
   ftmImplied?: number | null;
 }): SourceTag {
+  const varId = market.variableId ?? "";
+  if (varId.startsWith("dw_")) return "Dwarkesh";
+  if (varId.startsWith("pol_")) return "Policy";
+  if (varId.startsWith("fut_")) return "Futurist";
   if (market.anchor?.source === "metaculus") return "Metaculus";
   if (market.anchor?.source === "manifold") return "Manifold";
+  if (varId.startsWith("x_")) return "Manifold";
+  if (varId.startsWith("ftm_")) return "FTM";
   if (market.ftmImplied !== undefined && market.ftmImplied !== null) return "FTM";
   return "market";
 }
@@ -407,12 +554,14 @@ export function packYearCollisions(items: YearSlotItem[]): Map<string, number> {
 // ---------------------------------------------------------------------------
 
 export const YEAR_MIN = 2027;
-export const YEAR_MAX = 2045;
+export const YEAR_MAX = 2035;
 
-/** Flat bands (external/other) wrap their per-column stacks past this depth. */
+/** Flat bands (dwarkesh/policy/futurist/external/other) wrap their per-column stacks past this depth. */
 export const FLAT_MAX_ROWS = 14;
 /** Horizontal pitch between wrapped sub-columns inside one year slot. */
 export const FLAT_SUBCOL_PITCH = 7;
+
+const FLAT_FAMILIES = new Set(["dwarkesh", "policy", "futurist", "external", "other"]);
 
 export interface PositionedMapNode {
   id: string;
@@ -458,6 +607,7 @@ export interface MapLayout {
   height: number;
   yearMin: number;
   yearMax: number;
+  hasUndated: boolean;
   yearToX: (year: number | null) => number;
   leftMargin: number;
   topMargin: number;
@@ -476,7 +626,7 @@ export interface MapLayoutOptions {
 const DEFAULT_LAYOUT_OPTIONS: Required<MapLayoutOptions> = {
   leftMargin: 222,
   topMargin: 24,
-  yearPitch: 40,
+  yearPitch: 64,
   rowHeight: 18,
   bandGap: 6,
   rightPadding: 32,
@@ -497,7 +647,7 @@ export function computeMapLayout(
   options: MapLayoutOptions = {},
 ): MapLayout {
   const opts = { ...DEFAULT_LAYOUT_OPTIONS, ...options };
-  // Column model: 0 = "≤2026", 1..19 = 2027..2045, 20 = "2046+", 21 = undated.
+  // Column model: 0 = "≤2026", 1..9 = 2027..2035, 10 = "2036+", 11 = undated (only if undated exist).
   const preColumn = 0;
   const postColumn = YEAR_MAX - YEAR_MIN + 2;
   const undatedColumn = postColumn + 1;
@@ -514,6 +664,7 @@ export function computeMapLayout(
   };
 
   const classified = markets.map((m) => ({ market: m, cls: classifyVariable(m.variableId, m.title) }));
+  const hasUndated = classified.some((entry) => entry.cls.year === null);
 
   const byFamily = new Map<string, typeof classified>();
   for (const entry of classified) {
@@ -531,7 +682,7 @@ export function computeMapLayout(
     // Hide empty swimlanes automatically so dead bands never occupy vertical space.
     if (entries.length === 0) continue;
 
-    const isFlatBand = meta.key === "external" || meta.key === "other";
+    const isFlatBand = FLAT_FAMILIES.has(meta.key);
 
     if (isFlatBand) {
       const byColumn = new Map<number, typeof entries>();
@@ -630,7 +781,8 @@ export function computeMapLayout(
   }
 
   const height = (bands.length > 0 ? cursorY - opts.bandGap : opts.topMargin) + opts.bottomPadding;
-  const width = opts.leftMargin + (undatedColumn + 1) * opts.yearPitch + opts.rightPadding;
+  const lastColumn = hasUndated ? undatedColumn : postColumn;
+  const width = opts.leftMargin + (lastColumn + 1) * opts.yearPitch + opts.rightPadding;
 
   return {
     nodes,
@@ -643,6 +795,7 @@ export function computeMapLayout(
     height,
     yearMin: YEAR_MIN,
     yearMax: YEAR_MAX,
+    hasUndated,
     yearToX,
     leftMargin: opts.leftMargin,
     topMargin: opts.topMargin,

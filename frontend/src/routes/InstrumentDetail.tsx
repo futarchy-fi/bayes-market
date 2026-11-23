@@ -3,7 +3,6 @@ import { Link, useParams } from "react-router-dom";
 import { ErrorMessage, LoadingPage } from "@/components/ui/Spinner";
 import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import {
-  EXCHANGE_API,
   type Instrument,
   type InstrumentListing,
   type MarketMetadata,
@@ -22,7 +21,7 @@ import {
   usePlaceBookOrder,
   useTradeAmm,
 } from "@/lib/exchange/hooks";
-import { useExchangeSession } from "@/lib/exchange/session";
+import { GithubSignInLink, useExchangeSession } from "@/lib/exchange/session";
 import { validateBookOrder } from "@/lib/exchange/venues";
 
 export default function InstrumentDetail() {
@@ -252,7 +251,7 @@ function UnavailablePanel({ venue }: { venue: string }) {
 }
 
 function SignInPrompt({ action }: { action: string }) {
-  return <a href={`${EXCHANGE_API}/v1/auth/github/login`}>Sign in with GitHub to {action}</a>;
+  return <GithubSignInLink>Sign in with GitHub to {action}</GithubSignInLink>;
 }
 
 function PriceRow({ prices }: { prices: Record<string, string> }) {
