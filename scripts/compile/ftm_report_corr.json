@@ -1,17 +1,60 @@
 {
- "variables": 509,
+ "variables": 549,
  "dropped": {
-  "degenerate": 116,
-  "duplicate": 40,
+  "degenerate": 97,
+  "duplicate": 0,
   "missing": 0
  },
- "edges": 880,
- "implicationEdges": 737,
+ "edges": 1111,
+ "implicationEdges": 900,
+ "connectedComponents": [
+  549
+ ],
  "treewidth": 8.0,
- "cliqueCount": 509.0,
+ "cliqueCount": 549.0,
  "maxResidualLeak": 0.0,
- "maxProjectionDelta": 0.00014653705476641576,
- "meanProjectionDelta": 1.1614532330754296e-06,
- "lowSupportRows": 6,
- "trials": 2000
+ "maxProjectionDelta": 0.005711,
+ "meanProjectionDelta": 0.000102,
+ "lowSupportRows": 106,
+ "trials": 2000,
+ "method": "mc-threshold-grid-v2-weighted",
+ "weighting": {
+  "enabled": true,
+  "calibrationDate": "2026-11-23",
+  "ess": 435.62,
+  "observables": {
+   "log10_biggest_training_run_2026": {
+    "mean": 26.7,
+    "sd": 0.55
+   },
+   "log10_frac_gwp_compute_2026": {
+    "mean": -2.5229,
+    "sd": 0.5
+   },
+   "frac_tasks_automated_rnd_2026_ge_0.01_log_bonus": 0.5,
+   "agi_year_exp_tilt": -0.08
+  }
+ },
+ "agi2040ConditionalLifts": {
+  "ftm_auto_goods_t3_by_2040": {
+   "given_yes": 0.9104,
+   "given_no": 0.3739,
+   "lift": 0.5365
+  },
+  "ftm_auto_rnd_t3_by_2040": {
+   "given_yes": 0.9111,
+   "given_no": 0.4596,
+   "lift": 0.4516
+  },
+  "ftm_gwp_growth_max_t1_by_2040": {
+   "given_yes": 0.9572,
+   "given_no": 0.6692,
+   "lift": 0.2879
+  },
+  "ftm_sub_agi_by_2035": {
+   "given_yes": 0.7703,
+   "given_no": 0.1217,
+   "lift": 0.6486
+  }
+ }
 }

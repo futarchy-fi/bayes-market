@@ -9,11 +9,19 @@ distribution of the real factored net, pins the implied marginal to the
 external's anchored seed price exactly. The calibrator bot keeps anchoring
 the marginal afterwards; the bridge only reshapes conditional structure.
 
-Run on farol from ~/bayes-market:
-  python3 scratch/apply_bridges.py \
-      --proposals /tmp/bridge_proposals.json \
+Hard invariants enforced before accepting any bridge:
+  1. No backwards-in-time bridges: every FTM parent year <= child deadline year
+     (under both explicit title deadline — "before YYYY" -> YYYY-1, "by/in YYYY"
+     -> YYYY — and expires_at year).
+  2. Meaningful conditional lift after calibration: max(row) - min(row) >= 0.10.
+  3. Exact marginal preservation: worstMarginalDelta <= 1e-6.
+  4. Treewidth budget: <= 8.
+
+Run from repo root:
+  python3 scripts/bridge/apply_bridges.py \
+      --proposals scripts/bridge/data/bridge_proposals_remapped.json \
       --seeds backend/seeds_takeoff.json \
-      --report /tmp/bridge_report.json [--dry-run]
+      --report scripts/bridge/data/bridge_report_corr.json [--dry-run] [--no-backup]
 """
 
 from __future__ import annotations
@@ -22,11 +30,12 @@ import argparse
 import copy
 import json
 import math
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bayes-market"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, ".")
 
 from backend.inference.factored_market import FactoredMarket, JointMarketError
@@ -37,6 +46,7 @@ LIQUIDITY = 10000.0
 ROW_CLAMP = (0.02, 0.98)
 MAX_PARENTS = 2
 MIN_STRENGTH = 3
+MIN_CALIBRATED_LIFT = 0.10
 
 
 def logit(p: float) -> float:
@@ -49,6 +59,38 @@ def sigmoid(x: float) -> float:
 
 def clamp_row(p: float) -> float:
     return min(max(float(p), ROW_CLAMP[0]), ROW_CLAMP[1])
+
+
+def extract_var_year(var_id: str) -> int | None:
+    m = re.search(r"_(?:by|in)_(\d{4})$", var_id)
+    return int(m.group(1)) if m else None
+
+
+def extract_child_deadline_year(market: dict) -> int | None:
+    """Conservative upper bound on the causal deadline year of an external market.
+
+    Checks both expires_at and any explicit future year mentioned in the title
+    ("before YYYY" -> YYYY - 1, "by/in YYYY" -> YYYY), returning the minimum
+    so that parent_year <= child_year holds under every year-parsing convention.
+    """
+    candidates: list[int] = []
+    exp = str(market.get("expires_at", ""))
+    if len(exp) >= 4 and exp[:4].isdigit():
+        candidates.append(int(exp[:4]))
+
+    title = str(market.get("title", ""))
+    for m in re.finditer(r"\bbefore\s+(?:the\s+year\s+)?(20\d{2}|2100)\b", title, re.IGNORECASE):
+        candidates.append(int(m.group(1)) - 1)
+    for m in re.finditer(r"\b(?:by|in|end\s+of|eoy|oct|may|june\s+\d+,?)\s+(20\d{2}|2100)\b", title, re.IGNORECASE):
+        candidates.append(int(m.group(1)))
+    # Also catch leading year prefix like "2030 – 3. Over..."
+    m_lead = re.match(r"^\s*(20\d{2})\b", title)
+    if m_lead:
+        candidates.append(int(m_lead.group(1)))
+
+    # Ignore historical reference years (< 2027)
+    future = [y for y in candidates if y >= 2027]
+    return min(future) if future else (min(candidates) if candidates else None)
 
 
 def assignments(parents: list[str]) -> list[dict[str, str]]:
@@ -132,6 +174,7 @@ def main() -> None:
     ap.add_argument("--seeds", default="backend/seeds_takeoff.json")
     ap.add_argument("--report", default="/tmp/bridge_report.json")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--no-backup", action="store_true")
     args = ap.parse_args()
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -161,6 +204,14 @@ def main() -> None:
             reason = "unknown parent variable"
         elif markets[ext].get("variableId") in parents:
             reason = "self-parent"
+        else:
+            child_year = extract_child_deadline_year(markets[ext])
+            if child_year is not None:
+                for p in parents:
+                    py = extract_var_year(p)
+                    if py is not None and py > child_year:
+                        reason = f"backwards-in-time bridge ({p} year {py} > child year {child_year})"
+                        break
         rows: dict[str, float] | None = None
         if reason is None:
             rows = parse_proposal_cpt(b.get("cpt", {}), parents)
@@ -220,7 +271,14 @@ def main() -> None:
         if rows is None:
             dropped.append({"externalId": b["externalId"], "reason": "calibration infeasible"})
             continue
-        calibrated.append({**b, "rows": rows, "target": target})
+        lift = max(rows.values()) - min(rows.values())
+        if lift < MIN_CALIBRATED_LIFT:
+            dropped.append({
+                "externalId": b["externalId"],
+                "reason": f"calibrated lift {lift:.4f} < {MIN_CALIBRATED_LIFT}",
+            })
+            continue
+        calibrated.append({**b, "rows": rows, "target": target, "lift": lift})
 
     # Final tables + verification build.
     for b in calibrated:
@@ -236,21 +294,28 @@ def main() -> None:
         got = fm2.marginal(var)["yes"]
         delta = abs(got - b["target"])
         worst = max(worst, delta)
-        checks.append({"externalId": b["externalId"], "target": b["target"],
-                       "implied": round(got, 6), "delta": round(delta, 8)})
+        checks.append({
+            "externalId": b["externalId"],
+            "parents": b["parents"],
+            "target": round(b["target"], 6),
+            "implied": round(got, 6),
+            "delta": round(delta, 8),
+            "lift": round(b["lift"], 4),
+        })
     stats = fm2.stats()
 
     report = {
         "at": now, "dryRun": args.dry_run,
         "proposed": len(proposals), "applied": len(calibrated),
         "dropped": dropped, "worstMarginalDelta": worst,
+        "minCalibratedLift": round(min((c["lift"] for c in checks), default=0.0), 4),
         "stats": {k: stats[k] for k in ("treewidth", "cliqueCount", "maxCliqueStates", "statesLog2")
                   if k in stats},
         "checks": checks,
     }
-    Path(args.report).write_text(json.dumps(report, indent=1))
+    Path(args.report).write_text(json.dumps(report, indent=1) + "\n")
     print(json.dumps({k: report[k] for k in
-                      ("proposed", "applied", "worstMarginalDelta", "stats")}, indent=1))
+                      ("proposed", "applied", "worstMarginalDelta", "minCalibratedLift", "stats")}, indent=1))
     print(f"dropped: {len(dropped)} (see {args.report})")
 
     if args.dry_run:
@@ -264,14 +329,19 @@ def main() -> None:
             "parents": b["parents"], "strength": int(b.get("strength", 0)),
             "appliedAt": now,
         }
-        note = f" Bridged into the FTM net: conditional on {', '.join(b['parents'])}."
-        if note not in m.get("description", ""):
-            m["description"] = m.get("description", "") + note
+        note = f"Bridged into the FTM net: conditional on {', '.join(b['parents'])}."
+        desc = m.get("description", "").rstrip()
+        if note not in desc:
+            if desc and desc[-1] not in ".?!":
+                desc += "."
+            m["description"] = (desc + " " + note).strip()
     seeds["conditionalMarginals"] = work
-    backup = Path(args.seeds).with_suffix(".json.pre-bridge")
-    backup.write_text(Path(args.seeds).read_text())
-    Path(args.seeds).write_text(json.dumps(seeds, indent=1))
-    print(f"seeds updated ({args.seeds}); backup at {backup}")
+    if not args.no_backup:
+        backup = Path(args.seeds).with_suffix(".json.pre-bridge")
+        backup.write_text(Path(args.seeds).read_text())
+        print(f"backup written at {backup}")
+    Path(args.seeds).write_text(json.dumps(seeds, indent=1) + "\n")
+    print(f"seeds updated ({args.seeds})")
 
 
 if __name__ == "__main__":
