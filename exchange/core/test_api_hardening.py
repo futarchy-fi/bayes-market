@@ -456,3 +456,180 @@ class TestCORSErrorResponses:
             r500_bad = await c.get("/boom", headers={"Origin": "https://evil.example"})
             assert r500_bad.status_code == 500
             assert r500_bad.headers.get("access-control-allow-origin") is None
+
+
+# ---------------------------------------------------------------------------
+# OAuth state table cap & leaderboard upgrade hardening
+# ---------------------------------------------------------------------------
+
+class TestOAuthStateHardening:
+    async def test_oauth_state_table_capped_at_2000_evicts_oldest(self, client, monkeypatch):
+        from datetime import datetime, timedelta, timezone
+        from urllib.parse import parse_qs, urlparse
+
+        monkeypatch.setattr(api_module, "GITHUB_CLIENT_ID", "cid")
+        base = datetime.now(timezone.utc) - timedelta(minutes=2)
+        app.state.github_oauth_states = {
+            f"state-{i}": base + timedelta(milliseconds=i)
+            for i in range(api_module.GITHUB_OAUTH_STATE_MAX_ENTRIES)
+        }
+        assert len(app.state.github_oauth_states) == 2000
+
+        resp = await client.get("/v1/auth/github/login", follow_redirects=False)
+        assert resp.status_code == 302
+        new_state = parse_qs(urlparse(resp.headers["location"]).query)["state"][0]
+
+        assert len(app.state.github_oauth_states) == 2000
+        assert "state-0" not in app.state.github_oauth_states
+        assert "state-1999" in app.state.github_oauth_states
+        assert new_state in app.state.github_oauth_states
+
+    async def test_oauth_state_prunes_expired_before_evicting_active(self, client, monkeypatch):
+        from datetime import datetime, timedelta, timezone
+
+        monkeypatch.setattr(api_module, "GITHUB_CLIENT_ID", "cid")
+        now = datetime.now(timezone.utc)
+        app.state.github_oauth_states = {
+            "expired-a": now - timedelta(minutes=15),
+            "expired-b": now - timedelta(minutes=11),
+            "fresh-a": now - timedelta(minutes=1),
+        }
+
+        resp = await client.get("/v1/auth/github/login", follow_redirects=False)
+        assert resp.status_code == 302
+        assert "expired-a" not in app.state.github_oauth_states
+        assert "expired-b" not in app.state.github_oauth_states
+        assert "fresh-a" in app.state.github_oauth_states
+
+
+class TestLeaderboardUpgraded:
+    async def test_leaderboard_named_traders_net_stats_and_tie_breaking(
+        self, tmp_path, monkeypatch
+    ):
+        from decimal import Decimal
+
+        reset_counters()
+        seeds_path = _write_seeds(tmp_path)
+        monkeypatch.setenv("EXCHANGE_SEEDS_PATH", seeds_path)
+        api_module.STATE_PATH = str(tmp_path / "state_lb.json")
+        admin_headers = {"Authorization": f"Bearer {os.environ['FUTARCHY_ADMIN_KEY']}"}
+
+        async with api_module.lifespan(app):
+            # Hidden service account (default is_service_account=True)
+            bot_resp = await _post(
+                "/v1/admin/service-accounts",
+                {"username": "hidden_bot", "initial_credits": "50000"},
+                headers=admin_headers,
+            )
+            assert bot_resp.status_code == 200
+            bot_acc_id = bot_resp.json()["account_id"]
+
+            # Two named guest traders with equal starting total (1000)
+            alpha_resp = await _post(
+                "/v1/admin/service-accounts",
+                {
+                    "username": "guest_alpha",
+                    "display_name": "Guest Alpha",
+                    "is_service_account": False,
+                    "initial_credits": "1000",
+                },
+                headers=admin_headers,
+            )
+            assert alpha_resp.status_code == 200
+            alpha_key = alpha_resp.json()["api_key"]
+            alpha_acc_id = alpha_resp.json()["account_id"]
+
+            beta_resp = await _post(
+                "/v1/admin/service-accounts",
+                {
+                    "username": "guest_beta",
+                    "display_name": "Guest Beta",
+                    "is_service_account": False,
+                    "initial_credits": "1000",
+                },
+                headers=admin_headers,
+            )
+            assert beta_resp.status_code == 200
+            beta_key = beta_resp.json()["api_key"]
+            beta_acc_id = beta_resp.json()["account_id"]
+
+            # Two GitHub users with equal 1000 credits and zero orders
+            _, gh1_acc_id = await _authed_user(github_id=101, login="gh_one")
+            _, gh2_acc_id = await _authed_user(github_id=102, login="gh_two")
+
+            # Alpha places 1 small order; Beta places 2 larger orders
+            o_alpha = await _post(
+                "/v1/net/orders",
+                body={"variableId": "gcx_a", "outcomeId": "yes", "target": 0.55},
+                headers=_headers(alpha_key),
+            )
+            assert o_alpha.status_code == 200
+            alpha_stake = Decimal(o_alpha.json()["stake"])
+
+            o_beta1 = await _post(
+                "/v1/net/orders",
+                body={"variableId": "gcx_a", "outcomeId": "yes", "target": 0.78},
+                headers=_headers(beta_key),
+            )
+            assert o_beta1.status_code == 200
+            o_beta2 = await _post(
+                "/v1/net/orders",
+                body={"variableId": "gcx_b", "outcomeId": "yes", "target": 0.80},
+                headers=_headers(beta_key),
+            )
+            assert o_beta2.status_code == 200
+            beta_stake = Decimal(o_beta1.json()["stake"]) + Decimal(o_beta2.json()["stake"])
+            assert beta_stake > alpha_stake > Decimal("0")
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as c:
+                lb_resp = await c.get("/v1/leaderboard")
+            assert lb_resp.status_code == 200
+            entries = lb_resp.json()["entries"]
+
+            ids = [e["accountId"] for e in entries]
+            assert bot_acc_id not in ids
+            assert app.state.joint.treasury_account_id not in ids
+
+            # All 4 visible accounts tie at total=1000, so ranking is:
+            # netVolume desc (beta > alpha > gh1 == gh2), then accountId asc (gh1 < gh2)
+            assert ids == [beta_acc_id, alpha_acc_id, gh1_acc_id, gh2_acc_id]
+
+            by_id = {e["accountId"]: e for e in entries}
+            assert by_id[beta_acc_id]["login"] == "guest_beta"
+            assert by_id[beta_acc_id]["displayName"] == "Guest Beta"
+            assert by_id[beta_acc_id]["netOrders"] == 2
+            assert Decimal(by_id[beta_acc_id]["netVolume"]) == beta_stake
+
+            assert by_id[alpha_acc_id]["login"] == "guest_alpha"
+            assert by_id[alpha_acc_id]["displayName"] == "Guest Alpha"
+            assert by_id[alpha_acc_id]["netOrders"] == 1
+            assert Decimal(by_id[alpha_acc_id]["netVolume"]) == alpha_stake
+
+            assert by_id[gh1_acc_id]["login"] == "gh_one"
+            assert by_id[gh1_acc_id]["displayName"] is None
+            assert by_id[gh1_acc_id]["netOrders"] == 0
+            assert by_id[gh1_acc_id]["netVolume"] == "0"
+
+    def test_legacy_snapshot_without_display_name_defaults_to_none(self):
+        from exchange.core.persistence import _load_auth
+
+        store = _load_auth({
+            "users": [{
+                "github_id": 42,
+                "github_login": "octo",
+                "account_id": 1,
+                "api_key_hash": "a" * 64,
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "last_seen_at": "2026-01-01T00:00:00+00:00",
+            }],
+            "local_users": [{
+                "username": "legacy_local",
+                "account_id": 2,
+                "api_key_hash": "b" * 64,
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "last_seen_at": "2026-01-01T00:00:00+00:00",
+            }],
+        })
+        assert store.users[42].display_name is None
+        assert store.local_users["legacy_local"].display_name is None
