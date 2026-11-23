@@ -49,3 +49,73 @@ a {
 a:hover {
   color: var(--color-primary-hover);
 }
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-lg);
+  padding: var(--space-sm) var(--space-lg);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  min-width: 0;
+}
+
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.app-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  min-width: 0;
+}
+
+.app-auth {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.app-main {
+  flex: 1;
+  padding: var(--space-lg);
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .app-header {
+    padding: 10px 14px;
+    gap: 8px 12px;
+  }
+
+  .app-brand {
+    order: 1;
+  }
+
+  .app-auth {
+    order: 2;
+    margin-left: auto;
+  }
+
+  .app-nav {
+    order: 3;
+    flex-basis: 100%;
+    gap: 6px 14px;
+    padding-top: 4px;
+    border-top: 1px solid rgba(42, 46, 61, 0.55);
+  }
+
+  .app-main {
+    padding: var(--space-md) 14px;
+  }
+}

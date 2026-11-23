@@ -1,5 +1,6 @@
 import { useMemo, useEffect, useRef } from "react";
-import { useMarkets, useMarket, useEngineStats, useNetwork } from "@/lib/query/hooks";
+import { useMarkets, useEngineStats, useNetwork, useGraphMarkets } from "@/lib/query/hooks";
+import { isExchangeMode } from "@/lib/exchangeMode";
 import { formatProbability } from "@/lib/utils/format";
 import { useForceGraph } from "./useForceGraph";
 import { useAnimationPropagation } from "./useAnimationPropagation";
@@ -32,10 +33,107 @@ interface ForceDirectedGraphProps {
 // Constants
 // ---------------------------------------------------------------------------
 
+export const MAX_FORCE_NODES = 60;
+
 const NODE_W = 160;
 const NODE_H = 72;
 const SVG_WIDTH = 600;
 const SVG_HEIGHT = 400;
+
+// ---------------------------------------------------------------------------
+// Pure subgraph selection (zero extra queries, capped at MAX_FORCE_NODES)
+// ---------------------------------------------------------------------------
+
+function outcomeDisplayName(id: string): string {
+  if (id === "yes") return "Yes";
+  if (id === "no") return "No";
+  return id;
+}
+
+function detailFromMarket(
+  market: MarketSummary,
+  conditionedMarginals?: Record<string, number>,
+): { marginals: Record<string, number>; outcomes: Array<{ id: string; name: string }> } | undefined {
+  const marginals = conditionedMarginals ?? market.marginals;
+  if (!marginals || Object.keys(marginals).length === 0) return undefined;
+  const outcomes =
+    market.outcomes && market.outcomes.length > 0
+      ? market.outcomes
+      : Object.keys(marginals).map((id) => ({ id, name: outcomeDisplayName(id) }));
+  return { marginals, outcomes };
+}
+
+export function selectForceSubgraph(
+  markets: MarketSummary[],
+  edges: Array<{ source: string; target: string }>,
+  focusMarketId?: string,
+  maxNodes = MAX_FORCE_NODES,
+): {
+  visibleMarkets: MarketSummary[];
+  visibleEdges: Array<{ source: string; target: string }>;
+  linkedCount: number;
+} {
+  const adjacency = new Map<string, Set<string>>();
+  for (const m of markets) adjacency.set(m.id, new Set());
+  for (const e of edges) {
+    if (e.source === e.target) continue;
+    adjacency.get(e.source)?.add(e.target);
+    adjacency.get(e.target)?.add(e.source);
+  }
+
+  const linkedIds = markets.filter((m) => (adjacency.get(m.id)?.size ?? 0) > 0).map((m) => m.id);
+  const linkedCount = linkedIds.length;
+
+  if (markets.length <= maxNodes) {
+    return { visibleMarkets: markets, visibleEdges: edges, linkedCount };
+  }
+
+  const degree = (id: string) => adjacency.get(id)?.size ?? 0;
+  const marketById = new Map(markets.map((m) => [m.id, m]));
+  const picked = new Set<string>();
+
+  // Prefer BFS ego neighborhood around focusMarketId when available.
+  if (focusMarketId && marketById.has(focusMarketId)) {
+    const queue: string[] = [focusMarketId];
+    picked.add(focusMarketId);
+    while (queue.length > 0 && picked.size < maxNodes) {
+      const current = queue.shift()!;
+      const neighbors = Array.from(adjacency.get(current) ?? []).sort(
+        (a, b) => degree(b) - degree(a) || (a < b ? -1 : a > b ? 1 : 0),
+      );
+      for (const next of neighbors) {
+        if (picked.size >= maxNodes) break;
+        if (!picked.has(next)) {
+          picked.add(next);
+          queue.push(next);
+        }
+      }
+    }
+  }
+
+  // Fill with highest-degree linked nodes (e.g. if no focusMarketId or isolated focus).
+  if (picked.size < maxNodes) {
+    const byDegree = [...linkedIds].sort(
+      (a, b) => degree(b) - degree(a) || (a < b ? -1 : a > b ? 1 : 0),
+    );
+    for (const id of byDegree) {
+      if (picked.size >= maxNodes) break;
+      picked.add(id);
+    }
+  }
+
+  // Final fallback if the graph has fewer than maxNodes linked markets.
+  if (picked.size < maxNodes) {
+    for (const m of markets) {
+      if (picked.size >= maxNodes) break;
+      picked.add(m.id);
+    }
+  }
+
+  const visibleMarkets = markets.filter((m) => picked.has(m.id));
+  const visibleEdges = edges.filter((e) => picked.has(e.source) && picked.has(e.target));
+  return { visibleMarkets, visibleEdges, linkedCount };
+}
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -87,6 +185,7 @@ function MarketNode({
         fontSize="11"
         fontWeight={600}
         fill="var(--color-text)"
+        style={{ userSelect: "none" }}
       >
         {truncatedTitle}
       </text>
@@ -106,7 +205,7 @@ function MarketNode({
                   opacity={animationClass ? 0.9 : 0.7}
                   style={{ transition: "width 0.3s ease, opacity 0.3s ease, fill 0.3s ease" }}
                 />
-                <text x={4} y={8} fontSize="8" fill="var(--color-text)" fontWeight={500}>
+                <text x={4} y={8} fontSize="8" fill="var(--color-text)" fontWeight={500} style={{ userSelect: "none" }}>
                   {o.name}: {formatProbability(p)}
                 </text>
               </g>
@@ -201,43 +300,6 @@ function CliqueOverlay({
   );
 }
 
-function NodeWithDetail({
-  x,
-  y,
-  node,
-  isFocus,
-  isDimmed,
-  onClick,
-  animationClass,
-  context,
-}: {
-  x: number;
-  y: number;
-  node: { id: string; title: string; status: string };
-  isFocus: boolean;
-  isDimmed: boolean;
-  onClick?: () => void;
-  animationClass?: string;
-  context?: Array<{ variableId: string; outcomeId: string }>;
-}) {
-  const { data } = useMarket(node.id, { context });
-  const detail = data
-    ? { marginals: data.market.marginals, outcomes: data.market.outcomes }
-    : undefined;
-  return (
-    <MarketNode
-      x={x}
-      y={y}
-      node={node}
-      isFocus={isFocus}
-      isDimmed={isDimmed}
-      detail={detail}
-      onClick={onClick}
-      animationClass={animationClass}
-    />
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -248,9 +310,27 @@ export function ForceDirectedGraph({
   onNodeClick,
   assumptions,
 }: ForceDirectedGraphProps) {
+  const exchangeMode = isExchangeMode();
   const { data: marketsData, isLoading } = useMarkets();
-  const { data: engineStats } = useEngineStats(focusMarketId ?? "", { enabled: !!focusMarketId });
+  const { data: engineStats } = useEngineStats(focusMarketId ?? "", {
+    enabled: !!focusMarketId && !exchangeMode,
+  });
   const { data: networkData } = useNetwork();
+
+  const contextPayload = useMemo(
+    () => (assumptions ?? []).map((a) => ({ variableId: a.variableId, outcomeId: a.outcomeId })),
+    [assumptions],
+  );
+  const conditionedGraph = useGraphMarkets(contextPayload, { enabled: contextPayload.length > 0 });
+  const conditionedById = useMemo(() => {
+    const map = new Map<string, Record<string, number>>();
+    for (const gm of conditionedGraph?.data?.markets ?? []) {
+      if (gm.conditionalMarginals) {
+        map.set(gm.id, gm.conditionalMarginals as unknown as Record<string, number>);
+      }
+    }
+    return map;
+  }, [conditionedGraph?.data]);
 
   const markets = marketsData?.markets ?? [];
   const cliques = engineStats?.cliques.cliques ?? [];
@@ -262,27 +342,32 @@ export function ForceDirectedGraph({
   // Cancel animation on unmount
   useEffect(() => cancelAnimation, [cancelAnimation]);
 
-  // Derive force graph input nodes (variableId rides along for context filtering)
-  const forceInputNodes = useMemo(
-    () =>
-      markets.map((m: MarketSummary) => ({
-        id: m.id,
-        title: m.title,
-        status: m.status,
-        variableId: m.variableId,
-      })),
-    [markets],
-  );
-
   // Edge base: the full network DAG when available (market-id space), else
-  // the focused market's clique edges (variableId space). Either way they
-  // are remapped/filtered against the visible market nodes before d3.
+  // the focused market's clique edges (variableId space).
   const allEdges = useMemo(() => {
     const networkEdges = (networkData?.edges ?? []).map((e) => ({ source: e.from, target: e.to }));
     const base = networkEdges.length > 0 ? networkEdges : deriveEdgesFromCliques(cliques);
     return remapEdgesToMarketIds(mergeEdges(base, conditionalEdges), markets);
   }, [networkData, cliques, conditionalEdges, markets]);
-  const forceInputLinks = allEdges;
+
+  const { visibleMarkets, visibleEdges, linkedCount } = useMemo(
+    () => selectForceSubgraph(markets, allEdges, focusMarketId, MAX_FORCE_NODES),
+    [markets, allEdges, focusMarketId],
+  );
+
+  // Derive force graph input nodes directly from visibleMarkets (no N+1 useMarket!)
+  const forceInputNodes = useMemo(
+    () =>
+      visibleMarkets.map((m: MarketSummary) => ({
+        id: m.id,
+        title: m.title,
+        status: m.status,
+        variableId: m.variableId,
+        market: m,
+      })),
+    [visibleMarkets],
+  );
+  const forceInputLinks = visibleEdges;
 
   // Detect assumption changes and trigger propagation animation
   const prevAssumptionsRef = useRef(assumptions);
@@ -301,13 +386,13 @@ export function ForceDirectedGraph({
     const changedVariableId = added?.variableId ?? removed?.variableId;
     if (!changedVariableId) return;
 
-    const evidenceNode = markets.find(
+    const evidenceNode = visibleMarkets.find(
       (mk) => mk.id === changedVariableId || mk.variableId === changedVariableId,
     );
-    if (evidenceNode && allEdges.length > 0) {
-      triggerAnimation(evidenceNode.id, allEdges);
+    if (evidenceNode && visibleEdges.length > 0) {
+      triggerAnimation(evidenceNode.id, visibleEdges);
     }
-  }, [assumptions, markets, allEdges, triggerAnimation]);
+  }, [assumptions, visibleMarkets, visibleEdges, triggerAnimation]);
 
   const graphOptions = useMemo(() => ({ width: SVG_WIDTH, height: SVG_HEIGHT }), []);
   const { positions, getSimulation, getNodes, flushPositions } = useForceGraph(
@@ -330,8 +415,8 @@ export function ForceDirectedGraph({
     if (!focusMarketId) return null;
     const set = new Set<string>([focusMarketId]);
     for (const link of forceInputLinks) {
-      const src = typeof link.source === "string" ? link.source : link.source;
-      const tgt = typeof link.target === "string" ? link.target : link.target;
+      const src = link.source;
+      const tgt = link.target;
       if (src === focusMarketId) set.add(tgt);
       if (tgt === focusMarketId) set.add(src);
     }
@@ -370,7 +455,7 @@ export function ForceDirectedGraph({
   // --- Drag behavior ---
   useEffect(() => {
     const svgEl = svgRef.current;
-    if (!svgEl || markets.length === 0) return;
+    if (!svgEl || visibleMarkets.length === 0) return;
 
     const nodeGroups = select(svgEl).selectAll<SVGGElement, unknown>("g[data-node-id]");
 
@@ -413,7 +498,7 @@ export function ForceDirectedGraph({
     return () => {
       nodeGroups.on(".drag", null);
     };
-  }, [positions, markets.length, getSimulation, getNodes, flushPositions]);
+  }, [positions, visibleMarkets.length, getSimulation, getNodes, flushPositions]);
 
   // --- Loading state ---
   if (isLoading) {
@@ -439,8 +524,8 @@ export function ForceDirectedGraph({
   // Resolve link endpoints to positions
   const resolvedLinks = forceInputLinks
     .map((link) => {
-      const src = typeof link.source === "string" ? link.source : link.source;
-      const tgt = typeof link.target === "string" ? link.target : link.target;
+      const src = link.source;
+      const tgt = link.target;
       const srcPos = nodePositionMap.get(src);
       const tgtPos = nodePositionMap.get(tgt);
       if (!srcPos || !tgtPos) return null;
@@ -449,9 +534,11 @@ export function ForceDirectedGraph({
     })
     .filter((l): l is NonNullable<typeof l> => l != null);
 
+  const isCapped = visibleMarkets.length < markets.length;
+
   return (
     <div style={panelStyle}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-sm)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "var(--space-sm)", marginBottom: "var(--space-sm)" }}>
         <h3 style={{ fontSize: "1rem", fontWeight: 600 }}>
           Bayesian Network
         </h3>
@@ -463,10 +550,18 @@ export function ForceDirectedGraph({
         </div>
       </div>
 
+      {isCapped && (
+        <div style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", marginBottom: "var(--space-xs)" }}>
+          {linkedCount > visibleMarkets.length
+            ? `Showing ${visibleMarkets.length} of ${linkedCount} linked markets`
+            : `Showing ${visibleMarkets.length} of ${markets.length} markets`}
+        </div>
+      )}
+
       <svg
         ref={svgRef}
         viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
-        style={{ width: "100%", height: "auto", minHeight: 200, maxHeight: 400 }}
+        style={{ width: "100%", height: "auto", minHeight: 200, maxHeight: 400, userSelect: "none" }}
       >
         <defs>
           {/* Glow filter for evidence node */}
@@ -522,7 +617,7 @@ export function ForceDirectedGraph({
           ))}
 
           {/* Animated propagation edges */}
-          {animatingEdges.size > 0 && allEdges.map((e) => {
+          {animatingEdges.size > 0 && visibleEdges.map((e) => {
             const ek = e.source < e.target ? `${e.source}::${e.target}` : `${e.target}::${e.source}`;
             if (!animatingEdges.has(ek)) return null;
             const srcPos = nodePositionMap.get(e.source);
@@ -544,7 +639,7 @@ export function ForceDirectedGraph({
             );
           })}
 
-          {/* Market nodes */}
+          {/* Market nodes — rendered directly from already-loaded markets */}
           {forceInputNodes.map((node) => {
             const pos = nodePositionMap.get(node.id);
             if (!pos) return null;
@@ -557,22 +652,21 @@ export function ForceDirectedGraph({
               : isAnimating
                 ? "fdg-propagation-node"
                 : undefined;
-            // Show marginals conditioned on the active assumptions,
-            // excluding this node's own variable (backend rejects self-context).
-            const nodeContext = (assumptions ?? [])
-              .filter((a) => a.variableId !== node.variableId)
-              .map((a) => ({ variableId: a.variableId, outcomeId: a.outcomeId }));
+            const detail = detailFromMarket(
+              node.market,
+              contextPayload.length > 0 ? conditionedById.get(node.id) : undefined,
+            );
             return (
-              <NodeWithDetail
+              <MarketNode
                 key={node.id}
                 x={pos.x}
                 y={pos.y}
                 node={node}
                 isFocus={isFocus}
                 isDimmed={isDimmed}
+                detail={detail}
                 onClick={onNodeClick ? () => onNodeClick(node.id) : undefined}
                 animationClass={animClass}
-                context={nodeContext}
               />
             );
           })}
@@ -580,7 +674,7 @@ export function ForceDirectedGraph({
       </svg>
 
       {/* Legend */}
-      <div style={{ display: "flex", gap: "var(--space-md)", fontSize: "0.75rem", color: "var(--color-text-muted)", marginTop: "var(--space-sm)" }}>
+      <div style={{ display: "flex", gap: "var(--space-md)", fontSize: "0.75rem", color: "var(--color-text-muted)", marginTop: "var(--space-sm)", flexWrap: "wrap" }}>
         <span>
           <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--color-success)", marginRight: 4 }} />
           Active
@@ -611,4 +705,5 @@ const panelStyle: React.CSSProperties = {
   borderRadius: "var(--radius-md)",
   border: "1px solid var(--color-border)",
   background: "var(--color-bg-surface)",
+  minWidth: 0,
 };

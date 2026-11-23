@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "./helpers";
 import System from "@/routes/System";
+import { EXCHANGE_MODE_KEY } from "@/lib/exchangeMode";
 
 const mockClient = vi.hoisted(() => ({
   getHealth: vi.fn(),
@@ -9,7 +10,13 @@ const mockClient = vi.hoisted(() => ({
   listMarkets: vi.fn(),
 }));
 
+const mockExchange = vi.hoisted(() => ({
+  getExchangeHealth: vi.fn(),
+  getNetMarkets: vi.fn(),
+}));
+
 vi.mock("@/lib/api/client", () => mockClient);
+vi.mock("@/lib/exchange/client", () => mockExchange);
 
 describe("System", () => {
   beforeEach(() => {
@@ -149,24 +156,61 @@ describe("System", () => {
     });
   });
 
-  // Step 7: CountCard color assertion
-  it("applies correct color to active markets count card", async () => {
+  // Step 7: CountCard color assertion & no duplicate Active/Resolved cards
+  it("applies correct color to active markets count card and avoids duplicating Active/Resolved in Platform Stats", async () => {
     renderWithProviders(<System />);
     await waitFor(() => {
       expect(screen.getByText("Platform Stats")).toBeInTheDocument();
     });
-    // The "Active" CountCard in Platform Stats has color="var(--color-success)"
-    // Find the Active count value (1) inside Platform Stats section
     const platformStats = screen.getByText("Platform Stats").closest("div")!;
-    // Find the value element for the "Active" CountCard — it's the element with "1" whose sibling says "Active"
+    expect(platformStats.textContent).not.toContain("Active");
+    expect(platformStats.textContent).not.toContain("Resolved");
+
+    const marketsSection = screen.getByText("Markets").closest("div")!;
     let activeValueEl: HTMLElement | null = null;
-    platformStats.querySelectorAll("div").forEach((div) => {
+    marketsSection.querySelectorAll("div").forEach((div) => {
       if (div.textContent === "Active" && div.previousElementSibling) {
         activeValueEl = div.previousElementSibling as HTMLElement;
       }
     });
     expect(activeValueEl).not.toBeNull();
     expect(activeValueEl!).toHaveStyle({ color: "var(--color-success)" });
+  });
+
+  it("checks exchange health (/v1/health) and displays credits totals in exchange mode", async () => {
+    window.localStorage.removeItem(EXCHANGE_MODE_KEY);
+    mockExchange.getExchangeHealth.mockResolvedValue({
+      status: "ok",
+      users: 17,
+      net: { markets: 909, orders: 2004, enabled: true },
+    });
+    mockExchange.getNetMarkets.mockResolvedValue({
+      markets: [
+        {
+          id: "f1",
+          variableId: "ftm_agi_by_2035",
+          title: "AGI 2035",
+          status: "open",
+          outcomes: [{ id: "yes", name: "Yes" }, { id: "no", name: "No" }],
+          marginals: { yes: 0.3, no: 0.7 },
+          parents: [],
+          volume: 1200,
+          liquidity: 5000,
+        },
+      ],
+      count: 1,
+    });
+
+    renderWithProviders(<System />);
+
+    await waitFor(() => {
+      expect(screen.getByText("API Online")).toBeInTheDocument();
+      expect(screen.getByText("1.2K credits")).toBeInTheDocument();
+      expect(screen.getByText("5.0K credits")).toBeInTheDocument();
+    });
+    expect(mockExchange.getExchangeHealth).toHaveBeenCalled();
+    expect(screen.getByText("2,004")).toBeInTheDocument();
+    expect(screen.getByText("17")).toBeInTheDocument();
   });
 
   // Step 8: Empty markets array

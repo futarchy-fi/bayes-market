@@ -8,6 +8,7 @@ import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import { isExchangeMode } from "@/lib/exchangeMode";
 import { EXCHANGE_API } from "@/lib/exchange/client";
+import { formatCredits } from "@/lib/utils/format";
 
 export default function Portfolio() {
   const { session, isConfigured } = useSession();
@@ -54,10 +55,10 @@ function ExchangePortfolio({ me, net, positions, orders, cancel }: {
       {reconnecting && <ReconnectingHint />}
       <h2 style={sectionTitle}>Exchange (credits)</h2>
       <div style={metricGridStyle}>
-        <MetricCard label="Available" value={me.data?.available ?? "—"} />
-        <MetricCard label="Frozen" value={me.data?.frozen ?? "—"} />
-        <MetricCard label="Open stake" value={net.data?.openStake ?? "—"} />
-        <MetricCard label="Settled P&L" value={net.data?.settledPnl ?? "—"} />
+        <MetricCard label="Available" value={me.data?.available != null ? formatCredits(me.data.available) : "—"} />
+        <MetricCard label="Frozen" value={me.data?.frozen != null ? formatCredits(me.data.frozen) : "—"} />
+        <MetricCard label="Open stake" value={net.data?.openStake != null ? formatCredits(net.data.openStake) : "—"} />
+        <MetricCard label="Settled P&L" value={net.data?.settledPnl != null ? formatCredits(net.data.settledPnl) : "—"} />
       </div>
       {(net.data?.orders.length ?? 0) === 0 ? (
         <span style={{ color: "var(--color-text-muted)" }}>No credits orders.</span>
@@ -67,7 +68,7 @@ function ExchangePortfolio({ me, net, positions, orders, cancel }: {
             <thead><tr style={{ background: "var(--color-bg-hover)" }}><th style={thStyle}>Order</th><th style={thStyle}>Variable</th><th style={thStyle}>Outcome</th><th style={thStyle}>Target</th><th style={thStyle}>Stake</th><th style={thStyle}>Status</th></tr></thead>
             <tbody>{net.data?.orders.map((order) => (
               <tr key={order.orderId} style={{ borderTop: "1px solid var(--color-border)" }}>
-                <td style={tdStyle}>{order.orderId}</td><td style={tdStyle}>{order.variableId}</td><td style={tdStyle}>{order.outcomeId}</td><td style={tdStyle}>{(order.target * 100).toFixed(1)}%</td><td style={tdStyle}>{order.stake}</td><td style={tdStyle}>{order.status}</td>
+                <td style={tdStyle}>{order.orderId}</td><td style={tdStyle}>{order.variableId}</td><td style={tdStyle}>{order.outcomeId}</td><td style={tdStyle}>{(order.target * 100).toFixed(1)}%</td><td style={tdStyle}>{formatCredits(order.stake)}</td><td style={tdStyle}>{order.status}</td>
               </tr>
             ))}</tbody>
           </table>

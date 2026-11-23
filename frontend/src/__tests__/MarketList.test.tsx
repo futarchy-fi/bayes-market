@@ -24,6 +24,7 @@ describe("MarketList", () => {
     window.history.replaceState({}, "", "/");
     vi.mocked(api.listMarkets).mockResolvedValue(mockMarkets);
     vi.mocked(exchangeApi.getInstruments).mockResolvedValue([]);
+    vi.mocked(exchangeApi.getNetNetwork).mockResolvedValue({ nodes: [], edges: [{ from: "m2", to: "m1", fromVariableId: "btc", toVariableId: "eth" }, { from: "m2", to: "m3", fromVariableId: "btc", toVariableId: "sol" }], meta: mockMarkets.meta });
     vi.mocked(exchangeApi.getNetMarkets).mockResolvedValue({
       markets: [
         { id: "m1", variableId: "eth", title: "ETH Price > $3000", status: "active", outcomes: [], marginals: {}, parents: [] },
@@ -154,6 +155,37 @@ describe("MarketList", () => {
     renderWithProviders(<MarketList />);
     await waitFor(() => {
       expect(screen.getByText("No markets found.")).toBeInTheDocument();
+    });
+  });
+
+  it("supports Volume, Liquidity, Probability (High→Low), and Linked sorts in exchange mode and omits Newest", async () => {
+    window.localStorage.removeItem(EXCHANGE_MODE_KEY);
+    vi.mocked(exchangeApi.getNetMarkets).mockResolvedValue({
+      markets: [
+        { id: "m1", variableId: "eth", title: "Lower Prob", status: "open", outcomes: [], marginals: { yes: 0.25, no: 0.75 }, parents: [], volume: 10, liquidity: 500 },
+        { id: "m2", variableId: "btc", title: "Higher Prob", status: "open", outcomes: [], marginals: { yes: 0.85, no: 0.15 }, parents: [], volume: 200, liquidity: 100 },
+      ],
+      count: 2,
+    });
+
+    renderWithProviders(<MarketList />);
+    await screen.findByText("Lower Prob");
+
+    const sortSelect = screen.getByRole("combobox", { name: "Sort" });
+    const optionTexts = Array.from(sortSelect.querySelectorAll("option")).map((o) => o.textContent);
+    expect(optionTexts).toEqual(["Default order", "Volume", "Liquidity", "Probability (High→Low)", "Linked"]);
+    expect(optionTexts).not.toContain("Newest");
+
+    fireEvent.change(sortSelect, { target: { value: "probability" } });
+    await waitFor(() => {
+      const links = screen.getAllByRole("link").filter((l) => l.getAttribute("href")?.startsWith("/markets/"));
+      expect(links[0]).toHaveTextContent("Higher Prob");
+    });
+
+    fireEvent.change(sortSelect, { target: { value: "linked" } });
+    await waitFor(() => {
+      const links = screen.getAllByRole("link").filter((l) => l.getAttribute("href")?.startsWith("/markets/"));
+      expect(links[0]).toHaveTextContent("Higher Prob");
     });
   });
 });

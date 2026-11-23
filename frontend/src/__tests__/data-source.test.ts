@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as paper from "@/lib/api/client";
 import * as exchange from "@/lib/exchange/client";
-import { listMarkets, mapNetMarket } from "@/lib/dataSource";
+import { filterMarketList, listMarkets, mapNetMarket } from "@/lib/dataSource";
 import { EXCHANGE_MODE_KEY } from "@/lib/exchangeMode";
 
 vi.mock("@/lib/api/client", () => ({
@@ -80,5 +80,29 @@ describe("market data source", () => {
       created_at: "",
       expires_at: "",
     });
+  });
+
+  it("maps real volume and liquidity when provided on NetMarket", () => {
+    const mapped = mapNetMarket({ ...netMarket, volume: 420.5, liquidity: 1500 });
+    expect(mapped.volume).toBe(420.5);
+    expect(mapped.liquidity).toBe(1500);
+  });
+
+  it("sorts accurately by volume, liquidity, probability (High->Low), and linked degree", () => {
+    const response = {
+      markets: [
+        { id: "m1", title: "Low", status: "active" as const, volume: 10.5, liquidity: 50, expires_at: "", marginals: { yes: 0.2, no: 0.8 } },
+        { id: "m2", title: "Mid", status: "active" as const, volume: 100.25, liquidity: 200, expires_at: "", marginals: { yes: 0.9, no: 0.1 } },
+        { id: "m3", title: "High", status: "active" as const, volume: 25, liquidity: 500, expires_at: "", marginals: { yes: 0.55, no: 0.45 } },
+      ],
+      count: 3,
+      meta: { apiVersion: "exchange", timestamp: "now" },
+    };
+
+    expect(filterMarketList(response, { sort: "volume" }).markets.map((m) => m.id)).toEqual(["m2", "m3", "m1"]);
+    expect(filterMarketList(response, { sort: "liquidity" }).markets.map((m) => m.id)).toEqual(["m3", "m2", "m1"]);
+    expect(filterMarketList(response, { sort: "probability" }).markets.map((m) => m.id)).toEqual(["m2", "m3", "m1"]);
+    const linkCounts = new Map([["m1", 12], ["m2", 2], ["m3", 5]]);
+    expect(filterMarketList(response, { sort: "linked" }, linkCounts).markets.map((m) => m.id)).toEqual(["m1", "m3", "m2"]);
   });
 });

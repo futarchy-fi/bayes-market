@@ -10,6 +10,7 @@
  *   bands (one row of sub-bands per FTM concept, plus external + other).
  */
 
+import type { GraphMarket } from "@/lib/api/types";
 import { searchMatchIds as egoSearchMatchIds } from "./egoGraph";
 
 // ---------------------------------------------------------------------------
@@ -30,6 +31,7 @@ const FTM_VAR_RE = /^ftm_(.+?)(?:_t(\d))?_(?:by|in)_(\d{4})$/;
 
 export const KNOWN_FTM_FAMILIES = new Set([
   "agi",
+  "sub_agi",
   "rampup",
   "auto_goods",
   "full_auto",
@@ -83,7 +85,7 @@ export function classifyVariable(
 }
 
 // ---------------------------------------------------------------------------
-// Bands (Y axis)
+// Bands (Y axis) & tier threshold labels
 // ---------------------------------------------------------------------------
 
 export type GroupKey =
@@ -103,6 +105,7 @@ export interface FamilyMeta {
 /** Fixed band order top -> bottom, per the product spec. */
 export const FAMILY_ORDER: FamilyMeta[] = [
   { key: "agi", label: "AGI compute threshold", group: "agi_rampup" },
+  { key: "sub_agi", label: "Weakly general AI (Sub-AGI)", group: "agi_rampup" },
   { key: "rampup", label: "Economic ramp-up (20%)", group: "agi_rampup" },
   { key: "auto_goods", label: "Task automation — economy", group: "automation" },
   { key: "full_auto", label: "Full automation — economy", group: "automation" },
@@ -121,29 +124,29 @@ export const FAMILY_ORDER: FamilyMeta[] = [
 
 export const FAMILY_KEYS = new Set(FAMILY_ORDER.map((f) => f.key));
 
+/** Human-readable threshold labels for each sub-row tier of multi-tier FTM bands. */
+export const TIER_LABELS: Record<string, Record<number, string>> = {
+  auto_goods: { 0: "5%", 1: "20%", 2: "50%", 3: "90%" },
+  auto_rnd: { 0: "5%", 1: "20%", 2: "50%", 3: "90%" },
+  train_run: { 0: "1e28", 1: "1e29", 2: "1e31", 3: "1e33" },
+  gwp_compute: { 0: "0.5%", 1: "1%", 2: "2%", 3: "5%" },
+  hw_ratio: { 0: "10x", 1: "100x", 2: "10,000x" },
+  sw_ratio: { 0: "10x", 1: "100x", 2: "10,000x" },
+  gwp_growth: { 0: "5%", 1: "10%", 2: "20%", 3: "30%" },
+  gwp_growth_max: { 0: "5%", 1: "10%", 2: "20%", 3: "30%" },
+};
+
+export const GROUP_LABELS: Record<GroupKey, string> = {
+  agi_rampup: "AGI & Sub-AGI",
+  automation: "Automation",
+  compute: "Compute",
+  efficiency: "Efficiency",
+  economy: "Economy",
+  external_other: "External",
+};
+
 // ---------------------------------------------------------------------------
-// Categorical group palette
-//
-// Validated on the dark app surface (#0f1117, var(--color-bg)) with the
-// dataviz skill's validator:
-//
-//   node validate_palette.js \
-//     "#0083c4,#c83046,#605edc,#00925e,#6f7d00,#b73790" \
-//     --mode dark --surface "#0f1117" --pairs all
-//
-//   Palette (dark, surface #0f1117, categorical): 6 slots
-//     [PASS] Lightness band         all 6 inside L 0.48–0.67
-//     [PASS] Chroma floor           all 6 >= 0.1
-//     [PASS] CVD separation         worst all-pairs #00925e↔#c83046 ΔE 16.0
-//            (deutan) · tritan 12.2 · normal 44.9
-//     [PASS] Contrast vs surface    all 6 >= 3:1
-//     -> ALL CHECKS PASS
-//
-// --pairs all (not just adjacent) was used deliberately: every node is
-// visible simultaneously on one map (like a scatter/bubble chart), so any
-// two group colors can end up next to each other, not just neighbors in a
-// legend list. Colors are also double-encoded by fixed band position + band
-// label, so hue is never the sole identity carrier.
+// Categorical group palette (validated on #0f1117 dark surface)
 // ---------------------------------------------------------------------------
 
 export const GROUP_COLORS: Record<GroupKey, string> = {
@@ -160,17 +163,30 @@ export function colorForGroup(group: GroupKey): string {
 }
 
 // ---------------------------------------------------------------------------
+// Resting probability visual encoding (fillOpacity & subtle radius)
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps P(yes) in [0, 1] to a resting fillOpacity in [0.14, 1.0] so the
+ * probability wavefront across years 2027 -> 2045 is immediately legible at rest.
+ */
+export function probabilityFillOpacity(p: number | null | undefined): number {
+  if (typeof p !== "number" || !Number.isFinite(p)) return 0.6;
+  const clamped = Math.max(0, Math.min(1, p));
+  return Number((0.14 + 0.86 * Math.pow(clamped, 0.72)).toFixed(3));
+}
+
+/**
+ * Maps P(yes) in [0, 1] to a subtle resting circle radius around `baseR`.
+ */
+export function probabilityRadius(p: number | null | undefined, baseR: number): number {
+  if (typeof p !== "number" || !Number.isFinite(p)) return baseR;
+  const clamped = Math.max(0, Math.min(1, p));
+  return Number((baseR - 0.5 + 1.2 * clamped).toFixed(2));
+}
+
+// ---------------------------------------------------------------------------
 // Assumption-delta diverging encoding
-//
-// Poles validated the same way (2-slot categorical check covers hue/lightness
-// /chroma/contrast identically; a diverging pair is just N=2 here):
-//
-//   node validate_palette.js "#d75928,#0095d7" --mode dark --surface "#0f1117" --pairs all
-//
-//   Palette (dark, surface #0f1117, categorical): 2 slots
-//     [PASS] Lightness band, Chroma floor, Contrast vs surface
-//     [PASS] CVD separation  worst all-pairs ΔE 83.8 (protan) · tritan 110.0 · normal 109.5
-//     -> ALL CHECKS PASS
 // ---------------------------------------------------------------------------
 
 /** Warm pole: assumptions pushed this market's Yes price DOWN. */
@@ -222,6 +238,89 @@ export function deltaToColor(delta: number): string {
   if (t === 0) return DELTA_NEUTRAL_HEX;
   const pole = delta > 0 ? DELTA_COOL_HEX : DELTA_WARM_HEX;
   return lerpHex(DELTA_NEUTRAL_HEX, pole, t);
+}
+
+// ---------------------------------------------------------------------------
+// Contradiction detection (shared across NetworkMap, BeliefFlowGraph, MarketDetail)
+// ---------------------------------------------------------------------------
+
+export function isContextContradictedError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { status?: unknown; code?: unknown; message?: unknown };
+  if (e.code === "context_contradicted" || e.status === 409) return true;
+  if (typeof e.message === "string" && e.message.toLowerCase().includes("contradict")) return true;
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// World-Model Snapshot KPIs & Try What-If Scenarios
+// ---------------------------------------------------------------------------
+
+export interface SnapshotKpi {
+  label: string;
+  market: GraphMarket;
+}
+
+export interface WhatIfScenario {
+  label: string;
+  variableId: string;
+  outcomeId: "yes" | "no";
+  assumptionLabel: string;
+  marketId: string;
+}
+
+const SNAPSHOT_KPI_SPECS: Array<{ label: string; candidates: string[] }> = [
+  { label: "Weakly General AI by 2030", candidates: ["ftm_sub_agi_by_2030", "ftm_sub_agi_by_2031", "ftm_sub_agi_by_2032"] },
+  { label: "Strict AGI by 2035", candidates: ["ftm_agi_by_2035", "ftm_agi_by_2034"] },
+  { label: "Strict AGI by 2040", candidates: ["ftm_agi_by_2040", "ftm_agi_by_2039", "ftm_agi_by_2041"] },
+  { label: "50% R&D Auto by 2035", candidates: ["ftm_auto_rnd_t2_by_2035", "ftm_auto_rnd_t2_by_2034"] },
+  { label: "10%+ GWP Growth by 2040", candidates: ["ftm_gwp_growth_max_t1_by_2040", "ftm_gwp_growth_t1_in_2040", "ftm_gwp_growth_max_t1_by_2039"] },
+  { label: "1e29 FLOP Run by 2030", candidates: ["ftm_train_run_t1_by_2030", "ftm_train_run_t1_by_2031"] },
+];
+
+const WHAT_IF_SPECS: Array<{ label: string; candidates: string[]; outcomeId: "yes" | "no" }> = [
+  { label: "Assume AGI by 2032", candidates: ["ftm_agi_by_2032", "ftm_agi_by_2034"], outcomeId: "yes" },
+  { label: "Assume 20% R&D auto by 2030", candidates: ["ftm_auto_rnd_t1_by_2030", "ftm_auto_rnd_t1_by_2031"], outcomeId: "yes" },
+  { label: "Assume 1e29 FLOP by 2032", candidates: ["ftm_train_run_t1_by_2032", "ftm_train_run_t1_by_2031"], outcomeId: "yes" },
+];
+
+export function selectSnapshotKpis(markets: GraphMarket[], limit = 5): SnapshotKpi[] {
+  const byVar = new Map<string, GraphMarket>();
+  for (const m of markets) if (m.variableId) byVar.set(m.variableId, m);
+  const out: SnapshotKpi[] = [];
+  for (const spec of SNAPSHOT_KPI_SPECS) {
+    if (out.length >= limit) break;
+    for (const candidate of spec.candidates) {
+      const m = byVar.get(candidate);
+      if (m) {
+        out.push({ label: spec.label, market: m });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+export function selectWhatIfScenarios(markets: GraphMarket[]): WhatIfScenario[] {
+  const byVar = new Map<string, GraphMarket>();
+  for (const m of markets) if (m.variableId) byVar.set(m.variableId, m);
+  const out: WhatIfScenario[] = [];
+  for (const spec of WHAT_IF_SPECS) {
+    for (const candidate of spec.candidates) {
+      const m = byVar.get(candidate);
+      if (m && m.variableId && m.status === "active" && (m.marginals?.yes ?? 0) > 0.0005) {
+        out.push({
+          label: spec.label,
+          variableId: m.variableId,
+          outcomeId: spec.outcomeId,
+          assumptionLabel: m.title,
+          marketId: m.id,
+        });
+        break;
+      }
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -280,8 +379,7 @@ export function buildAdjacency(markets: GraphMarketInput[]): Adjacency {
 }
 
 // ---------------------------------------------------------------------------
-// Collision nudging (used for the external band, and defensively anywhere
-// else multiple nodes land on the exact same year within one row)
+// Collision nudging
 // ---------------------------------------------------------------------------
 
 export interface YearSlotItem {
@@ -289,12 +387,6 @@ export interface YearSlotItem {
   year: number;
 }
 
-/**
- * Deterministic stack index (0-based) per item, grouped by `year`; items
- * sharing a year are ordered by id so the assignment never depends on input
- * order. Used to nudge same-year nodes into mini-rows instead of drawing
- * them on top of each other.
- */
 export function packYearCollisions(items: YearSlotItem[]): Map<string, number> {
   const byYear = new Map<number, string[]>();
   for (const it of items) {
@@ -333,6 +425,12 @@ export interface PositionedMapNode {
   undated: boolean;
 }
 
+export interface BandSubRow {
+  tier: number;
+  label: string;
+  y: number;
+}
+
 export interface MapBand {
   family: string;
   label: string;
@@ -340,6 +438,7 @@ export interface MapBand {
   y0: number;
   y1: number;
   rows: number;
+  subRows: BandSubRow[];
 }
 
 export interface MapEdge {
@@ -353,6 +452,8 @@ export interface MapLayout {
   bands: MapBand[];
   edges: MapEdge[];
   neighborsOf: Map<string, Set<string>>;
+  parentsOf: Map<string, string[]>;
+  childrenOf: Map<string, string[]>;
   width: number;
   height: number;
   yearMin: number;
@@ -373,7 +474,7 @@ export interface MapLayoutOptions {
 }
 
 const DEFAULT_LAYOUT_OPTIONS: Required<MapLayoutOptions> = {
-  leftMargin: 190,
+  leftMargin: 222,
   topMargin: 24,
   yearPitch: 40,
   rowHeight: 18,
@@ -427,15 +528,12 @@ export function computeMapLayout(
 
   for (const meta of FAMILY_ORDER) {
     const entries = byFamily.get(meta.key) ?? [];
+    // Hide empty swimlanes automatically so dead bands never occupy vertical space.
+    if (entries.length === 0) continue;
+
     const isFlatBand = meta.key === "external" || meta.key === "other";
 
-    let rowOf: (cls: Classification) => number;
-    let rows: number;
-
     if (isFlatBand) {
-      // Dense packing: nodes sharing a column stack downward, wrapping into
-      // centered sub-columns past FLAT_MAX_ROWS so no column becomes a
-      // page-long spike (the undated bucket alone holds ~100 externals).
       const byColumn = new Map<number, typeof entries>();
       for (const e of entries) {
         const col = columnOf(e.cls.year);
@@ -464,10 +562,9 @@ export function computeMapLayout(
           });
         });
       }
-      rows = maxRows;
-      rowOf = (_cls) => 0; // node positions were assigned per-item above
+      const rows = maxRows;
       const y1 = y0 + rows * opts.rowHeight;
-      bands.push({ family: meta.key, label: meta.label, group: meta.group, y0, y1, rows });
+      bands.push({ family: meta.key, label: meta.label, group: meta.group, y0, y1, rows, subRows: [] });
       cursorY = y1 + opts.bandGap;
       continue;
     }
@@ -476,8 +573,8 @@ export function computeMapLayout(
     // defaulting untiered markets to row 0.
     const tiers = Array.from(new Set(entries.map((e) => e.cls.tier ?? 0))).sort((a, b) => a - b);
     const rowIndexOfTier = new Map(tiers.map((t, i) => [t, i]));
-    rows = Math.max(1, tiers.length);
-    rowOf = (cls) => rowIndexOfTier.get(cls.tier ?? 0) ?? 0;
+    const rows = Math.max(1, tiers.length);
+    const rowOf = (cls: Classification) => rowIndexOfTier.get(cls.tier ?? 0) ?? 0;
 
     const y0 = cursorY;
     for (const e of entries) {
@@ -493,8 +590,20 @@ export function computeMapLayout(
         undated: e.cls.year === null,
       });
     }
+
+    const tierMap = TIER_LABELS[meta.key];
+    const subRows: BandSubRow[] = tierMap
+      ? tiers
+          .filter((t) => tierMap[t] !== undefined)
+          .map((t) => ({
+            tier: t,
+            label: tierMap[t]!,
+            y: y0 + (rowIndexOfTier.get(t) ?? 0) * opts.rowHeight + opts.rowHeight / 2,
+          }))
+      : [];
+
     const y1 = y0 + rows * opts.rowHeight;
-    bands.push({ family: meta.key, label: meta.label, group: meta.group, y0, y1, rows });
+    bands.push({ family: meta.key, label: meta.label, group: meta.group, y0, y1, rows, subRows });
     cursorY = y1 + opts.bandGap;
   }
 
@@ -528,6 +637,8 @@ export function computeMapLayout(
     bands,
     edges,
     neighborsOf,
+    parentsOf: adjacency.parentsOf,
+    childrenOf: adjacency.childrenOf,
     width,
     height,
     yearMin: YEAR_MIN,
