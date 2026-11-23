@@ -35,6 +35,7 @@ class User:
     # POST /v1/auth/register path (real humans, not bots) are never
     # mistaken for service accounts just because of where they're stored.
     is_service_account: bool = False
+    display_name: str | None = None
 
 
 def _hash_key(raw_key: str) -> str:
@@ -90,6 +91,12 @@ class AuthStore:
     def get_by_github_id(self, github_id: int) -> User | None:
         return self.users.get(github_id)
 
+    def revoke_user_key(self, user: User) -> None:
+        """Invalidate the user's active API key while preserving their account."""
+        self.key_to_user.pop(user.api_key_hash, None)
+        user.api_key_hash = f"revoked:{secrets.token_hex(16)}"
+        user.last_seen_at = _now()
+
 
 async def validate_github_token(token: str) -> dict:
     """
@@ -97,20 +104,28 @@ async def validate_github_token(token: str) -> dict:
     Returns {"id": int, "login": str} on success.
     Raises ValueError on failure.
     """
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            "https://api.github.com/user",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/vnd.github+json",
-            },
-            timeout=10.0,
-        )
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://api.github.com/user",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                },
+                timeout=10.0,
+            )
+    except httpx.HTTPError as e:
+        raise ValueError(f"github_http_error:{e.__class__.__name__}") from e
     if resp.status_code == 401:
         raise ValueError("github_token_invalid")
     if resp.status_code != 200:
         raise ValueError(f"github_api_error:{resp.status_code}")
-    data = resp.json()
+    try:
+        data = resp.json()
+    except ValueError as e:
+        raise ValueError("github_api_error:invalid_json") from e
+    if not isinstance(data, dict) or "id" not in data or "login" not in data:
+        raise ValueError("github_api_error:invalid_user_payload")
     return {"id": data["id"], "login": data["login"]}
 
 
@@ -119,13 +134,16 @@ async def start_device_flow(client_id: str) -> dict:
     Start GitHub OAuth device flow.
     Returns the device flow response (device_code, user_code, verification_uri, etc.)
     """
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            "https://github.com/login/device/code",
-            data={"client_id": client_id},
-            headers={"Accept": "application/json"},
-            timeout=10.0,
-        )
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://github.com/login/device/code",
+                data={"client_id": client_id},
+                headers={"Accept": "application/json"},
+                timeout=10.0,
+            )
+    except httpx.HTTPError as e:
+        raise ValueError(f"github_http_error:{e.__class__.__name__}") from e
     if resp.status_code != 200:
         raise ValueError(f"github_api_error:{resp.status_code}")
     return resp.json()
@@ -137,17 +155,20 @@ async def poll_device_flow(client_id: str, device_code: str) -> dict:
     Returns {"access_token": str} on success.
     Raises ValueError with code on pending/expired/etc.
     """
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            "https://github.com/login/oauth/access_token",
-            data={
-                "client_id": client_id,
-                "device_code": device_code,
-                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-            },
-            headers={"Accept": "application/json"},
-            timeout=10.0,
-        )
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://github.com/login/oauth/access_token",
+                data={
+                    "client_id": client_id,
+                    "device_code": device_code,
+                    "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                },
+                headers={"Accept": "application/json"},
+                timeout=10.0,
+            )
+    except httpx.HTTPError as e:
+        raise ValueError(f"github_http_error:{e.__class__.__name__}") from e
     if resp.status_code != 200:
         raise ValueError(f"github_api_error:{resp.status_code}")
     data = resp.json()

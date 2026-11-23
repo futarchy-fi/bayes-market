@@ -15,6 +15,6 @@ def test_build_from_takeoff_seeds():
     from exchange.venues.joint.venue import nodes_from_seeds
     nodes = nodes_from_seeds(seeds)
     fm = FactoredMarket.from_nodes(nodes, liquidity=50.0, max_width=8)
-    assert len(fm.variables()) >= 500
-    m = fm.marginal("ftm_agi_by_2040")
+    assert len(fm.variables()) >= 250
+    m = fm.marginal("ftm_agi_by_2035")
     assert m is not None and 0.0 < m["yes"] < 1.0

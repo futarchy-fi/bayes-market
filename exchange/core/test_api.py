@@ -262,7 +262,6 @@ class TestAuth:
         assert resp.json()["error"]["code"] == "github_oauth_invalid_state"
 
     async def test_oauth_callback_creates_account_and_redirects(self, client):
-        app.state.github_oauth_states["valid-state"] = datetime.now(timezone.utc)
         exchange_mock = AsyncMock(return_value="gho_token")
         validate_mock = AsyncMock(return_value={"id": 88, "login": "octocat"})
 
@@ -270,9 +269,15 @@ class TestAuth:
                 patch("exchange.core.api.GITHUB_CLIENT_SECRET", "client-secret"), \
                 patch("exchange.core.api._exchange_github_oauth_code", exchange_mock), \
                 patch("exchange.core.api.validate_github_token", validate_mock):
+            login_resp = await client.get("/v1/auth/github/login",
+                                          follow_redirects=False)
+            assert login_resp.status_code == 302
+            state = parse_qs(urlparse(login_resp.headers["location"]).query)["state"][0]
+            assert login_resp.cookies.get("futarchy_oauth_state") == state
+
             resp = await client.get("/v1/auth/callback",
                                     params={"code": "oauth-code",
-                                            "state": "valid-state"},
+                                            "state": state},
                                     follow_redirects=False)
 
         assert resp.status_code == 302
@@ -281,17 +286,263 @@ class TestAuth:
         fragment = parse_qs(parsed.fragment)
 
         assert parsed.scheme == "https"
-        assert parsed.netloc == "api.futarchy.ai"
-        assert parsed.path == "/dashboard"
+        assert parsed.netloc == "futarchy.ai"
+        assert parsed.path == "/exchange/callback"
         assert fragment["account_id"] == ["1"]
         assert fragment["login"] == ["octocat"]
         assert "auth" in fragment
-        assert "valid-state" not in app.state.github_oauth_states
+        assert state not in app.state.github_oauth_states
+        # Cookie cleared on callback
+        set_cookie = resp.headers.get("set-cookie", "").lower()
+        assert "futarchy_oauth_state=" in set_cookie
+        assert "max-age=0" in set_cookie
 
         me = await client.get("/v1/me",
                               headers=_user_headers(fragment["auth"][0]))
         assert me.status_code == 200
         assert me.json()["available"] == "1000"
+
+    async def test_oauth_login_sets_cookie_attributes_for_http_and_https(self, client):
+        with patch("exchange.core.api.GITHUB_CLIENT_ID", "client-id"):
+            http_resp = await client.get("/v1/auth/github/login",
+                                         follow_redirects=False)
+            https_resp = await client.get(
+                "/v1/auth/github/login",
+                headers={"X-Forwarded-Proto": "https"},
+                follow_redirects=False,
+            )
+
+        http_cookie = http_resp.headers.get("set-cookie", "")
+        assert "futarchy_oauth_state=" in http_cookie
+        assert "HttpOnly" in http_cookie
+        assert "SameSite=lax" in http_cookie
+        assert "Max-Age=600" in http_cookie
+        assert "; Secure" not in http_cookie
+
+        https_cookie = https_resp.headers.get("set-cookie", "")
+        assert "futarchy_oauth_state=" in https_cookie
+        assert "HttpOnly" in https_cookie
+        assert "SameSite=lax" in https_cookie
+        assert "Max-Age=600" in https_cookie
+        assert "Secure" in https_cookie
+
+    async def test_oauth_callback_rejects_missing_or_mismatched_cookie(self, client):
+        app.state.github_oauth_states["valid-state"] = datetime.now(timezone.utc)
+        with patch("exchange.core.api.GITHUB_CLIENT_ID", "client-id"), \
+                patch("exchange.core.api.GITHUB_CLIENT_SECRET", "client-secret"):
+            # Missing cookie -> rejected without burning valid server state
+            no_cookie = await client.get(
+                "/v1/auth/callback",
+                params={"code": "oauth-code", "state": "valid-state"},
+                follow_redirects=False,
+            )
+            assert no_cookie.status_code == 400
+            assert no_cookie.json()["error"]["code"] == "github_oauth_invalid_state"
+            assert "valid-state" in app.state.github_oauth_states
+
+            # Mismatched cookie -> rejected and cookie cleared
+            bad_cookie = await client.get(
+                "/v1/auth/callback",
+                params={"code": "oauth-code", "state": "valid-state"},
+                headers={"Cookie": "futarchy_oauth_state=wrong-state"},
+                follow_redirects=False,
+            )
+            assert bad_cookie.status_code == 400
+            assert bad_cookie.json()["error"]["code"] == "github_oauth_invalid_state"
+            assert "max-age=0" in bad_cookie.headers.get("set-cookie", "").lower()
+
+    async def test_oauth_callback_browser_error_redirects(self, client):
+        with patch("exchange.core.api.GITHUB_CLIENT_ID", "client-id"), \
+                patch("exchange.core.api.GITHUB_CLIENT_SECRET", "client-secret"):
+            # User clicked Cancel on GitHub -> ?error=access_denied always redirects
+            denied = await client.get(
+                "/v1/auth/callback",
+                params={"error": "access_denied"},
+                follow_redirects=False,
+            )
+            assert denied.status_code == 302
+            parsed = urlparse(denied.headers["location"])
+            assert parsed.netloc == "futarchy.ai"
+            assert parsed.path == "/exchange/callback"
+            assert parse_qs(parsed.fragment)["error"] == ["access_denied"]
+            assert "max-age=0" in denied.headers.get("set-cookie", "").lower()
+
+            # Browser hitting callback with invalid state -> friendly redirect
+            bad_state = await client.get(
+                "/v1/auth/callback",
+                params={"code": "oauth-code", "state": "bad-state"},
+                headers={"Accept": "text/html,application/xhtml+xml"},
+                follow_redirects=False,
+            )
+            assert bad_state.status_code == 302
+            assert parse_qs(urlparse(bad_state.headers["location"]).fragment)["error"] == [
+                "github_oauth_invalid_state"
+            ]
+
+    async def test_oauth_callback_handles_httpx_errors_and_sends_redirect_uri(self, client):
+        import httpx
+        from exchange.core.api import _exchange_github_oauth_code
+        from exchange.core.auth import validate_github_token
+
+        # Verify RFC 6749 §4.1.3 redirect_uri is included in code exchange POST
+        captured = {}
+
+        class _FakeClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def post(self, url, data=None, headers=None, timeout=None):
+                captured["url"] = url
+                captured["data"] = data
+                return httpx.Response(200, json={"access_token": "gho_abc"})
+
+            async def get(self, url, headers=None, timeout=None):
+                raise httpx.ConnectTimeout("timed out")
+
+        with patch("exchange.core.api.GITHUB_CLIENT_ID", "cid"), \
+                patch("exchange.core.api.GITHUB_CLIENT_SECRET", "csec"), \
+                patch("exchange.core.api.GITHUB_OAUTH_REDIRECT_URI", "https://api.futarchy.ai/v1/auth/callback"), \
+                patch("exchange.core.api.httpx.AsyncClient", return_value=_FakeClient()):
+            token = await _exchange_github_oauth_code("code-123")
+            assert token == "gho_abc"
+            assert captured["data"]["redirect_uri"] == "https://api.futarchy.ai/v1/auth/callback"
+
+        with patch("exchange.core.auth.httpx.AsyncClient", return_value=_FakeClient()):
+            with pytest.raises(ValueError, match="github_http_error:ConnectTimeout"):
+                await validate_github_token("gho_abc")
+
+        # Callback converts httpx.HTTPError to 502 JSON or browser error redirect
+        app.state.github_oauth_states["s-api"] = datetime.now(timezone.utc)
+        app.state.github_oauth_states["s-html"] = datetime.now(timezone.utc)
+        failing_exchange = AsyncMock(side_effect=httpx.ReadTimeout("timeout"))
+
+        with patch("exchange.core.api.GITHUB_CLIENT_ID", "cid"), \
+                patch("exchange.core.api.GITHUB_CLIENT_SECRET", "csec"), \
+                patch("exchange.core.api._exchange_github_oauth_code", failing_exchange):
+            api_resp = await client.get(
+                "/v1/auth/callback",
+                params={"code": "c", "state": "s-api"},
+                headers={"Cookie": "futarchy_oauth_state=s-api"},
+                follow_redirects=False,
+            )
+            assert api_resp.status_code == 502
+            assert api_resp.json()["error"]["code"] == "github_api_error"
+
+            html_resp = await client.get(
+                "/v1/auth/callback",
+                params={"code": "c", "state": "s-html"},
+                headers={
+                    "Cookie": "futarchy_oauth_state=s-html",
+                    "Accept": "text/html",
+                },
+                follow_redirects=False,
+            )
+            assert html_resp.status_code == 302
+            assert parse_qs(urlparse(html_resp.headers["location"]).fragment)["error"] == [
+                "github_api_error"
+            ]
+
+    async def test_auth_logout_revokes_key_immediately_and_survives_reload(self, client, tmp_path):
+        import exchange.core.api as api_module
+        from exchange.core.persistence import load_snapshot
+
+        state_path = tmp_path / "logout_state.json"
+        original_state_path = api_module.STATE_PATH
+        api_module.STATE_PATH = str(state_path)
+        try:
+            key = await _mock_auth(client, github_id=77, login="logout-user")
+            me_before = await client.get("/v1/me", headers=_user_headers(key))
+            assert me_before.status_code == 200
+            account_id = me_before.json()["account_id"]
+
+            logout = await client.post("/v1/auth/logout", headers=_user_headers(key))
+            assert logout.status_code == 200
+            assert logout.json() == {"status": "logged_out"}
+
+            # Old key is immediately rejected
+            me_after = await client.get("/v1/me", headers=_user_headers(key))
+            assert me_after.status_code == 401
+            assert me_after.json()["error"]["code"] == "invalid_api_key"
+
+            # Persisted snapshot keeps old key invalid
+            _, _, reloaded_auth, _, _, _ = load_snapshot(str(state_path))
+            assert reloaded_auth.authenticate(key) is None
+
+            # Re-authenticating same GitHub user preserves account and issues new key
+            new_key = await _mock_auth(client, github_id=77, login="logout-user")
+            assert new_key != key
+            me_reauth = await client.get("/v1/me", headers=_user_headers(new_key))
+            assert me_reauth.status_code == 200
+            assert me_reauth.json()["account_id"] == account_id
+        finally:
+            api_module.STATE_PATH = original_state_path
+
+    async def test_admin_named_trader_account_and_display_name_persistence(self, client, tmp_path):
+        import exchange.core.api as api_module
+        from exchange.core.persistence import load_snapshot
+
+        state_path = tmp_path / "named_trader_state.json"
+        original_state_path = api_module.STATE_PATH
+        api_module.STATE_PATH = str(state_path)
+        try:
+            resp = await client.post(
+                "/v1/admin/service-accounts",
+                headers=ADMIN_HEADERS,
+                json={
+                    "username": "dwarkesh_guest",
+                    "display_name": "Dwarkesh Guest",
+                    "is_service_account": False,
+                    "initial_credits": "1000",
+                },
+            )
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["username"] == "dwarkesh_guest"
+            assert body["display_name"] == "Dwarkesh Guest"
+            assert body["is_service_account"] is False
+            old_key = body["api_key"]
+            account_id = body["account_id"]
+
+            # Duplicate without rotate_if_exists still returns 409
+            dup = await client.post(
+                "/v1/admin/service-accounts",
+                headers=ADMIN_HEADERS,
+                json={"username": "dwarkesh_guest", "initial_credits": "1000"},
+            )
+            assert dup.status_code == 409
+            assert dup.json()["error"]["code"] == "username_taken"
+
+            # Duplicate with rotate_if_exists rotates key without double-minting
+            rot = await client.post(
+                "/v1/admin/service-accounts",
+                headers=ADMIN_HEADERS,
+                json={
+                    "username": "dwarkesh_guest",
+                    "display_name": "Dwarkesh Guest Updated",
+                    "is_service_account": False,
+                    "initial_credits": "1000",
+                    "rotate_if_exists": True,
+                },
+            )
+            assert rot.status_code == 200
+            new_key = rot.json()["api_key"]
+            assert rot.json()["account_id"] == account_id
+            assert new_key != old_key
+            assert (await client.get("/v1/me", headers=_user_headers(old_key))).status_code == 401
+            me = await client.get("/v1/me", headers=_user_headers(new_key))
+            assert me.status_code == 200
+            assert me.json()["available"] == "1000"
+
+            # Snapshot persistence preserves display_name
+            _, _, reloaded_auth, _, _, _ = load_snapshot(str(state_path))
+            loaded = reloaded_auth.local_users["dwarkesh_guest"]
+            assert loaded.display_name == "Dwarkesh Guest Updated"
+            assert loaded.is_service_account is False
+        finally:
+            api_module.STATE_PATH = original_state_path
 
     async def test_register_endpoint_removed(self, client):
         resp = await client.post("/v1/auth/register", json={"username": "alice"})
