@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
+import { EXCHANGE_API, EXCHANGE_UNAUTHORIZED_EVENT, ExchangeApiError } from "@/lib/exchange/client";
+import { EXCHANGE_SELECT_ACCOUNT_STORAGE_KEY, EXCHANGE_SESSION_STORAGE_KEY, SESSION_EXPIRED_NOTICE } from "@/lib/exchange/session";
 import { renderWithProviders, createMockQueryResult } from "./helpers";
 import Portfolio from "@/routes/Portfolio";
 import { EXCHANGE_MODE_KEY } from "@/lib/exchangeMode";
@@ -270,5 +272,33 @@ describe("Portfolio", () => {
 
     renderWithProviders(<Portfolio />);
     expect(screen.getByText("No positions.")).toBeInTheDocument();
+  });
+
+  it("displays session-expired notice and ?prompt=select_account sign-in link on /portfolio", () => {
+    window.localStorage.removeItem(EXCHANGE_MODE_KEY);
+    window.localStorage.setItem(
+      EXCHANGE_SESSION_STORAGE_KEY,
+      JSON.stringify({ apiKey: "k-portfolio", githubLogin: "alice" }),
+    );
+    window.sessionStorage.setItem(EXCHANGE_SELECT_ACCOUNT_STORAGE_KEY, "1");
+    mockUseSession.mockReturnValue(unconfiguredSession);
+
+    renderWithProviders(<Portfolio />, { route: "/portfolio" });
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(EXCHANGE_UNAUTHORIZED_EVENT, {
+          detail: { apiKey: "k-portfolio", error: new ExchangeApiError(401, "invalid_api_key", "expired") },
+        }),
+      );
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(SESSION_EXPIRED_NOTICE);
+    expect(screen.getByRole("link", { name: "Sign in with GitHub" })).toHaveAttribute(
+      "href",
+      `${EXCHANGE_API}/v1/auth/github/login?prompt=select_account`,
+    );
+    window.sessionStorage.clear();
+    window.localStorage.removeItem(EXCHANGE_SESSION_STORAGE_KEY);
   });
 });

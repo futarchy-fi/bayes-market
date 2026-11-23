@@ -1,0 +1,230 @@
+{
+ "version": "policy-curated-v1",
+ "asOfDate": "2026-11-23",
+ "markets": [
+  {
+   "slug": "pol_mandatory_predeploy_evals_2028",
+   "title": "Will the US or EU mandate government-run or accredited pre-deployment safety evals for frontier AI models by 2028?",
+   "description": "Resolves YES if, between November 24, 2026 and December 31, 2028, either (a) the US enacts a federal statute or binding federal agency rule (e.g., via Commerce/CAISI, DoD, or a newly authorized federal AI agency) or (b) the EU adopts a binding Regulation, Directive, or EU AI Office Implementing Act amending or extending the EU AI Act, that legally prohibits commercial release or external deployment of frontier AI models above a specified training-compute (e.g., >=10^26 FLOP) or dangerous-capability threshold (CBRN, offensive cyber, or autonomy) until the model completes pre-deployment safety evaluations or red-teaming conducted by a government institute (such as US CAISI or the EU AI Office) or an accredited independent third-party evaluator (such as METR or Apollo). Excludes voluntary commitments, US state-only laws (e.g., CA SB 53), and the pre-existing 2024 EU AI Act Article 55 self-assessment, voluntary GPAI Code of Practice, and post-hoc Article 91 RFIs unless upgraded to mandatory pre-deployment external/government evaluation clearance.",
+   "category": "licensing",
+   "year": 2028,
+   "expires_at": "2028-12-31T23:59:59Z",
+   "consensus_prior": 0.48,
+   "parents": [
+    "ftm_auto_rnd_t1_by_2028"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t1_by_2028=yes": 0.72,
+    "ftm_auto_rnd_t1_by_2028=no": 0.28
+   }
+  },
+  {
+   "slug": "pol_us_china_export_tighten_2028",
+   "title": "Will the US enact tighter China AI chip export controls beyond the Nov 2026 BIS baseline by 2028?",
+   "description": "Resolves YES if, between November 24, 2026 and December 31, 2028, the US enacts a binding federal statute (e.g., codifying the MATCH Act, GAIN AI Act, or statutory China accelerator bans) or Commerce/BIS publishes an effective Final or Interim Final Rule in the Federal Register that materially tightens AI compute export controls on China/Country Group D:5 relative to the November 19, 2026 BIS baseline via at least one of: (1) revoking the January 2026 case-by-case review pathway and restoring a formal presumption of denial for H200-class or lower-threshold ECCN 3A090 accelerators to China/Macau; (2) cutting the ECCN 3A090 Total Processing Performance (TPP) export ceiling for China by >=25% or lowering the November 19, 2026 remote-access cloud license threshold below 12 million aggregate TPP; or (3) expanding binding extraterritorial Foreign Direct Product Rule controls on advanced packaging, HBM3E/HBM4, or sub-14nm DUV lithography servicing to Chinese fabs. Resolves NO if controls remain at or are relaxed below the November 19, 2026 baseline.",
+   "category": "export_controls",
+   "year": 2028,
+   "expires_at": "2028-12-31T23:59:59Z",
+   "consensus_prior": 0.5,
+   "parents": [
+    "ftm_train_run_t0_by_2028"
+   ],
+   "cpt": {
+    "ftm_train_run_t0_by_2028=yes": 0.66,
+    "ftm_train_run_t0_by_2028=no": 0.3
+   }
+  },
+  {
+   "slug": "pol_federal_whistleblower_incident_2028",
+   "title": "Will the US enact a federal AI lab whistleblower protection and frontier incident reporting law by 2028?",
+   "description": "Resolves YES if, between November 24, 2026 and December 31, 2028, an Act of Congress is signed into US federal law (such as the AI Whistleblower Protection Act or a broader federal AI safety statute) that contains BOTH: (1) explicit federal anti-retaliation protections and NDA carve-outs shielding current or former employees and contractors of frontier AI developers who report catastrophic AI safety, alignment, or weight-security risks to federal authorities or Congress; AND (2) mandatory federal incident-reporting obligations requiring covered frontier AI developers (defined by compute, capability, or revenue thresholds) to notify a designated federal agency (e.g., DHS/CISA, Commerce/CAISI, or a federal AI oversight office) within a statutory deadline upon discovering qualifying severe model-weight exfiltrations, cyber breaches, or autonomous loss-of-control / critical safety incidents. State-only statutes (e.g., CA SB 53) and non-binding executive policies do not qualify.",
+   "category": "licensing",
+   "year": 2028,
+   "expires_at": "2028-12-31T23:59:59Z",
+   "consensus_prior": 0.49,
+   "parents": [
+    "ftm_sub_agi_by_2028"
+   ],
+   "cpt": {
+    "ftm_sub_agi_by_2028=yes": 0.74,
+    "ftm_sub_agi_by_2028=no": 0.36
+   }
+  },
+  {
+   "slug": "pol_us_frontier_licensing_2029",
+   "title": "Will the US enact a federal frontier-model licensing or compute-threshold regulatory statute by 2029?",
+   "description": "Resolves YES if, between November 24, 2026 and December 31, 2029, an Act of Congress is signed into US federal law establishing a binding federal licensing, pre-training registration-and-authorization, or statutory compute-threshold regulatory regime governing frontier AI models (e.g., models exceeding an explicit training-compute threshold such as >=10^26 or >=10^27 FLOP, cluster power threshold, or frontier capability tier), empowering a federal agency to enforce binding safety/security standards, audit labs, and deny, suspend, or revoke authorization to train or deploy non-compliant frontier models. Excludes purely voluntary NIST frameworks, standalone state-preemption moratoriums lacking substantive federal frontier standards, and export-control rules applying solely to foreign adversaries.",
+   "category": "licensing",
+   "year": 2029,
+   "expires_at": "2029-12-31T23:59:59Z",
+   "consensus_prior": 0.42,
+   "parents": [
+    "ftm_sub_agi_by_2029"
+   ],
+   "cpt": {
+    "ftm_sub_agi_by_2029=yes": 0.66,
+    "ftm_sub_agi_by_2029=no": 0.2
+   }
+  },
+  {
+   "slug": "pol_autonomous_agent_liability_2029",
+   "title": "Will the US or EU enact statutory strict liability or mandatory insurance for autonomous AI agents by 2029?",
+   "description": "Resolves YES if, between November 24, 2026 and December 31, 2029, either (a) the US enacts a federal statute or (b) the EU adopts a new binding Regulation or Directive published in the Official Journal specifically establishing either: (1) a statutory strict-liability regime imposing non-waivable civil liability on frontier model developers or commercial deployers for material financial, cyber, or physical harm caused by autonomous AI agents operating without per-action human approval; OR (2) a mandatory third-party liability insurance, financial-responsibility bond, or Price-Anderson-style pooled catastrophe indemnity fund required as a legal condition to deploy frontier/high-autonomy AI agents. Explicitly excludes the pre-existing 2024 EU Product Liability Directive (Directive (EU) 2024/2853) as enacted prior to November 2026 unless newly amended or supplemented with autonomous-agent strict-liability or mandatory-insurance rules.",
+   "category": "liability",
+   "year": 2029,
+   "expires_at": "2029-12-31T23:59:59Z",
+   "consensus_prior": 0.35,
+   "parents": [
+    "ftm_auto_goods_t1_by_2029"
+   ],
+   "cpt": {
+    "ftm_auto_goods_t1_by_2029=yes": 0.58,
+    "ftm_auto_goods_t1_by_2029=no": 0.18
+   }
+  },
+  {
+   "slug": "pol_us_open_weights_restriction_2030",
+   "title": "Will the US enact a federal ban or export-style licensing restriction on releasing frontier open-weight models by 2030?",
+   "description": "Resolves YES if, between November 24, 2026 and December 31, 2030, the US enacts a federal statute or binding federal regulation (e.g., under EAR/BIS, ITAR, or a federal AI regulatory statute) that takes legal effect and prohibits, or requires prior federal government license/authorization before, US persons or entities publicly releasing the model weights of a frontier AI model above a defined compute threshold (e.g., >=10^26 or >=10^27 FLOP) or dangerous-capability threshold (CBRN, offensive cyber zero-day exploitation, or autonomous replication). Voluntary lab decisions not to release weights, non-binding guidance, or rules permanently enjoined before taking effect do not qualify.",
+   "category": "open_weights",
+   "year": 2030,
+   "expires_at": "2030-12-31T23:59:59Z",
+   "consensus_prior": 0.38,
+   "parents": [
+    "ftm_sub_agi_by_2030"
+   ],
+   "cpt": {
+    "ftm_sub_agi_by_2030=yes": 0.56,
+    "ftm_sub_agi_by_2030=no": 0.14
+   }
+  },
+  {
+   "slug": "pol_us_china_safety_agreement_2030",
+   "title": "Will the US and China sign a bilateral AI safety or frontier compute-monitoring agreement by 2030?",
+   "description": "Resolves YES if, between November 24, 2026 and December 31, 2030, the governments of the United States and the People's Republic of China formally sign a bilateral written agreement, executive accord, or treaty (beyond non-binding Track 2 dialogues or generic summit communiques) establishing concrete operational commitments in at least one of: (1) mutual notification, verification, or monitoring of frontier AI training clusters/runs above a defined compute threshold; (2) verifiable bilateral red lines and crisis communication protocols governing autonomous AI in nuclear command-and-control, critical-infrastructure cyber offense, or bioweapons; or (3) mutual or jointly audited third-party safety evaluation and critical-incident disclosure protocols for frontier AI labs. Formal Senate treaty ratification is not required if signed as an operational government-to-government executive agreement.",
+   "category": "treaty",
+   "year": 2030,
+   "expires_at": "2030-12-31T23:59:59Z",
+   "consensus_prior": 0.34,
+   "parents": [
+    "ftm_auto_rnd_t2_by_2030"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t2_by_2030=yes": 0.54,
+    "ftm_auto_rnd_t2_by_2030=no": 0.18
+   }
+  },
+  {
+   "slug": "pol_hw_chip_governance_mandate_2030",
+   "title": "Will the US mandate hardware-enforced location tracking or on-chip compute governance on frontier AI accelerators by 2030?",
+   "description": "Resolves YES if, between November 24, 2026 and December 31, 2030, the US enacts a federal statute (such as the Chip Security Act, H.R. 3447 / S. 1705, or successor legislation) or Commerce/BIS issues an effective binding rule requiring manufacturers of export-controlled frontier AI accelerators (ECCN 3A090 or successor datacenter GPU/TPU/ASIC classifications) to integrate hardware- or firmware-enforced governance mechanisms into newly shipped chips \u2014 specifically including cryptographic location verification (e.g., delay-based geolocation or signed location attestation), hardware-enforced cluster-size/telemetry attestation, or remote licensing/disablement capability. Paper end-user attestations or software-only cloud KYC rules (such as the Nov 2026 BIS Remote Access IFR) without mandated on-chip/firmware security mechanisms do not qualify.",
+   "category": "hardware_governance",
+   "year": 2030,
+   "expires_at": "2030-12-31T23:59:59Z",
+   "consensus_prior": 0.44,
+   "parents": [
+    "ftm_train_run_t1_by_2030"
+   ],
+   "cpt": {
+    "ftm_train_run_t1_by_2030=yes": 0.62,
+    "ftm_train_run_t1_by_2030=no": 0.24
+   }
+  },
+  {
+   "slug": "pol_sovereign_compute_1gw_2030",
+   "title": "Will a >=1 GW majority government-owned sovereign AI compute cluster outside the US and China be operational by 2030?",
+   "description": "Resolves YES if, by December 31, 2030, at least one sovereign AI compute cluster or national/supranational public compute reserve located outside the United States and China (including Hong Kong and Macau) reaches verified operational status with >=1.0 GW (1,000 MW) of energized IT/AI-compute load (at a single campus or within one integrated national/EU-level public compute reserve such as an EU AI Gigafactory/EuroHPC facility, UAE sovereign-controlled 1 GW+ campus once fully energized, Saudi HUMAIN sovereign cluster, or UK national compute reserve), where >=50% equity ownership or direct operational/allocation control is held by a national government, sovereign wealth fund, or intergovernmental public body. Announced plans, power-permit filings, or sub-1 GW initial phases (such as the 200 MW 2026 Phase 1 of Stargate UAE) do not qualify until >=1.0 GW of active AI compute load is operational.",
+   "category": "nationalization",
+   "year": 2030,
+   "expires_at": "2030-12-31T23:59:59Z",
+   "consensus_prior": 0.58,
+   "parents": [
+    "ftm_gwp_compute_t1_by_2030"
+   ],
+   "cpt": {
+    "ftm_gwp_compute_t1_by_2030=yes": 0.78,
+    "ftm_gwp_compute_t1_by_2030=no": 0.34
+   }
+  },
+  {
+   "slug": "pol_us_nationalized_project_2031",
+   "title": "Will the US launch a >=$50B government-directed frontier AI mega-project or nationalize a frontier AI lab by 2031?",
+   "description": "Resolves YES if, between November 24, 2026 and December 31, 2031, the US federal government either: (1) enacts federal appropriations or binding federal fiscal commitments totaling >=$50 billion (nominal USD via direct funding, DOE/DoD contracts, or federally backed consortium equity/loans) establishing a single US government-directed frontier AI development mega-project or public-private national compute consortium ('AI Manhattan Project') with direct federal governance and security authority over training runs and model weights; OR (2) exercises statutory authority (e.g., Defense Production Act compulsion, eminent domain, or federal receivership/nationalization legislation) to assume direct operational control or majority federal ownership of a US frontier AI lab (such as OpenAI, Anthropic, Google DeepMind US, or xAI). Privately financed hyperscaler projects endorsed rhetorically by the White House without >=$50B in binding federal financing or direct federal operational command do not qualify.",
+   "category": "nationalization",
+   "year": 2031,
+   "expires_at": "2031-12-31T23:59:59Z",
+   "consensus_prior": 0.35,
+   "parents": [
+    "ftm_full_auto_rnd_by_2031"
+   ],
+   "cpt": {
+    "ftm_full_auto_rnd_by_2031=yes": 0.62,
+    "ftm_full_auto_rnd_by_2031=no": 0.17
+   }
+  },
+  {
+   "slug": "pol_emergency_moratorium_2031",
+   "title": "Will the US or G7 enact an emergency >=90-day moratorium on frontier AI training following a safety or capability scare by 2031?",
+   "description": "Resolves YES if, between November 24, 2026 and December 31, 2031, the US federal government (via statute, legally enforceable executive order, or binding federal agency order) OR a coordinated binding directive of at least four G7 governments (including the US) enforces a temporary halt lasting at least 90 consecutive calendar days prohibiting initiation or continuation of frontier AI training runs above a specified compute or capability threshold, explicitly citing safety, misalignment, loss-of-control, weight-security, or catastrophic capability risks. Voluntary pauses by individual labs, pauses lifted before 90 consecutive days, or state/local datacenter zoning moratoriums targeting electricity or water usage do not qualify; carve-outs for government-supervised safety/alignment research remain compatible with a YES resolution.",
+   "category": "moratorium",
+   "year": 2031,
+   "expires_at": "2031-12-31T23:59:59Z",
+   "consensus_prior": 0.28,
+   "parents": [
+    "ftm_full_auto_rnd_by_2031"
+   ],
+   "cpt": {
+    "ftm_full_auto_rnd_by_2031=yes": 0.52,
+    "ftm_full_auto_rnd_by_2031=no": 0.12
+   }
+  },
+  {
+   "slug": "pol_iaea_ai_agency_2033",
+   "title": "Will an IAEA-style international AI inspection agency with hardware-verified compute audits be established by treaty by 2033?",
+   "description": "Resolves YES if, by December 31, 2033, a legally binding multilateral treaty or international charter enters into force (ratified by at least 10 states, including at least two of the United States, China, and the European Union/EU member states) establishing a permanent intergovernmental AI inspection and verification organization (analogous to the IAEA or OPCW) vested with legal authority to conduct on-site datacenter inspections OR hardware-verified compute audits (verifying accelerator inventories, cryptographic chip telemetry, power consumption, or frontier training-run compliance) within signatory jurisdictions. Advisory UN panels, voluntary AI Safety Institute networks, and non-binding international summit declarations without binding inspection/audit authority do not qualify.",
+   "category": "treaty",
+   "year": 2033,
+   "expires_at": "2033-12-31T23:59:59Z",
+   "consensus_prior": 0.32,
+   "parents": [
+    "ftm_agi_by_2033"
+   ],
+   "cpt": {
+    "ftm_agi_by_2033=yes": 0.48,
+    "ftm_agi_by_2033=no": 0.12
+   }
+  },
+  {
+   "slug": "pol_global_compute_cap_treaty_2035",
+   "title": "Will the US and China both ratify a binding global compute-cap or frontier AI training ceiling treaty by 2035?",
+   "description": "Resolves YES if, by December 31, 2035, BOTH the United States (via Senate treaty ratification or congressional-executive agreement enacted into federal statute) and the People's Republic of China (via ratification by the Standing Committee of the National People's Congress) have formally ratified and brought into force a legally binding international treaty imposing verifiable upper limits (hard compute caps, moratoria, or treaty-authorized licensing ceilings) on frontier AI training FLOPs, unapproved frontier cluster aggregation, or unauthorized superhuman capability training runs, backed by mutual or independent verification provisions. Non-binding executive pledges, unilateral domestic ceilings, or treaties ratified by only one of the two powers do not qualify.",
+   "category": "treaty",
+   "year": 2035,
+   "expires_at": "2035-12-31T23:59:59Z",
+   "consensus_prior": 0.3,
+   "parents": [
+    "ftm_agi_by_2035"
+   ],
+   "cpt": {
+    "ftm_agi_by_2035=yes": 0.42,
+    "ftm_agi_by_2035=no": 0.08
+   }
+  },
+  {
+   "slug": "pol_global_post_agi_charter_2040",
+   "title": "Will major powers ratify a global post-AGI superintelligence governance or compute-monopoly charter by 2040?",
+   "description": "Resolves YES if, by December 31, 2040, major powers \u2014 including at least the United States, China (or their successor sovereign entities), and either the European Union or at least two additional UN Security Council / G7 / G20 major economies \u2014 formally ratify and bring into force a binding global civilizational governance treaty or supranational charter governing post-AGI / superintelligent AI systems, featuring at least one of: (1) consolidating frontier/superintelligent compute infrastructure under a treaty-governed international consortium or licensed global compute monopoly; (2) establishing binding supranational enforcement authority over alignment standards, sovereign AI deployment, and prevention of unauthorized recursive self-improvement worldwide; or (3) establishing a treaty-mandated global post-AGI sovereign compute-allocation or benefit-sharing compact backed by verified global chip-supply and datacenter controls. Regional pacts excluding either the US or China, or symbolic UN declarations without binding enforcement over frontier compute or superintelligent systems, do not qualify.",
+   "category": "treaty",
+   "year": 2040,
+   "expires_at": "2040-12-31T23:59:59Z",
+   "consensus_prior": 0.32,
+   "parents": [
+    "ftm_full_auto_by_2035"
+   ],
+   "cpt": {
+    "ftm_full_auto_by_2035=yes": 0.56,
+    "ftm_full_auto_by_2035=no": 0.16
+   }
+  }
+ ]
+}

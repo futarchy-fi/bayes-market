@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { EXCHANGE_API, ExchangeApiError, type NetOrderPreview } from "./client";
+import { ExchangeApiError, type NetOrderPreview } from "./client";
 import { useNetMarket, usePlaceNetEdit, usePreviewNetEdit } from "./hooks";
-import { useExchangeSession } from "./session";
+import { GithubSignInLink, SESSION_EXPIRED_NOTICE, useExchangeSession } from "./session";
 import { isExchangeMode } from "@/lib/exchangeMode";
 import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 
 export function friendlyExchangeError(error: unknown): string {
   if (!(error instanceof ExchangeApiError)) return "The exchange request failed. Please try again.";
+  if (error.status === 401) return SESSION_EXPIRED_NOTICE;
   if (error.status === 503) return "Credits trading is temporarily unavailable.";
   return ({
     insufficient_credits: "You do not have enough available credits for this stake.",
@@ -50,7 +51,7 @@ export function TradeCreditsPanel({ marketId, variableId }: { marketId: string; 
       <h2 style={{ fontSize: "1.1rem", fontWeight: 600 }}>Trade credits</h2>
       <p style={noteStyle}>{exchangeMode ? "Trades at the live credits exchange venue." : "Trades the credits exchange book, independently of the paper belief flow above."}</p>
       {!isSignedIn ? (
-        <a href={`${EXCHANGE_API}/v1/auth/github/login`}>Sign in with GitHub to trade credits</a>
+        <GithubSignInLink>Sign in with GitHub to trade credits</GithubSignInLink>
       ) : market.isLoading ? (
         <span style={noteStyle}>Loading live exchange market…</span>
       ) : market.error && !market.data ? (

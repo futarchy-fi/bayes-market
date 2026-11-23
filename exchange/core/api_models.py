@@ -19,6 +19,9 @@ class AuthResponse(BaseModel):
     account_id: int
     github_login: str
 
+class LogoutResponse(BaseModel):
+    status: str
+
 class DeviceFlowResponse(BaseModel):
     device_code: str
     user_code: str
@@ -156,11 +159,16 @@ class CreateAccountResponse(BaseModel):
 class CreateServiceAccountRequest(BaseModel):
     username: str
     initial_credits: str | None = None
+    is_service_account: bool = True
+    display_name: str | None = None
+    rotate_if_exists: bool = False
 
 class CreateServiceAccountResponse(BaseModel):
     account_id: int
     username: str
     api_key: str
+    display_name: str | None = None
+    is_service_account: bool = True
 
 class MintRequest(BaseModel):
     account_id: int
@@ -508,6 +516,9 @@ class LeaderboardEntry(BaseModel):
     login: str | None
     accountId: int
     total: str
+    displayName: str | None = None
+    netOrders: int = 0
+    netVolume: str = "0"
 
 
 class LeaderboardResponse(BaseModel):

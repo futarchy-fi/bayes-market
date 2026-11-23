@@ -15,11 +15,30 @@ import { filterMarketList } from "@/lib/dataSource";
 import type { MarketListSort, MarketStatus } from "@/lib/api/types";
 import { isExchangeMode } from "@/lib/exchangeMode";
 import { useInstruments } from "@/lib/exchange/hooks";
+import {
+  buildCategoryPills,
+  categoryOfMarket,
+  GROUP_COLORS,
+  isMarketCategory,
+  matchesMarketCategory,
+  type MarketCategory,
+} from "@/features/graph/mapLayout";
 
 const STATUSES = ["", "active", "resolved", "closed", "draft"] as const;
 const EXCHANGE_SORTS: Array<"" | MarketListSort> = ["", "volume", "liquidity", "probability", "linked"];
 const PAPER_SORTS: Array<"" | MarketListSort> = ["", "volume", "liquidity", "created", "probability", "linked"];
 const SEARCH_DEBOUNCE_MS = 300;
+
+const CARD_CATEGORY_META: Record<
+  Exclude<MarketCategory, "all">,
+  { label: string; color: string }
+> = {
+  ftm: { label: "FTM", color: GROUP_COLORS.agi_rampup },
+  dwarkesh: { label: "Dwarkesh", color: GROUP_COLORS.dwarkesh },
+  policy: { label: "Policy", color: GROUP_COLORS.policy },
+  futurist: { label: "Futurist", color: GROUP_COLORS.futurist },
+  manifold: { label: "Manifold", color: GROUP_COLORS.external_other },
+};
 
 function sortLabel(sort: "" | MarketListSort) {
   if (sort === "") return "Default order";
@@ -29,22 +48,43 @@ function sortLabel(sort: "" | MarketListSort) {
   return sort.charAt(0).toUpperCase() + sort.slice(1);
 }
 
+function buildPageSearchParams(filters: {
+  status?: MarketStatus;
+  sort?: MarketListSort;
+  q?: string;
+  category?: MarketCategory;
+}): URLSearchParams {
+  const params = marketListSearchParams({
+    status: filters.status,
+    sort: filters.sort,
+    q: filters.q,
+  });
+  if (filters.category && filters.category !== "all") {
+    params.set("category", filters.category);
+  }
+  return params;
+}
+
 function updateSearchParams(
   setSearchParams: ReturnType<typeof useSearchParams>[1],
   filters: {
     status?: MarketStatus;
     sort?: MarketListSort;
     q?: string;
+    category?: MarketCategory;
   },
   opts?: { replace?: boolean },
 ) {
-  setSearchParams(marketListSearchParams(filters), opts);
+  setSearchParams(buildPageSearchParams(filters), opts);
 }
 
 export default function MarketList() {
   const exchangeMode = isExchangeMode();
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = readMarketListFiltersFromSearchParams(searchParams);
+  const rawCategory = searchParams.get("category");
+  const categoryFilter: MarketCategory =
+    isMarketCategory(rawCategory) && rawCategory !== "all" ? rawCategory : "all";
   const statusFilter = filters.status ?? "";
   const sortFilter = filters.sort ?? "";
   const committedSearch = filters.q ?? "";
@@ -67,25 +107,33 @@ export default function MarketList() {
     return counts;
   }, [networkQuery?.data?.edges]);
 
-  // Apply client-side sorting when sorting by linked degree or probability (or
-  // re-sorting exchange data with network link counts).
+  const categoryPills = useMemo(
+    () => buildCategoryPills(data?.markets ?? []),
+    [data?.markets],
+  );
+
+  // Apply category filter + client-side sorting when sorting by linked degree or probability.
   const displayedMarkets = useMemo(() => {
     if (!data) return undefined;
-    if (sortFilter === "linked" || sortFilter === "probability") {
-      return filterMarketList(data, { sort: sortFilter }, linkCounts).markets;
-    }
-    return data.markets;
-  }, [data, sortFilter, linkCounts]);
+    const base =
+      sortFilter === "linked" || sortFilter === "probability"
+        ? filterMarketList(data, { sort: sortFilter }, linkCounts).markets
+        : data.markets;
+    if (categoryFilter === "all") return base;
+    return base.filter((m) => matchesMarketCategory(m, categoryFilter));
+  }, [data, sortFilter, linkCounts, categoryFilter]);
 
   const sortOptions = exchangeMode ? EXCHANGE_SORTS : PAPER_SORTS;
 
   useEffect(() => {
     const rawStatus = searchParams.get("status");
     const rawSort = searchParams.get("sort");
-    const next = marketListSearchParams({
-      status: isMarketListStatusFilter(rawStatus) ? rawStatus : undefined,
+    const rawCat = searchParams.get("category");
+    const next = buildPageSearchParams({
+      status: isMarketListStatusFilter(rawStatus) && rawStatus !== "all" ? rawStatus : undefined,
       sort: isMarketListSort(rawSort) ? rawSort : undefined,
       q: searchParams.get("q") ?? undefined,
+      category: isMarketCategory(rawCat) && rawCat !== "all" ? rawCat : undefined,
     });
 
     if (next.toString() !== searchParams.toString()) {
@@ -111,13 +159,14 @@ export default function MarketList() {
           status: statusFilter || undefined,
           sort: sortFilter || undefined,
           q: nextSearch,
+          category: categoryFilter !== "all" ? categoryFilter : undefined,
         },
         { replace: true },
       );
     }, SEARCH_DEBOUNCE_MS);
 
     return () => window.clearTimeout(handle);
-  }, [committedSearch, searchInput, setSearchParams, sortFilter, statusFilter]);
+  }, [categoryFilter, committedSearch, searchInput, setSearchParams, sortFilter, statusFilter]);
 
   return (
     <div style={{ minWidth: 0 }}>
@@ -151,7 +200,7 @@ export default function MarketList() {
           display: "grid",
           gap: "var(--space-sm)",
           gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          marginBottom: "var(--space-lg)",
+          marginBottom: categoryPills.length > 0 ? "var(--space-md)" : "var(--space-lg)",
           padding: "var(--space-md)",
           borderRadius: "var(--radius-md)",
           background: "var(--color-bg-surface)",
@@ -178,6 +227,7 @@ export default function MarketList() {
                 status: (e.target.value as MarketStatus) || undefined,
                 sort: sortFilter || undefined,
                 q: searchInput || undefined,
+                category: categoryFilter !== "all" ? categoryFilter : undefined,
               })
             }
             style={controlStyle}
@@ -199,6 +249,7 @@ export default function MarketList() {
                 status: statusFilter || undefined,
                 sort: (e.target.value as MarketListSort) || undefined,
                 q: searchInput || undefined,
+                category: categoryFilter !== "all" ? categoryFilter : undefined,
               })
             }
             style={controlStyle}
@@ -211,6 +262,52 @@ export default function MarketList() {
           </select>
         </label>
       </div>
+
+      {categoryPills.length > 0 && (
+        <div
+          role="group"
+          aria-label="Filter markets by category"
+          style={categoryBarStyle}
+        >
+          {categoryPills.map((pill) => {
+            const isActive = categoryFilter === pill.key;
+            return (
+              <button
+                key={pill.key}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() =>
+                  updateSearchParams(setSearchParams, {
+                    status: statusFilter || undefined,
+                    sort: sortFilter || undefined,
+                    q: searchInput || undefined,
+                    category: pill.key === "all" ? undefined : pill.key,
+                  })
+                }
+                style={categoryPillStyle(isActive, pill.color)}
+              >
+                {pill.color && (
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      background: isActive ? "#fff" : pill.color,
+                      display: "inline-block",
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
+                <span>{pill.label}</span>
+                <span style={{ opacity: isActive ? 0.9 : 0.65, fontVariantNumeric: "tabular-nums" }}>
+                  {pill.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {isLoading && <LoadingPage />}
       {error && !data && <ErrorMessage message={error instanceof Error ? error.message : "Failed to load markets"} />}
@@ -243,6 +340,8 @@ export default function MarketList() {
           {displayedMarkets.map((m) => {
             const instrument = instrumentsByNetMarket.get(m.id);
             const links = linkCounts.get(m.id) ?? 0;
+            const cat = categoryOfMarket(m);
+            const catMeta = cat !== "other" ? CARD_CATEGORY_META[cat] : undefined;
             return (
               <Link
                 key={m.id}
@@ -263,7 +362,24 @@ export default function MarketList() {
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 8, marginBottom: "var(--space-sm)" }}>
                   <span style={{ fontWeight: 500, fontSize: "0.95rem" }}>{m.title}</span>
-                  <StatusBadge status={m.status} />
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                    {catMeta && (
+                      <span
+                        style={{
+                          padding: "2px 7px",
+                          borderRadius: 999,
+                          fontSize: "0.68rem",
+                          fontWeight: 600,
+                          border: `1px solid ${catMeta.color}`,
+                          color: catMeta.color,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {catMeta.label}
+                      </span>
+                    )}
+                    <StatusBadge status={m.status} />
+                  </div>
                 </div>
                 <PriceBar marginals={m.marginals} />
                 {exchangeMode ? (
@@ -330,3 +446,29 @@ const controlStyle: React.CSSProperties = {
   width: "100%",
   minHeight: 40,
 };
+
+const categoryBarStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  gap: 8,
+  marginBottom: "var(--space-lg)",
+};
+
+function categoryPillStyle(active: boolean, color?: string): React.CSSProperties {
+  const accent = color ?? "var(--color-primary)";
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "5px 12px",
+    borderRadius: 999,
+    border: `1px solid ${active ? accent : "var(--color-border)"}`,
+    background: active ? accent : "var(--color-bg-surface)",
+    color: active ? "#fff" : "var(--color-text)",
+    fontSize: "0.78rem",
+    fontWeight: active ? 600 : 500,
+    cursor: "pointer",
+    transition: "border-color 0.15s, background 0.15s, color 0.15s",
+  };
+}

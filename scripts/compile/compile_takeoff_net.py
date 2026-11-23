@@ -37,7 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from backend.inference import FactoredMarket, JointMarketError  # noqa: E402
 
-YEARS = list(range(2027, 2046))
+YEARS = list(range(2027, 2036))
 CALIBRATION_DATE = "2026-11-23"
 
 
@@ -304,38 +304,38 @@ class TrialWeights:
 
 
 def compute_late_2026_weights(series, scalar_cols, trial_ids) -> tuple[TrialWeights, dict]:
-    """Bayesian importance weights updating June-2026 FTM MC to late-2026 reality.
+    """Bayesian importance weights updating June-2026 FTM MC to late-2026 short-timelines reality.
 
     Observables anchored to Nov 2026:
-      1. Largest training run compute in 2026 ~ log10 N(26.7, 0.55^2) (~5e26-1e27 FLOP).
-      2. AI compute capex share of GWP in 2026 ~ log10 N(log10(0.003), 0.50^2) (~0.3% GWP).
-      3. Early AI R&D automation in 2026 >= 1% (+0.5 log-likelihood bonus).
-      4. Bounded exponential tilt on agi_year (-0.08 * (min(agi_year, 2060) - 2035)),
-         aligning Sub-AGI and strict AGI timelines with late-2026 forecasting consensus
-         while preserving healthy effective sample size (ESS >= 350 / 2000).
+      1. Largest training run compute in 2026 ~ log10 N(26.75, 0.60^2) (~6e26 FLOP).
+      2. AI compute capex share of GWP in 2026 ~ log10 N(log10(0.0035), 0.55^2) (~0.35% GWP).
+      3. Early AI R&D automation in 2026 >= 1% (+0.65 log-likelihood bonus).
+      4. Bounded exponential tilt on agi_year (-0.16 * (min(agi_year, 2060) - 2035)),
+         yielding a crisp short-timelines (2027-2035) prior while preserving healthy
+         effective sample size (ESS >= 240 / 2000).
     """
     tr_series = series.get("biggest_training_run", {})
     cap_series = series.get("frac_gwp_compute", {})
     rnd_series = series.get("frac_tasks_automated_rnd", {})
     agi_col = scalar_cols.get("agi_year", {})
 
-    log_cap_target = math.log10(0.003)
+    log_cap_target = math.log10(0.0035)
     log_ws: list[float] = []
     for t in trial_ids:
         lw = 0.0
         tr26 = tr_series.get(t, {}).get(2026)
         if tr26 is not None and tr26 > 0:
-            lw += -0.5 * ((math.log10(tr26) - 26.7) / 0.55) ** 2
+            lw += -0.5 * ((math.log10(tr26) - 26.75) / 0.60) ** 2
         cap26 = cap_series.get(t, {}).get(2026)
         if cap26 is not None and cap26 > 0:
-            lw += -0.5 * ((math.log10(cap26) - log_cap_target) / 0.50) ** 2
+            lw += -0.5 * ((math.log10(cap26) - log_cap_target) / 0.55) ** 2
         rnd26 = rnd_series.get(t, {}).get(2026, 0.0)
         if rnd26 is not None and rnd26 >= 0.01:
-            lw += 0.5
+            lw += 0.65
         ay = agi_col.get(t, 2060.0)
         if math.isnan(ay):
             ay = 2060.0
-        lw += -0.08 * (min(ay, 2060.0) - 2035.0)
+        lw += -0.16 * (min(ay, 2060.0) - 2035.0)
         log_ws.append(lw)
 
     mx = max(log_ws)
@@ -346,14 +346,13 @@ def compute_late_2026_weights(series, scalar_cols, trial_ids) -> tuple[TrialWeig
         "calibrationDate": CALIBRATION_DATE,
         "ess": round(tw.ess, 2),
         "observables": {
-            "log10_biggest_training_run_2026": {"mean": 26.7, "sd": 0.55},
-            "log10_frac_gwp_compute_2026": {"mean": round(log_cap_target, 4), "sd": 0.50},
-            "frac_tasks_automated_rnd_2026_ge_0.01_log_bonus": 0.5,
-            "agi_year_exp_tilt": -0.08,
+            "log10_biggest_training_run_2026": {"mean": 26.75, "sd": 0.60},
+            "log10_frac_gwp_compute_2026": {"mean": round(log_cap_target, 4), "sd": 0.55},
+            "frac_tasks_automated_rnd_2026_ge_0.01_log_bonus": 0.65,
+            "agi_year_exp_tilt": -0.16,
         },
     }
     return tw, meta
-
 
 class Variable:
     __slots__ = ("vid", "title", "mask", "metric", "slug", "year", "thr_idx",
@@ -698,25 +697,37 @@ def build_structure(variables: list[Variable], tw: TrialWeights, max_width: int,
         ("gwp_growth_max", 0), ("gwp_growth_max", 1), ("gwp_growth_max", 2),
     ]
 
-    # Pick early-phase hub (auto_rnd t0 around 2030) and takeoff-phase hub
-    # (full_auto_rnd around 2037) dynamically if exact years were dropped.
-    early_hub = by_key.get(("auto_rnd", 0, 2030)) or next(
+    # Pick 3 chronological phase hubs across the 2027-2035 short-timelines horizon:
+    #   early (auto_rnd t1 ~2029) -> 2029..2031
+    #   mid   (full_auto_rnd ~2032) -> 2032..2033
+    #   late  (full_auto_rnd ~2034) -> 2034..2035
+    # Disjoint year slices keep parents <= 3 and treewidth <= 8 while giving
+    # strong causal lifts from both ftm_agi_by_2032 and ftm_agi_by_2035.
+    early_hub = by_key.get(("auto_rnd", 1, 2029)) or next(
         (v for v in sorted(variables, key=lambda x: x.year)
-         if v.slug == "auto_rnd" and v.thr_idx == 0 and v.sample_p >= 0.25),
+         if v.slug == "auto_rnd" and v.thr_idx in (0, 1) and v.sample_p >= 0.20),
         None,
     )
-    late_hub = by_key.get(("full_auto_rnd", 0, 2037)) or next(
+    mid_hub = by_key.get(("full_auto_rnd", 0, 2032)) or next(
         (v for v in sorted(variables, key=lambda x: x.year)
-         if v.slug == "full_auto_rnd" and v.thr_idx == 0 and v.year >= 2036 and v.sample_p >= 0.50),
+         if v.slug == "full_auto_rnd" and v.thr_idx == 0 and v.year >= 2031 and v.sample_p >= 0.20),
+        None,
+    )
+    late_hub = by_key.get(("full_auto_rnd", 0, 2034)) or next(
+        (v for v in sorted(variables, key=lambda x: x.year)
+         if v.slug == "full_auto_rnd" and v.thr_idx == 0 and v.year >= 2033 and v.sample_p >= 0.40),
         None,
     )
 
+    ordered_hubs: list[Variable] = []
+    for h in (early_hub, mid_hub, late_hub):
+        if h is not None and (not ordered_hubs or h.year > ordered_hubs[-1].year):
+            ordered_hubs.append(h)
+
     hub_blocks: list[tuple[Variable, list[int]]] = []
-    if early_hub and late_hub and early_hub.year < late_hub.year:
-        hub_blocks.append((early_hub, [y for y in YEARS if early_hub.year <= y < late_hub.year]))
-        hub_blocks.append((late_hub, [y for y in YEARS if y >= late_hub.year]))
-    elif early_hub:
-        hub_blocks.append((early_hub, [y for y in YEARS if y >= early_hub.year]))
+    for idx, hub in enumerate(ordered_hubs):
+        nxt_year = ordered_hubs[idx + 1].year if idx + 1 < len(ordered_hubs) else (max(YEARS) + 1)
+        hub_blocks.append((hub, [y for y in YEARS if hub.year <= y < nxt_year]))
 
     cross_added = 0
     for hub, target_years in hub_blocks:
@@ -749,16 +760,16 @@ def build_structure(variables: list[Variable], tw: TrialWeights, max_width: int,
     #    gwp_compute -> hw_ratio -> sw_ratio -> train_run -> auto_rnd
     #    All strictly forward-in-time (u.year <= v.year) and forward in CAUSAL_RANK.
     upstream_specs = [
-        ("gwp_compute", 0, 2030, "hw_ratio", 0, range(2030, 2036)),
-        ("gwp_compute", 1, 2036, "hw_ratio", 1, range(2036, 2046)),
-        ("gwp_compute", 0, 2030, "train_run", 0, range(2030, 2036)),
-        ("gwp_compute", 1, 2036, "train_run", 2, range(2036, 2046)),
-        ("hw_ratio", 0, 2031, "sw_ratio", 0, range(2031, 2037)),
-        ("hw_ratio", 1, 2037, "sw_ratio", 1, range(2037, 2046)),
-        ("sw_ratio", 0, 2031, "train_run", 1, range(2031, 2037)),
-        ("sw_ratio", 1, 2037, "train_run", 2, range(2037, 2046)),
-        ("train_run", 1, 2032, "auto_rnd", 0, range(2032, 2037)),
-        ("train_run", 2, 2037, "auto_rnd", 1, range(2037, 2046)),
+        ("gwp_compute", 0, 2029, "hw_ratio", 0, range(2029, 2036)),
+        ("gwp_compute", 1, 2030, "hw_ratio", 1, range(2030, 2036)),
+        ("gwp_compute", 0, 2029, "train_run", 0, range(2029, 2033)),
+        ("gwp_compute", 1, 2030, "train_run", 2, range(2030, 2036)),
+        ("hw_ratio", 0, 2029, "sw_ratio", 0, range(2029, 2036)),
+        ("hw_ratio", 1, 2030, "sw_ratio", 1, range(2030, 2036)),
+        ("sw_ratio", 0, 2029, "train_run", 1, range(2029, 2035)),
+        ("sw_ratio", 1, 2030, "train_run", 2, range(2030, 2036)),
+        ("train_run", 1, 2030, "auto_rnd", 0, range(2030, 2036)),
+        ("train_run", 2, 2032, "auto_rnd", 1, range(2032, 2036)),
     ]
     for ss, st, sy, ds, dt, dys in upstream_specs:
         assert CAUSAL_RANK[ss] < CAUSAL_RANK[ds]
@@ -1221,22 +1232,36 @@ def main():
     seeds = {"version": "seeds-v1", "markets": markets, "conditionalMarginals": conditional}
     Path(args.out).write_text(json.dumps(seeds, indent=1) + "\n")
 
-    # Summary conditional propagation diagnostics
-    lifts = {}
-    if "ftm_agi_by_2040" in by_vid:
+    # Summary conditional propagation diagnostics (both 2035 and 2032 AGI anchors)
+    lifts_2035 = {}
+    if "ftm_agi_by_2035" in by_vid:
         for tgt in (
-            "ftm_auto_goods_t3_by_2040",
-            "ftm_auto_rnd_t3_by_2040",
-            "ftm_gwp_growth_max_t1_by_2040",
-            "ftm_sub_agi_by_2035",
+            "ftm_auto_goods_t3_by_2035",
+            "ftm_auto_rnd_t3_by_2035",
+            "ftm_gwp_growth_max_t1_by_2035",
+            "ftm_sub_agi_by_2032",
         ):
             if tgt in by_vid:
-                py = market.marginal(tgt, {"ftm_agi_by_2040": "yes"})["yes"]
-                pn = market.marginal(tgt, {"ftm_agi_by_2040": "no"})["yes"]
-                lifts[tgt] = {"given_yes": round(py, 4), "given_no": round(pn, 4), "lift": round(py - pn, 4)}
+                py = market.marginal(tgt, {"ftm_agi_by_2035": "yes"})["yes"]
+                pn = market.marginal(tgt, {"ftm_agi_by_2035": "no"})["yes"]
+                lifts_2035[tgt] = {"given_yes": round(py, 4), "given_no": round(pn, 4), "lift": round(py - pn, 4)}
+
+    lifts_2032 = {}
+    if "ftm_agi_by_2032" in by_vid:
+        for tgt in (
+            "ftm_auto_goods_t3_by_2032",
+            "ftm_auto_rnd_t3_by_2032",
+            "ftm_gwp_growth_max_t1_by_2032",
+            "ftm_sub_agi_by_2030",
+        ):
+            if tgt in by_vid:
+                py = market.marginal(tgt, {"ftm_agi_by_2032": "yes"})["yes"]
+                pn = market.marginal(tgt, {"ftm_agi_by_2032": "no"})["yes"]
+                lifts_2032[tgt] = {"given_yes": round(py, 4), "given_no": round(pn, 4), "lift": round(py - pn, 4)}
 
     report = {
         "variables": len(variables),
+        "horizon": [min(YEARS), max(YEARS)],
         "dropped": dropped,
         "edges": sum(len(p) for p in parents.values()),
         "implicationEdges": len(implication),
@@ -1250,7 +1275,8 @@ def main():
         "trials": n,
         "method": method_tag,
         "weighting": weight_meta,
-        "agi2040ConditionalLifts": lifts,
+        "agi2035ConditionalLifts": lifts_2035,
+        "agi2032ConditionalLifts": lifts_2032,
     }
     Path(args.report).write_text(json.dumps(report, indent=1) + "\n")
     log(f"wrote {args.out} ({len(markets)} markets) and {args.report}")

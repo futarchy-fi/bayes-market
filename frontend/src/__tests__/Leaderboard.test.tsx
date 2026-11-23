@@ -37,5 +37,58 @@ describe("Leaderboard", () => {
     expect(screen.getByText("80.00")).toBeInTheDocument();
     expect(screen.queryByText(/80\.000000/)).not.toBeInTheDocument();
     expect(screen.getByText("0.00")).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Trades" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Volume" })).not.toBeInTheDocument();
+  });
+
+  it("renders displayName with muted @login, plus Trades and Volume columns when present", () => {
+    mockUseLeaderboard.mockReturnValue(
+      createMockQueryResult({
+        data: {
+          entries: [
+            {
+              login: "dwarkesh-paul-christiano",
+              displayName: "Paul Christiano (Dwarkesh)",
+              accountId: 42,
+              total: "2500.5",
+              netOrders: 14,
+              netVolume: "1842.75",
+            },
+            {
+              login: "alice",
+              displayName: null,
+              accountId: 7,
+              total: "1000",
+              netOrders: 3,
+              netVolume: "250",
+            },
+            {
+              login: null,
+              displayName: "Anonymous Whale",
+              accountId: 99,
+              total: "500",
+            },
+          ],
+        },
+        isSuccess: true,
+      }) as ReturnType<typeof useLeaderboard>,
+    );
+
+    renderWithProviders(<Leaderboard />);
+
+    expect(screen.getByRole("columnheader", { name: "Trades" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Volume" })).toBeInTheDocument();
+
+    expect(screen.getByText("Paul Christiano (Dwarkesh)")).toBeInTheDocument();
+    expect(screen.getByText("@dwarkesh-paul-christiano")).toBeInTheDocument();
+    expect(screen.getByText("14")).toBeInTheDocument();
+    expect(screen.getByText("1,842.75")).toBeInTheDocument();
+    expect(screen.getByText("2,500.50")).toBeInTheDocument();
+
+    expect(screen.getByText("@alice")).toBeInTheDocument();
+    expect(screen.getByText("250.00")).toBeInTheDocument();
+
+    expect(screen.getByText("Anonymous Whale")).toBeInTheDocument();
+    expect(screen.getByText("Account #99")).toBeInTheDocument();
   });
 });

@@ -188,6 +188,38 @@ describe("MarketList", () => {
       expect(links[0]).toHaveTextContent("Higher Prob");
     });
   });
+  it("renders source/category filter pills for populated categories and filters cards on click", async () => {
+    window.localStorage.removeItem(EXCHANGE_MODE_KEY);
+    vi.mocked(exchangeApi.getNetMarkets).mockResolvedValue({
+      markets: [
+        { id: "m1", variableId: "ftm_agi_by_2032", title: "Strict AGI by 2032", status: "open", outcomes: [], marginals: { yes: 0.25, no: 0.75 }, parents: [] },
+        { id: "m2", variableId: "dw_paul_agi_2030", title: "Dwarkesh: Paul Christiano on scaling", status: "open", outcomes: [], marginals: { yes: 0.4, no: 0.6 }, parents: [] },
+        { id: "m3", variableId: "pol_compute_cap_2029", title: "US compute cap enacted by 2029", status: "open", outcomes: [], marginals: { yes: 0.3, no: 0.7 }, parents: [] },
+      ],
+      count: 3,
+    });
+
+    renderWithProviders(<MarketList />);
+    await screen.findByText("Strict AGI by 2032");
+
+    const filterGroup = screen.getByRole("group", { name: "Filter markets by category" });
+    expect(filterGroup).toHaveTextContent("All");
+    expect(filterGroup).toHaveTextContent("Core FTM");
+    expect(filterGroup).toHaveTextContent("Dwarkesh");
+    expect(filterGroup).toHaveTextContent("Policy");
+    // Empty categories are omitted
+    expect(filterGroup).not.toHaveTextContent("Futurist");
+    expect(filterGroup).not.toHaveTextContent("Manifold");
+
+    fireEvent.click(screen.getByRole("button", { name: /Dwarkesh/ }));
+    expect(screen.getByText("Dwarkesh: Paul Christiano on scaling")).toBeInTheDocument();
+    expect(screen.queryByText("Strict AGI by 2032")).not.toBeInTheDocument();
+    expect(screen.queryByText("US compute cap enacted by 2029")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^All/ }));
+    expect(screen.getByText("Strict AGI by 2032")).toBeInTheDocument();
+    expect(screen.getByText("US compute cap enacted by 2029")).toBeInTheDocument();
+  });
 });
 
 const SEARCH_DEBOUNCE_MS = 300;

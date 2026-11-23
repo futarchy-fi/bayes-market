@@ -22,14 +22,14 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, Query, Request, Response
 from fastapi.responses import FileResponse, RedirectResponse
 
 from exchange.core.api_errors import (
     APIError, api_error_handler, translate_engine_error, translate_venue_error,
 )
 from exchange.core.api_models import (
-    AuthResponse,
+    AuthResponse, LogoutResponse,
     DeviceFlowStartRequest, DeviceFlowResponse, DeviceFlowPollRequest,
     AccountResponse, AccountActivityEntry, AccountActivityPage, LockResponse,
     MarketSummary, MarketDetail, PositionEntry, TradeResponse, Candle,
@@ -91,9 +91,11 @@ GITHUB_OAUTH_REDIRECT_URI = os.environ.get(
 )
 DASHBOARD_URL = os.environ.get(
     "FUTARCHY_DASHBOARD_URL",
-    "https://api.futarchy.ai/dashboard",
+    "https://futarchy.ai/exchange/callback",
 )
 GITHUB_OAUTH_STATE_TTL = timedelta(minutes=10)
+GITHUB_OAUTH_STATE_MAX_ENTRIES = 2000
+OAUTH_STATE_COOKIE_NAME = "futarchy_oauth_state"
 
 # Liquidity settings (matching pr-market.yml defaults)
 LIQUIDITY_INITIAL = os.environ.get("LIQUIDITY_INITIAL", "40")
@@ -404,23 +406,86 @@ def _prune_github_oauth_states(now: datetime | None = None) -> None:
         states.pop(state, None)
 
 
-async def _exchange_github_oauth_code(code: str) -> str:
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            "https://github.com/login/oauth/access_token",
-            data={
-                "client_id": GITHUB_CLIENT_ID,
-                "client_secret": GITHUB_CLIENT_SECRET,
-                "code": code,
-            },
-            headers={"Accept": "application/json"},
-            timeout=10.0,
+def _store_github_oauth_state(state: str, now: datetime | None = None) -> None:
+    """Store a fresh OAuth state token, pruning expired and oldest entries past cap."""
+    current = now or datetime.now(timezone.utc)
+    _prune_github_oauth_states(current)
+    states = _github_oauth_states()
+    while len(states) >= GITHUB_OAUTH_STATE_MAX_ENTRIES:
+        oldest_key = min(states, key=lambda k: states[k])
+        states.pop(oldest_key, None)
+    states[state] = current
+
+
+def _is_https_request(request: Request) -> bool:
+    forwarded = request.headers.get("x-forwarded-proto", "")
+    if forwarded:
+        proto = forwarded.split(",")[0].strip().lower()
+        return proto == "https"
+    return request.url.scheme == "https"
+
+
+def _clear_oauth_state_cookie(response: Response, request: Request) -> None:
+    response.delete_cookie(
+        key=OAUTH_STATE_COOKIE_NAME,
+        path="/v1/auth/callback",
+        httponly=True,
+        samesite="lax",
+        secure=_is_https_request(request),
+    )
+
+
+def _wants_html_redirect(request: Request) -> bool:
+    return "text/html" in request.headers.get("accept", "").lower()
+
+
+def _oauth_callback_error_response(
+    request: Request,
+    status: int,
+    code: str,
+    message: str,
+    *,
+    force_redirect: bool = False,
+    error_slug: str | None = None,
+) -> Response:
+    if force_redirect or _wants_html_redirect(request):
+        raw_slug = error_slug or code
+        slug = re.sub(r"[^a-zA-Z0-9_.-]+", "_", raw_slug).strip("_")[:64] or "oauth_error"
+        fragment = urlencode({"error": slug})
+        resp: Response = RedirectResponse(
+            url=f"{DASHBOARD_URL}#{fragment}",
+            status_code=302,
         )
+    else:
+        resp = APIError(status, code, message).response()
+    _clear_oauth_state_cookie(resp, request)
+    return resp
+
+
+async def _exchange_github_oauth_code(code: str) -> str:
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://github.com/login/oauth/access_token",
+                data={
+                    "client_id": GITHUB_CLIENT_ID,
+                    "client_secret": GITHUB_CLIENT_SECRET,
+                    "code": code,
+                    "redirect_uri": GITHUB_OAUTH_REDIRECT_URI,
+                },
+                headers={"Accept": "application/json"},
+                timeout=10.0,
+            )
+    except httpx.HTTPError as e:
+        raise ValueError(f"github_http_error:{e.__class__.__name__}") from e
 
     if resp.status_code != 200:
         raise ValueError(f"github_api_error:{resp.status_code}")
 
-    data = resp.json()
+    try:
+        data = resp.json()
+    except ValueError as e:
+        raise ValueError("github_api_error:invalid_json") from e
     if "error" in data:
         raise ValueError(f"github_api_error:{data['error']}")
 
@@ -771,7 +836,10 @@ async def health() -> HealthResponse:
 # ---------------------------------------------------------------------------
 
 @app.get("/v1/auth/github/login")
-async def auth_github_login(prompt: str | None = None) -> RedirectResponse:
+async def auth_github_login(
+    request: Request,
+    prompt: str | None = None,
+) -> RedirectResponse:
     """Start GitHub OAuth web flow."""
     if not GITHUB_CLIENT_ID:
         raise APIError(501, "github_oauth_unavailable",
@@ -782,8 +850,7 @@ async def auth_github_login(prompt: str | None = None) -> RedirectResponse:
 
     state = secrets.token_urlsafe(32)
     async with app.state.lock:
-        _prune_github_oauth_states()
-        _github_oauth_states()[state] = datetime.now(timezone.utc)
+        _store_github_oauth_state(state)
 
     params = {
         "client_id": GITHUB_CLIENT_ID,
@@ -792,42 +859,85 @@ async def auth_github_login(prompt: str | None = None) -> RedirectResponse:
     }
     if prompt:
         params["prompt"] = prompt
-    return RedirectResponse(
+    response = RedirectResponse(
         url=f"https://github.com/login/oauth/authorize?{urlencode(params)}",
         status_code=302,
     )
+    response.set_cookie(
+        key=OAUTH_STATE_COOKIE_NAME,
+        value=state,
+        max_age=int(GITHUB_OAUTH_STATE_TTL.total_seconds()),
+        path="/v1/auth/callback",
+        httponly=True,
+        samesite="lax",
+        secure=_is_https_request(request),
+    )
+    return response
 
 
 @app.get("/v1/auth/callback")
 async def auth_github_callback(
+    request: Request,
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
-) -> RedirectResponse:
+) -> Response:
     """Finish GitHub OAuth web flow and redirect to the dashboard."""
     if error:
-        raise APIError(400, "github_oauth_denied",
-                       f"GitHub authorization failed: {error}")
+        return _oauth_callback_error_response(
+            request,
+            400,
+            "github_oauth_denied",
+            f"GitHub authorization failed: {error}",
+            force_redirect=True,
+            error_slug=error,
+        )
     if not code or not state:
-        raise APIError(400, "github_oauth_invalid_request",
-                       "Missing OAuth code or state")
+        return _oauth_callback_error_response(
+            request,
+            400,
+            "github_oauth_invalid_request",
+            "Missing OAuth code or state",
+        )
     if not GITHUB_CLIENT_ID or not GITHUB_CLIENT_SECRET:
-        raise APIError(501, "github_oauth_unavailable",
-                       "GitHub OAuth not fully configured")
+        return _oauth_callback_error_response(
+            request,
+            501,
+            "github_oauth_unavailable",
+            "GitHub OAuth not fully configured",
+        )
+
+    cookie_state = request.cookies.get(OAUTH_STATE_COOKIE_NAME)
+    if not cookie_state or not secrets.compare_digest(cookie_state, state):
+        return _oauth_callback_error_response(
+            request,
+            400,
+            "github_oauth_invalid_state",
+            "Invalid or expired OAuth state",
+        )
 
     async with app.state.lock:
         _prune_github_oauth_states()
         issued_at = _github_oauth_states().pop(state, None)
 
     if issued_at is None:
-        raise APIError(400, "github_oauth_invalid_state",
-                       "Invalid or expired OAuth state")
+        return _oauth_callback_error_response(
+            request,
+            400,
+            "github_oauth_invalid_state",
+            "Invalid or expired OAuth state",
+        )
 
     try:
         access_token = await _exchange_github_oauth_code(code)
         gh = await validate_github_token(access_token)
-    except ValueError as e:
-        raise APIError(502, "github_api_error", str(e))
+    except (ValueError, httpx.HTTPError) as e:
+        return _oauth_callback_error_response(
+            request,
+            502,
+            "github_api_error",
+            str(e),
+        )
 
     auth = await _authenticate_github_identity(gh)
     fragment = urlencode({
@@ -835,7 +945,18 @@ async def auth_github_callback(
         "account_id": auth.account_id,
         "login": auth.github_login,
     })
-    return RedirectResponse(url=f"{DASHBOARD_URL}#{fragment}", status_code=302)
+    response = RedirectResponse(url=f"{DASHBOARD_URL}#{fragment}", status_code=302)
+    _clear_oauth_state_cookie(response, request)
+    return response
+
+
+@app.post("/v1/auth/logout")
+async def auth_logout(user: AuthUser) -> LogoutResponse:
+    """Revoke the caller's API key server-side."""
+    async with app.state.lock:
+        app.state.auth_store.revoke_user_key(user)
+        _save()
+    return LogoutResponse(status="logged_out")
 
 
 @app.post("/v1/auth/device")
@@ -846,7 +967,7 @@ async def auth_device_start(req: DeviceFlowStartRequest) -> DeviceFlowResponse:
                        "GITHUB_CLIENT_ID not configured")
     try:
         data = await start_device_flow(GITHUB_CLIENT_ID)
-    except ValueError as e:
+    except (ValueError, httpx.HTTPError) as e:
         raise APIError(502, "github_api_error", str(e))
 
     return DeviceFlowResponse(
@@ -867,7 +988,7 @@ async def auth_device_poll(req: DeviceFlowPollRequest) -> AuthResponse:
 
     try:
         token_data = await poll_device_flow(GITHUB_CLIENT_ID, req.device_code)
-    except ValueError as e:
+    except (ValueError, httpx.HTTPError) as e:
         code = str(e)
         if code == "device_flow_pending":
             raise APIError(202, "device_flow_pending",
@@ -881,7 +1002,7 @@ async def auth_device_poll(req: DeviceFlowPollRequest) -> AuthResponse:
     access_token = token_data["access_token"]
     try:
         gh = await validate_github_token(access_token)
-    except ValueError:
+    except (ValueError, httpx.HTTPError):
         raise APIError(502, "github_api_error",
                        "Failed to validate GitHub access token")
 
@@ -1310,10 +1431,13 @@ async def get_leaderboard() -> LeaderboardResponse:
         ``local_users`` for auth continuity per core/auth.py) have
         ``is_service_account=False`` and must still appear on the board.
 
-    Logins are resolved from ``auth_store.users`` (github_id -> User): an
-    account owned by a real GitHub identity gets its login; any other
-    account still in the ranking (e.g. one created via the plain
-    ``POST /v1/admin/accounts``, or a legacy local human) gets ``null``.
+    Logins and optional display names are resolved from both
+    ``auth_store.users`` (GitHub identities) and non-service
+    ``auth_store.local_users`` (named trader accounts and legacy local
+    humans). When the net venue is enabled, each entry also includes
+    ``netOrders`` and ``netVolume`` aggregated from ``joint.orders``, and
+    ties in ``total`` are broken by ``netVolume`` descending then
+    ``accountId`` ascending.
     """
     auth_store = app.state.auth_store
 
@@ -1329,21 +1453,44 @@ async def get_leaderboard() -> LeaderboardResponse:
             if u.is_service_account
         }
 
-        login_by_account = {
-            u.account_id: u.github_login for u in auth_store.users.values()
-        }
+        login_by_account: dict[int, str] = {}
+        display_name_by_account: dict[int, str] = {}
+        for u in auth_store.local_users.values():
+            if not u.is_service_account:
+                login_by_account[u.account_id] = u.github_login
+                if u.display_name is not None:
+                    display_name_by_account[u.account_id] = u.display_name
+        for u in auth_store.users.values():
+            login_by_account[u.account_id] = u.github_login
+            if u.display_name is not None:
+                display_name_by_account[u.account_id] = u.display_name
+
+        net_orders_by_account: dict[int, int] = {}
+        net_volume_by_account: dict[int, Decimal] = {}
+        if joint is not None:
+            for order in joint.orders:
+                acc_id = int(order["accountId"])
+                net_orders_by_account[acc_id] = net_orders_by_account.get(acc_id, 0) + 1
+                stake = Decimal(str(order.get("stake", "0")))
+                net_volume_by_account[acc_id] = net_volume_by_account.get(acc_id, ZERO) + stake
 
         ranked = sorted(
             (acc for acc in app.state.risk.accounts.values()
              if acc.id not in excluded_ids),
-            key=lambda a: a.total,
-            reverse=True,
+            key=lambda a: (
+                -a.total,
+                -net_volume_by_account.get(a.id, ZERO),
+                a.id,
+            ),
         )[:50]
         entries = [
             LeaderboardEntry(
                 login=login_by_account.get(acc.id),
                 accountId=acc.id,
                 total=str(acc.total),
+                displayName=display_name_by_account.get(acc.id),
+                netOrders=net_orders_by_account.get(acc.id, 0),
+                netVolume=str(net_volume_by_account.get(acc.id, ZERO)),
             )
             for acc in ranked
         ]
@@ -2171,44 +2318,75 @@ async def admin_create_account(_: AdminDep) -> CreateAccountResponse:
 async def admin_create_service_account(
         req: CreateServiceAccountRequest, _: AdminDep
 ) -> CreateServiceAccountResponse:
-    """Create a service account (bot/agent) with a username and API key.
+    """Create a local trader or service account with a username and API key.
 
-    Optionally mint initial credits. Returns the raw API key once.
+    Defaults to ``is_service_account=True`` so bot/agent accounts stay off the
+    public leaderboard. Pass ``is_service_account=False`` (and optionally
+    ``display_name``) to create a named trader account that appears on
+    ``GET /v1/leaderboard``. Optionally mint initial credits. Returns the raw
+    API key once.
     """
     username = req.username.strip()
     if not username or len(username) > 40:
         raise APIError(400, "invalid_username",
                        "Username must be 1-40 characters")
 
+    display_name = req.display_name.strip() if req.display_name is not None else None
+    if display_name == "":
+        display_name = None
+    if display_name is not None and len(display_name) > 80:
+        raise APIError(400, "invalid_display_name",
+                       "Display name must be at most 80 characters")
+
+    mint_amount = ZERO
+    if req.initial_credits:
+        try:
+            mint_amount = Decimal(req.initial_credits)
+        except InvalidOperation:
+            raise APIError(400, "invalid_amount",
+                           f"Invalid credits: {req.initial_credits}")
+
     async with app.state.lock:
         auth_store = app.state.auth_store
-        if username in auth_store.local_users:
-            raise APIError(409, "username_taken",
-                           f"Username '{username}' is already taken")
+        existing = auth_store.local_users.get(username)
+        if existing is not None:
+            if not req.rotate_if_exists:
+                raise APIError(409, "username_taken",
+                               f"Username '{username}' is already taken")
+            raw_key = secrets.token_urlsafe(32)
+            key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+            from exchange.core.auth import _now
+            auth_store.key_to_user.pop(existing.api_key_hash, None)
+            existing.api_key_hash = key_hash
+            existing.is_service_account = req.is_service_account
+            if req.display_name is not None:
+                existing.display_name = display_name
+            existing.last_seen_at = _now()
+            auth_store.key_to_user[key_hash] = existing
+            _save()
+            return CreateServiceAccountResponse(
+                account_id=existing.account_id,
+                username=username,
+                api_key=raw_key,
+                display_name=existing.display_name,
+                is_service_account=existing.is_service_account,
+            )
 
         acc = app.state.risk.create_account()
+        if mint_amount > ZERO:
+            app.state.risk.mint(acc.id, mint_amount)
 
-        if req.initial_credits:
-            try:
-                amount = Decimal(req.initial_credits)
-            except InvalidOperation:
-                raise APIError(400, "invalid_amount",
-                               f"Invalid credits: {req.initial_credits}")
-            if amount > ZERO:
-                app.state.risk.mint(acc.id, amount)
-
-        import hashlib
-        import secrets
         raw_key = secrets.token_urlsafe(32)
         key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
 
-        from exchange.core.auth import User, _now
+        from exchange.core.auth import User
         user = User(
             github_id=0,
             github_login=username,
             account_id=acc.id,
             api_key_hash=key_hash,
-            is_service_account=True,
+            is_service_account=req.is_service_account,
+            display_name=display_name,
         )
         auth_store.local_users[username] = user
         auth_store.key_to_user[key_hash] = user
@@ -2219,6 +2397,8 @@ async def admin_create_service_account(
         account_id=acc.id,
         username=username,
         api_key=raw_key,
+        display_name=user.display_name,
+        is_service_account=user.is_service_account,
     )
 
 
