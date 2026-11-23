@@ -1,10 +1,12 @@
 import { useMemo } from "react";
 import { useHealth, useServiceIndex, useMarkets } from "@/lib/query/hooks";
+import { isExchangeMode } from "@/lib/exchangeMode";
 import { ErrorMessage, LoadingPage } from "@/components/ui/Spinner";
 import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
 import { formatCurrency } from "@/lib/utils/format";
 
 export default function System() {
+  const exchangeMode = isExchangeMode();
   const health = useHealth();
   const index = useServiceIndex();
   const allMarkets = useMarkets();
@@ -20,23 +22,22 @@ export default function System() {
   const platformStats = useMemo(() => {
     const markets = allMarkets.data?.markets ?? [];
     return {
-      totalVolume: markets.reduce((s, m) => s + m.volume, 0),
-      totalLiquidity: markets.reduce((s, m) => s + m.liquidity, 0),
-      activeCount: markets.filter((m) => m.status === "active").length,
-      resolvedCount: markets.filter((m) => m.status === "resolved").length,
+      totalVolume: markets.reduce((s, m) => s + (m.volume ?? 0), 0),
+      totalLiquidity: markets.reduce((s, m) => s + (m.liquidity ?? 0), 0),
     };
   }, [allMarkets.data]);
 
   const isUp = health.data?.status === "ok";
+  const exchangeInfo = health.data?.exchange;
 
   return (
-    <div style={{ display: "grid", gap: "var(--space-lg)" }}>
+    <div style={{ display: "grid", gap: "var(--space-lg)", minWidth: 0 }}>
       <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>System Status</h1>
 
       {/* Health beacon */}
       <div style={cardStyle}>
         {health.error && health.data && <ReconnectingHint />}
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "var(--space-sm)" }}>
           <div style={{
             width: 12,
             height: 12,
@@ -53,6 +54,13 @@ export default function System() {
             </span>
           )}
         </div>
+        {exchangeMode && exchangeInfo?.net && (
+          <div style={{ marginTop: "var(--space-xs)", fontSize: "0.78rem", color: "var(--color-text-muted)" }}>
+            Exchange API · {exchangeInfo.net.markets.toLocaleString("en-US")} net markets ·{" "}
+            {exchangeInfo.net.orders.toLocaleString("en-US")} orders
+            {typeof exchangeInfo.users === "number" ? ` · ${exchangeInfo.users.toLocaleString("en-US")} traders` : ""}
+          </div>
+        )}
         {health.isError && !health.data && (
           <div style={{ marginTop: "var(--space-sm)", fontSize: "0.8rem", color: "var(--color-danger)" }}>
             {health.error instanceof Error ? health.error.message : "Connection failed"}
@@ -60,15 +68,27 @@ export default function System() {
         )}
       </div>
 
-      {/* Platform aggregate stats */}
+      {/* Platform aggregate stats (no duplicate Active/Resolved cards) */}
       {!allMarkets.isLoading && allMarkets.data && (
         <div style={cardStyle}>
           <h2 style={sectionTitle}>Platform Stats</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "var(--space-sm)" }}>
-            <CountCard label="Total Volume" value={formatCurrency(platformStats.totalVolume)} raw />
-            <CountCard label="Total Liquidity" value={formatCurrency(platformStats.totalLiquidity)} raw />
-            <CountCard label="Active" value={platformStats.activeCount} color="var(--color-success)" />
-            <CountCard label="Resolved" value={platformStats.resolvedCount} color="var(--color-primary)" />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "var(--space-sm)" }}>
+            <CountCard
+              label="Total Volume"
+              value={exchangeMode ? `${formatCurrency(platformStats.totalVolume)} credits` : formatCurrency(platformStats.totalVolume)}
+              raw
+            />
+            <CountCard
+              label="Total Liquidity"
+              value={exchangeMode ? `${formatCurrency(platformStats.totalLiquidity)} credits` : formatCurrency(platformStats.totalLiquidity)}
+              raw
+            />
+            {exchangeMode && exchangeInfo?.net && (
+              <CountCard label="Net Orders" value={exchangeInfo.net.orders.toLocaleString("en-US")} raw />
+            )}
+            {exchangeMode && typeof exchangeInfo?.users === "number" && (
+              <CountCard label="Traders" value={exchangeInfo.users.toLocaleString("en-US")} raw />
+            )}
           </div>
         </div>
       )}
@@ -143,6 +163,7 @@ const cardStyle: React.CSSProperties = {
   borderRadius: "var(--radius-md)",
   border: "1px solid var(--color-border)",
   background: "var(--color-bg-surface)",
+  minWidth: 0,
 };
 
 const sectionTitle: React.CSSProperties = {

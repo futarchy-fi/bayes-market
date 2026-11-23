@@ -13,6 +13,11 @@ import {
   DELTA_COOL_HEX,
   DELTA_NEUTRAL_HEX,
   sourceTag,
+  probabilityFillOpacity,
+  probabilityRadius,
+  selectSnapshotKpis,
+  selectWhatIfScenarios,
+  isContextContradictedError,
   type GraphMarketInput,
 } from "@/features/graph/mapLayout";
 
@@ -109,9 +114,10 @@ describe("parseYearFromTitle", () => {
 });
 
 describe("FAMILY_ORDER", () => {
-  it("has the 15 bands in the specified fixed order with display labels", () => {
+  it("has the 16 bands in the specified fixed order with display labels including sub_agi", () => {
     expect(FAMILY_ORDER.map((f) => f.key)).toEqual([
       "agi",
+      "sub_agi",
       "rampup",
       "auto_goods",
       "full_auto",
@@ -129,7 +135,8 @@ describe("FAMILY_ORDER", () => {
     ]);
     expect(FAMILY_ORDER[0]).toMatchObject({ label: "AGI compute threshold" });
     expect(FAMILY_ORDER[FAMILY_ORDER.length - 1]).toMatchObject({ key: "other" });
-    expect(FAMILY_KEYS.size).toBe(15);
+    expect(FAMILY_ORDER[1]).toMatchObject({ key: "sub_agi", label: "Weakly general AI (Sub-AGI)", group: "agi_rampup" });
+    expect(FAMILY_KEYS.size).toBe(16);
   });
 
   it("groups families into exactly 6 categorical color groups", () => {
@@ -334,5 +341,62 @@ describe("sourceTag", () => {
 
   it("falls back to market when neither is present", () => {
     expect(sourceTag({})).toBe("market");
+  });
+});
+
+describe("sub_agi, empty swimlane hiding, tier labels, and probability encoding", () => {
+  it("classifies ftm_sub_agi_by_YYYY into the sub_agi family", () => {
+    expect(classifyVariable("ftm_sub_agi_by_2030", "Weakly general AI by 2030")).toEqual({
+      family: "sub_agi",
+      tier: null,
+      year: 2030,
+    });
+  });
+
+  it("hides empty swimlanes automatically", () => {
+    const markets: GraphMarketInput[] = [
+      { id: "m1", variableId: "ftm_agi_by_2035", title: "AGI 2035", status: "active" },
+      { id: "m2", variableId: "ftm_sub_agi_by_2030", title: "Sub-AGI 2030", status: "active" },
+    ];
+    const layout = computeMapLayout(markets);
+    expect(layout.bands.map((b) => b.family)).toEqual(["agi", "sub_agi"]);
+  });
+
+  it("populates sub-row threshold labels on multi-tier bands", () => {
+    const markets: GraphMarketInput[] = [
+      { id: "a0", variableId: "ftm_auto_goods_t0_by_2030", title: "5%", status: "active" },
+      { id: "a3", variableId: "ftm_auto_goods_t3_by_2035", title: "90%", status: "active" },
+      { id: "tr1", variableId: "ftm_train_run_t1_by_2032", title: "1e29", status: "active" },
+    ];
+    const layout = computeMapLayout(markets);
+    const autoBand = layout.bands.find((b) => b.family === "auto_goods")!;
+    expect(autoBand.subRows.map((r) => r.label)).toEqual(["5%", "90%"]);
+    const trainBand = layout.bands.find((b) => b.family === "train_run")!;
+    expect(trainBand.subRows.map((r) => r.label)).toEqual(["1e29"]);
+  });
+
+  it("scales resting fillOpacity and radius monotonically with probability", () => {
+    expect(probabilityFillOpacity(0.05)).toBeLessThan(probabilityFillOpacity(0.5));
+    expect(probabilityFillOpacity(0.5)).toBeLessThan(probabilityFillOpacity(0.95));
+    expect(probabilityRadius(0.05, 3.5)).toBeLessThan(probabilityRadius(0.95, 3.5));
+  });
+
+  it("selects snapshot KPIs and what-if scenarios gracefully by variableId", () => {
+    const markets = [
+      { id: "s1", variableId: "ftm_sub_agi_by_2030", title: "Weakly General AI by 2030", status: "active" as const, marginals: { yes: 0.42, no: 0.58 } },
+      { id: "a1", variableId: "ftm_agi_by_2032", title: "AGI by 2032", status: "active" as const, marginals: { yes: 0.12, no: 0.88 } },
+      { id: "a2", variableId: "ftm_agi_by_2035", title: "AGI by 2035", status: "active" as const, marginals: { yes: 0.28, no: 0.72 } },
+    ];
+    expect(selectSnapshotKpis(markets).map((k) => k.label)).toEqual([
+      "Weakly General AI by 2030",
+      "Strict AGI by 2035",
+    ]);
+    expect(selectWhatIfScenarios(markets).map((s) => s.label)).toEqual(["Assume AGI by 2032"]);
+  });
+
+  it("detects 409 context_contradicted errors reliably", () => {
+    expect(isContextContradictedError({ status: 409, code: "context_contradicted" })).toBe(true);
+    expect(isContextContradictedError({ status: 500, code: "internal_error" })).toBe(false);
+    expect(isContextContradictedError(null)).toBe(false);
   });
 });

@@ -1143,3 +1143,94 @@ class TestNetAdminPersistence:
             ]
             assert len(settled) == 1
             assert settled[0]["status"] == "settled"
+
+
+class TestNetVolumeLiquidityAndHealth:
+    async def test_net_markets_and_health_expose_real_volume_and_liquidity(
+        self, tmp_path, monkeypatch
+    ):
+        reset_counters()
+        seeds_path = _write_seeds(tmp_path)
+        monkeypatch.setenv("EXCHANGE_SEEDS_PATH", seeds_path)
+        monkeypatch.setenv("JOINT_LIQUIDITY", "50")
+        api_module.STATE_PATH = str(tmp_path / "state.json")
+
+        async with api_module.lifespan(app):
+            # Initial state: 0 volume, real liquidity = 50.0 on every projection.
+            listed0 = await _get_json("/v1/net/markets")
+            for m in listed0["markets"]:
+                assert m["volume"] == 0.0
+                assert m["liquidity"] == pytest.approx(50.0)
+
+            graph0 = await _get_json("/v1/net/markets?fields=graph")
+            for m in graph0["markets"]:
+                assert m["volume"] == 0.0
+                assert m["liquidity"] == pytest.approx(50.0)
+
+            detail0 = await _get_json("/v1/net/markets/g1")
+            assert detail0["volume"] == 0.0
+            assert detail0["liquidity"] == pytest.approx(50.0)
+
+            # Place two orders on g1 (gcx_a) and one on g2 (gcx_b).
+            api_key, _ = await _authed_user()
+            r1 = await _post(
+                "/v1/net/orders",
+                {"variableId": "gcx_a", "outcomeId": "yes", "target": 0.75},
+                headers=_headers(api_key),
+            )
+            r2 = await _post(
+                "/v1/net/orders",
+                {"variableId": "gcx_a", "outcomeId": "yes", "target": 0.80},
+                headers=_headers(api_key),
+            )
+            r3 = await _post(
+                "/v1/net/orders",
+                {"variableId": "gcx_b", "outcomeId": "yes", "target": 0.50},
+                headers=_headers(api_key),
+            )
+            assert r1.status_code == r2.status_code == r3.status_code == 200
+
+            vol_a = Decimal(r1.json()["stake"]) + Decimal(r2.json()["stake"])
+            vol_b = Decimal(r3.json()["stake"])
+            assert vol_a > 0 and vol_b > 0
+
+            listed = await _get_json("/v1/net/markets")
+            by_id = {m["id"]: m for m in listed["markets"]}
+            assert by_id["g1"]["volume"] == pytest.approx(float(vol_a), rel=1e-6)
+            assert by_id["g1"]["liquidity"] == pytest.approx(50.0)
+            assert by_id["g2"]["volume"] == pytest.approx(float(vol_b), rel=1e-6)
+            assert by_id["g2"]["liquidity"] == pytest.approx(50.0)
+
+            graph = await _get_json("/v1/net/markets?fields=graph")
+            graph_by_id = {m["id"]: m for m in graph["markets"]}
+            assert graph_by_id["g1"]["volume"] == pytest.approx(float(vol_a), rel=1e-6)
+            assert graph_by_id["g1"]["liquidity"] == pytest.approx(50.0)
+            assert graph_by_id["g2"]["volume"] == pytest.approx(float(vol_b), rel=1e-6)
+            assert graph_by_id["g2"]["liquidity"] == pytest.approx(50.0)
+
+            detail_g1 = await _get_json("/v1/net/markets/g1")
+            assert detail_g1["volume"] == pytest.approx(float(vol_a), rel=1e-6)
+            assert detail_g1["liquidity"] == pytest.approx(50.0)
+
+            health = await _get_json("/v1/health")
+            assert health["status"] == "ok"
+            assert health["service"] == "futarchy-exchange"
+            assert health["timestamp"].endswith("Z")
+            assert health["netMarkets"] == 2
+            assert health["activeMarkets"] == 2
+            assert health["resolvedMarkets"] == 0
+            assert health["totalVolume"] == pytest.approx(float(vol_a + vol_b), rel=1e-6)
+            assert health["totalLiquidity"] == pytest.approx(100.0)
+
+            # Resolve g1 and check health active/resolved counts update.
+            res = await _post(
+                "/v1/net/markets/g1/resolve",
+                {"outcome": "yes"},
+                headers=ADMIN_HEADERS,
+            )
+            assert res.status_code == 200
+            health2 = await _get_json("/v1/health")
+            assert health2["netMarkets"] == 2
+            assert health2["activeMarkets"] == 1
+            assert health2["resolvedMarkets"] == 1
+            assert health2["totalVolume"] == pytest.approx(float(vol_a + vol_b), rel=1e-6)

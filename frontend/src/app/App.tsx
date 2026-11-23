@@ -5,6 +5,7 @@ import { EXCHANGE_API } from "@/lib/exchange/client";
 import { useExchangeMe } from "@/lib/exchange/hooks";
 import { useExchangeSession } from "@/lib/exchange/session";
 import { isExchangeMode } from "@/lib/exchangeMode";
+import { formatCredits } from "@/lib/utils/format";
 
 export function AppLayout() {
   const { session, setAccountId, setAgentId } = useSession();
@@ -13,25 +14,25 @@ export function AppLayout() {
   const exchangeMode = isExchangeMode();
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      <header style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "var(--space-lg)",
-        padding: "var(--space-sm) var(--space-lg)",
-        borderBottom: "1px solid var(--color-border)",
-        background: "var(--color-bg-surface)",
-      }}>
-        <NavLink to="/" style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--color-text)", textDecoration: "none" }}>Bayes Market</NavLink>
-        {!exchangeMode && <span style={exchangeBadgeStyle}>paper mode</span>}
-        <nav style={{ display: "flex", gap: "var(--space-md)" }}>
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <header className="app-header">
+        <div className="app-brand">
+          <NavLink
+            to="/"
+            style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--color-text)", textDecoration: "none", whiteSpace: "nowrap" }}
+          >
+            Bayes Market
+          </NavLink>
+          {!exchangeMode && <span style={exchangeBadgeStyle}>paper mode</span>}
+        </div>
+        <nav className="app-nav" aria-label="Primary navigation">
           <NavLink to="/" end style={navLinkStyle}>Network</NavLink>
           <NavLink to="/markets" style={navLinkStyle}>Markets</NavLink>
           <NavLink to="/portfolio" style={navLinkStyle}>Portfolio</NavLink>
           <NavLink to="/leaderboard" style={navLinkStyle}>Leaderboard</NavLink>
           <NavLink to="/system" style={navLinkStyle}>System</NavLink>
         </nav>
-        <div style={{ marginLeft: "auto", display: "flex", gap: "var(--space-sm)", alignItems: "center" }}>
+        <div className="app-auth">
           {!exchangeMode && (
             <>
               <input
@@ -49,9 +50,9 @@ export function AppLayout() {
             </>
           )}
           {exchange.isSignedIn ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", fontSize: "0.8rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", fontSize: "0.8rem", flexWrap: "wrap" }}>
               <span>@{exchange.session.githubLogin || `account ${me.data?.account_id ?? ""}`}</span>
-              {me.data && <span style={creditChipStyle}>{me.data.available} credits</span>}
+              {me.data && <span style={creditChipStyle}>{formatCredits(me.data.available)} credits</span>}
               <button onClick={exchange.signOut} style={signOutStyle}>Sign out</button>
             </div>
           ) : (
@@ -59,7 +60,7 @@ export function AppLayout() {
           )}
         </div>
       </header>
-      <main style={{ flex: 1, padding: "var(--space-lg)", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
+      <main className="app-main">
         <ErrorBoundary>
           <Outlet />
         </ErrorBoundary>
@@ -73,6 +74,7 @@ const navLinkStyle = ({ isActive }: { isActive: boolean }): React.CSSProperties 
   fontWeight: isActive ? 600 : 400,
   color: isActive ? "var(--color-primary)" : "var(--color-text-muted)",
   textDecoration: "none",
+  whiteSpace: "nowrap",
 });
 
 const headerInputStyle: React.CSSProperties = {
@@ -83,6 +85,7 @@ const headerInputStyle: React.CSSProperties = {
   color: "var(--color-text)",
   fontSize: "0.8rem",
   width: 160,
+  maxWidth: "100%",
 };
 
 const creditChipStyle: React.CSSProperties = { padding: "2px 7px", borderRadius: 999, background: "var(--color-bg-hover)", color: "var(--color-success)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap" };

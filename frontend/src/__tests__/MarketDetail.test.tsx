@@ -83,6 +83,7 @@ vi.mock("@/features/graph/useForceGraph", () => ({
 
 vi.mock("@/lib/query/hooks", () => ({
   useNetwork: vi.fn(() => ({ data: undefined })),
+  useGraphMarkets: vi.fn(() => ({ data: undefined, error: null })),
   useMarket: vi.fn(),
   useMarketEvents: vi.fn(),
   useAccountRisk: vi.fn(),
@@ -121,6 +122,7 @@ import {
   useProbabilityEdit,
   useCpt,
   useNetwork,
+  useGraphMarkets,
 } from "@/lib/query/hooks";
 import { useInstruments } from "@/lib/exchange/hooks";
 import { EXCHANGE_MODE_KEY } from "@/lib/exchangeMode";
@@ -138,6 +140,7 @@ const mockUseEventTrade = vi.mocked(useEventTrade);
 const mockUseProbabilityEdit = vi.mocked(useProbabilityEdit);
 const mockUseCpt = vi.mocked(useCpt);
 const mockUseNetwork = vi.mocked(useNetwork);
+const mockUseGraphMarkets = vi.mocked(useGraphMarkets);
 const mockUseInstruments = vi.mocked(useInstruments);
 
 // ---------------------------------------------------------------------------
@@ -286,6 +289,7 @@ beforeEach(() => {
   mockUseProbabilityEdit.mockReturnValue(defaultMutationState() as any);
   mockUseCpt.mockReturnValue(defaultQueryState(undefined) as any);
   mockUseNetwork.mockReturnValue(defaultQueryState(undefined) as any);
+  mockUseGraphMarkets.mockReturnValue(defaultQueryState(undefined) as any);
   mockUseInstruments.mockReturnValue(defaultQueryState([]) as any);
 });
 
@@ -565,6 +569,85 @@ describe("MarketDetail", () => {
     renderWithProviders(<MarketDetail />);
     await waitFor(() => {
       expect(screen.getByText("Resolve Market")).toBeInTheDocument();
+    });
+  });
+
+  describe("exchange mode cleanup & Causal Context", () => {
+    beforeEach(() => {
+      window.localStorage.removeItem(EXCHANGE_MODE_KEY);
+    });
+
+    it("removes the 4 dead 'Not available in exchange mode.' cards and hides Export/Import", () => {
+      renderWithProviders(<MarketDetail />);
+      expect(screen.queryByText("Not available in exchange mode.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Conditional Probability Table")).not.toBeInTheDocument();
+      expect(screen.queryByText("Event Journal")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Junction Tree & Inference/)).not.toBeInTheDocument();
+      expect(screen.queryByTitle("Export network as JSON")).not.toBeInTheDocument();
+      expect(screen.queryByTitle("Import network from JSON")).not.toBeInTheDocument();
+    });
+
+    it("renders Causal Context & What-If with direct causes/effects and live conditioning", () => {
+      mockUseMarkets.mockReturnValue(defaultQueryState({
+        markets: [
+          { id: "p1", variableId: "v_parent", title: "Parent Driver", status: "active", liquidity: 100, volume: 10, expires_at: "", marginals: { yes: 0.4, no: 0.6 } },
+          { id: "m1", variableId: "eth_price_gt_3000_mar15", title: "ETH Price > $3000 on March 15", status: "active", liquidity: 100, volume: 10, expires_at: "", marginals: { yes: 0.65, no: 0.35 } },
+          { id: "c1", variableId: "v_child", title: "Downstream Effect", status: "active", liquidity: 100, volume: 10, expires_at: "", marginals: { yes: 0.25, no: 0.75 } },
+        ],
+        count: 3,
+        meta: mockMarketsListData.meta,
+      }) as any);
+      mockUseNetwork.mockReturnValue(defaultQueryState({
+        nodes: [],
+        edges: [
+          { from: "p1", to: "m1", fromVariableId: "v_parent", toVariableId: "eth_price_gt_3000_mar15" },
+          { from: "m1", to: "c1", fromVariableId: "eth_price_gt_3000_mar15", toVariableId: "v_child" },
+        ],
+        meta: mockMarketsListData.meta,
+      }) as any);
+      mockUseGraphMarkets.mockImplementation(((ctx: Array<{ variableId: string; outcomeId: string }> = []) => {
+        if (ctx.length > 0) {
+          return defaultQueryState({
+            markets: [
+              { id: "p1", variableId: "v_parent", title: "Parent Driver", status: "active", marginals: { yes: 0.4, no: 0.6 }, conditionalMarginals: { yes: 0.55, no: 0.45 } },
+              { id: "m1", variableId: "eth_price_gt_3000_mar15", title: "ETH Price > $3000 on March 15", status: "active", marginals: { yes: 0.65, no: 0.35 }, conditionalMarginals: { yes: 1, no: 0 } },
+              { id: "c1", variableId: "v_child", title: "Downstream Effect", status: "active", marginals: { yes: 0.25, no: 0.75 }, conditionalMarginals: { yes: 0.48, no: 0.52 } },
+            ],
+            meta: mockMarketsListData.meta,
+          }) as any;
+        }
+        return defaultQueryState(undefined) as any;
+      }) as any);
+
+      renderWithProviders(<MarketDetail />);
+
+      expect(screen.getByText("Causal Context & What-If")).toBeInTheDocument();
+      expect(screen.getByText("Causes (Parents) · 1")).toBeInTheDocument();
+      expect(screen.getByText("Effects (Children) · 1")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Parent Driver/ })).toHaveAttribute("href", "/markets/p1");
+      expect(screen.getByRole("link", { name: /Downstream Effect/ })).toHaveAttribute("href", "/markets/c1");
+
+      fireEvent.click(screen.getByRole("button", { name: "Assume YES" }));
+      expect(screen.getByRole("button", { name: "✓ Assumed YES" })).toBeInTheDocument();
+      expect(screen.getByText("+15.0 pts")).toBeInTheDocument();
+      expect(screen.getByText("+23.0 pts")).toBeInTheDocument();
+    });
+
+    it("renders external URLs as clickable links and strips double periods in descriptions", () => {
+      mockUseMarket.mockReturnValue(defaultQueryState({
+        ...mockMarket,
+        market: {
+          ...mockMarket.market,
+          description: "Resolves by 2030.. Imported from metaculus (https://www.metaculus.com/questions/41193/).",
+        },
+      }) as any);
+
+      renderWithProviders(<MarketDetail />);
+
+      const link = screen.getByRole("link", { name: "https://www.metaculus.com/questions/41193/" });
+      expect(link).toHaveAttribute("href", "https://www.metaculus.com/questions/41193/");
+      expect(screen.getByText(/Resolves by 2030\. Imported/)).toBeInTheDocument();
+      expect(screen.queryByText(/\.\./)).not.toBeInTheDocument();
     });
   });
 });

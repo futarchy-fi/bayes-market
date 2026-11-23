@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { isExchangeMode } from "@/lib/exchangeMode";
 import { useCreateMarket } from "@/lib/query/hooks";
 import { useSession } from "@/features/session/context";
 
@@ -9,6 +10,26 @@ interface OutcomeInput {
 }
 
 export function CreateMarketForm() {
+  if (isExchangeMode()) {
+    return (
+      <div style={{ maxWidth: 600, margin: "0 auto", padding: "var(--space-lg)", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "var(--color-bg-surface)" }}>
+        <h1 style={{ fontSize: "1.4rem", fontWeight: 600, marginBottom: "var(--space-sm)" }}>
+          Create Market
+        </h1>
+        <p style={{ color: "var(--color-text-muted)", fontSize: "0.9rem", lineHeight: 1.55, marginBottom: "var(--space-md)" }}>
+          Market creation on the live credits exchange is governed via exchange proposals and the CLI rather than the legacy paper form.
+        </p>
+        <div style={{ display: "flex", gap: "var(--space-md)", flexWrap: "wrap", fontSize: "0.875rem" }}>
+          <Link to="/" style={{ fontWeight: 600 }}>← Back to Network</Link>
+          <Link to="/markets" style={{ color: "var(--color-text-muted)" }}>Browse Markets</Link>
+        </div>
+      </div>
+    );
+  }
+  return <PaperCreateMarketForm />;
+}
+
+function PaperCreateMarketForm() {
   const navigate = useNavigate();
   const { session } = useSession();
   const mutation = useCreateMarket();

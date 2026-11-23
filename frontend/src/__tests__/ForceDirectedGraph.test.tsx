@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
 import { renderWithProviders } from "./helpers";
-import { ForceDirectedGraph } from "@/features/graph/ForceDirectedGraph";
+import { ForceDirectedGraph, MAX_FORCE_NODES } from "@/features/graph/ForceDirectedGraph";
+import { EXCHANGE_MODE_KEY } from "@/lib/exchangeMode";
 import type { MarketSummary, EngineStatsResponse, Market } from "@/lib/api/types";
 
 // ---------------------------------------------------------------------------
@@ -13,6 +14,7 @@ vi.mock("@/lib/query/hooks", () => ({
   useMarkets: vi.fn(),
   useMarket: vi.fn(),
   useEngineStats: vi.fn(),
+  useGraphMarkets: vi.fn(() => ({ data: undefined })),
 }));
 
 // Mock the useForceGraph hook to return fixed positions without running D3 simulation
@@ -64,11 +66,12 @@ vi.mock("d3-drag", () => ({
   }),
 }));
 
-import { useMarkets, useMarket, useEngineStats } from "@/lib/query/hooks";
+import { useMarkets, useMarket, useEngineStats, useNetwork } from "@/lib/query/hooks";
 
 const mockUseMarkets = vi.mocked(useMarkets);
 const mockUseMarket = vi.mocked(useMarket);
 const mockUseEngineStats = vi.mocked(useEngineStats);
+const mockUseNetwork = vi.mocked(useNetwork);
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -186,6 +189,7 @@ beforeEach(() => {
   mockUseMarkets.mockReturnValue(defaultMarketsReturn());
   mockUseMarket.mockReturnValue(defaultMarketReturn());
   mockUseEngineStats.mockReturnValue(defaultEngineStatsReturn());
+  mockUseNetwork.mockReturnValue({ data: undefined } as unknown as ReturnType<typeof useNetwork>);
 });
 
 // ---------------------------------------------------------------------------
@@ -307,49 +311,73 @@ describe("ForceDirectedGraph", () => {
     });
   });
 
-  it("renders probability bars with formatted percentages", () => {
-    mockUseMarket.mockImplementation((marketId: string) => {
-      if (marketId === "mkt-1") {
-        return defaultMarketReturn({
-          ...mockMarketDetail,
-          id: "mkt-1",
-          outcomes: [
-            { id: "out-yes", name: "Yes" },
-            { id: "out-no", name: "No" },
-          ],
-          marginals: { "out-yes": 0.75, "out-no": 0.25 },
-        });
-      }
-      if (marketId === "mkt-2") {
-        return defaultMarketReturn({
-          ...mockMarketDetail,
-          id: "mkt-2",
-          title: "Will BTC hit $100K by year end?",
-          outcomes: [
-            { id: "out-btc-yes", name: "Yes" },
-            { id: "out-btc-no", name: "No" },
-          ],
-          marginals: { "out-btc-yes": 0.42, "out-btc-no": 0.58 },
-        });
-      }
-      return defaultMarketReturn({
-        ...mockMarketDetail,
-        id: "mkt-3",
-        title: "Federal Reserve rate cut before December 2026",
-        outcomes: [{ id: "out-fed-yes", name: "Cut" }],
-        marginals: { "out-fed-yes": 0.6 },
-      });
-    });
+  it("renders probability bars directly from loaded markets with zero per-node useMarket calls", () => {
+    mockUseMarkets.mockReturnValue(defaultMarketsReturn({
+      data: {
+        markets: [
+          mkSummary({
+            id: "mkt-1",
+            title: "Will ETH exceed $3000?",
+            outcomes: [{ id: "out-yes", name: "Yes" }, { id: "out-no", name: "No" }],
+            marginals: { "out-yes": 0.75, "out-no": 0.25 },
+          }),
+          mkSummary({
+            id: "mkt-2",
+            title: "Will BTC hit $100K by year end?",
+            outcomes: [{ id: "out-btc-yes", name: "Yes" }, { id: "out-btc-no", name: "No" }],
+            marginals: { "out-btc-yes": 0.42, "out-btc-no": 0.58 },
+          }),
+          mkSummary({
+            id: "mkt-3",
+            title: "Federal Reserve rate cut before December 2026",
+            outcomes: [{ id: "out-fed-yes", name: "Cut" }],
+            marginals: { "out-fed-yes": 0.6 },
+          }),
+        ],
+        count: 3,
+        meta: { apiVersion: "1.0", timestamp: "t" },
+      },
+    }));
 
     const { container } = renderWithProviders(<ForceDirectedGraph />);
 
+    expect(mockUseMarket).not.toHaveBeenCalled();
     expect(screen.getByText(/Yes: 75\.0%/)).toBeInTheDocument();
     expect(screen.getByText(/No: 25\.0%/)).toBeInTheDocument();
-
     expect(screen.getByText(/Yes: 42\.0%/)).toBeInTheDocument();
     expect(screen.getByText(/No: 58\.0%/)).toBeInTheDocument();
 
     const barRects = container.querySelectorAll('rect[rx="3"]');
     expect(barRects.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("caps rendered nodes at MAX_FORCE_NODES (60) for large networks and never fires per-node useMarket calls", () => {
+    const bigMarkets = Array.from({ length: 100 }, (_, i) =>
+      mkSummary({ id: `m${i}`, title: `Market ${i}`, marginals: { yes: 0.5, no: 0.5 } }),
+    );
+    const edges = Array.from({ length: 99 }, (_, i) => ({
+      from: `m${i}`,
+      to: `m${i + 1}`,
+      fromVariableId: `m${i}`,
+      toVariableId: `m${i + 1}`,
+    }));
+    mockUseMarkets.mockReturnValue(defaultMarketsReturn({
+      data: { markets: bigMarkets, count: bigMarkets.length, meta: { apiVersion: "1.0", timestamp: "t" } },
+    }));
+    mockUseNetwork.mockReturnValue({
+      data: { nodes: [], edges, meta: { apiVersion: "1.0", timestamp: "t" } },
+    } as unknown as ReturnType<typeof useNetwork>);
+
+    const { container } = renderWithProviders(<ForceDirectedGraph focusMarketId="m50" />);
+
+    expect(mockUseMarket).not.toHaveBeenCalled();
+    expect(container.querySelectorAll("g[data-node-id]").length).toBe(MAX_FORCE_NODES);
+    expect(screen.getByText(`Showing ${MAX_FORCE_NODES} of 100 linked markets`)).toBeInTheDocument();
+  });
+
+  it("disables useEngineStats in exchange mode", () => {
+    window.localStorage.removeItem(EXCHANGE_MODE_KEY);
+    renderWithProviders(<ForceDirectedGraph focusMarketId="mkt-1" />);
+    expect(mockUseEngineStats).toHaveBeenCalledWith("mkt-1", { enabled: false });
   });
 });

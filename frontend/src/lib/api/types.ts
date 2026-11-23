@@ -5,7 +5,7 @@ export interface MarketOutcome {
 
 export type MarketStatus = "active" | "resolved" | "closed" | "draft";
 export type MarketListStatusFilter = MarketStatus | "all";
-export type MarketListSort = "volume" | "liquidity" | "created";
+export type MarketListSort = "volume" | "liquidity" | "created" | "probability" | "linked";
 
 export interface MarketListFilters {
   status?: MarketListStatusFilter;
@@ -36,6 +36,8 @@ export interface MarketSummary {
   expires_at: string;
   /** Engine variable id backing this market; used to map clique/graph node ids. */
   variableId?: string;
+  /** Optional outcome metadata when provided by the market feed. */
+  outcomes?: MarketOutcome[];
   /** Current prices per outcome (kept in sync with the joint market maker). */
   marginals?: Record<string, number>;
   /** Model-implied prior probability (0-1) from the futarchy team model (FTM), when available. */

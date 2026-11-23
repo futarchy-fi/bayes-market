@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useMarkets } from "@/lib/query/hooks";
+import { useMarkets, useNetwork } from "@/lib/query/hooks";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
@@ -11,23 +11,21 @@ import {
   marketListSearchParams,
   readMarketListFiltersFromSearchParams,
 } from "@/lib/marketListFilters";
+import { filterMarketList } from "@/lib/dataSource";
 import type { MarketListSort, MarketStatus } from "@/lib/api/types";
 import { isExchangeMode } from "@/lib/exchangeMode";
 import { useInstruments } from "@/lib/exchange/hooks";
 
 const STATUSES = ["", "active", "resolved", "closed", "draft"] as const;
-const SORTS = ["", "volume", "liquidity", "created"] as const;
+const EXCHANGE_SORTS: Array<"" | MarketListSort> = ["", "volume", "liquidity", "probability", "linked"];
+const PAPER_SORTS: Array<"" | MarketListSort> = ["", "volume", "liquidity", "created", "probability", "linked"];
 const SEARCH_DEBOUNCE_MS = 300;
 
-function sortLabel(sort: (typeof SORTS)[number]) {
-  if (sort === "") {
-    return "Default order";
-  }
-
-  if (sort === "created") {
-    return "Newest";
-  }
-
+function sortLabel(sort: "" | MarketListSort) {
+  if (sort === "") return "Default order";
+  if (sort === "created") return "Newest";
+  if (sort === "probability") return "Probability (High→Low)";
+  if (sort === "linked") return "Linked";
   return sort.charAt(0).toUpperCase() + sort.slice(1);
 }
 
@@ -52,12 +50,34 @@ export default function MarketList() {
   const committedSearch = filters.q ?? "";
   const [searchInput, setSearchInput] = useState(committedSearch);
   const { data, isLoading, error } = useMarkets(filters);
+  const networkQuery = useNetwork({ enabled: exchangeMode || sortFilter === "linked" });
   const instruments = useInstruments(exchangeMode);
   const instrumentsByNetMarket = new Map(instruments.data?.flatMap((instrument) =>
     instrument.listings
       .filter((listing) => listing.venue === "net")
       .map((listing) => [listing.marketId, instrument] as const),
   ));
+
+  const linkCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const edge of networkQuery?.data?.edges ?? []) {
+      counts.set(edge.from, (counts.get(edge.from) ?? 0) + 1);
+      counts.set(edge.to, (counts.get(edge.to) ?? 0) + 1);
+    }
+    return counts;
+  }, [networkQuery?.data?.edges]);
+
+  // Apply client-side sorting when sorting by linked degree or probability (or
+  // re-sorting exchange data with network link counts).
+  const displayedMarkets = useMemo(() => {
+    if (!data) return undefined;
+    if (sortFilter === "linked" || sortFilter === "probability") {
+      return filterMarketList(data, { sort: sortFilter }, linkCounts).markets;
+    }
+    return data.markets;
+  }, [data, sortFilter, linkCounts]);
+
+  const sortOptions = exchangeMode ? EXCHANGE_SORTS : PAPER_SORTS;
 
   useEffect(() => {
     const rawStatus = searchParams.get("status");
@@ -100,7 +120,7 @@ export default function MarketList() {
   }, [committedSearch, searchInput, setSearchParams, sortFilter, statusFilter]);
 
   return (
-    <div>
+    <div style={{ minWidth: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: "var(--space-md)", marginBottom: "var(--space-lg)", flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: "var(--space-xs)" }}>
           <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>Markets</h1>
@@ -183,7 +203,7 @@ export default function MarketList() {
             }
             style={controlStyle}
           >
-            {SORTS.map((sort) => (
+            {sortOptions.map((sort) => (
               <option key={sort} value={sort}>
                 {sortLabel(sort)}
               </option>
@@ -196,70 +216,85 @@ export default function MarketList() {
       {error && !data && <ErrorMessage message={error instanceof Error ? error.message : "Failed to load markets"} />}
       {error && data && <ReconnectingHint />}
 
-      {data && data.markets.length > 0 && (
-        <div style={{ display: "flex", gap: "var(--space-lg)", fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: "var(--space-md)" }}>
-          <span>{data.markets.length} market{data.markets.length !== 1 ? "s" : ""}</span>
-          {exchangeMode ? <span>Live net-venue prices</span> : (
+      {displayedMarkets && displayedMarkets.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-lg)", fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: "var(--space-md)" }}>
+          <span>{displayedMarkets.length} market{displayedMarkets.length !== 1 ? "s" : ""}</span>
+          {exchangeMode ? (
             <>
-              <span>Total Volume: {formatCurrency(data.markets.reduce((s, m) => s + m.volume, 0))}</span>
-              <span>Total Liquidity: {formatCurrency(data.markets.reduce((s, m) => s + m.liquidity, 0))}</span>
+              <span>Live net-venue prices</span>
+              {displayedMarkets.some((m) => m.volume > 0) && (
+                <span>Total Volume: {formatCurrency(displayedMarkets.reduce((s, m) => s + m.volume, 0))} credits</span>
+              )}
+              {displayedMarkets.some((m) => m.liquidity > 0) && (
+                <span>Total Liquidity: {formatCurrency(displayedMarkets.reduce((s, m) => s + m.liquidity, 0))} credits</span>
+              )}
+            </>
+          ) : (
+            <>
+              <span>Total Volume: {formatCurrency(displayedMarkets.reduce((s, m) => s + m.volume, 0))}</span>
+              <span>Total Liquidity: {formatCurrency(displayedMarkets.reduce((s, m) => s + m.liquidity, 0))}</span>
             </>
           )}
         </div>
       )}
 
-      {data && (
-        <div style={{ display: "grid", gap: "var(--space-md)", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))" }}>
-          {data.markets.map((m) => {
+      {displayedMarkets && (
+        <div style={{ display: "grid", gap: "var(--space-md)", gridTemplateColumns: "repeat(auto-fill, minmax(min(360px, 100%), 1fr))" }}>
+          {displayedMarkets.map((m) => {
             const instrument = instrumentsByNetMarket.get(m.id);
+            const links = linkCounts.get(m.id) ?? 0;
             return (
-            <Link
-              key={m.id}
-              to={`/markets/${m.id}`}
-              style={{
-                display: "block",
-                padding: "var(--space-md)",
-                borderRadius: "var(--radius-md)",
-                background: "var(--color-bg-surface)",
-                border: "1px solid var(--color-border)",
-                textDecoration: "none",
-                color: "inherit",
-                transition: "border-color 0.15s",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--color-primary)")}
-              onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--color-border)")}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "var(--space-sm)" }}>
-                <span style={{ fontWeight: 500, fontSize: "0.95rem" }}>{m.title}</span>
-                <StatusBadge status={m.status} />
-              </div>
-              <PriceBar marginals={m.marginals} />
-              {exchangeMode ? (
-                <div style={{ display: "flex", gap: "var(--space-sm)", alignItems: "center", fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
-                  <span>Net venue</span>
-                  {instrument && instrument.listings.length > 1 && (
-                    <span
-                      aria-label={`Available on ${instrument.listings.length} venues`}
-                      style={{ padding: "2px 7px", borderRadius: 999, background: "var(--color-bg-hover)", color: "var(--color-primary)", fontSize: "0.7rem", fontWeight: 600 }}
-                    >
-                      {instrument.listings.map((listing) => listing.venue.toUpperCase()).join(" · ")}
-                    </span>
-                  )}
+              <Link
+                key={m.id}
+                to={`/markets/${m.id}`}
+                style={{
+                  display: "block",
+                  padding: "var(--space-md)",
+                  borderRadius: "var(--radius-md)",
+                  background: "var(--color-bg-surface)",
+                  border: "1px solid var(--color-border)",
+                  textDecoration: "none",
+                  color: "inherit",
+                  transition: "border-color 0.15s",
+                  minWidth: 0,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--color-primary)")}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--color-border)")}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 8, marginBottom: "var(--space-sm)" }}>
+                  <span style={{ fontWeight: 500, fontSize: "0.95rem" }}>{m.title}</span>
+                  <StatusBadge status={m.status} />
                 </div>
-              ) : (
-                <div style={{ display: "flex", gap: "var(--space-lg)", fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: "var(--space-sm)" }}>
-                  <span>Vol {formatCurrency(m.volume)}</span>
-                  <span>Liq {formatCurrency(m.liquidity)}</span>
-                  <span>{timeUntil(m.expires_at)}</span>
-                </div>
-              )}
-            </Link>
+                <PriceBar marginals={m.marginals} />
+                {exchangeMode ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-sm)", alignItems: "center", fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+                    <span>Net venue</span>
+                    {links > 0 && <span>· {links} link{links === 1 ? "" : "s"}</span>}
+                    {m.volume > 0 && <span>· Vol {formatCurrency(m.volume)}</span>}
+                    {m.liquidity > 0 && <span>· Liq {formatCurrency(m.liquidity)}</span>}
+                    {instrument && instrument.listings.length > 1 && (
+                      <span
+                        aria-label={`Available on ${instrument.listings.length} venues`}
+                        style={{ padding: "2px 7px", borderRadius: 999, background: "var(--color-bg-hover)", color: "var(--color-primary)", fontSize: "0.7rem", fontWeight: 600 }}
+                      >
+                        {instrument.listings.map((listing) => listing.venue.toUpperCase()).join(" · ")}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: "var(--space-lg)", fontSize: "0.8rem", color: "var(--color-text-muted)", marginBottom: "var(--space-sm)" }}>
+                    <span>Vol {formatCurrency(m.volume)}</span>
+                    <span>Liq {formatCurrency(m.liquidity)}</span>
+                    <span>{timeUntil(m.expires_at)}</span>
+                  </div>
+                )}
+              </Link>
             );
           })}
         </div>
       )}
 
-      {data && data.markets.length === 0 && (
+      {displayedMarkets && displayedMarkets.length === 0 && (
         <div style={{ textAlign: "center", padding: "var(--space-xl)", color: "var(--color-text-muted)" }}>
           No markets found.
         </div>

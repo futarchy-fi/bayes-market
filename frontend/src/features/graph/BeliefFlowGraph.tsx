@@ -1,28 +1,24 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { useMarkets, useMarket, useNetwork } from "@/lib/query/hooks";
+import { useMarkets, useMarket, useNetwork, useGraphMarkets } from "@/lib/query/hooks";
 import { useOptionalAssumptions } from "@/features/assumptions/AssumptionContext";
+import { FormattedDescription } from "@/components/ui/FormattedDescription";
 import { computeFlowLayout, wrapTitle, DEFAULT_FLOW_OPTIONS, type PositionedNode } from "./flowLayout";
 import {
   computeEgoSet,
   induceEdges,
   searchMatchIds,
-  firstSearchMatch,
   topMovers,
   firstRootId,
 } from "./egoGraph";
-import type { MarketSummary } from "@/lib/api/types";
+import { isContextContradictedError } from "./mapLayout";
+import type { GraphMarket, MarketSummary } from "@/lib/api/types";
 
 // ---------------------------------------------------------------------------
-// The belief-flow view: a layered DAG read left-to-right as cause -> effect.
-// One thin bar per node (P of the first outcome, shared 0-100 scale), full
-// two-line titles, solid hairline edges with arrowheads, and — when
-// assumptions are active — a signed delta against the unconditional prior.
-//
-// Scale features (built for 1000+ nodes, working at 16): title search with
-// fade-out of non-matches, a 2-hop ego "focus mode", and a top-movers strip
-// when assumptions are active. Networks past AUTO_FOCUS_NODE_LIMIT nodes
-// open focused instead of drawing the full graph.
+// The belief-flow view: a layered DAG read top-to-bottom as cause -> effect.
+// All probabilities and assumption deltas come from the single bulk
+// useMarkets() + useGraphMarkets(context) responses — zero per-node queries
+// and zero <DeltaProbe> request storms.
 // ---------------------------------------------------------------------------
 
 const NODE_W = DEFAULT_FLOW_OPTIONS.nodeWidth;
@@ -30,16 +26,14 @@ const NODE_H = DEFAULT_FLOW_OPTIONS.nodeHeight;
 const BAR_W = NODE_W - 102;
 const BAR_H = 5;
 
-/** Above this many nodes the graph defaults to focus mode instead of drawing everything. */
+/** Above this many nodes the graph opens in ego-focus mode. */
 const AUTO_FOCUS_NODE_LIMIT = 40;
 
-/**
- * Hard ceiling on mounted FlowNode components, independent of focus state.
- * Each FlowNode fires its own per-market useMarket queries, so this is the
- * backstop against a mount storm on large networks (e.g. a user backing out
- * of focus mode, or an ego set that is itself large).
- */
+/** Hard ceiling on rendered FlowNode SVG groups to keep layout snappy. */
 const MAX_RENDERED_NODES = 60;
+
+/** Maximum search results rendered inside the Find event dropdown. */
+const MAX_SEARCH_DROPDOWN = 12;
 
 interface BeliefFlowGraphProps {
   focusMarketId?: string;
@@ -51,6 +45,8 @@ interface FlowMarket {
   title: string;
   status: string;
   variableId?: string;
+  marginals?: Record<string, number>;
+  outcomes?: Array<{ id: string; name: string }>;
 }
 
 /** Left-square, right-rounded bar path (data-end rounded, baseline square). */
@@ -68,12 +64,6 @@ function barPath(x: number, y: number, w: number, h: number): string {
   ].join(" ");
 }
 
-/**
- * Same rule the auto-focus effect used to apply after the fact: the biggest
- * mover (by |deltaPts|), else the first root. Pure and synchronous so it can
- * be used directly during render (see `autoFocusId` below) instead of via a
- * post-commit effect.
- */
 function computeAutoFocusTarget(
   markets: FlowMarket[],
   edges: Array<{ source: string; target: string }>,
@@ -89,21 +79,26 @@ function computeAutoFocusTarget(
   return ranked[0]?.id ?? firstRootId(markets.map((m) => m.id), edges);
 }
 
-function firstOutcomeProbability(
-  market: { outcomes: Array<{ id: string }>; marginals: Record<string, number> } | undefined,
-): { outcomeId: string; p: number } | null {
-  if (!market || market.outcomes.length === 0) return null;
-  const preferred = market.outcomes.find((o) => o.id === "yes") ?? market.outcomes[0];
-  if (!preferred) return null;
-  const p = market.marginals[preferred.id];
-  if (typeof p !== "number") return null;
-  return { outcomeId: preferred.id, p };
+function primaryProbabilityFromRecord(
+  marginals: Record<string, number> | undefined,
+  outcomes?: Array<{ id: string }>,
+): number | null {
+  if (!marginals) return null;
+  if (typeof marginals.yes === "number") return marginals.yes;
+  const firstOutcomeId = outcomes?.[0]?.id;
+  if (firstOutcomeId && typeof marginals[firstOutcomeId] === "number") {
+    return marginals[firstOutcomeId]!;
+  }
+  const firstVal = Object.values(marginals)[0];
+  return typeof firstVal === "number" ? firstVal : null;
 }
 
 function FlowNode({
   node,
   market,
-  context,
+  baseP,
+  condP,
+  hasAssumptions,
   isFocus,
   dimmed,
   assumedOutcome,
@@ -113,7 +108,9 @@ function FlowNode({
 }: {
   node: PositionedNode;
   market: FlowMarket;
-  context: Array<{ variableId: string; outcomeId: string }>;
+  baseP: number | null;
+  condP: number | null;
+  hasAssumptions: boolean;
   isFocus: boolean;
   dimmed: boolean;
   assumedOutcome?: string;
@@ -121,15 +118,9 @@ function FlowNode({
   onFocusRequest?: () => void;
   onHover: (info: { id: string; x: number; y: number } | null) => void;
 }) {
-  const conditioned = useMarket(market.id, { context });
-  const base = useMarket(market.id);
-
-  const condP = firstOutcomeProbability(conditioned.data?.market);
-  const baseP = firstOutcomeProbability(base.data?.market);
-  const shown = condP ?? baseP;
-  const hasDelta = context.length > 0 && condP != null && baseP != null;
-  const delta = hasDelta ? condP.p - baseP.p : 0;
-  const deltaPts = delta * 100;
+  const shown = hasAssumptions && condP != null ? condP : baseP;
+  const hasDelta = hasAssumptions && !assumedOutcome && condP != null && baseP != null;
+  const deltaPts = hasDelta ? (condP - baseP) * 100 : 0;
   const showDelta = hasDelta && Math.abs(deltaPts) >= 0.05;
 
   const titleLines = wrapTitle(market.title, 32);
@@ -143,7 +134,11 @@ function FlowNode({
       onDoubleClick={onFocusRequest ? (e) => { e.stopPropagation(); onFocusRequest(); } : undefined}
       onMouseEnter={() => onHover({ id: market.id, x: node.x, y: node.y })}
       onMouseLeave={() => onHover(null)}
-      style={{ cursor: onClick ? "pointer" : "default", opacity: dimmed ? 0.25 : isResolved ? 0.45 : 1 }}
+      style={{
+        cursor: onClick ? "pointer" : "default",
+        opacity: dimmed ? 0.25 : isResolved ? 0.45 : 1,
+        userSelect: "none",
+      }}
     >
       {/* Quiet hit/hover surface; a visible border only for the focused node */}
       <rect
@@ -163,6 +158,7 @@ function FlowNode({
           fontSize="10.5"
           fontWeight={isFocus ? 700 : 600}
           fill="var(--color-text)"
+          style={{ userSelect: "none" }}
         >
           {line}
         </text>
@@ -170,22 +166,22 @@ function FlowNode({
 
       {/* Single probability bar: track + fill on a shared 0-100 scale */}
       <rect x={10} y={NODE_H - 19} width={BAR_W} height={BAR_H} rx={BAR_H / 2} fill="var(--color-border)" />
-      {shown && shown.p > 0.004 && (
+      {shown != null && shown > 0.004 && (
         <path
-          d={barPath(10, NODE_H - 19, Math.max(2, shown.p * BAR_W), BAR_H)}
+          d={barPath(10, NODE_H - 19, Math.max(2, shown * BAR_W), BAR_H)}
           fill="var(--color-info)"
         />
       )}
-      {shown && (
+      {shown != null && (
         <text
           x={10 + BAR_W + 7}
           y={NODE_H - 13.5}
           fontSize="10.5"
           fontWeight={600}
           fill="var(--color-text)"
-          style={{ fontVariantNumeric: "tabular-nums" }}
+          style={{ fontVariantNumeric: "tabular-nums", userSelect: "none" }}
         >
-          {(shown.p * 100).toFixed(1)}%
+          {(shown * 100).toFixed(1)}%
         </text>
       )}
 
@@ -198,7 +194,7 @@ function FlowNode({
           fontSize="9.5"
           fontWeight={700}
           fill={deltaPts > 0 ? "var(--color-success)" : "var(--color-danger)"}
-          style={{ fontVariantNumeric: "tabular-nums" }}
+          style={{ fontVariantNumeric: "tabular-nums", userSelect: "none" }}
         >
           {deltaPts > 0 ? "▲" : "▼"}{Math.abs(deltaPts).toFixed(1)}
         </text>
@@ -207,44 +203,22 @@ function FlowNode({
       {/* Evidence badge for assumed variables */}
       {assumedOutcome && (
         <g transform={`translate(10, ${NODE_H - 10})`}>
-          <rect width={58} height={11} rx={3} fill="var(--color-primary)" />
-          <text x={29} y={8.5} textAnchor="middle" fontSize="7.5" fontWeight={700} fill="#fff">
+          <rect width={62} height={11} rx={3} fill="var(--color-primary)" />
+          <text
+            x={31}
+            y={8.5}
+            textAnchor="middle"
+            fontSize="7.5"
+            fontWeight={700}
+            fill="#fff"
+            style={{ userSelect: "none" }}
+          >
             GIVEN: {assumedOutcome.toUpperCase()}
           </text>
         </g>
       )}
     </g>
   );
-}
-
-/**
- * Renders nothing; subscribes to the same conditioned/base queries as the
- * node and reports the delta upward so the parent can rank top movers
- * without new hooks or extra network traffic (react-query dedupes keys).
- */
-function DeltaProbe({
-  market,
-  context,
-  onDelta,
-}: {
-  market: FlowMarket;
-  context: Array<{ variableId: string; outcomeId: string }>;
-  onDelta: (id: string, deltaPts: number | null) => void;
-}) {
-  const conditioned = useMarket(market.id, { context });
-  const base = useMarket(market.id);
-  const condP = firstOutcomeProbability(conditioned.data?.market);
-  const baseP = firstOutcomeProbability(base.data?.market);
-  const deltaPts =
-    context.length > 0 && condP != null && baseP != null ? (condP.p - baseP.p) * 100 : null;
-
-  const id = market.id;
-  useEffect(() => {
-    onDelta(id, deltaPts);
-  }, [id, deltaPts, onDelta]);
-  useEffect(() => () => onDelta(id, null), [id, onDelta]);
-
-  return null;
 }
 
 function TopMoversStrip({
@@ -255,8 +229,8 @@ function TopMoversStrip({
   onPick: (id: string) => void;
 }) {
   return (
-    <div style={{ width: 180, flexShrink: 0 }}>
-      <div style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", marginBottom: 4 }}>
+    <div style={{ width: 190, flexShrink: 0 }}>
+      <div style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", marginBottom: 4, fontWeight: 600 }}>
         Top movers
       </div>
       {rows.map((r) => (
@@ -270,7 +244,7 @@ function TopMoversStrip({
             width: "100%",
             alignItems: "baseline",
             gap: 8,
-            padding: "2px 0",
+            padding: "3px 0",
             background: "transparent",
             border: "none",
             cursor: "pointer",
@@ -303,14 +277,36 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
   const { data: networkData } = useNetwork();
   const assumptionState = useOptionalAssumptions();
   const assumptions = assumptionState?.assumptions ?? [];
+  const contextPayload = useMemo(
+    () => assumptions.map((a) => ({ variableId: a.variableId, outcomeId: a.outcomeId })),
+    [assumptions],
+  );
+  const hasAssumptions = contextPayload.length > 0;
 
-  const markets: FlowMarket[] = (marketsData?.markets ?? []).map((m: MarketSummary) => ({
-    id: m.id,
-    title: m.title,
-    status: m.status,
-    variableId: m.variableId,
-  }));
+  // Single bulk conditioned query instead of N+1 <DeltaProbe> / <FlowNode> queries.
+  const conditionedGraph = useGraphMarkets(contextPayload, { enabled: hasAssumptions });
+  const lastGoodGraphRef = useRef<GraphMarket[] | undefined>(undefined);
+  if (conditionedGraph?.data?.markets) {
+    lastGoodGraphRef.current = conditionedGraph.data.markets;
+  }
+  const graphMarkets = conditionedGraph?.data?.markets ?? (hasAssumptions ? lastGoodGraphRef.current : undefined) ?? [];
+  const graphById = useMemo(() => new Map(graphMarkets.map((gm) => [gm.id, gm])), [graphMarkets]);
+  const contradicted = hasAssumptions && isContextContradictedError(conditionedGraph?.error);
+
+  const markets: FlowMarket[] = useMemo(
+    () =>
+      (marketsData?.markets ?? []).map((m: MarketSummary) => ({
+        id: m.id,
+        title: m.title,
+        status: m.status,
+        variableId: m.variableId,
+        marginals: m.marginals,
+        outcomes: m.outcomes,
+      })),
+    [marketsData],
+  );
   const marketIds = useMemo(() => new Set(markets.map((m) => m.id)), [markets]);
+  const marketById = useMemo(() => new Map(markets.map((m) => [m.id, m])), [markets]);
 
   const edges = useMemo(
     () =>
@@ -320,53 +316,84 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
     [networkData, marketIds],
   );
 
-  const marketById = useMemo(() => new Map(markets.map((m) => [m.id, m])), [markets]);
+  const variableToMarketId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of markets) if (m.variableId) map.set(m.variableId, m.id);
+    return map;
+  }, [markets]);
 
-  // ---- Focus mode (2-hop ego graph) ----
-  const [focusedId, setFocusedId] = useState<string | null>(null);
-  const [deltaById, setDeltaById] = useState<ReadonlyMap<string, number>>(new Map());
+  const assumedByMarketId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of assumptions) {
+      const mid = variableToMarketId.get(a.variableId);
+      if (mid) map.set(mid, a.outcomeId);
+    }
+    return map;
+  }, [assumptions, variableToMarketId]);
 
-  // Scale readiness: past the limit, the graph opens focused on the biggest
-  // mover (or the first root) instead of drawing the whole network. This is
-  // derived synchronously during render -- NOT via an effect -- so the very
-  // FIRST commit where markets.length exceeds AUTO_FOCUS_NODE_LIMIT already
-  // renders only the ego subgraph. Setting this via a post-render effect
-  // (the previous approach) let every node mount -- and fire its per-market
-  // useMarket queries -- on that first commit, before the effect had a
-  // chance to prune it back down; deriving it inline avoids that extra
-  // commit entirely.
+  // Compute unconditional base probabilities, conditioned probabilities, and deltas synchronously.
+  const { baseProbById, condProbById, deltaById } = useMemo(() => {
+    const baseMap = new Map<string, number>();
+    const condMap = new Map<string, number>();
+    const deltas = new Map<string, number>();
+    for (const m of markets) {
+      const gm = graphById.get(m.id);
+      const baseP =
+        primaryProbabilityFromRecord(gm?.marginals as Record<string, number> | undefined, m.outcomes) ??
+        primaryProbabilityFromRecord(m.marginals, m.outcomes);
+      if (baseP != null) baseMap.set(m.id, baseP);
+
+      const condP = hasAssumptions
+        ? primaryProbabilityFromRecord(gm?.conditionalMarginals as Record<string, number> | undefined, m.outcomes)
+        : null;
+      if (condP != null) {
+        condMap.set(m.id, condP);
+        if (baseP != null && !assumedByMarketId.has(m.id)) {
+          deltas.set(m.id, (condP - baseP) * 100);
+        }
+      }
+    }
+    return { baseProbById: baseMap, condProbById: condMap, deltaById: deltas };
+  }, [markets, graphById, hasAssumptions, assumedByMarketId]);
+
+  // ---- Focus & scope state ----
+  // userFocusedId overrides focusMarketId when the user double-clicks or picks from search.
+  const [userFocusedId, setUserFocusedId] = useState<string | null>(null);
+  const [hopDepth, setHopDepth] = useState<1 | 2>(2);
+  const [showAllSmall, setShowAllSmall] = useState(true);
+  const [selected, setSelected] = useState<string | null>(null);
+
+  // When navigating to a different /markets/:id, immediately snap focus to the new market.
+  useEffect(() => {
+    setUserFocusedId(null);
+    setHopDepth(2);
+    setSelected(null);
+  }, [focusMarketId]);
+
+  const isLargeNetwork = markets.length > AUTO_FOCUS_NODE_LIMIT;
+
   const autoFocusId = useMemo(
-    () => (markets.length > AUTO_FOCUS_NODE_LIMIT ? computeAutoFocusTarget(markets, edges, deltaById) : null),
-    [markets, edges, deltaById],
+    () => (isLargeNetwork ? computeAutoFocusTarget(markets, edges, deltaById) : null),
+    [isLargeNetwork, markets, edges, deltaById],
   );
 
-  const explicitFocusId = focusedId != null && marketById.has(focusedId) ? focusedId : null;
-  const effectiveFocusId = explicitFocusId ?? autoFocusId;
+  const validUserFocus = userFocusedId != null && marketById.has(userFocusedId) ? userFocusedId : null;
+  const validPropFocus = focusMarketId != null && marketById.has(focusMarketId) ? focusMarketId : null;
 
-  // Reactive follow-up only: once an auto-focus target is available, lock it
-  // in as the explicit selection so "Focused on … / Show all" has a stable
-  // id to work with (e.g. so it survives the user picking a different node
-  // and coming back). Guarded to fire at most once per mount, and it only
-  // ever moves focusedId from null to a value -- it can never widen the
-  // rendered set back toward the full (storm-sized) graph, so it cannot
-  // re-trigger the mount storm.
-  const autoFocusApplied = useRef(false);
-  useEffect(() => {
-    if (autoFocusApplied.current) return;
-    if (autoFocusId == null) return;
-    autoFocusApplied.current = true;
-    setFocusedId(autoFocusId);
-  }, [autoFocusId]);
+  // On large networks (>40), always stay focused (user selection -> prop focusMarketId -> auto).
+  // On small networks (<=40), default to showing all unless user chooses 1-hop/2-hop or focuses a node.
+  const effectiveFocusId = isLargeNetwork
+    ? (validUserFocus ?? validPropFocus ?? autoFocusId)
+    : (validUserFocus ?? (!showAllSmall ? validPropFocus : null));
 
   const displayed = useMemo(() => {
     const allIds = markets.map((m) => m.id);
     if (!effectiveFocusId) return { ids: allIds, edges };
-    const ego = computeEgoSet(effectiveFocusId, edges, 2);
+    const ego = computeEgoSet(effectiveFocusId, edges, hopDepth);
     return { ids: allIds.filter((id) => ego.has(id)), edges: induceEdges(ego, edges) };
-  }, [markets, edges, effectiveFocusId]);
+  }, [markets, edges, effectiveFocusId, hopDepth]);
 
-  // Hard cap: never mount more than MAX_RENDERED_NODES FlowNode components,
-  // regardless of focus state. The focused node (if any) is always kept.
+  // Hard cap: never render more than MAX_RENDERED_NODES FlowNode groups.
   const renderedIds = useMemo(() => {
     if (displayed.ids.length <= MAX_RENDERED_NODES) return displayed.ids;
     if (effectiveFocusId && displayed.ids.includes(effectiveFocusId)) {
@@ -391,41 +418,34 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
     () => new Map(layout.nodes.map((n) => [n.id, n])),
     [layout],
   );
-  const variableToMarketId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const m of markets) if (m.variableId) map.set(m.variableId, m.id);
-    return map;
-  }, [markets]);
-
-  const assumedByMarketId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const a of assumptions) {
-      const mid = variableToMarketId.get(a.variableId);
-      if (mid) map.set(mid, a.outcomeId);
-    }
-    return map;
-  }, [assumptions, variableToMarketId]);
 
   const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null);
   const handleHover = useCallback(
     (info: { id: string; x: number; y: number } | null) => setHover(info),
     [],
   );
-  const [selected, setSelected] = useState<string | null>(null);
 
-  // ---- Search ----
+  // ---- Search across ALL markets ----
   const [query, setQuery] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
 
-  // ---- Top movers ----
-  const reportDelta = useCallback((id: string, deltaPts: number | null) => {
-    setDeltaById((prev) => {
-      const current = prev.get(id);
-      if (deltaPts === null ? current === undefined : current === deltaPts) return prev;
-      const next = new Map(prev);
-      if (deltaPts === null) next.delete(id);
-      else next.set(id, deltaPts);
-      return next;
-    });
+  const allSearchMatches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return markets.filter(
+      (m) =>
+        m.title.toLowerCase().includes(q) ||
+        m.id.toLowerCase().includes(q) ||
+        (m.variableId?.toLowerCase().includes(q) ?? false),
+    );
+  }, [query, markets]);
+
+  const refocusOnMarket = useCallback((id: string) => {
+    setUserFocusedId(id);
+    setShowAllSmall(false);
+    setSelected(null);
+    setQuery("");
+    setSearchFocused(false);
   }, []);
 
   if (isLoading) {
@@ -449,11 +469,6 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
   const matchIds = searchMatchIds(query, renderedMarkets);
   const focusedMarket = effectiveFocusId ? marketById.get(effectiveFocusId) : undefined;
 
-  const contextFor = (market: FlowMarket) =>
-    assumptions
-      .filter((a) => a.variableId !== market.variableId)
-      .map((a) => ({ variableId: a.variableId, outcomeId: a.outcomeId }));
-
   const moverRows = topMovers(
     markets.flatMap((m) => {
       const d = deltaById.get(m.id);
@@ -462,7 +477,8 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
   ).map((v) => ({ ...v, title: marketById.get(v.id)?.title ?? v.id }));
 
   const handlePickMover = (id: string) => {
-    if (effectiveFocusId) setFocusedId(id);
+    setUserFocusedId(id);
+    setShowAllSmall(false);
     setSelected(id);
     onNodeClick?.(id);
   };
@@ -473,62 +489,190 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
     ? edges.filter((e) => e.target === hover.id).map((e) => marketById.get(e.source)?.title).filter(Boolean)
     : [];
 
+  const isOnPropFocusDefault =
+    validPropFocus != null && effectiveFocusId === validPropFocus && hopDepth === 2 && !showAllSmall;
+  const lastAssumption = assumptions[assumptions.length - 1];
+
   return (
     <div style={panelStyle}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-sm)", marginBottom: "var(--space-sm)" }}>
+      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "var(--space-sm)", marginBottom: "var(--space-sm)" }}>
         <h3 style={{ fontSize: "1rem", fontWeight: 600 }}>Belief network</h3>
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              const id = firstSearchMatch(query, renderedMarkets);
-              if (id) {
-                setSelected(id);
-                onNodeClick?.(id);
-              }
-            } else if (e.key === "Escape") {
-              setQuery("");
-            }
-          }}
-          placeholder="Find event…"
-          aria-label="Find event"
-          style={searchInputStyle}
-        />
         <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
           {markets.length} markets · {edges.length} causal links
-          {assumptions.length > 0 && ` · conditioned on ${assumptions.length} assumption${assumptions.length > 1 ? "s" : ""}`}
+          {hasAssumptions && ` · conditioned on ${assumptions.length} assumption${assumptions.length > 1 ? "s" : ""}`}
         </span>
-      </div>
 
-      {/* Delta probes feed the top-movers strip and auto-focus (render nothing) */}
-      {assumptions.length > 0 &&
-        markets.map((m) => (
-          <DeltaProbe key={m.id} market={m} context={contextFor(m)} onDelta={reportDelta} />
-        ))}
+        {/* Search across ALL markets with clickable dropdown */}
+        <div style={{ position: "relative", marginLeft: "auto" }}>
+          <input
+            type="text"
+            value={query}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setSearchFocused(true);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const first = allSearchMatches[0];
+                if (first) {
+                  refocusOnMarket(first.id);
+                  onNodeClick?.(first.id);
+                }
+              } else if (e.key === "Escape") {
+                setQuery("");
+                setSearchFocused(false);
+              }
+            }}
+            placeholder="Find event…"
+            aria-label="Find event"
+            style={searchInputStyle}
+          />
 
-      <div style={{ display: "flex", gap: "var(--space-md)", alignItems: "flex-start" }}>
-        <div style={{ position: "relative", overflowX: "auto", flex: 1, minWidth: 0 }}>
-          {focusedMarket && (
-            <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 6 }}>
-              Focused on <span style={{ color: "var(--color-text)", fontWeight: 600 }}>{focusedMarket.title}</span>
-              {" · "}
-              <button type="button" onClick={() => setFocusedId(null)} style={linkButtonStyle}>
-                Show all {markets.length} events
-              </button>
+          {searchFocused && query.trim().length > 0 && (
+            <div role="listbox" aria-label="Matching events" style={searchDropdownStyle}>
+              <div style={{ padding: "4px 8px", fontSize: "0.68rem", color: "var(--color-text-muted)", borderBottom: "1px solid var(--color-border)" }}>
+                {allSearchMatches.length === 0
+                  ? "No matching markets"
+                  : `${allSearchMatches.length} match${allSearchMatches.length === 1 ? "" : "es"} across all markets`}
+              </div>
+              {allSearchMatches.slice(0, MAX_SEARCH_DROPDOWN).map((m) => {
+                const p = (hasAssumptions ? condProbById.get(m.id) : undefined) ?? baseProbById.get(m.id);
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    role="option"
+                    aria-selected={m.id === effectiveFocusId}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      refocusOnMarket(m.id);
+                      onNodeClick?.(m.id);
+                    }}
+                    style={searchOptionStyle}
+                  >
+                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {m.title}
+                    </span>
+                    {p != null && (
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.68rem", color: "var(--color-info)", flexShrink: 0 }}>
+                        {(p * 100).toFixed(1)}%
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
+        </div>
+      </div>
 
+      {contradicted && (
+        <div role="alert" style={contradictionBannerStyle}>
+          <span>
+            Contradictory assumption: those outcomes have zero joint probability in the network. Remove an assumption or Clear all.
+          </span>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            {assumptionState && lastAssumption && (
+              <button
+                type="button"
+                onClick={() => assumptionState.removeAssumption(lastAssumption.variableId)}
+                style={bannerBtnStyle}
+              >
+                Undo last
+              </button>
+            )}
+            {assumptionState && (
+              <button type="button" onClick={assumptionState.clearAll} style={bannerBtnStyle}>
+                Clear all
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Scope & focus controls */}
+      {(focusedMarket || validPropFocus) && (
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: 8 }}>
+          {focusedMarket ? (
+            <span>
+              Focused on <span style={{ color: "var(--color-text)", fontWeight: 600 }}>{focusedMarket.title}</span>
+              {" "}({renderedIds.length} node{renderedIds.length !== 1 ? "s" : ""})
+            </span>
+          ) : (
+            <span>Showing all {markets.length} events</span>
+          )}
+          <div style={{ display: "inline-flex", gap: 4, marginLeft: "auto", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => {
+                setHopDepth(1);
+                setShowAllSmall(false);
+                if (!effectiveFocusId && validPropFocus) setUserFocusedId(validPropFocus);
+              }}
+              style={effectiveFocusId && hopDepth === 1 ? scopeBtnActiveStyle : scopeBtnStyle}
+            >
+              1-hop
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setHopDepth(2);
+                setShowAllSmall(false);
+                if (!effectiveFocusId && validPropFocus) setUserFocusedId(validPropFocus);
+              }}
+              style={effectiveFocusId && hopDepth === 2 ? scopeBtnActiveStyle : scopeBtnStyle}
+            >
+              2-hop
+            </button>
+            {!isLargeNetwork && (
+              <button
+                type="button"
+                onClick={() => {
+                  setUserFocusedId(null);
+                  setShowAllSmall(true);
+                }}
+                style={!effectiveFocusId ? scopeBtnActiveStyle : scopeBtnStyle}
+              >
+                All ({markets.length})
+              </button>
+            )}
+            {validPropFocus && (
+              <button
+                type="button"
+                disabled={isLargeNetwork ? isOnPropFocusDefault : effectiveFocusId === validPropFocus && hopDepth === 2}
+                onClick={() => {
+                  setUserFocusedId(null);
+                  setHopDepth(2);
+                  setShowAllSmall(false);
+                  setSelected(null);
+                  setQuery("");
+                }}
+                style={{
+                  ...scopeBtnStyle,
+                  opacity: (isLargeNetwork ? isOnPropFocusDefault : effectiveFocusId === validPropFocus && hopDepth === 2) ? 0.5 : 1,
+                  cursor: (isLargeNetwork ? isOnPropFocusDefault : effectiveFocusId === validPropFocus && hopDepth === 2) ? "default" : "pointer",
+                }}
+              >
+                Reset to this market
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: "var(--space-md)", alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ position: "relative", overflowX: "auto", flex: 1, minWidth: 0 }}>
           {truncatedCount > 0 && (
             <div style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", marginBottom: 6 }}>
-              Showing {MAX_RENDERED_NODES} of {displayed.ids.length} — use search or focus.
+              Showing {MAX_RENDERED_NODES} of {displayed.ids.length} — use search or 1-hop focus.
             </div>
           )}
 
           <svg
             viewBox={`0 0 ${layout.width} ${layout.height}`}
-            style={{ width: "100%", maxWidth: 860, height: "auto", display: "block", margin: "0 auto" }}
+            style={{ width: "100%", maxWidth: 860, height: "auto", display: "block", margin: "0 auto", userSelect: "none", WebkitUserSelect: "none" }}
             role="img"
             aria-label="Causal belief network of all markets"
             onClick={() => setSelected(null)}
@@ -578,8 +722,10 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
                   key={n.id}
                   node={n}
                   market={market}
-                  context={contextFor(market)}
-                  isFocus={n.id === focusMarketId || n.id === effectiveFocusId}
+                  baseP={baseProbById.get(n.id) ?? null}
+                  condP={condProbById.get(n.id) ?? null}
+                  hasAssumptions={hasAssumptions}
+                  isFocus={n.id === effectiveFocusId || (!effectiveFocusId && n.id === focusMarketId)}
                   dimmed={matchIds != null && !matchIds.has(n.id)}
                   assumedOutcome={assumedByMarketId.get(n.id)}
                   onClick={() => {
@@ -587,7 +733,8 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
                     onNodeClick?.(n.id);
                   }}
                   onFocusRequest={() => {
-                    setFocusedId(n.id);
+                    setUserFocusedId(n.id);
+                    setShowAllSmall(false);
                     setSelected(null);
                   }}
                   onHover={handleHover}
@@ -603,8 +750,14 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
               node={positionById.get(selected)!}
               layoutWidth={layout.width}
               layoutHeight={layout.height}
-              context={contextFor(marketById.get(selected)!)}
-              onFocus={() => setFocusedId(selected)}
+              baseP={baseProbById.get(selected) ?? null}
+              condP={condProbById.get(selected) ?? null}
+              hasAssumptions={hasAssumptions}
+              onFocus={() => {
+                setUserFocusedId(selected);
+                setShowAllSmall(false);
+                setSelected(null);
+              }}
               onClose={() => setSelected(null)}
             />
           )}
@@ -614,8 +767,8 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
             <div
               style={{
                 position: "absolute",
-                left: `${((hover.x + NODE_W / 2) / layout.width) * 100}%`,
-                top: `${((hover.y + NODE_H + 4) / layout.height) * 100}%`,
+                left: `${Math.min(82, Math.max(18, ((hover.x + NODE_W / 2) / layout.width) * 100))}%`,
+                top: `${Math.min(84, ((hover.y + NODE_H + 4) / layout.height) * 100)}%`,
                 transform: "translateX(-50%)",
                 maxWidth: 260,
                 padding: "6px 10px",
@@ -641,14 +794,17 @@ export function BeliefFlowGraph({ focusMarketId, onNodeClick }: BeliefFlowGraphP
           )}
         </div>
 
-        {assumptions.length > 0 && moverRows.length > 0 && (
+        {hasAssumptions && moverRows.length > 0 && (
           <TopMoversStrip rows={moverRows} onPick={handlePickMover} />
         )}
       </div>
 
-      <div style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", marginTop: "var(--space-sm)" }}>
-        Bars show the probability of Yes on a shared 0–100% scale. Arrows point cause → effect.
-        {assumptions.length > 0 && " Deltas (▲▼) are the shift from each market's unconditional price."}
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 6, fontSize: "0.72rem", color: "var(--color-text-muted)", marginTop: "var(--space-sm)" }}>
+        <span>
+          Bars show P(yes) on a 0–100% scale. Arrows point cause → effect.
+          {hasAssumptions && " Deltas (▲▼) show shift from the unconditional prior."}
+        </span>
+        <span>Click to inspect · Double-click to refocus</span>
       </div>
     </div>
   );
@@ -659,7 +815,9 @@ function NodePopover({
   node,
   layoutWidth,
   layoutHeight,
-  context,
+  baseP,
+  condP,
+  hasAssumptions,
   onFocus,
   onClose,
 }: {
@@ -667,31 +825,38 @@ function NodePopover({
   node: PositionedNode;
   layoutWidth: number;
   layoutHeight: number;
-  context: Array<{ variableId: string; outcomeId: string }>;
+  baseP: number | null;
+  condP: number | null;
+  hasAssumptions: boolean;
   onFocus: () => void;
   onClose: () => void;
 }) {
-  const conditioned = useMarket(market.id, { context });
-  const base = useMarket(market.id);
+  // Fetch full details (description/outcomes) only for the single inspected node.
+  const detailQuery = useMarket(market.id);
   const assumptionState = useOptionalAssumptions();
 
-  const detail = conditioned.data?.market ?? base.data?.market;
-  const condP = firstOutcomeProbability(conditioned.data?.market);
-  const baseP = firstOutcomeProbability(base.data?.market);
-  const shown = condP ?? baseP;
-  const deltaPts = context.length > 0 && condP && baseP ? (condP.p - baseP.p) * 100 : 0;
+  const detail = detailQuery.data?.market;
+  const shown = hasAssumptions && condP != null ? condP : (baseP ?? primaryProbabilityFromRecord(detail?.marginals, detail?.outcomes));
+  const deltaPts = hasAssumptions && condP != null && baseP != null ? (condP - baseP) * 100 : 0;
   const assumed = market.variableId ? assumptionState?.getAssumption(market.variableId) : undefined;
+  const outcomes = detail?.outcomes ?? market.outcomes ?? [
+    { id: "yes", name: "Yes" },
+    { id: "no", name: "No" },
+  ];
 
-  const leftPct = Math.min(88, Math.max(12, ((node.x + 96) / layoutWidth) * 100));
+  const isCertainYes = shown != null && shown >= 0.9995;
+  const isCertainNo = shown != null && shown <= 0.0005;
+  const leftPct = Math.min(82, Math.max(18, ((node.x + NODE_W / 2) / layoutWidth) * 100));
 
   return (
     <div
       style={{
         position: "absolute",
         left: `${leftPct}%`,
-        top: `${((node.y + 66) / layoutHeight) * 100}%`,
+        top: `${Math.min(80, ((node.y + NODE_H - 6) / layoutHeight) * 100)}%`,
         transform: "translateX(-50%)",
         width: 300,
+        maxWidth: "calc(100% - 16px)",
         padding: "10px 12px",
         borderRadius: 8,
         border: "1px solid var(--color-primary)",
@@ -716,17 +881,19 @@ function NodePopover({
       </div>
 
       {detail?.description && (
-        <div style={{ color: "var(--color-text-muted)", margin: "6px 0", lineHeight: 1.4 }}>
-          {detail.description}
+        <div style={{ color: "var(--color-text-muted)", margin: "6px 0", lineHeight: 1.4, maxHeight: 72, overflowY: "auto" }}>
+          <FormattedDescription text={detail.description} />
         </div>
       )}
 
-      {shown && (
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "6px 0" }}>
-          <span style={{ fontSize: "1.15rem", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
-            {(shown.p * 100).toFixed(1)}%
+      {shown != null && (
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "6px 0", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "1.1rem", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+            {(shown * 100).toFixed(1)}%
           </span>
-          <span style={{ color: "var(--color-text-muted)" }}>P(yes{context.length > 0 ? " | assumptions" : ""})</span>
+          <span style={{ color: "var(--color-text-muted)" }}>
+            P(yes{hasAssumptions ? " | assumptions" : ""})
+          </span>
           {Math.abs(deltaPts) >= 0.05 && (
             <span
               style={{
@@ -741,14 +908,17 @@ function NodePopover({
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
         {assumptionState && market.variableId && market.status === "active" &&
-          (detail?.outcomes ?? []).slice(0, 3).map((o) => {
+          outcomes.slice(0, 3).map((o) => {
             const isThis = assumed?.outcomeId === o.id;
+            const disabled = !isThis && ((o.id === "no" && isCertainYes) || (o.id === "yes" && isCertainNo));
             return (
               <button
                 key={o.id}
                 type="button"
+                disabled={disabled}
+                title={disabled ? "Certain under current assumptions" : undefined}
                 onClick={() => {
                   if (isThis) {
                     assumptionState.removeAssumption(market.variableId!);
@@ -765,7 +935,8 @@ function NodePopover({
                   borderRadius: 4,
                   fontSize: "0.7rem",
                   fontWeight: 600,
-                  cursor: "pointer",
+                  cursor: disabled ? "not-allowed" : "pointer",
+                  opacity: disabled ? 0.45 : 1,
                   border: `1px solid ${isThis ? "var(--color-primary)" : "var(--color-border)"}`,
                   background: isThis ? "var(--color-primary)" : "transparent",
                   color: isThis ? "#fff" : "var(--color-text)",
@@ -805,6 +976,11 @@ function NodePopover({
           Open market →
         </Link>
       </div>
+      {!assumed && (isCertainYes || isCertainNo) && (
+        <div style={{ marginTop: 4, fontSize: "0.68rem", color: "var(--color-text-muted)" }}>
+          Certain under current assumptions
+        </div>
+      )}
     </div>
   );
 }
@@ -814,25 +990,90 @@ const panelStyle: React.CSSProperties = {
   borderRadius: "var(--radius-md)",
   border: "1px solid var(--color-border)",
   background: "var(--color-bg-surface)",
+  minWidth: 0,
 };
 
 const searchInputStyle: React.CSSProperties = {
-  marginLeft: "auto",
-  width: 150,
-  padding: "2px 8px",
-  fontSize: "0.72rem",
+  width: 190,
+  padding: "4px 8px",
+  fontSize: "0.75rem",
   borderRadius: "var(--radius-sm)",
   border: "1px solid var(--color-border)",
   background: "var(--color-bg)",
   color: "var(--color-text)",
 };
 
-const linkButtonStyle: React.CSSProperties = {
-  background: "transparent",
+const searchDropdownStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "calc(100% + 4px)",
+  right: 0,
+  width: 280,
+  maxWidth: "85vw",
+  maxHeight: 260,
+  overflowY: "auto",
+  borderRadius: "var(--radius-sm)",
+  border: "1px solid var(--color-border)",
+  background: "var(--color-bg)",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+  zIndex: 10,
+};
+
+const searchOptionStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  width: "100%",
+  padding: "6px 8px",
   border: "none",
-  padding: 0,
-  fontSize: "inherit",
+  borderBottom: "1px solid var(--color-border)",
+  background: "transparent",
+  color: "var(--color-text)",
+  fontSize: "0.72rem",
+  textAlign: "left",
+  cursor: "pointer",
+};
+
+const scopeBtnStyle: React.CSSProperties = {
+  padding: "2px 8px",
+  borderRadius: "var(--radius-sm)",
+  border: "1px solid var(--color-border)",
+  background: "var(--color-bg)",
+  color: "var(--color-text-muted)",
+  fontSize: "0.7rem",
+  fontWeight: 500,
+  cursor: "pointer",
+};
+
+const scopeBtnActiveStyle: React.CSSProperties = {
+  ...scopeBtnStyle,
+  border: "1px solid var(--color-primary)",
+  background: "var(--color-primary)",
+  color: "#fff",
   fontWeight: 600,
-  color: "var(--color-primary)",
+};
+
+const contradictionBannerStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  flexWrap: "wrap",
+  gap: 8,
+  padding: "8px 12px",
+  marginBottom: "var(--space-sm)",
+  borderRadius: "var(--radius-sm)",
+  border: "1px solid var(--color-warning)",
+  background: "rgba(234, 179, 8, 0.12)",
+  color: "var(--color-text)",
+  fontSize: "0.78rem",
+};
+
+const bannerBtnStyle: React.CSSProperties = {
+  padding: "3px 8px",
+  borderRadius: "var(--radius-sm)",
+  border: "1px solid var(--color-border)",
+  background: "var(--color-bg)",
+  color: "var(--color-text)",
+  fontSize: "0.72rem",
+  fontWeight: 600,
   cursor: "pointer",
 };

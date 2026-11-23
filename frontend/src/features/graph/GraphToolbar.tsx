@@ -1,5 +1,6 @@
 import { useRef, useCallback, useState } from "react";
 import { readAndValidateFile } from "./networkImport";
+import { isExchangeMode } from "@/lib/exchangeMode";
 import type { NetworkExportSchema } from "./networkExportSchema";
 
 export type GraphView = "flow" | "force";
@@ -17,6 +18,7 @@ export function GraphToolbar({
   onExport,
   onImportSuccess,
 }: GraphToolbarProps) {
+  const exchangeMode = isExchangeMode();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
@@ -54,24 +56,28 @@ export function GraphToolbar({
           </button>
         </div>
 
-        <button type="button" onClick={onExport} style={btnStyle} title="Export network as JSON">
-          Export
-        </button>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          style={btnStyle}
-          title="Import network from JSON"
-        >
-          Import
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json"
-          style={{ display: "none" }}
-          onChange={handleImportFile}
-        />
+        {!exchangeMode && (
+          <>
+            <button type="button" onClick={onExport} style={btnStyle} title="Export network as JSON">
+              Export
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              style={btnStyle}
+              title="Import network from JSON"
+            >
+              Import
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              style={{ display: "none" }}
+              onChange={handleImportFile}
+            />
+          </>
+        )}
       </div>
 
       {importError && (

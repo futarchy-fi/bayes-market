@@ -22,7 +22,7 @@ function LandingContent() {
   const { assumptions } = useAssumptions();
 
   return (
-    <div style={{ display: "grid", gap: "var(--space-lg)" }}>
+    <div style={{ display: "grid", gap: "var(--space-lg)", minWidth: 0 }}>
       <div style={{ maxWidth: 720 }}>
         <h1 style={{ fontSize: "1.9rem", fontWeight: 700, lineHeight: 1.2, marginBottom: "var(--space-sm)" }}>
           A live belief network over AI futures
@@ -38,7 +38,7 @@ function LandingContent() {
 
       <NetworkMap />
 
-      <div style={{ display: "flex", gap: "var(--space-md)", alignItems: "center", fontSize: "0.85rem" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-md)", alignItems: "center", fontSize: "0.85rem" }}>
         <Link to="/markets" style={ctaStyle}>
           Browse markets →
         </Link>

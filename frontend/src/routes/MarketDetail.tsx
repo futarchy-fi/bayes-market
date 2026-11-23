@@ -1,14 +1,25 @@
-import { useState, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useState, useCallback, useMemo, useRef } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMarket, useMarkets, useMarketEvents, useAccountRisk, useEngineStats, useNetwork, queryKeys } from "@/lib/query/hooks";
+import {
+  useMarket,
+  useMarkets,
+  useMarketEvents,
+  useAccountRisk,
+  useEngineStats,
+  useNetwork,
+  useGraphMarkets,
+  queryKeys,
+} from "@/lib/query/hooks";
 import { useSession } from "@/features/session/context";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ProbabilityBar } from "@/components/ui/ProbabilityBar";
 import { LoadingPage, ErrorMessage } from "@/components/ui/Spinner";
 import { ReconnectingHint } from "@/components/ui/ReconnectingHint";
+import { FormattedDescription } from "@/components/ui/FormattedDescription";
 import { formatCurrency, timeUntil, truncateHash, formatRelativeTime } from "@/lib/utils/format";
 import { AssumptionProvider, useAssumptions, useOptionalAssumptions } from "@/features/assumptions/AssumptionContext";
+import { AssumptionBar } from "@/features/assumptions/AssumptionBar";
 import { AssumptionPanel } from "@/features/assumptions/AssumptionPanel";
 import { HistoryProvider } from "@/features/history/HistoryContext";
 import { UndoRedoToolbar } from "@/features/history/UndoRedoToolbar";
@@ -17,15 +28,15 @@ import { BeliefFlowGraph } from "@/features/graph/BeliefFlowGraph";
 import { GraphToolbar, type GraphView } from "@/features/graph/GraphToolbar";
 import { deriveEdgesFromCliques } from "@/features/graph/deriveEdges";
 import { buildNetworkExport, downloadJson } from "@/features/graph/networkExport";
+import { isContextContradictedError } from "@/features/graph/mapLayout";
 import { JunctionTreePanel } from "@/features/graph/JunctionTreePanel";
 import { DiscussionThread } from "@/features/market/DiscussionThread";
 import { ResolveMarketPanel } from "@/features/market/ResolveMarketPanel";
 import { EventTradePanel } from "@/features/trading/EventTradePanel";
 import { CptPanel } from "@/features/trading/CptPanel";
-import type { MarketEvent } from "@/lib/api/types";
+import type { GraphMarket, Market, MarketEvent, MarketSummary, NetworkEdgeSummary } from "@/lib/api/types";
 import { TradeCreditsPanel } from "@/lib/exchange/TradeCreditsPanel";
 import { isExchangeMode } from "@/lib/exchangeMode";
-import { ExchangeUnavailable } from "@/components/ui/ExchangeUnavailable";
 import { useInstruments } from "@/lib/exchange/hooks";
 import { VenuePanels } from "@/routes/InstrumentDetail";
 import { MarketCombobox } from "@/features/compare/MarketCombobox";
@@ -42,12 +53,11 @@ export default function MarketDetail() {
   // All hooks must run unconditionally (before the loading/error returns
   // below) so their order is stable across renders — see React error #310.
 
-  // Track which market's CPT to display when a graph node is clicked.
-  // null means "the market on this page".
+  // Track which market's CPT to display when a graph node is clicked (paper mode).
   const [selectedMarketId, setSelectedMarketId] = useState<string | null>(null);
   const effectiveSelectedId = selectedMarketId ?? marketId!;
   const selectedMarketQuery = useMarket(effectiveSelectedId, {
-    enabled: effectiveSelectedId !== marketId,
+    enabled: !exchangeMode && effectiveSelectedId !== marketId,
   });
 
   const handleNodeClick = useCallback((nodeId: string) => {
@@ -63,14 +73,15 @@ export default function MarketDetail() {
   const instruments = useInstruments(exchangeMode);
   const engineStatsQuery = useEngineStats(marketId!, { enabled: !exchangeMode });
   const allMarkets = marketsQuery.data?.markets ?? [];
+  const networkEdges = networkQuery.data?.edges ?? [];
   const cliques = engineStatsQuery.data?.cliques.cliques ?? [];
 
   const handleExport = useCallback(() => {
     const cliqueEdges = deriveEdgesFromCliques(cliques);
     const nodes = allMarkets.map((mk) => ({ id: mk.id, x: 0, y: 0 }));
-    const data = buildNetworkExport(allMarkets, nodes, cliqueEdges, [], cliques);
+    const exported = buildNetworkExport(allMarkets, nodes, cliqueEdges, [], cliques);
     const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    downloadJson(data, `bayes-network-${ts}.json`);
+    downloadJson(exported, `bayes-network-${ts}.json`);
   }, [allMarkets, cliques]);
 
   const handleImportSuccess = useCallback(() => {
@@ -96,15 +107,15 @@ export default function MarketDetail() {
   return (
     <HistoryProvider>
     <AssumptionProvider>
-    <div style={{ display: "grid", gap: "var(--space-lg)" }}>
+    <div style={{ display: "grid", gap: "var(--space-lg)", minWidth: 0 }}>
       {error && <ReconnectingHint />}
-      <div>
-        <div style={{ display: "flex", gap: "var(--space-md)", alignItems: "center", marginBottom: "var(--space-sm)" }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: "flex", gap: "var(--space-md)", alignItems: "center", flexWrap: "wrap", marginBottom: "var(--space-sm)" }}>
           <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>{m.title}</h1>
           <StatusBadge status={m.status} />
         </div>
         <div style={compareRowStyle}>
-          <div style={{ width: 260 }}>
+          <div style={{ width: 260, maxWidth: "100%" }}>
             <MarketCombobox
               label="Compare with…"
               value=""
@@ -117,16 +128,24 @@ export default function MarketDetail() {
           <RelatedMarketChips
             marketId={m.id}
             markets={comparisonMarkets}
-            networkEdges={networkQuery.data?.edges ?? []}
+            networkEdges={networkEdges}
             onSelect={compareWith}
             label="Related:"
           />
         </div>
-        <p style={{ color: "var(--color-text-muted)", marginBottom: "var(--space-md)" }}>{m.description}</p>
+        {m.description && (
+          <p style={{ color: "var(--color-text-muted)", marginBottom: "var(--space-md)", lineHeight: 1.55, overflowWrap: "break-word" }}>
+            <FormattedDescription text={m.description} />
+          </p>
+        )}
         {exchangeMode ? (
-          <span style={{ fontSize: "0.85rem", color: "var(--color-text-muted)" }}>Live net-venue marginals.</span>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-md)", fontSize: "0.85rem", color: "var(--color-text-muted)" }}>
+            <span>Live net-venue marginals</span>
+            {m.volume > 0 && <span>Volume: {formatCurrency(m.volume)} credits</span>}
+            {m.liquidity > 0 && <span>Liquidity: {formatCurrency(m.liquidity)} credits</span>}
+          </div>
         ) : (
-          <div style={{ display: "flex", gap: "var(--space-lg)", fontSize: "0.85rem", color: "var(--color-text-muted)" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-lg)", fontSize: "0.85rem", color: "var(--color-text-muted)" }}>
             <span>Volume: {formatCurrency(m.volume)}</span>
             <span>Liquidity: {formatCurrency(m.liquidity)}</span>
             <span>Expires: {timeUntil(m.expires_at)}</span>
@@ -142,9 +161,17 @@ export default function MarketDetail() {
 
       {instrument && <VenuePanels instrument={instrument} includeNet={false} />}
 
+      {exchangeMode && (
+        <CausalContextPanel
+          market={m}
+          allMarkets={allMarkets}
+          networkEdges={networkEdges}
+        />
+      )}
+
       {!exchangeMode && <ResolveMarketPanel market={m} />}
 
-      {!exchangeMode && m.status === "active" ? (
+      {!exchangeMode && m.status === "active" && (
         <>
           <UndoRedoToolbar />
           <AssumptionPanel market={m} />
@@ -152,15 +179,12 @@ export default function MarketDetail() {
           <EventTradePanel market={m} />
           <DiscussionThread market={m} />
         </>
-      ) : !exchangeMode ? (
+      )}
+
+      {!exchangeMode && m.status !== "active" && (
         <>
           <CptPanel market={selectedMarket} />
           <EventTradePanel market={m} />
-          <DiscussionThread market={m} />
-        </>
-      ) : (
-        <>
-          <CptPanel market={selectedMarket} />
           <DiscussionThread market={m} />
         </>
       )}
@@ -172,59 +196,240 @@ export default function MarketDetail() {
         onImportSuccess={handleImportSuccess}
       />
       {graphView === "force" ? (
-        exchangeMode || m.status !== "active" ? (
-          <ForceDirectedGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
-        ) : (
-          <ConnectedForceGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
-        )
+        <ConnectedForceGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
       ) : (
         <BeliefFlowGraph focusMarketId={m.id} onNodeClick={handleNodeClick} />
       )}
 
-      {/* Event Journal */}
-      {exchangeMode ? <ExchangeUnavailable title="Event Journal" /> : <div>
-        <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--space-sm)" }}>Event Journal</h2>
-        {events.isLoading && <LoadingPage />}
-        {events.error && !events.data && <ErrorMessage message="Failed to load market events" />}
-        {events.error && events.data && <ReconnectingHint />}
-        {events.data && events.data.events.length === 0 && (
-          <span style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>No events yet.</span>
-        )}
-        {events.data && events.data.events.length > 0 && (
-          <div style={{ borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
-              <thead>
-                <tr style={{ background: "var(--color-bg-hover)" }}>
-                  <th style={thStyle}>Seq</th>
-                  <th style={thStyle}>Type</th>
-                  <th style={thStyle}>Hash</th>
-                  <th style={thStyle}>Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.data.events.map((e) => (
-                  <EventRow key={e.eventId} event={e} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>}
+      {/* Paper-only Event Journal & Junction Tree diagnostics */}
+      {!exchangeMode && (
+        <div>
+          <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "var(--space-sm)" }}>Event Journal</h2>
+          {events.isLoading && <LoadingPage />}
+          {events.error && !events.data && <ErrorMessage message="Failed to load market events" />}
+          {events.error && events.data && <ReconnectingHint />}
+          {events.data && events.data.events.length === 0 && (
+            <span style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>No events yet.</span>
+          )}
+          {events.data && events.data.events.length > 0 && (
+            <div style={{ borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
+                <thead>
+                  <tr style={{ background: "var(--color-bg-hover)" }}>
+                    <th style={thStyle}>Seq</th>
+                    <th style={thStyle}>Type</th>
+                    <th style={thStyle}>Hash</th>
+                    <th style={thStyle}>Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.data.events.map((e) => (
+                    <EventRow key={e.eventId} event={e} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
-      <JunctionTreePanel marketId={m.id} />
+      {!exchangeMode && <JunctionTreePanel marketId={m.id} />}
     </div>
     </AssumptionProvider>
     </HistoryProvider>
   );
 }
 
+/**
+ * Exchange-mode Causal Context & What-If panel: shows direct causal parents &
+ * children with live probabilities & clickable links (zero N+1 queries), plus
+ * working Assume YES / Assume NO conditioning buttons backed by a single bulk
+ * conditioned graph query.
+ */
+function CausalContextPanel({
+  market,
+  allMarkets,
+  networkEdges,
+}: {
+  market: Market;
+  allMarkets: MarketSummary[];
+  networkEdges: NetworkEdgeSummary[];
+}) {
+  const { assumptions, addAssumption, removeAssumption, clearAll, getAssumption, contextPayload } =
+    useAssumptions();
+  const hasAssumptions = contextPayload.length > 0;
+
+  const conditionedGraph = useGraphMarkets(contextPayload, { enabled: hasAssumptions });
+  const lastGoodRef = useRef<GraphMarket[] | undefined>(undefined);
+  if (conditionedGraph?.data?.markets) {
+    lastGoodRef.current = conditionedGraph.data.markets;
+  }
+  const graphMarkets = conditionedGraph?.data?.markets ?? (hasAssumptions ? lastGoodRef.current : undefined) ?? [];
+  const graphById = useMemo(() => new Map(graphMarkets.map((gm) => [gm.id, gm])), [graphMarkets]);
+  const contradicted = hasAssumptions && isContextContradictedError(conditionedGraph?.error);
+
+  const marketById = useMemo(() => new Map(allMarkets.map((m) => [m.id, m])), [allMarkets]);
+
+  const { parents, children } = useMemo(() => {
+    const parentIds = new Set<string>();
+    const childIds = new Set<string>();
+    for (const e of networkEdges) {
+      if (e.to === market.id && e.from !== market.id) parentIds.add(e.from);
+      if (e.from === market.id && e.to !== market.id) childIds.add(e.to);
+    }
+    const resolve = (ids: Set<string>) =>
+      Array.from(ids)
+        .map((id) => marketById.get(id))
+        .filter((m): m is MarketSummary => m != null);
+    return { parents: resolve(parentIds), children: resolve(childIds) };
+  }, [networkEdges, market.id, marketById]);
+
+  const currentAssumed = market.variableId ? getAssumption(market.variableId) : undefined;
+  const selfGraph = graphById.get(market.id);
+  const displayedYes =
+    (hasAssumptions ? selfGraph?.conditionalMarginals?.yes : undefined) ?? market.marginals?.yes;
+  const isCertainYes = typeof displayedYes === "number" && displayedYes >= 0.9995;
+  const isCertainNo = typeof displayedYes === "number" && displayedYes <= 0.0005;
+  const lastAssumption = assumptions[assumptions.length - 1];
+
+  const renderChipList = (items: MarketSummary[], emptyText: string) => {
+    if (items.length === 0) {
+      return <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>{emptyText}</span>;
+    }
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(260px, 100%), 1fr))", gap: 8 }}>
+        {items.map((rel) => {
+          const gm = graphById.get(rel.id);
+          const baseP = gm?.marginals?.yes ?? rel.marginals?.yes;
+          const condP = hasAssumptions ? gm?.conditionalMarginals?.yes : undefined;
+          const deltaPts =
+            typeof baseP === "number" && typeof condP === "number" ? (condP - baseP) * 100 : null;
+          const shownP = typeof condP === "number" ? condP : baseP;
+          return (
+            <Link key={rel.id} to={`/markets/${rel.id}`} style={causalChipStyle}>
+              <span style={{ fontWeight: 500, fontSize: "0.82rem", color: "var(--color-text)", lineHeight: 1.3 }}>
+                {rel.title}
+              </span>
+              <span style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 4, fontVariantNumeric: "tabular-nums" }}>
+                {typeof baseP === "number" && typeof condP === "number" && deltaPts != null && Math.abs(deltaPts) >= 0.05 ? (
+                  <>
+                    <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                      {(baseP * 100).toFixed(1)}% →
+                    </span>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--color-text)" }}>
+                      {(condP * 100).toFixed(1)}%
+                    </span>
+                    <span style={{ fontSize: "0.74rem", fontWeight: 700, color: deltaPts > 0 ? "var(--color-success)" : "var(--color-danger)" }}>
+                      {deltaPts > 0 ? "+" : ""}{deltaPts.toFixed(1)} pts
+                    </span>
+                  </>
+                ) : typeof shownP === "number" ? (
+                  <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--color-info)" }}>
+                    {(shownP * 100).toFixed(1)}%
+                  </span>
+                ) : (
+                  <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>—</span>
+                )}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <section style={causalPanelStyle} aria-label="Causal Context & What-If">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "var(--space-sm)" }}>
+        <div>
+          <h2 style={{ fontSize: "1.1rem", fontWeight: 600 }}>Causal Context &amp; What-If</h2>
+          <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginTop: 2 }}>
+            Assume this outcome to see exact Bayesian updates across its direct causes and effects.
+          </p>
+        </div>
+
+        {market.variableId && market.status === "active" && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <button
+              type="button"
+              disabled={!currentAssumed && isCertainNo}
+              title={!currentAssumed && isCertainNo ? "Certain under current assumptions" : undefined}
+              onClick={() => {
+                if (currentAssumed?.outcomeId === "yes") {
+                  removeAssumption(market.variableId);
+                } else {
+                  addAssumption({ variableId: market.variableId, outcomeId: "yes", label: market.title });
+                }
+              }}
+              style={whatIfToggleStyle(currentAssumed?.outcomeId === "yes", !currentAssumed && isCertainNo)}
+            >
+              {currentAssumed?.outcomeId === "yes" ? "✓ Assumed YES" : "Assume YES"}
+            </button>
+            <button
+              type="button"
+              disabled={!currentAssumed && isCertainYes}
+              title={!currentAssumed && isCertainYes ? "Certain under current assumptions" : undefined}
+              onClick={() => {
+                if (currentAssumed?.outcomeId === "no") {
+                  removeAssumption(market.variableId);
+                } else {
+                  addAssumption({ variableId: market.variableId, outcomeId: "no", label: market.title });
+                }
+              }}
+              style={whatIfToggleStyle(currentAssumed?.outcomeId === "no", !currentAssumed && isCertainYes)}
+            >
+              {currentAssumed?.outcomeId === "no" ? "✓ Assumed NO" : "Assume NO"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <AssumptionBar />
+
+      {contradicted && (
+        <div role="alert" style={contradictionBannerStyle}>
+          <span>
+            Contradictory assumption: those outcomes have zero joint probability in the network. Remove an assumption or Clear all.
+          </span>
+          <div style={{ display: "flex", gap: 6 }}>
+            {lastAssumption && (
+              <button type="button" onClick={() => removeAssumption(lastAssumption.variableId)} style={bannerBtnStyle}>
+                Undo last
+              </button>
+            )}
+            <button type="button" onClick={clearAll} style={bannerBtnStyle}>
+              Clear all
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: "var(--space-md)" }}>
+        <div>
+          <div style={causalGroupTitleStyle}>
+            Causes (Parents) · {parents.length}
+          </div>
+          {renderChipList(parents, "Root driver — no direct causal parents in this network.")}
+        </div>
+
+        <div>
+          <div style={causalGroupTitleStyle}>
+            Effects (Children) · {children.length}
+          </div>
+          {renderChipList(children, "Leaf market — no direct causal effects in this network.")}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /** Probability bar reflecting the active assumptions (excluding this market's own variable). */
-function ConditionedProbabilityBar({ market }: { market: import("@/lib/api/types").Market }) {
+function ConditionedProbabilityBar({ market }: { market: Market }) {
   const assumptionState = useOptionalAssumptions();
   const context = (assumptionState?.contextPayload ?? []).filter(
     (c) => c.variableId !== market.variableId,
   );
-  const { data } = useMarket(market.id, { context });
+  const { data } = useMarket(market.id, { context, enabled: context.length > 0 });
   const marginals = context.length > 0 && data ? data.market.marginals : market.marginals;
   return <ProbabilityBar outcomes={market.outcomes} marginals={marginals} />;
 }
@@ -311,6 +516,74 @@ function EventRow({ event }: { event: MarketEvent }) {
 const thStyle: React.CSSProperties = { textAlign: "left", padding: "6px 12px", fontWeight: 500 };
 const tdStyle: React.CSSProperties = { padding: "6px 12px" };
 const compareRowStyle: React.CSSProperties = { display: "flex", alignItems: "center", flexWrap: "wrap", gap: "var(--space-sm)", marginBottom: "var(--space-sm)" };
+
+const causalPanelStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "var(--space-md)",
+  padding: "var(--space-md)",
+  borderRadius: "var(--radius-md)",
+  border: "1px solid var(--color-border)",
+  background: "var(--color-bg-surface)",
+  minWidth: 0,
+};
+
+const causalGroupTitleStyle: React.CSSProperties = {
+  fontSize: "0.78rem",
+  fontWeight: 600,
+  color: "var(--color-text-muted)",
+  marginBottom: 6,
+  textTransform: "uppercase",
+  letterSpacing: "0.03em",
+};
+
+const causalChipStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  padding: "8px 10px",
+  borderRadius: "var(--radius-sm)",
+  border: "1px solid var(--color-border)",
+  background: "var(--color-bg)",
+  textDecoration: "none",
+};
+
+function whatIfToggleStyle(active: boolean, disabled: boolean): React.CSSProperties {
+  return {
+    padding: "5px 12px",
+    borderRadius: "var(--radius-sm)",
+    border: `1px solid ${active ? "var(--color-primary)" : "var(--color-border)"}`,
+    background: active ? "var(--color-primary)" : "var(--color-bg)",
+    color: active ? "#fff" : "var(--color-text)",
+    fontSize: "0.78rem",
+    fontWeight: 600,
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.45 : 1,
+  };
+}
+
+const contradictionBannerStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  flexWrap: "wrap",
+  gap: 8,
+  padding: "8px 12px",
+  borderRadius: "var(--radius-sm)",
+  border: "1px solid var(--color-warning)",
+  background: "rgba(234, 179, 8, 0.12)",
+  color: "var(--color-text)",
+  fontSize: "0.78rem",
+};
+
+const bannerBtnStyle: React.CSSProperties = {
+  padding: "3px 8px",
+  borderRadius: "var(--radius-sm)",
+  border: "1px solid var(--color-border)",
+  background: "var(--color-bg)",
+  color: "var(--color-text)",
+  fontSize: "0.72rem",
+  fontWeight: 600,
+  cursor: "pointer",
+};
 
 const positionCardStyle: React.CSSProperties = {
   padding: "var(--space-sm) var(--space-md)",

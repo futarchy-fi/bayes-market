@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   useInstruments: vi.fn(() => ({ data: [] })),
 }));
 
-vi.mock("@/lib/query/hooks", () => ({ useMarkets: mocks.useMarkets }));
+vi.mock("@/lib/query/hooks", () => ({ useMarkets: mocks.useMarkets, useNetwork: vi.fn(() => ({ data: undefined })) }));
 vi.mock("@/lib/exchange/hooks", () => ({ useInstruments: mocks.useInstruments }));
 
 const data = {

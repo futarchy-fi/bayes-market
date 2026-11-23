@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { formatProbability, formatCurrency, truncateHash, statusColor, formatRelativeTime, timeUntil } from "@/lib/utils/format";
+import { formatProbability, formatCurrency, truncateHash, statusColor, formatCredits, cleanDescription, formatRelativeTime, timeUntil } from "@/lib/utils/format";
 
 describe("formatProbability", () => {
   it("formats 0.65 as 65.0%", () => expect(formatProbability(0.65)).toBe("65.0%"));
@@ -77,4 +77,22 @@ describe("statusColor", () => {
   it("returns green for active", () => expect(statusColor("active")).toBe("var(--color-active)"));
   it("returns blue for resolved", () => expect(statusColor("resolved")).toBe("var(--color-resolved)"));
   it("returns muted for unknown", () => expect(statusColor("unknown")).toBe("var(--color-text-muted)"));
+});
+
+describe("formatCredits", () => {
+  it("formats floats with 2-decimal precision and strips float tail noise", () => {
+    expect(formatCredits("80.00000000000000000000000002")).toBe("80.00");
+    expect(formatCredits("1000")).toBe("1,000.00");
+    expect(formatCredits(0)).toBe("0.00");
+    expect(formatCredits(-0.0001)).toBe("0.00");
+    expect(formatCredits("17.25")).toBe("17.25");
+  });
+});
+
+describe("cleanDescription", () => {
+  it("strips double periods while preserving ellipses", () => {
+    expect(cleanDescription("End of 2026.. Imported from manifold.")).toBe("End of 2026. Imported from manifold.");
+    expect(cleanDescription("Wait... really?")).toBe("Wait... really?");
+    expect(cleanDescription("Trailing double..")).toBe("Trailing double.");
+  });
 });

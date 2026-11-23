@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import * as api from "@/lib/api/client";
 import * as dataSource from "@/lib/dataSource";
 import { isExchangeMode } from "@/lib/exchangeMode";
@@ -77,28 +77,33 @@ export function useMarket(
   });
 }
 
-export function useNetwork() {
+export function useNetwork(opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["network"] as const,
     queryFn: () => dataSource.getNetwork(),
     refetchInterval: 30000,
     staleTime: 15000,
+    enabled: opts?.enabled ?? true,
   });
 }
 
 /**
- * Bulk graph-shaped market feed for the landing NetworkMap: ~900 markets in
- * one response, so the map can render without a per-node query. `context`
- * (active assumptions) gets its own stable cache entry, same pattern as
- * useMarket's context-conditioned key.
+ * Bulk graph-shaped market feed for the landing NetworkMap & belief graphs:
+ * ~900 markets in one response, so the map can render without a per-node query.
+ * `context` (active assumptions) gets its own stable cache entry.
  */
-export function useGraphMarkets(context: api.MarketContextEntry[] = []) {
+export function useGraphMarkets(
+  context: api.MarketContextEntry[] = [],
+  opts?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: context.length
       ? (["markets", "graph", { context }] as const)
       : (["markets", "graph"] as const),
     queryFn: () => dataSource.getGraphMarkets(context),
     staleTime: 15000,
+    placeholderData: keepPreviousData,
+    enabled: opts?.enabled ?? true,
   });
 }
 
@@ -151,8 +156,8 @@ export const useAnalytics = useMarketAnalytics;
 
 export function useHealth() {
   return useQuery({
-    queryKey: queryKeys.health(),
-    queryFn: () => api.getHealth(),
+    queryKey: [...queryKeys.health(), isExchangeMode() ? "exchange" : "paper"] as const,
+    queryFn: () => dataSource.getHealth(),
     refetchInterval: 30000,
   });
 }
