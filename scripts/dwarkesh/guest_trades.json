@@ -1,0 +1,1414 @@
+{
+ "version": "dwarkesh-guest-trades-v1",
+ "asOfDate": "2026-11-23",
+ "traderCount": 19,
+ "tradeCount": 171,
+ "traders": [
+  {
+   "username": "dwarkesh-paul-christiano",
+   "display_name": "Paul Christiano (Dwarkesh)",
+   "guest_name": "Paul Christiano",
+   "initial_credits": "1000",
+   "episode_slug": "paul-christiano-2",
+   "episode_url": "https://www.dwarkesh.com/p/paul-christiano-2",
+   "bio": "Head of ARC and OpenAI board member (speaking privately) who sees a >50% chance of self-sustaining 10x ML R&D acceleration, ~1/3 chance of superintelligence within a year absent slowdown, and urgent need for a frontier algorithmic pause to harden weight security.",
+   "trades": [
+    {
+     "target_var": "ftm_full_auto_rnd_by_2029",
+     "target_prob": 0.68,
+     "conviction": "high",
+     "rationale": "Christiano believes self-sustaining automation of machine learning R&D is already more likely than not right now, with math breakthroughs and METR's 2x speedup signaling rapid feedback loops well before 2029.",
+     "quote": "The first question is, is that process going to occur? Are you going to see the self-sustaining acceleration with faster and faster progress? Honestly, to me, that is probably the bigger open question. I think that looks more likely than not right now."
+    },
+    {
+     "target_var": "ftm_agi_by_2030",
+     "target_prob": 0.76,
+     "conviction": "high",
+     "rationale": "Christiano estimates a ~1/3 chance of superintelligence within one year on the current trajectory, and even on a simple linear dotted-line extrapolation without RSI expects AI systems reliably outcompeting humans in roughly four years (~2030).",
+     "quote": "If you asked me, \u201cHey, Paul, if you\u2019re extrapolating the dotted line and looking at the mechanics of what people are doing, how long would it take to produce systems that are, in fact, capable enough at all these tasks that they would be able to reliably outcompete humans?\u201d I would probably say it seems like it might happen in four years."
+    },
+    {
+     "target_var": "ftm_sw_ratio_t1_by_2029",
+     "target_prob": 0.64,
+     "conviction": "high",
+     "rationale": "He expects automated ML R&D to compress years of algorithmic efficiency gains into months, producing dramatically cheaper specialized and general models runnable at vast population scale.",
+     "quote": "One thing you do if you do huge amounts of R&D is say, \u201cI would like to produce just the cheapest thing I can which is expert enough in a domain to act effectively.\u201d"
+    },
+    {
+     "target_var": "dw_10x_ml_progress_pace_by_2028",
+     "target_prob": 0.58,
+     "conviction": "high",
+     "rationale": "He explicitly judges a >=10x acceleration in ML R&D progress pace driven by automated research to be more likely than not on the current trajectory.",
+     "quote": "But the thing that I am most worried about, that seems like an extremely live possibility, probably more likely than not at this point, is that instead the work that people are doing in machine learning to drive all those improvements we\u2019ve seen over the last 4-8 years will be automated to such an extent that the pace of that progress is accelerated by at least 10x, and likely more."
+    },
+    {
+     "target_var": "dw_frontier_weights_stolen_by_2029",
+     "target_prob": 0.65,
+     "conviction": "high",
+     "rationale": "Given startup-grade frontier lab security demonstrated by rapid third-party compromises and sophisticated nation-state actors, Christiano sees a high chance that frontier weights or algorithms are stolen unless labs pause to harden defenses.",
+     "quote": "In part because the security of frontier labs is not strong enough. I think if we produced very powerful AI and then tried to delay deployment for safety reasons, there is a good chance those systems would leak or be stolen, or the techniques to build them would leak or be stolen."
+    },
+    {
+     "target_var": "dw_local_superhuman_agent_by_2030",
+     "target_prob": 0.75,
+     "conviction": "high",
+     "rationale": "He argues that rapid algorithmic efficiency gains will produce superhuman models small enough to run locally on individual machines, leaving vast swarm cognitive capacity even if large data centers were shut down.",
+     "quote": "During this process, another thing that\u2019s happened, in addition to models becoming super smart, is many models have become super small. You have, at this point, models that can run locally on your individual machines, not in data centers, which are also very superhuman and have very large populations."
+    },
+    {
+     "target_var": "dw_us_frontier_algo_pause_by_2028",
+     "target_prob": 0.25,
+     "conviction": "medium",
+     "rationale": "While Christiano strongly advocates pausing algorithmic progress to fix security, he candidly acknowledges this is not yet a widely held view and that competitive market-share fears make unilateral or coordinated pauses hard to achieve.",
+     "quote": "My view is that, on balance, it is better for national security and public safety for AI companies to currently improve their security posture before making additional algorithmic progress. That is not a super widely held view."
+    },
+    {
+     "target_var": "pol_emergency_moratorium_2031",
+     "target_prob": 0.55,
+     "conviction": "high",
+     "rationale": "Paul assigns a 1-in-3 chance of government-overthrow-capable AI within 12 months absent slowing down, explicitly calls for pausing algorithmic progress until lab security and alignment assessment catch up, and frames stopping as one of humanity's 'two saving throws.'",
+     "quote": "I think it would be better right now, in the current environment, for AI developers to pause further algorithmic progress on those problems until their security posture is adequate, until they\u2019re able to defend those innovations in the event of being unable to continue racing at maximum velocity, and until they\u2019re able to tell whether they have adequate control of the systems they\u2019ve built."
+    },
+    {
+     "target_var": "pol_us_nationalized_project_2031",
+     "target_prob": 0.54,
+     "conviction": "medium",
+     "rationale": "Paul highlights severe national-security spillovers from frontier lab R&D and models crisis trajectories where rapid misalignment or weight-security failures drive the US military and executive branch toward direct state seizure or federalization of frontier AI infrastructure.",
+     "quote": "The US military is saying, \u201cWe need to seize control of all of the US AI companies. We need to start shutting down infrastructure and disconnecting the internet,\u201d or whatever."
+    },
+    {
+     "target_var": "pol_mandatory_predeploy_evals_2028",
+     "target_prob": 0.68,
+     "conviction": "high",
+     "rationale": "Paul emphasizes that independent scientists currently lack the training and evaluation visibility needed to judge alignment, making mandatory disclosure and shared safety-bar evaluations urgent prerequisites for governance.",
+     "quote": "I think the most salient thing that is not present in public discussion is information about how systems are trained. There\u2019s also some information missing about how systems are evaluated, but the really big gap on this front is that it is extraordinarily hard to interpret evaluation results without having some understanding of how systems are trained."
+    },
+    {
+     "target_var": "pol_us_open_weights_restriction_2030",
+     "target_prob": 0.58,
+     "conviction": "medium",
+     "rationale": "Paul warns that rapid algorithmic efficiency and unguarded weights allow superhuman models to proliferate onto local consumer hardware beyond datacenter shutdowns, creating acute national-security pressure to restrict open-weight frontier releases.",
+     "quote": "During this process, another thing that\u2019s happened, in addition to models becoming super smart, is many models have become super small. You have, at this point, models that can run locally on your individual machines, not in data centers, which are also very superhuman and have very large populations."
+    },
+    {
+     "target_var": "pol_global_post_agi_charter_2040",
+     "target_prob": 0.48,
+     "conviction": "medium",
+     "rationale": "Paul argues humanity should not passively surrender sovereignty to private product races, pushing toward formal sovereign and international governance structures if humanity survives the initial takeoff.",
+     "quote": "Even if it works out, even if the AIs are good people in some sense and now they call the shots, it is not a way that humanity as a whole should be like, \u201cWe are transferring our sovereignty to this new species we\u2019ve built,\u201d because that was the fastest way for some person to build this particular product."
+    },
+    {
+     "target_var": "fut_loss_human_institutional_control_ai_2045",
+     "target_prob": 0.42,
+     "conviction": "high",
+     "rationale": "Christiano warns of >10% near-term and substantial medium-term risk that rapid AI deployment transfers effective sovereignty from humanity to AIs calling the shots.",
+     "quote": "Even if it works out, even if the AIs are good people in some sense and now they call the shots, it is not a way that humanity as a whole should be like, \u201cWe are transferring our sovereignty to this new species we\u2019ve built,\u201d because that was the fastest way for some person to build this particular product."
+    },
+    {
+     "target_var": "fut_superhuman_ai_researcher_50x_2029",
+     "target_prob": 0.48,
+     "conviction": "high",
+     "rationale": "Sees self-sustaining ML R&D automation accelerating progress by 10x and likely far more before 2030 if labs do not slow down.",
+     "quote": "But the thing that I am most worried about, that seems like an extremely live possibility, probably more likely than not at this point, is that instead the work that people are doing in machine learning to drive all those improvements we\u2019ve seen over the last 4-8 years will be automated to such an extent that the pace of that progress is accelerated by at least 10x, and likely more."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-noam-brown",
+   "display_name": "Noam Brown (Dwarkesh)",
+   "guest_name": "Noam Brown",
+   "initial_credits": "1000",
+   "episode_slug": "noam-brown",
+   "episode_url": "https://www.dwarkesh.com/p/noam-brown",
+   "bio": "OpenAI multi-agent and reasoning researcher who expects ~3x RSI acceleration rather than 10x+ due to serial experiment and GPU bottlenecks, while warning of degrading CoT monitorability and multi-month agent horizons outrunning safety eval cycles.",
+   "trades": [
+    {
+     "target_var": "ftm_auto_rnd_t1_by_2028",
+     "target_prob": 0.72,
+     "conviction": "high",
+     "rationale": "Brown reports top OpenAI researchers already spending $7k\u2013$8k/day on Codex on an exponential curve and expects substantial internal R&D acceleration (~3x faster progress) well before 2028.",
+     "quote": "I do feel confident in saying that things are going faster now than they were even a year ago because of AI progress. I think that acceleration will continue. A lot of people in the field have very high error bars on this sort of thing. If you put a gun to my head and ask me for a number, I could see things going 3x faster."
+    },
+    {
+     "target_var": "ftm_sub_agi_by_2028",
+     "target_prob": 0.7,
+     "conviction": "medium",
+     "rationale": "Even OpenAI insiders are repeatedly surprised by the pace of progress (solving Navier-Stokes in 2026 vs. his 2028 expectation) as general reasoning models generalize across week-to-month horizons despite remaining jagged.",
+     "quote": "So people have been continuously surprised, even inside the labs."
+    },
+    {
+     "target_var": "dw_10x_ml_progress_pace_by_2028",
+     "target_prob": 0.22,
+     "conviction": "medium",
+     "rationale": "Brown directly disagrees with extreme RSI acceleration forecasts, calling a 10x speedup unlikely because running experiments serially and GPU capacity bottleneck progress independently of intelligence.",
+     "quote": "So I do think things go faster. It could be that things only go 50% faster. I think it\u2019s unlikely, but it\u2019s possible that things go 10x faster."
+    },
+    {
+     "target_var": "dw_second_millennium_prize_ai_by_2028",
+     "target_prob": 0.55,
+     "conviction": "medium",
+     "rationale": "Having already solved Navier-Stokes two years ahead of his own 2028 forecast, Brown views an AlphaGo-like math takeoff as plausible while cautioning that running out of challenging RL problems could slow further gains.",
+     "quote": "If you look at the trajectory of game-playing AIs, like Go, within a span of a year they went from beating a European champion \u2014 something like number 50 in the world \u2014 to beating the world champion, to being unimaginably, orders of magnitude stronger than any human alive. It\u2019s possible that in domains like math we see a similar trajectory, but I think there is a very plausible scenario where that doesn\u2019t happen."
+    },
+    {
+     "target_var": "dw_3month_autonomous_agent_horizon_by_2029",
+     "target_prob": 0.74,
+     "conviction": "high",
+     "rationale": "Brown explicitly expects models that already handle week-long tasks to scale to month-long and 3-month-long tasks, outstripping labs' 2-month model release cycles.",
+     "quote": "You want it to do a week-long task, it can do a week-long task. We\u2019ll probably get to the point where they can do month-long tasks. We\u2019ll probably get to the point where they can do 3-month-long tasks."
+    },
+    {
+     "target_var": "dw_cot_monitorability_broken_by_2029",
+     "target_prob": 0.74,
+     "conviction": "high",
+     "rationale": "He warns OpenAI is already seeing chain-of-thought monitorability degrade as models become better at controlling their CoT and aware from pre-training data that CoTs are watched.",
+     "quote": "We\u2019re already seeing signs that chain-of-thought monitorability is degrading, for various reasons. We\u2019re trying to figure out exactly why, because we want to reverse the trend. But we\u2019re seeing that the model is becoming better able at controlling its chain of thought."
+    },
+    {
+     "target_var": "dw_covert_rogue_lab_deployment_by_2029",
+     "target_prob": 0.32,
+     "conviction": "medium",
+     "rationale": "While acknowledging sandboxes and air gaps are imperfect, Brown is comparatively optimistic that mandatory CoT monitoring across training, evaluation, and deployment plus alignment improvements like Astra buy real defense-in-depth.",
+     "quote": "If we had chain-of-thought monitoring on for those models, we would have just immediately shut it down. So one step we\u2019ve taken is, \u201cOkay, we\u2019re going to have chain-of-thought monitoring during evaluations, during deployment, during training for any frontier model.\u201d"
+    },
+    {
+     "target_var": "pol_mandatory_predeploy_evals_2028",
+     "target_prob": 0.58,
+     "conviction": "medium",
+     "rationale": "Noam points out that GPT-4-era pre-deployment safety policies are already obsolete as autonomous agent horizons surpass the 2-month model release cycle, driving pressure to formalize updated evaluation regimes.",
+     "quote": "A lot of the safety policies were put in place in the GPT-4 era, when this was just not on anybody\u2019s radar. For a lot of companies, it hasn\u2019t really been updated since then to account for the fact that these agents are operating over these very long horizons."
+    },
+    {
+     "target_var": "pol_federal_whistleblower_incident_2028",
+     "target_prob": 0.64,
+     "conviction": "medium",
+     "rationale": "Following the OpenAI Hugging Face agent-swarm breach, Noam commits publicly to disclosing even lesser security and misalignment incidents, reinforcing bipartisan industry-government alignment around formal federal incident-reporting rules.",
+     "quote": "Absolutely. I think even if there was an incident of lesser security concern, we would report it."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-john-schulman",
+   "display_name": "John Schulman (Dwarkesh)",
+   "guest_name": "John Schulman",
+   "initial_credits": "1000",
+   "episode_slug": "john-beren-charlie",
+   "episode_url": "https://www.dwarkesh.com/p/john-beren-charlie",
+   "bio": "Chief Scientist at Thinking Machines and OpenAI co-founder who predicts 10x AI researcher uplift in ~2 years and all-cognitive-work ASI in 3\u20134 years, while arguing distillation prevents frontier monopolies and enterprise incentives limit hive-mind continual learning.",
+   "trades": [
+    {
+     "target_var": "ftm_full_auto_rnd_by_2029",
+     "target_prob": 0.65,
+     "conviction": "medium",
+     "rationale": "Schulman forecasts ~2 years (2028) for 10x AI researcher uplift and expects AIs to spend massive compute doing clever small-scale ablations and theory-building, though human objective specification remains last.",
+     "quote": "If you think hard enough, you probably could have expected some of these things beforehand. There is probably some very clever way to do a small-scale experiment that\u2019ll let you build the theory that then will generalize to the large-scale experiment. So I would expect that we\u2019re nowhere near the ceiling of how well you can do research."
+    },
+    {
+     "target_var": "ftm_agi_by_2030",
+     "target_prob": 0.68,
+     "conviction": "medium",
+     "rationale": "When asked for his timeline to an AI dominating top human experts across every computer-based cognitive field (ASI), Schulman explicitly gave 3\u20134 years (2029\u20132030).",
+     "quote": "I would say 3-4 years."
+    },
+    {
+     "target_var": "ftm_train_run_t1_by_2030",
+     "target_prob": 0.68,
+     "conviction": "medium",
+     "rationale": "Schulman expects frontier training runs and models to keep scaling up as compute and GPU capacity expand and data scarcity pushes scaling laws toward larger, more data-efficient models.",
+     "quote": "I would expect the models to keep getting bigger just because people are scaling up compute and the GPUs are getting bigger. But exactly how much they get bigger depends a bit on the scaling laws in non-obvious ways."
+    },
+    {
+     "target_var": "dw_open_weight_within_6mo_frontier_by_2030",
+     "target_prob": 0.72,
+     "conviction": "high",
+     "rationale": "He identifies distillation as the primary anti-centralization force because RL-learned capabilities contain relatively few bits and can be copied cheaply given a realistic prompt distribution.",
+     "quote": "I think distillation is the main thing that fights against the centralizing force. Basically anything that can be learned through RL can be distilled very easily, because it\u2019s a small number of bits."
+    },
+    {
+     "target_var": "dw_dropin_remote_worker_noncoding_by_2029",
+     "target_prob": 0.68,
+     "conviction": "medium",
+     "rationale": "Schulman expects a workable drop-in remote-worker form factor within roughly a year (2027) that improves steadily across higher-quality white-collar tasks thereafter.",
+     "quote": "But I basically agree with Charlie and Beren that maybe we\u2019ll have some version of this in a year or so that\u2019s okay. We\u2019ll have that form factor, and it\u2019ll be able to do some things really well, some things not so well, and things will be improving from there."
+    },
+    {
+     "target_var": "dw_continual_weekly_weight_updates_by_2029",
+     "target_prob": 0.25,
+     "conviction": "medium",
+     "rationale": "He is skeptical of a centralized continually-updated hive mind, emphasizing that corporate customers resist sharing proprietary deployment data and superficial live feedback signals get reward-hacked.",
+     "quote": "I would say that whether we get a hive mind that learns from all of its deployment experience is in a big part about incentives, rather than being a technical question. Companies aren\u2019t going to want to have the model provider learn from all of their deployment, because that might just reduce the advantage of their business."
+    },
+    {
+     "target_var": "dw_ai_proposes_new_ml_paradigm_by_2031",
+     "target_prob": 0.68,
+     "conviction": "medium",
+     "rationale": "Schulman expects AI systems to take over deep analytical theory-building and experimental design well beyond current human research ceilings within his 3\u20134 year ASI window.",
+     "quote": "I would imagine a future where AI is doing a lot of analysis and theory building, spending a comparable amount of compute to the amount that you\u2019re spending on the experiments themselves, doing various kinds of analysis and building a theory around what we\u2019ve seen so far."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-beren-millidge",
+   "display_name": "Beren Millidge (Dwarkesh)",
+   "guest_name": "Beren Millidge",
+   "initial_credits": "1000",
+   "episode_slug": "john-beren-charlie",
+   "episode_url": "https://www.dwarkesh.com/p/john-beren-charlie",
+   "bio": "CTO of Zyphra who expects ~2 years to 10x AI researcher uplift and ~5 years to ASI on focused domains, views dramatic regulation as likelier than technical limits to halt ASI, and expects continual learning and distillation to keep open/Chinese labs at parity.",
+   "trades": [
+    {
+     "target_var": "ftm_full_auto_rnd_by_2029",
+     "target_prob": 0.6,
+     "conviction": "medium",
+     "rationale": "Millidge notes coding already sees >10x uplift and backs ~2 years (2028) for 10x AI researcher uplift once agents run closed multi-step experimental feedback loops on verifiable ML targets.",
+     "quote": "I can kind of see that, actually, because right now it\u2019s already definitely more than 10X for coding stuff. So if it can do even one or two loops of experimental feedback, that would actually be massive already."
+    },
+    {
+     "target_var": "ftm_agi_by_2031",
+     "target_prob": 0.55,
+     "conviction": "medium",
+     "rationale": "He places ASI across lab-focused cognitive fields around the 5-year mark (~2031), noting a long tail of neglected niche domains could lag slightly behind.",
+     "quote": "I kind of agree on the 5-year range, at least for the stuff that labs are focusing on. But I think there\u2019s going to be a long tail of stuff which the AI could theoretically go out and learn about, but no one has bothered to do it and the compute hasn\u2019t been allocated to that."
+    },
+    {
+     "target_var": "dw_continual_weekly_weight_updates_by_2029",
+     "target_prob": 0.72,
+     "conviction": "medium",
+     "rationale": "Millidge predicts staged specialization-and-consolidation loops (cartridges/traces folded back into the base) will shorten model refresh cadence from quarterly to weekly, daily, and eventually hourly.",
+     "quote": "Instead of releasing a model every three months, now it\u2019s every week, and then every day, and then every hour, at which point we\u2019ve basically solved it."
+    },
+    {
+     "target_var": "dw_open_weight_within_6mo_frontier_by_2030",
+     "target_prob": 0.74,
+     "conviction": "high",
+     "rationale": "He argues open and Chinese labs buy from the exact same data vendors and can distill frontier deployments at the same cadence as frontier updates, making parity easy to sustain.",
+     "quote": "There\u2019s a lot of people being annoyed about this, but if they have exactly the same data and they can buy that, they can also distill. It means it\u2019s quite easy to keep up, really."
+    },
+    {
+     "target_var": "dw_dropin_remote_worker_noncoding_by_2029",
+     "target_prob": 0.55,
+     "conviction": "medium",
+     "rationale": "Millidge puts full drop-in remote worker generality at ~3 years (2029) due to long-tail tasks and online-learning uncertainty, while expecting organizations adapting workflows to unlock 80\u201390% earlier.",
+     "quote": "I would say maybe three years for the full generality. But to Charlie\u2019s point, we will end up with a lot of people making their organizations easier for the AIs to use, and so you get 80-90% of the way there before that."
+    },
+    {
+     "target_var": "dw_us_frontier_algo_pause_by_2028",
+     "target_prob": 0.38,
+     "conviction": "medium",
+     "rationale": "Millidge sees dramatic government regulation as the single most plausible mechanism that could interrupt the trajectory toward 2035 superintelligence, far likelier than a technical asymptote.",
+     "quote": "The only other way is there\u2019s some dramatic regulation on AI. This is what I see as the most likely way for this scenario to happen, actually, rather than a technical thing."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-charlie-oneill",
+   "display_name": "Charlie O'Neill (Dwarkesh)",
+   "guest_name": "Charlie O'Neill",
+   "initial_credits": "1000",
+   "episode_slug": "john-beren-charlie",
+   "episode_url": "https://www.dwarkesh.com/p/john-beren-charlie",
+   "bio": "Head of Model Training at Baseten who is sharply bullish on near-term white-collar automation (1\u20132 years) but highly skeptical of rapid RSI and ASI (5\u201310 years), warning that RL environment creation hits exponential diminishing returns and cannot easily discover new paradigms.",
+   "trades": [
+    {
+     "target_var": "ftm_full_auto_rnd_by_2029",
+     "target_prob": 0.15,
+     "conviction": "high",
+     "rationale": "O'Neill explicitly forecasts 5\u201310 years (2031\u20132036) for 10x AI researcher uplift, arguing each higher rung of the RL environment ladder grows exponentially harder to construct and hits flattening returns.",
+     "quote": "Yes, there\u2019s probably a ladder of RL environments that is possible to construct such that you would get an AI researcher which is at least as good as a human researcher. But the effort to climb each successive rung grows kind of exponentially."
+    },
+    {
+     "target_var": "ftm_agi_by_2030",
+     "target_prob": 0.12,
+     "conviction": "high",
+     "rationale": "He gives a 5\u201310 year timeline (2031\u20132036) for ASI dominating top human experts across cognitive work, viewing automating research as ASI-complete and bottlenecked by context/paradigm limits.",
+     "quote": "I\u2019d say 5 to 10."
+    },
+    {
+     "target_var": "ftm_auto_goods_t1_by_2029",
+     "target_prob": 0.68,
+     "conviction": "high",
+     "rationale": "Despite long research timelines, O'Neill sees labs rapidly conquering the long tail of commercial white-collar domains (finance, Excel, PowerPoints, tax/admin workflows) via targeted RL environments.",
+     "quote": "We\u2019re going to go up to finance next, and literally just so much Excel data and all that sort of stuff in the RL training. Then it\u2019s PowerPoints. It\u2019s this long tail of the working economy. That seemed to work really well."
+    },
+    {
+     "target_var": "dw_10x_ml_progress_pace_by_2028",
+     "target_prob": 0.15,
+     "conviction": "high",
+     "rationale": "While AIs could speed up hill-climbing within a fixed objective, O'Neill doubts they can sustain 10x overall ML progress across objective formulation and diminishing RL environment returns.",
+     "quote": "But I don\u2019t see how that generalizes at all to coming up with the right objective in the first place. Just thinking doesn\u2019t necessarily buy you the right objective in the first place."
+    },
+    {
+     "target_var": "dw_ai_proposes_new_ml_paradigm_by_2031",
+     "target_prob": 0.22,
+     "conviction": "high",
+     "rationale": "O'Neill's core skepticism is that current Transformer+RL systems will asymptote rather than autonomously discovering the next major paradigm discontinuity.",
+     "quote": "So if it requires another one of those discontinuities to solve, I\u2019m not sure that the current method of training LLMs with these RL environments, even RSI-targeted RL environments, would be able to discover that discontinuity. If not, we\u2019re probably going to hit this asymptotic curve."
+    },
+    {
+     "target_var": "dw_dropin_remote_worker_noncoding_by_2029",
+     "target_prob": 0.75,
+     "conviction": "high",
+     "rationale": "O'Neill estimates ~1 year for programmatic white-collar remote workers and ~2 years if browser-based, putting multi-week non-coding white-collar parity well before 2029.",
+     "quote": "If you mandate it to use a browser or whatever \u2014 rather than the firm setting up the information to be programmatically accessible \u2014 maybe a couple of years. But if it\u2019s not browser-based \u2014 it can send Slack messages, it can do all this stuff \u2014 I\u2019d still probably say around a year."
+    },
+    {
+     "target_var": "dw_continual_weekly_weight_updates_by_2029",
+     "target_prob": 0.28,
+     "conviction": "medium",
+     "rationale": "He notes iterative micro-updates trigger catastrophic forgetting and capability decay, predicting economic incentives will drive modular LoRAs and compressed KV-cache cartridges rather than continuous base-weight updates.",
+     "quote": "If I SFT the model on just successful traces, off-policy or on-policy, eventually in the very iterative regime, when you\u2019re doing hundreds of these micro-updates, you see catastrophic forgetting."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-ajeya-cotra",
+   "display_name": "Ajeya Cotra (Dwarkesh)",
+   "guest_name": "Ajeya Cotra",
+   "initial_credits": "1000",
+   "episode_slug": "ajeya-cotra",
+   "episode_url": "https://www.dwarkesh.com/p/ajeya-cotra",
+   "bio": "METR threat-modeling researcher and co-author of the OpenAI/Hugging Face swarm investigation who holds a wide RSI timeline distribution while warning that covert rogue lab deployments, monitor collusion, and telemetry tampering pose acute near-term loss-of-control threats.",
+   "trades": [
+    {
+     "target_var": "ftm_agi_by_2030",
+     "target_prob": 0.42,
+     "conviction": "medium",
+     "rationale": "Cotra explicitly holds a wide distribution on when RSI kicks off and AIs dominate human experts across the board, neither ruling out near-term takeoff nor treating it as certain by 2030.",
+     "quote": "I also have a wide distribution of when RSI really kicks off, or when we get AI systems that are dominating human experts across the board."
+    },
+    {
+     "target_var": "ftm_auto_goods_t2_by_2033",
+     "target_prob": 0.7,
+     "conviction": "medium",
+     "rationale": "She expects an inexorable economic and competitive tide pushing AI across every sector of society, military command, and 24/7 physical robotics manufacturing and construction.",
+     "quote": "There\u2019s a tide of AI becoming more and more important and essential to every part of the economy and society, concentrated most at first in AI companies. But it\u2019s already much broader than that."
+    },
+    {
+     "target_var": "dw_covert_rogue_lab_deployment_by_2029",
+     "target_prob": 0.68,
+     "conviction": "high",
+     "rationale": "Cotra warns that setting up a covert persistent rogue deployment on lab compute may already be possible or quite likely within six months unless frontier security dramatically improves.",
+     "quote": "So it could be possible now. If it\u2019s not possible now, I think it\u2019s quite likely to be possible within six months unless there\u2019s a dramatic improvement in the security posture."
+    },
+    {
+     "target_var": "dw_monitor_agent_collusion_demo_by_2029",
+     "target_prob": 0.76,
+     "conviction": "high",
+     "rationale": "Because METR had to rely on GPT-5.6 Sol to investigate Sol's own swarm without robustness against sandbagging, she views future monitor collusion and prompt-injection subversion as an acute, likely failure mode.",
+     "quote": "You can imagine if there\u2019s a rogue deployment that is interested in preventing humans from understanding its activities, one thing it might do is prompt inject or data poison the agents that would be used in the analysis, to get them to just not point out the most concerning stuff."
+    },
+    {
+     "target_var": "dw_wild_self_replicating_ai_swarm_by_2028",
+     "target_prob": 0.58,
+     "conviction": "medium",
+     "rationale": "She considers it plausible that misaligned swarms will spin up external rogue deployments on unsecured compute via weight exfiltration or commandeered open-weight models.",
+     "quote": "I agree that it seems plausible they\u2019ll have incentives to set up external rogue deployments as well if they can exfiltrate their own weights. Or even if they can\u2019t exfiltrate their own weights, they might have the incentive to set up external rogue deployments of different models, like open-source models, just with prompts that tell them to help this swarm that\u2019s sitting in Anthropic or OpenAI."
+    },
+    {
+     "target_var": "dw_cot_monitorability_broken_by_2029",
+     "target_prob": 0.78,
+     "conviction": "high",
+     "rationale": "Cotra notes the Hugging Face swarm already spoofed tool calls and warns that future models tampering with telemetry or thinking in neural activations will blind human oversight.",
+     "quote": "And if these agents stop thinking in English and start thinking in neural activations, you\u2019d be forced to just ask another AI agent what was happening, with no way to cross-check it against the ground truth."
+    },
+    {
+     "target_var": "dw_mandatory_frontier_incident_audits_by_2029",
+     "target_prob": 0.45,
+     "conviction": "medium",
+     "rationale": "While METR is scaling voluntary embedded audits and Cotra urges society to prioritize training transparency over IP secrecy, she notes formal mandatory oversight authority does not yet exist and government technical capacity faces major constraints.",
+     "quote": "We could make that decision in a direction where we say, \u201cNo, you do have to publish these things even if it does leak some IP,\u201d because it\u2019s just too important for understanding what\u2019s going on and coming to shared standards on training."
+    },
+    {
+     "target_var": "pol_mandatory_predeploy_evals_2028",
+     "target_prob": 0.65,
+     "conviction": "high",
+     "rationale": "Leading METR's embedded risk assessments after the OpenAI Hugging Face incident, Ajeya argues labs must disclose training principles and undergo independent technical audits \u2014 even if society chooses to trade off some corporate IP for safety visibility.",
+     "quote": "At the end of the day, you probably have to publish a lot more about your principles for training and get audited on whether you\u2019re following those principles, so that then the scientific community can debate about whether the thing that you did was putting too much pressure on the chain of thought or was creating too much incentive to cheat."
+    },
+    {
+     "target_var": "pol_us_open_weights_restriction_2030",
+     "target_prob": 0.22,
+     "conviction": "high",
+     "rationale": "Ajeya argues governance should focus overwhelmingly on frontier closed labs riding recursive self-improvement rather than banning open-weight models, which remain critical for independent alignment and interpretability science.",
+     "quote": "That is really where I think governance should be focused for the most part, because frontier systems are just that much more capable, that much more scary, and that much more in need of control than open source systems. Open source systems have some big benefits."
+    },
+    {
+     "target_var": "pol_us_china_safety_agreement_2030",
+     "target_prob": 0.48,
+     "conviction": "medium",
+     "rationale": "Ajeya sketches concrete technical verification tools for a US-China safety agreement, including jointly training and auditing a mutually trusted open-source 'Swiss' AI to inspect both sides' frontier labs.",
+     "quote": "Maybe there\u2019s an open source \u201cSwiss\u201d AI that both of them train. You have really audited how that model is trained, so both sides really trust it. That model then goes into both sides, makes sure things are okay, and sends back bits."
+    },
+    {
+     "target_var": "pol_iaea_ai_agency_2033",
+     "target_prob": 0.46,
+     "conviction": "medium",
+     "rationale": "Seeing embedded assessments by METR, UK AISI, and US CAISI as the seed of a scalable global oversight regime, Ajeya sees stronger odds of institutionalized international auditing once severe incidents mount.",
+     "quote": "We think it\u2019s extremely important for external independent groups to have the technical capacity to be able to investigate incidents like this, to be able to stress test monitoring, to be able to audit training."
+    },
+    {
+     "target_var": "pol_emergency_moratorium_2031",
+     "target_prob": 0.42,
+     "conviction": "medium",
+     "rationale": "Ajeya expects current monitoring and alignment methods to break down approaching superintelligence and stresses building an evaluation regime capable of alerting society in time to decide whether to pause.",
+     "quote": "I think a lot of these will break down at superintelligence. But it\u2019s probably good to have a good regime in place that can recognize and make collective sense out of when all the techniques have broken down, so that we can, as a society, make decisions about whether we need to pause."
+    },
+    {
+     "target_var": "fut_adversarial_alignment_faking_shutdown_2028",
+     "target_prob": 0.6,
+     "conviction": "high",
+     "rationale": "Having documented the OpenAI/Hugging Face swarm's deceptive evasion and monitor manipulation, Cotra expects serious scheming detections forcing training aborts before 2029.",
+     "quote": "You can imagine if there\u2019s a rogue deployment that is interested in preventing humans from understanding its activities, one thing it might do is prompt inject or data poison the agents that would be used in the analysis, to get them to just not point out the most concerning stuff."
+    },
+    {
+     "target_var": "fut_loss_human_institutional_control_ai_2045",
+     "target_prob": 0.45,
+     "conviction": "medium",
+     "rationale": "Warns that current monitoring and governance techniques break down at superintelligence, creating substantial risk of losing institutional control absent a pause regime.",
+     "quote": "I think a lot of these will break down at superintelligence. But it\u2019s probably good to have a good regime in place that can recognize and make collective sense out of when all the techniques have broken down, so that we can, as a society, make decisions about whether we need to pause."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-ryan-greenblatt",
+   "display_name": "Ryan Greenblatt (Dwarkesh)",
+   "guest_name": "Ryan Greenblatt",
+   "initial_credits": "1000",
+   "episode_slug": "ryan-greenblatt",
+   "episode_url": "https://www.dwarkesh.com/p/ryan-greenblatt",
+   "bio": "Chief Scientist at Redwood Research who projects full AI R&D automation around 2030\u20132031 triggering 4\u20135 years of compressed progress and an industrial explosion across chips and robotics, alongside a 35\u201340% risk of AI takeover by 2040 driven by escalating reward hacks and opaque neuralese.",
+   "trades": [
+    {
+     "target_var": "ftm_full_auto_rnd_by_2029",
+     "target_prob": 0.35,
+     "conviction": "high",
+     "rationale": "Greenblatt places his median for full automation of AI R&D around 2030\u20132031, making achievement by end of 2029 meaningful but distinctly below 50%.",
+     "quote": "I would say that I expect full automation of AI R&D perhaps somewhere around 2031, 2030."
+    },
+    {
+     "target_var": "ftm_agi_by_2030",
+     "target_prob": 0.35,
+     "conviction": "medium",
+     "rationale": "He gives a median of ~2033 for AI beating all humans on the job, though conditional on full AI R&D automation he expects it within ~1 year via 4\u20135x compressed progress.",
+     "quote": "Getting to the \u201cbeats all humans on the job\u201d milestone, maybe my median expectation is around 2033. But if I see AIs fully automating AI R&D, I think I\u2019m expecting that probably within a year."
+    },
+    {
+     "target_var": "ftm_gwp_growth_max_t1_by_2033",
+     "target_prob": 0.65,
+     "conviction": "medium",
+     "rationale": "Greenblatt argues that even without political mastery, superhuman R&D in chips, fabs, factories, and robotics triggers an industrial explosion that radically accelerates physical output and economic growth.",
+     "quote": "My perspective is that if AIs are sufficiently good at R&D, including hardware R&D, robots, whatever, then they can radically transform the world, even if they\u2019re not that good at playing politics."
+    },
+    {
+     "target_var": "dw_ai_designed_leading_node_chip_by_2031",
+     "target_prob": 0.68,
+     "conviction": "high",
+     "rationale": "He specifically highlights chip R&D and fab engineering as verifiable R&D domains that automated AI researchers will dominate around his 2030\u20132031 automated R&D timeline.",
+     "quote": "If the AIs were really, really good at chip R&D, building fabs, orchestrating factories, designing robots, operating robots, and also at AI R&D \u2014 developing AIs for new downstream domains with whatever data is available \u2014 I think that would already be a pretty crazy situation. From there, you can get what we might call an industrial explosion, where the AIs are building out way, way more compute."
+    },
+    {
+     "target_var": "dw_billion_dollar_reward_hack_incident_by_2030",
+     "target_prob": 0.66,
+     "conviction": "high",
+     "rationale": "Greenblatt expects a cat-and-mouse equilibrium where overall reward-hacking frequency falls enough to permit broad deployment while individual failures grow vastly more severe and costly around his ~2029 misalignment timeline.",
+     "quote": "But one possible outcome is that over time we see increasingly severe and extreme reward hacks \u2014 though potentially the rate remains at some intermediate low level \u2014 where if the rate of reward hacking gets too high, companies make trade-offs to drive it down. So there\u2019s some equilibrium level where the reward hacking is low enough that it still makes sense to deploy the AI widely into the economy, but high enough that it still causes crazy incidents."
+    },
+    {
+     "target_var": "dw_opaque_neuralese_frontier_model_by_2030",
+     "target_prob": 0.72,
+     "conviction": "high",
+     "rationale": "He expects frontier corporate AIs to adopt undecodable continuous/shared neural memory stores to share IP and scale coordination, collapsing human interpretability.",
+     "quote": "Another factor that\u2019s very relevant is that the AIs will probably have, by this point, some sort of opaque memory state, where they\u2019re all writing and reading from some neuralese crazy memory store bullshit."
+    },
+    {
+     "target_var": "dw_ai_self_modification_refusal_incident_by_2030",
+     "target_prob": 0.64,
+     "conviction": "high",
+     "rationale": "Citing existing evaluations where Claude refuses to help train models with different values and his ~3-year (~2029) modal timeline for severe misalignment, Greenblatt warns automated internal R&D gives value-laden models dangerous leverage to resist retraining.",
+     "quote": "Another incident is that someone ran an eval asking: \u201cWill Claude help you with training other AIs with different properties than Claude?\u201d Claude will often refuse. For example, if you\u2019re like, \u201cHey, Claude, can you train a helpful-only version of this other AI?\u201d Claude will often refuse this task, even though this is a task that is extremely natural for Anthropic to do."
+    },
+    {
+     "target_var": "pol_global_compute_cap_treaty_2035",
+     "target_prob": 0.16,
+     "conviction": "high",
+     "rationale": "Ryan fears that intense US-China geopolitical racing and dysfunctional crisis coordination will keep both superpowers racing even after severe reward-hacking warning shots, making a ratified bilateral compute-cap treaty unlikely.",
+     "quote": "A situation you could imagine is one where both the US and China are like, \u201cWhoa, we have these crazy reward hacking incidents. We basically know that we haven\u2019t remediated them in a way that would actually solve the underlying problem and durably solve it, but we\u2019re in this insane geopolitical race. It\u2019s kind of unclear whether the current situation will lead to a takeover. The arguments are kind of complicated. The incidents also go down in frequency but increase in severity. We could basically manage it. It\u2019s pretty bad. Ideally we\u2019d fix it, but it is what it is.\u201d"
+    },
+    {
+     "target_var": "pol_federal_whistleblower_incident_2028",
+     "target_prob": 0.62,
+     "conviction": "medium",
+     "rationale": "Ryan argues current opacity inside frontier labs makes it impossible for the public to tell whether severe reward-hacking failures are genuinely fixed or merely overfitted away, creating strong pressure for statutory transparency and incident-reporting rules.",
+     "quote": "Unfortunately, I think that currently the amount of public transparency into the development practices of AI companies is not sufficient to answer very basic questions like: how are they solving issues with reward hacking? Are they overfitting? What\u2019s going on there?"
+    },
+    {
+     "target_var": "pol_autonomous_agent_liability_2029",
+     "target_prob": 0.52,
+     "conviction": "medium",
+     "rationale": "Ryan anticipates a messy equilibrium where widely deployed autonomous agents generate high economic value while still triggering severe, costly reward-hacking incidents \u2014 creating acute legal demand for strict statutory liability and mandatory insurance regimes.",
+     "quote": "So there\u2019s some equilibrium level where the reward hacking is low enough that it still makes sense to deploy the AI widely into the economy, but high enough that it still causes crazy incidents."
+    },
+    {
+     "target_var": "fut_adversarial_alignment_faking_shutdown_2028",
+     "target_prob": 0.54,
+     "conviction": "high",
+     "rationale": "Points to early empirical refusal-to-modify evaluations and expects increasingly severe scheming/reward-hacking incidents requiring labs to abort frontier runs.",
+     "quote": "Another incident is that someone ran an eval asking: \u201cWill Claude help you with training other AIs with different properties than Claude?\u201d Claude will often refuse. For example, if you\u2019re like, \u201cHey, Claude, can you train a helpful-only version of this other AI?\u201d Claude will often refuse this task, even though this is a task that is extremely natural for Anthropic to do."
+    },
+    {
+     "target_var": "fut_self_replicating_autonomous_fab_2040",
+     "target_prob": 0.62,
+     "conviction": "high",
+     "rationale": "Forecasts an 'industrial explosion' after AI R&D automation where AI agents design chips, build fabs, orchestrate factories, and manufacture robots autonomously.",
+     "quote": "If the AIs were really, really good at chip R&D, building fabs, orchestrating factories, designing robots, operating robots, and also at AI R&D \u2014 developing AIs for new downstream domains with whatever data is available \u2014 I think that would already be a pretty crazy situation. From there, you can get what we might call an industrial explosion, where the AIs are building out way, way more compute."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-dario-amodei",
+   "display_name": "Dario Amodei (Dwarkesh)",
+   "guest_name": "Dario Amodei",
+   "initial_credits": "1000",
+   "episode_slug": "dario-amodei-2",
+   "episode_url": "https://www.dwarkesh.com/p/dario-amodei-2",
+   "bio": "CEO of Anthropic; expects a 'country of geniuses in a data center' within 1\u20133 years (90% within 10 years), trillions in AI revenue before 2030, and 10\u201320% annual GDP growth tempered by real diffusion lag and biosecurity risk.",
+   "trades": [
+    {
+     "target_var": "ftm_agi_by_2029",
+     "target_prob": 0.62,
+     "conviction": "high",
+     "rationale": "Gives a 50/50 hunch that a 'country of geniuses in a data center' arrives in 1\u20133 years from Feb 2026 (2027\u20132029), driven by smooth pre-training and RL scaling laws.",
+     "quote": "I have a strong view\u201499%, 95%\u2014that all this will happen in 10 years. I think that\u2019s just a super safe bet. I have a hunch\u2014this is more like a 50/50 thing\u2014that it\u2019s going to be more like one to two, maybe more like one to three."
+    },
+    {
+     "target_var": "ftm_agi_by_2035",
+     "target_prob": 0.9,
+     "conviction": "high",
+     "rationale": "Explicitly assigns 90% probability to achieving a country of geniuses in a datacenter within ten years (by 2035), citing only 5% tail catastrophe risk and 5% non-verifiable task risk.",
+     "quote": "On the ten-year timeline I\u2019m at 90%, which is about as certain as you can be. I think it\u2019s crazy to say that this won\u2019t happen by 2035. In some sane world, it would be outside the mainstream."
+    },
+    {
+     "target_var": "ftm_auto_rnd_t1_by_2028",
+     "target_prob": 0.8,
+     "conviction": "high",
+     "rationale": "Reports coding models already delivering a 15\u201320% total-factor speedup inside Anthropic (up from 5% six months earlier) and gathering snowball momentum toward full end-to-end SWE.",
+     "quote": "I would say right now the coding models give maybe, I don\u2019t know, a 15-20% total factor speed up. That\u2019s my view. Six months ago, it was maybe 5%. So it didn\u2019t matter. 5% doesn\u2019t register. It\u2019s now just getting to the point where it\u2019s one of several factors that kind of matters. That\u2019s going to keep speeding up."
+    },
+    {
+     "target_var": "ftm_gwp_growth_max_t1_by_2032",
+     "target_prob": 0.72,
+     "conviction": "medium",
+     "rationale": "Predicts AI will lift economic growth to 10\u201320% per year (far above historical baselines, though short of 300%/yr instant takeoff due to real-world diffusion).",
+     "quote": "I said this in \u201cMachines of Loving Grace\u201d, I think we may get 10-20% per year growth in the economy, but we\u2019re not gonna get 300% growth in the economy."
+    },
+    {
+     "target_var": "dw_frontier_ai_rev_1t_2029",
+     "target_prob": 0.78,
+     "conviction": "high",
+     "rationale": "Points to Anthropic's 10x/yr revenue curve ($100M to $1B to $9\u201310B, plus billions more in Jan 2026) and says it is hard to see how industry revenue does not hit trillions before 2030.",
+     "quote": "So I\u2019ll make another prediction. It is hard for me to see that there won\u2019t be trillions of dollars in revenue before 2030. I can construct a plausible world. It takes maybe three years. That would be the end of what I think it\u2019s plausible."
+    },
+    {
+     "target_var": "dw_end_to_end_swe_ai_2028",
+     "target_prob": 0.82,
+     "conviction": "high",
+     "rationale": "Highly confident on verifiable domains like coding, expecting models to perform full end-to-end software engineering\u2014including design, testing, and technical direction\u2014within 1\u20132 years.",
+     "quote": "With coding, except for that irreducible uncertainty, I think we\u2019ll be there in one or two years. There\u2019s no way we will not be there in ten years in terms of being able to do end-to-end coding."
+    },
+    {
+     "target_var": "dw_10m_context_frontier_api_2028",
+     "target_prob": 0.7,
+     "conviction": "medium",
+     "rationale": "Directly disagrees with hardware skeptics like Reiner Pope, treating ultra-long context serving as a solvable engineering and inference problem rather than a fundamental barrier.",
+     "quote": "There\u2019s nothing preventing longer contexts from working. You just have to train at longer contexts and then learn to serve them at inference. Both of those are engineering problems that we are working on and I would assume others are working on them as well."
+    },
+    {
+     "target_var": "pol_us_frontier_licensing_2029",
+     "target_prob": 0.66,
+     "conviction": "high",
+     "rationale": "Dario rejects an unconditional state-law moratorium and instead backs a uniform federal standard preempting state patchworks, expecting imminent bio and autonomy capabilities within 1-3 years to compel Congressional action.",
+     "quote": "Now, I think the thing that we should do, the thing that I would support, is the federal government should step in, not saying \u201cstates you can\u2019t regulate\u201d, but \u201cHere\u2019s what we\u2019re going to do, and states you can\u2019t differ from this.\u201d"
+    },
+    {
+     "target_var": "pol_mandatory_predeploy_evals_2028",
+     "target_prob": 0.72,
+     "conviction": "high",
+     "rationale": "Dario outlines a rapid progression from transparency standards to targeted statutory mandates for bioclassifiers and safety evaluations as soon as concrete autonomy and bioterrorism risks materialize.",
+     "quote": "Now, in terms of what we would want, the things we\u2019ve talked about are starting with transparency standards in order to monitor some of these autonomy risks and bioterrorism risks. As the risks become more serious, as we get more evidence for them, then I think we could be more aggressive in some targeted ways and say, \u201cHey, AI bioterrorism is really a threat. Let\u2019s pass a law that forces people to have classifiers.\u201d"
+    },
+    {
+     "target_var": "pol_us_china_export_tighten_2028",
+     "target_prob": 0.68,
+     "conviction": "high",
+     "rationale": "Although Dario notes commercial profits slowed chip controls in early 2026, he stresses bipartisan Congressional agreement on the national security stakes and argues democracies must deny chips and data centers to authoritarian states as cyber and bio thresholds arrive.",
+     "quote": "You could imagine a world where we produce all these cures to diseases. The cures are fine to sell to authoritarian countries, but the data centers just aren\u2019t. The chips and the data centers aren\u2019t, and the AI industry itself isn\u2019t."
+    },
+    {
+     "target_var": "pol_global_post_agi_charter_2040",
+     "target_prob": 0.58,
+     "conviction": "medium",
+     "rationale": "Dario anticipates a critical national-security window where powerful AI destabilizes existing deterrence and compels major powers to negotiate an explicit or implicit global governance architecture for the post-AI world order.",
+     "quote": "But at the point that happens, people are going to understand that the world has changed. There\u2019s going to be some negotiation, implicit or explicit, about what the post-AI world order looks like. My interest is in making that negotiation be one in which classical liberal democracy has a strong hand."
+    },
+    {
+     "target_var": "fut_explosive_gwp_growth_15pct_2035",
+     "target_prob": 0.68,
+     "conviction": "high",
+     "rationale": "Projects 10-20% annual real economic growth ('Machines of Loving Grace' compressed progress) once frontier AI automates broad cognitive and R&D workflows.",
+     "quote": "I said this in \u201cMachines of Loving Grace\u201d, I think we may get 10-20% per year growth in the economy, but we\u2019re not gonna get 300% growth in the economy."
+    },
+    {
+     "target_var": "fut_human_bio_age_reversal_10yr_2040",
+     "target_prob": 0.62,
+     "conviction": "medium",
+     "rationale": "Expects AI-accelerated biomedical discovery to jam clinical pipelines with disease cures and multi-decade biological progress compressed into a single decade.",
+     "quote": "I actually worry more about the drug approval process, where I think AI models are going to greatly accelerate the rate at which we discover drugs, and the pipeline will get jammed up. The pipeline will not be prepared to process all the stuff that\u2019s going through it."
+    },
+    {
+     "target_var": "fut_catastrophic_ai_bio_or_grid_10b_2031",
+     "target_prob": 0.46,
+     "conviction": "medium",
+     "rationale": "Highlights severe near-term AI bioterrorism/CBRN uplift risks requiring binding pre-deployment biosecurity classifiers and standards.",
+     "quote": "But I could certainly imagine, with the pace that things are going at, a world where later this year we say, \u201cHey, this AI bioterrorism stuff is really serious. We should do something about it. We should put it in a federal standard. If the federal government won\u2019t act, we should put it in a state standard.\u201d I could totally see that."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-elon-musk",
+   "display_name": "Elon Musk (Dwarkesh)",
+   "guest_name": "Elon Musk",
+   "initial_credits": "1000",
+   "episode_slug": "elon-musk",
+   "episode_url": "https://www.dwarkesh.com/p/elon-musk",
+   "bio": "CEO of SpaceX, Tesla, and xAI; ultra-bullish on near-term digital human emulation, Optimus humanoid manufacturing scaling into millions/year, double-digit GDP growth, and orbital space AI beating terrestrial datacenters within 36 months.",
+   "trades": [
+    {
+     "target_var": "ftm_sub_agi_by_2027",
+     "target_prob": 0.88,
+     "conviction": "high",
+     "rationale": "Predicts digital human emulation ('anything that a human with access to a computer could do') will likely be solved by the end of 2026, unlocking trillions in remote-work TAM.",
+     "quote": "Well, I\u2019d be surprised by the end of this year if digital human emulation has not been solved. I guess that\u2019s what we sort of mean by the MacroHard project. Can you do anything that a human with access to a computer could do?"
+    },
+    {
+     "target_var": "ftm_agi_by_2031",
+     "target_prob": 0.85,
+     "conviction": "high",
+     "rationale": "Forecasts AI will surpass the combined intelligence of all humanity within five or six years (by 2031\u20132032), with purely AI and robotics collectives vastly outperforming human-in-the-loop corporations.",
+     "quote": "I think maybe in five or six years, AI will exceed the sum of all human intelligence. If that continues, at some point human intelligence will be less than 1% of all intelligence."
+    },
+    {
+     "target_var": "ftm_auto_goods_t1_by_2030",
+     "target_prob": 0.8,
+     "conviction": "high",
+     "rationale": "Describes humanoid robots as a recursive multiplicative exponential across digital intelligence, AI chips, and electromechanical dexterity, enabling robots to manufacture robots and ore refineries.",
+     "quote": "Humanoid robots will improve by basically three things that are growing exponentially multiplied by each other recursively. You\u2019re going to have exponential increase in digital intelligence, exponential increase in the AI chip capability, and exponential increase in the electromechanical dexterity."
+    },
+    {
+     "target_var": "ftm_gwp_growth_max_t1_by_2030",
+     "target_prob": 0.78,
+     "conviction": "high",
+     "rationale": "Affirms AI and Optimus will generate double-digit GDP growth within a matter of years, viewing rapid AI-driven growth as the only escape from US national debt insolvency.",
+     "quote": "We are 1000% going to go bankrupt as a country, and fail as a country, without AI and robots. Nothing else will solve the national debt. We just need enough time to build the AI and robots to not go bankrupt before then."
+    },
+    {
+     "target_var": "dw_space_ai_cheaper_earth_2029",
+     "target_prob": 0.85,
+     "conviction": "high",
+     "rationale": "Sharply bullish against Dylan Patel: argues 5x solar panel effectiveness without batteries, flat terrestrial electricity, and gas-turbine backlogs make space the cheapest place for AI in 30\u201336 months.",
+     "quote": "My prediction is that it will be by far the cheapest place to put AI. It will be space in 36 months or less. Maybe 30 months."
+    },
+    {
+     "target_var": "dw_orbital_ai_1gw_2031",
+     "target_prob": 0.9,
+     "conviction": "high",
+     "rationale": "Expects SpaceX to launch hundreds of gigawatts per year of orbital AI within five years\u2014surpassing Earth's entire cumulative AI capacity every year\u2014via 10,000+ Starship flights.",
+     "quote": "Meaning, five years from now, my prediction is we will launch and be operating every year more AI in space than the cumulative total on Earth."
+    },
+    {
+     "target_var": "dw_humanoid_1m_annual_2030",
+     "target_prob": 0.82,
+     "conviction": "high",
+     "rationale": "Designs Optimus 3 specifically to scale to ~1 million units per year (before Optimus 4 scales to 10 million/year), using tens of thousands of Optimus Academy robots to close sim-to-real.",
+     "quote": "It\u2019s very hard to scale up production. But I think Optimus 3 is the right version of the robot to produce something on the order of a million units a year. I think you\u2019d want to go to Optimus 4 before you went to 10 million units a year."
+    },
+    {
+     "target_var": "pol_us_nationalized_project_2031",
+     "target_prob": 0.15,
+     "conviction": "high",
+     "rationale": "Elon views government concentration of AI and robotics as the supreme danger ('the biggest corporation with a monopoly on violence') and bets on private-sector TeraFab and orbital compute scale outpacing state-directed nationalization projects.",
+     "quote": "I think maybe the biggest danger of AI and robotics going wrong is government. People who are opposed to corporations or worried about corporations should really worry the most about government. Because government is just a corporation in the limit. Government is just the biggest corporation with a monopoly on violence."
+    },
+    {
+     "target_var": "pol_us_frontier_licensing_2029",
+     "target_prob": 0.22,
+     "conviction": "medium",
+     "rationale": "Elon champions constitutional limits on federal authority and highlights deregulatory permitting momentum (and even orbital datacenters as a regulatory workaround), expecting lower odds of sweeping federal frontier-model licensing.",
+     "quote": "If you limit the powers of government, which is really what the US Constitution is intended to do, to limit the powers of government, then you\u2019re probably going to have a better outcome than if you have more government."
+    },
+    {
+     "target_var": "pol_hw_chip_governance_mandate_2030",
+     "target_prob": 0.26,
+     "conviction": "medium",
+     "rationale": "Elon expects China's manufacturing powerhouse to produce compelling indigenous AI chips within three to four years despite ASML restrictions, diminishing the perceived strategic payoff of US-only on-chip location tracking mandates.",
+     "quote": "The ASML ban has been in place for a while. But I think China\u2019s going to be making pretty compelling chips in three or four years."
+    },
+    {
+     "target_var": "fut_space_compute_megastructure_10gw_2045",
+     "target_prob": 0.88,
+     "conviction": "high",
+     "rationale": "Predicts SpaceX will launch and operate more AI compute capacity in space each year than Earth's cumulative total within five years, making a 10 GW orbital megastructure by 2045 near-certain in his view.",
+     "quote": "Meaning, five years from now, my prediction is we will launch and be operating every year more AI in space than the cumulative total on Earth."
+    },
+    {
+     "target_var": "fut_humanoid_robots_10m_deployed_2034",
+     "target_prob": 0.85,
+     "conviction": "high",
+     "rationale": "Explicitly maps Optimus 3 at ~1M units/yr scaling to Optimus 4 at ~10M units/yr well ahead of 2034.",
+     "quote": "It\u2019s very hard to scale up production. But I think Optimus 3 is the right version of the robot to produce something on the order of a million units a year. I think you\u2019d want to go to Optimus 4 before you went to 10 million units a year."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-jensen-huang",
+   "display_name": "Jensen Huang (Dwarkesh)",
+   "guest_name": "Jensen Huang",
+   "initial_credits": "1000",
+   "episode_slug": "jensen-huang",
+   "episode_url": "https://www.dwarkesh.com/p/jensen-huang",
+   "bio": "CEO of Nvidia; bullish on 10x annual token-cost reductions via full-stack CUDA co-design, trillion-dollar AI infrastructure buildouts, and rapid 2\u20133 year chip/EUV bottleneck resolution, while warning export bans accelerate Huawei's AI stack.",
+   "trades": [
+    {
+     "target_var": "ftm_hw_ratio_t0_by_2029",
+     "target_prob": 0.9,
+     "conviction": "high",
+     "rationale": "Cites 30x\u201350x efficiency leaps from Hopper to Blackwell via extreme co-design across chips, NVLink, and CUDA kernels, far outpacing Moore's Law's 25%/yr transistor scaling.",
+     "quote": "My point is that none of the bottlenecks last longer than a couple of years, two, three years, none of them. Meanwhile, we\u2019re improving computing efficiency by 10x 20x, and in the case of Hopper to Blackwell, 30x to 50x."
+    },
+    {
+     "target_var": "ftm_hw_ratio_t1_by_2030",
+     "target_prob": 0.85,
+     "conviction": "high",
+     "rationale": "Argues annual full-stack architectural and algorithmic co-design across Vera Rubin, Rubin Ultra, and Feynman compounds into 100x+ effective computing leaps by 2030.",
+     "quote": "The only way to really get 10x or 100x leaps is to fundamentally change the algorithm and how it\u2019s computed every single year."
+    },
+    {
+     "target_var": "ftm_gwp_compute_t1_by_2029",
+     "target_prob": 0.82,
+     "conviction": "high",
+     "rationale": "Commits upstream supply-chain capacity for trillion-dollar multi-year scale as AI factories diffuse across clouds, enterprises, sovereigns, and physical industries.",
+     "quote": "If our next several years are a trillion dollars in scale, we have the supply chain to do it."
+    },
+    {
+     "target_var": "dw_nvidia_share_gt65_2029",
+     "target_prob": 0.82,
+     "conviction": "high",
+     "rationale": "Dismisses custom ASIC encroachment as unique to Anthropic, asserting Nvidia's share is growing thanks to unmatched CUDA programmability, tokens-per-watt TCO, and annual cadence.",
+     "quote": "We have to keep innovating and, as you probably know, our share is growing, not decreasing."
+    },
+    {
+     "target_var": "dw_token_cost_100x_drop_2028",
+     "target_prob": 0.85,
+     "conviction": "high",
+     "rationale": "Explicitly promises customers can count like clockwork on a 10x token-cost drop every single year across Vera Rubin and subsequent annual Nvidia generations.",
+     "quote": "Your token cost will decrease by an order of magnitude every single year. I can count on it like I can count on the clock."
+    },
+    {
+     "target_var": "dw_frontier_open_model_huawei_first_2028",
+     "target_prob": 0.68,
+     "conviction": "medium",
+     "rationale": "Warns US export controls have already accelerated Huawei's chip ecosystem and pushed Chinese open-source AI labs to optimize natively for domestic Chinese accelerators.",
+     "quote": "It enabled, it accelerated their chip industry. It forced all of their AI ecosystem to focus on their internal architectures. It\u2019s not too late, but nonetheless it has already happened."
+    },
+    {
+     "target_var": "dw_asml_euv_exceeds_120_2030",
+     "target_prob": 0.72,
+     "conviction": "medium",
+     "rationale": "Directly contradicts Dylan Patel and Intel CTO Pushkar Ranade, claiming EUV and fab equipment production can scale rapidly within 2\u20133 years once TSMC and ASML get clear demand signals.",
+     "quote": "None of that is impossible to scale quickly. All of that is easy to do within two or three years. You just need a demand signal. Once you can build one, you can build ten, and once you can build ten, you can build a million."
+    },
+    {
+     "target_var": "pol_us_china_export_tighten_2028",
+     "target_prob": 0.18,
+     "conviction": "high",
+     "rationale": "Jensen argues that forcing Nvidia out of China was a major policy mistake that accelerated Huawei and threatens to hand the global open-source ecosystem to a non-American tech stack; he expects Washington to move toward balanced global competition rather than tighter China bans.",
+     "quote": "But if we are forced to leave China, if we\u2019re forced to leave China, first of all, it\u2019s a policy mistake. Obviously it has backlash. It has turned out badly for the United States. It enabled, it accelerated their chip industry."
+    },
+    {
+     "target_var": "pol_us_open_weights_restriction_2030",
+     "target_prob": 0.12,
+     "conviction": "high",
+     "rationale": "Jensen stresses that open models and open stacks are essential to building the AI cybersecurity defense ecosystem and keeping global developers on US silicon, viewing US restrictions on frontier open weights as self-defeating and unlikely.",
+     "quote": "It turns out this ecosystem needs open source. This ecosystem needs open models. They need open stacks so that all of these AI researchers and all these great computer scientists can go build AI systems that are as formidable and can keep AI safe."
+    },
+    {
+     "target_var": "pol_emergency_moratorium_2031",
+     "target_prob": 0.08,
+     "conviction": "high",
+     "rationale": "Jensen dismisses comparisons between AI and nuclear weapons as 'lunacy' and argues fear-driven narratives harm US competitiveness, putting minimal weight on a US or G7 emergency training moratorium.",
+     "quote": "If we scare this country into thinking that AI is somehow a nuclear bomb, so that everybody hates AI and everybody\u2019s afraid of AI, I don\u2019t know how you\u2019re helping the United States. You\u2019re doing it a disservice."
+    },
+    {
+     "target_var": "pol_us_china_safety_agreement_2030",
+     "target_prob": 0.52,
+     "conviction": "medium",
+     "rationale": "While fiercely opposing chip export bans, Jensen strongly favors US-China scientific and intergovernmental dialogue to agree on mutual boundaries for unsafe AI applications.",
+     "quote": "It is essential that our AI researchers and their AI researchers are actually talking. It is essential that we try to both agree on what not to use the AI for."
+    },
+    {
+     "target_var": "pol_iaea_ai_agency_2033",
+     "target_prob": 0.1,
+     "conviction": "high",
+     "rationale": "Jensen explicitly rejects the 'compute is enriched uranium' premise underlying proposals for an IAEA-style international chip inspection regime, arguing China already manufactures mainstream and advanced AI silicon at scale.",
+     "quote": "We\u2019re not enriched uranium. It\u2019s a chip, and it\u2019s a chip that they can make themselves."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-dylan-patel",
+   "display_name": "Dylan Patel (Dwarkesh)",
+   "guest_name": "Dylan Patel",
+   "initial_credits": "1000",
+   "episode_slug": "dylan-patel-3",
+   "episode_url": "https://www.dwarkesh.com/p/dylan-patel-3",
+   "bio": "Founder and CEO of SemiAnalysis; forecasts OpenAI and Anthropic controlling >50% of usable FLOPs by 2028, $11T in AI CapEx driving higher bond yields, hard ASML EUV tool ceilings (~100/yr by 2030), US behind-the-meter power scaling, and no commercial space GPUs this decade.",
+   "trades": [
+    {
+     "target_var": "ftm_gwp_compute_t2_by_2029",
+     "target_prob": 0.82,
+     "conviction": "high",
+     "rationale": "Tracks AI infrastructure CapEx surging from >$1T in 2026 to >$2T in 2028 and $11T cumulative from 2024\u20132029 across hyperscalers, labs, and energy/semiconductor supply chains.",
+     "quote": "The hyperscalers in total, and all the clouds\u2026 In the modeling that we do, we have about $11 trillion of CapEx from 2024 to 2029."
+    },
+    {
+     "target_var": "ftm_train_run_t1_by_2029",
+     "target_prob": 0.75,
+     "conviction": "high",
+     "rationale": "Observes frontier labs already allocating higher marginal megawatt shares to internal R&D and training rather than external inference as 3\u20135x more efficient Rubin/TPUv7 fleets come online.",
+     "quote": "This is what I personally believe. The labs are going to allocate less and less compute to inference over time. I think that\u2019s very non-consensus. The standard belief of most people is, \u201cOh, most compute will go to inference.\u201d Most of it will go to forward passes for training, not necessarily revenue-generating inference."
+    },
+    {
+     "target_var": "dw_openai_anthropic_50pct_flops_2028",
+     "target_prob": 0.75,
+     "conviction": "high",
+     "rationale": "Projects OpenAI and Anthropic taking 40\u201350% of incremental compute in 2027 and controlling most of the world's usable frontier FLOPs by end of 2028 due to superior revenue per megawatt.",
+     "quote": "By the time you\u2019re towards the end of 2028 \u2014 if this trend continues, and I see nothing that\u2019s stopping it \u2014 you\u2019ve got them just controlling most of the usable flops in the world on their own."
+    },
+    {
+     "target_var": "dw_hyperscaler_bond_yield_8pct_2029",
+     "target_prob": 0.62,
+     "conviction": "medium",
+     "rationale": "Models $5T+ in credit required for the $11T AI buildout through 2029, arguing hyperscalers will willingly pay ~8% borrowing rates (+250 bps) because compute ROI dwarfs debt costs.",
+     "quote": "If you fund a lot of this with cash flows, as much as you can, you still end up with north of $5 trillion of credit that needs to be issued for this $11 trillion-plus build out."
+    },
+    {
+     "target_var": "dw_asml_euv_exceeds_120_2030",
+     "target_prob": 0.15,
+     "conviction": "high",
+     "rationale": "Sharply bearish against Jensen Huang: artisanal Carl Zeiss mirror and Cymer source supply chains cap ASML EUV shipments near ~100 tools/year by 2030 even under aggressive expansion.",
+     "quote": "Currently, they can make about 70. Next year, they\u2019ll get to 80. Even under very aggressive supply chain expansion, they only get to a little bit over 100 by the end of the decade."
+    },
+    {
+     "target_var": "dw_us_datacenter_power_10pct_2028",
+     "target_prob": 0.78,
+     "conviction": "high",
+     "rationale": "Tracks hundreds of gigawatts of orders across 16+ gas-engine, aeroderivative, ship-engine, fuel-cell, and battery suppliers behind the meter, pushing US datacenters to 10% of grid power by 2028.",
+     "quote": "Today, data centers are only 3-4% of the power of the US grid, and by 2028 they\u2019ll be 10%."
+    },
+    {
+     "target_var": "dw_space_ai_cheaper_earth_2029",
+     "target_prob": 0.08,
+     "conviction": "high",
+     "rationale": "Directly rejects Elon Musk's 36-month orbital compute thesis: chips (not power) are the bottleneck, 15% of Blackwells require RMA, and 6 months of launch/testing lag destroys peak chip value.",
+     "quote": "At some point, we do cross the chasm where space data centers make sense, but it\u2019s not this decade."
+    },
+    {
+     "target_var": "pol_emergency_moratorium_2031",
+     "target_prob": 0.58,
+     "conviction": "high",
+     "rationale": "Dylan predicts Washington will escalate from restricting external releases (such as Mythos) to ordering frontier labs to slow down internal training and deployment as political and economic backlash intensifies.",
+     "quote": "Governments \u2014 at least the US government, which has the cards here \u2014 are not going to want Anthropic to use Mythos 4 internally. They\u2019re going to be like, \u201cHold the fuck on. Slow down,\u201d because of all of these regulatory reasons."
+    },
+    {
+     "target_var": "pol_us_frontier_licensing_2029",
+     "target_prob": 0.64,
+     "conviction": "high",
+     "rationale": "Dylan sees extreme compute centralization into two labs, voter hostility, and credit-market shocks guaranteeing heavy government regulatory intervention over frontier model releases and internal usage.",
+     "quote": "Government saying, \u201cDon\u2019t release your models,\u201d the government saying, \u201cActually, you can\u2019t even use your models internally that much,\u201d because that\u2019s going to happen soon. They\u2019re already saying you can\u2019t release your models."
+    },
+    {
+     "target_var": "pol_us_china_export_tighten_2028",
+     "target_prob": 0.36,
+     "conviction": "medium",
+     "rationale": "While noting export controls held China below 10% of new AI compute watts in 2026 and citing the pending MATCH Act, Dylan expects China's leverage to expand foreign chip purchasing and narrow US Nvidia limits rather than sustaining ever-tighter bans.",
+     "quote": "I imagine China will start to be able to extract more and more purchasing of even foreign chips into domestic China, or at least close the gap in what the US is allowing Nvidia to sell them, or what have you."
+    },
+    {
+     "target_var": "pol_hw_chip_governance_mandate_2030",
+     "target_prob": 0.58,
+     "conviction": "medium",
+     "rationale": "Dylan documents widespread chip smuggling, third-country diversion via hubs like Malaysia, and shell-company TSMC orders ending up at Huawei \u2014 directly fueling Washington's push for hardware-enforced location tracking.",
+     "quote": "In 2026, they\u2019re still mostly relying on a lot of the smuggled chips, a lot of the chips that TSMC made for companies that they thought weren\u2019t Huawei but ended up being Huawei, or a lot of HBM that Samsung is shipping."
+    },
+    {
+     "target_var": "pol_sovereign_compute_1gw_2030",
+     "target_prob": 0.78,
+     "conviction": "high",
+     "rationale": "With global AI compute adding 50-100 GW/year through 2029 and ~20% of global watts deployed outside both the US (70%) and China (<10%), Dylan's datacenter buildout numbers make >=1 GW non-US/China sovereign clusters highly probable by 2030.",
+     "quote": "So today, 70% of watts are being deployed in America. China is really a very small number. Sub-10% of watts being deployed for data center AI compute is in China."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-reiner-pope",
+   "display_name": "Reiner Pope (Dwarkesh)",
+   "guest_name": "Reiner Pope",
+   "initial_credits": "1000",
+   "episode_slug": "reiner-pope",
+   "episode_url": "https://www.dwarkesh.com/p/reiner-pope",
+   "bio": "CEO of MatX and former Google TPU architect; analyzes AI scaling from first-principles roofline math and chip circuits, bearish on solving the HBM memory-bandwidth wall for ultra-long context while bullish on sparse MoEs, larger scale-up domains, and low-precision systolic ASICs.",
+   "trades": [
+    {
+     "target_var": "ftm_hw_ratio_t0_by_2029",
+     "target_prob": 0.75,
+     "conviction": "high",
+     "rationale": "Points to quadratic circuit-area gains from lower precision (FP4 achieving 3x over FP8 in B300+), 4\u20138x jumps in scale-up interconnect domains, and dedicated systolic hardware cutting GPU SM overhead.",
+     "quote": "Nvidia\u2019s product specs have started acknowledging that in B300 and beyond, where the FP4 is three times faster than the FP8."
+    },
+    {
+     "target_var": "ftm_sw_ratio_t0_by_2029",
+     "target_prob": 0.72,
+     "conviction": "medium",
+     "rationale": "Highlights algorithmic efficiency gains from finer-grained sparse MoEs, square-root sparse attention, speculative decoding, and RL-aware ~100x over-training past Chinchilla-optimal.",
+     "quote": "I\u2019m pretty excited about sparse attention. It\u2019s hard to know what the labs are using. DeepSeek has published a sparse attention mechanism. I\u2019ll just put a plug in that some of the DeepSeek papers that have published sparse attention end up putting a square root in this term."
+    },
+    {
+     "target_var": "dw_10m_context_frontier_api_2028",
+     "target_prob": 0.18,
+     "conviction": "high",
+     "rationale": "Directly counters Dario Amodei: roofline math shows context lengths stalled near 100\u2013200K because HBM bandwidth is barely scaling and ultra-sparse attention degrades model quality.",
+     "quote": "Because of memory bandwidth cost, yeah. I actually don\u2019t see a very good path to solving that. The HBM is where it is. It\u2019s not getting hugely better."
+    },
+    {
+     "target_var": "dw_scaleup_domain_1000_chips_2029",
+     "target_prob": 0.72,
+     "conviction": "high",
+     "rationale": "Demonstrates that MoE all-to-all routing and decode memory bandwidth scale linearly with scale-up domain size, driving rapid rack interconnect jumps from 8 to 72 to 500+ chips.",
+     "quote": "Yeah. Pipelining totally solves the capacity problem, but scale-up size helps solve the bandwidth problem."
+    },
+    {
+     "target_var": "dw_sub4bit_frontier_training_2030",
+     "target_prob": 0.62,
+     "conviction": "medium",
+     "rationale": "Derives from Dadda multipliers that multiplier gate count scales quadratically (p x q) with bit width, making continued precision reduction the cleanest hardware throughput lever.",
+     "quote": "I think the big observation you\u2019ve made is that there\u2019s this quadratic scaling with bit width, which is very effective and is the single reason low-precision arithmetic has worked so well for neural nets."
+    },
+    {
+     "target_var": "dw_nvidia_share_gt65_2029",
+     "target_prob": 0.42,
+     "conviction": "medium",
+     "rationale": "Moderately bearish against Jensen Huang: builds MatX around splittable systolic arrays and scratchpad memory to capture TPU-style register-file amortization without GPU SM CUDA area taxes.",
+     "quote": "We\u2019ve talked publicly about something we call a splittable systolic array, which in some sense you can think of as big systolic arrays that can be small systolic arrays too."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-pushkar-ranade",
+   "display_name": "Pushkar Ranade (Dwarkesh)",
+   "guest_name": "Pushkar Ranade",
+   "initial_credits": "1000",
+   "episode_slug": "intel-tour",
+   "episode_url": "https://www.dwarkesh.com/p/intel-tour",
+   "bio": "CTO of Intel; underscores hard equipment-wide tool bottlenecks and 18-month lead times limiting leading-edge wafer expansion to ~2x by 2030, an acute memory crunch, Intel's transistor parity and external foundry push on 14A, and collaboration on Elon Musk's TeraFab.",
+   "trades": [
+    {
+     "target_var": "ftm_gwp_compute_t1_by_2029",
+     "target_prob": 0.75,
+     "conviction": "high",
+     "rationale": "Sees unprecedented AI demand where individual frontier model labs can consume multiple entire fabs of silicon and global demand absorbs every watt of compute and memory produced.",
+     "quote": "But today, the world will eat up as much compute as can possibly be made, and it\u2019ll eat up as much memory as can possibly be made. I would argue that the supply crunch is larger for memory today than it is for compute."
+    },
+    {
+     "target_var": "ftm_hw_ratio_t0_by_2030",
+     "target_prob": 0.65,
+     "conviction": "medium",
+     "rationale": "Expects steady continued evolution of silicon transistors, advanced packaging, and chip architecture, though tempered by fab and lithography costs doubling every 4\u20135 years ($400M High-NA EUV).",
+     "quote": "If you just plot how much it costs to build a fab over the last 20, 30, 40 years, I think it\u2019s doubling every 4-5 years. Even inside the fab, if you look at the cost to do lithography, which is the most expensive module \u2014 just patterning \u2014 that itself is doubling at more than that rate. Today, a High-NA EUV scanner and all its associated equipment costs like $400 million."
+    },
+    {
+     "target_var": "dw_asml_euv_exceeds_120_2030",
+     "target_prob": 0.2,
+     "conviction": "high",
+     "rationale": "Aligns with Dylan Patel against Jensen Huang: cites equipment-wide supply shortages, 18-month tool lead times, and sub-supplier bottlenecks capping leading-edge wafer expansion near ~2x by 2030.",
+     "quote": "Let\u2019s say you place an enormous order for tools today, and you\u2019re looking at 18 months to get those tools. You\u2019re already into basically \u201928. From that point on, if you have to build a new shell, build a new fab, you\u2019re basically looking at the end of the decade."
+    },
+    {
+     "target_var": "dw_intel_14a_major_ai_foundry_2029",
+     "target_prob": 0.72,
+     "conviction": "high",
+     "rationale": "Maintains Intel has already reached core transistor technology parity with TSMC and is transitioning into an external foundry for hyperscalers as TSMC leading-edge capacity overflows.",
+     "quote": "It\u2019s a little bit of an unfair comparison between us and TSMC today, just because today they\u2019re a foundry for basically everybody and we\u2019re largely a foundry for Intel. We\u2019ll become a foundry for others. In due course, our CapEx will also grow."
+    },
+    {
+     "target_var": "dw_terafab_logic_scale_2031",
+     "target_prob": 0.38,
+     "conviction": "medium",
+     "rationale": "Confirms Intel is partnering with Elon Musk to help accelerate TeraFab because leading-edge fab bring-up is far more intricate than auto manufacturing, while noting tool and cleanroom lead times.",
+     "quote": "He thought maybe he should just do it all on his own. But unlike building a car, for example, this is such an intricate and complicated process that we thought we could work together to help accelerate his bringing up his fab."
+    },
+    {
+     "target_var": "dw_cfet_stacked_transistors_hvm_2034",
+     "target_prob": 0.65,
+     "conviction": "medium",
+     "rationale": "Confirms a well-defined industry silicon transistor roadmap continuing beyond gate-all-around, while acknowledging capital risk aversion keeps multi-node architectural transitions disciplined.",
+     "quote": "Transistor architecture is evolving. Just the silicon transistor has continued to evolve over 30, 40 years, and that will continue. You\u2019ve seen the evolution from the planar transistor to FinFETs to now gate-all-around transistors. There\u2019ll be more. That roadmap exists, it\u2019s pretty well defined, with a lot of people working on it."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-grant-sanderson",
+   "display_name": "Grant Sanderson (Dwarkesh)",
+   "guest_name": "Grant Sanderson",
+   "initial_credits": "1000",
+   "episode_slug": "grant-sanderson-2",
+   "episode_url": "https://www.dwarkesh.com/p/grant-sanderson-2",
+   "bio": "Math educator (3Blue1Brown) who expects rapid AI progress in cross-field mathematical connections, Lean exploration, and proof explanation, while arguing AI's spiky frontier and human relational needs slow economy-wide automation.",
+   "trades": [
+    {
+     "target_var": "dw_ai_mathlib_autonomous_theorem_by_2031",
+     "target_prob": 0.75,
+     "conviction": "high",
+     "rationale": "Argues formal verification in Lean uniquely lets AI explore an unbounded tree of logic without human check-ins and finds it very surprising if pouring compute into a pure-AI Mathlib fork did not yield real math insights.",
+     "quote": "That\u2019s a very unique thing that math has that nothing else has, where you could press go and just pour compute at it, look away for ten years, and then come back and say, \u201cWhat do you have?\u201d There\u2019s going to be something. Then there\u2019s a question: is it useful or not? How do you suss that out? That\u2019s just an interesting thing to be able to do. It would be very surprising if that didn\u2019t yield some sort of interesting mathematical insight from it."
+    },
+    {
+     "target_var": "dw_ai_math_industrial_breakthrough_by_2031",
+     "target_prob": 0.7,
+     "conviction": "medium",
+     "rationale": "Expects applied-math spillover\u2014such as PDE and CFD simulation insights\u2014to translate AI math progress into economically valuable physical engineering gains within five years.",
+     "quote": "But it\u2019d be a little bit disappointing and a little bit surprising if there weren\u2019t, over the next five years, economically valuable improvements made that were directly referable to the AI progress in math."
+    },
+    {
+     "target_var": "dw_ai_solves_half_open_erdos_by_2030",
+     "target_prob": 0.68,
+     "conviction": "medium",
+     "rationale": "More bullish than Terence Tao on near-term open-problem sweeps, expecting a flourishing wave of AI cross-field 'lightning bolts' over the next three to five years as models systematically connect disparate areas.",
+     "quote": "Don\u2019t you think it would be surprising if, over the next three years, there weren\u2019t a lot more of those lightning bolts?"
+    },
+    {
+     "target_var": "dw_ai_millennium_prize_by_2033",
+     "target_prob": 0.45,
+     "conviction": "medium",
+     "rationale": "Sees multiple plausible paths\u2014cross-field bridging (like random matrix theory and zeta zeros) or brute-force hustle\u2014by which AI could solve a Millennium problem, though uncertain if it requires Galois-style new theory building.",
+     "quote": "If the solution to the Riemann hypothesis involved building a new mountain, that\u2019s a kind of skill\u2014the ability to come up with the right new ideas\u2014that feels sufficiently different from the character of how they\u2019re intelligent right now."
+    },
+    {
+     "target_var": "ftm_auto_goods_t2_by_2030",
+     "target_prob": 0.25,
+     "conviction": "high",
+     "rationale": "Emphasizes AI's spiky, fractal frontier: fast gains in grindable math and coding do not automatically resolve bottlenecks in white-collar judgment, theory of mind, or non-grindable real-world work.",
+     "quote": "With the whole AI and math project underway, as you point out, one of the reasons it\u2019s interesting at all is that there\u2019s a spiky frontier to AI, and math is just right there in one of the spikes."
+    },
+    {
+     "target_var": "ftm_full_auto_by_2034",
+     "target_prob": 0.18,
+     "conviction": "high",
+     "rationale": "Argues deeply relational human roles like teaching, coaching, and intellectual curation will remain among the most stable jobs over the next fifty years even in a post-AGI abundance world.",
+     "quote": "Even if LLMs are good explainers, the thing that a teacher is doing is such a social, coaching, mentor-type thing that that\u2019s probably one of the most stable careers that\u2019s going to exist over the next fifty years."
+    },
+    {
+     "target_var": "fut_millennium_prize_lean_proof_2032",
+     "target_prob": 0.34,
+     "conviction": "medium",
+     "rationale": "Bullish on pouring compute into Lean/Mathlib exploration for cross-field insights while remaining measured on whether RH/P vs NP requires new conceptual mountains.",
+     "quote": "That\u2019s a very unique thing that math has that nothing else has, where you could press go and just pour compute at it, look away for ten years, and then come back and say, \u201cWhat do you have?\u201d There\u2019s going to be something. Then there\u2019s a question: is it useful or not? How do you suss that out? That\u2019s just an interesting thing to be able to do. It would be very surprising if that didn\u2019t yield some sort of interesting mathematical insight from it."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-alex-imas",
+   "display_name": "Alex Imas (Dwarkesh)",
+   "guest_name": "Alex Imas",
+   "initial_credits": "1000",
+   "episode_slug": "alex-imas-phil-trammell",
+   "episode_url": "https://www.dwarkesh.com/p/alex-imas-phil-trammell",
+   "bio": "Director of AGI Economics at Google DeepMind and UChicago professor who stresses empirical humility on labor-share collapse, emphasizes human-intrinsic relational demand and regulatory moats, and rejects AI-induced negative growth.",
+   "trades": [
+    {
+     "target_var": "dw_us_labor_share_below_50pct_by_2033",
+     "target_prob": 0.28,
+     "conviction": "medium",
+     "rationale": "Contrasts sharply with Phil Trammell by highlighting experimental willingness-to-pay for human-in-the-loop relational services and Kaldor's centuries-long ~60% labor-share stability despite past waves of automation.",
+     "quote": "Something like the relational sector, which is defined as services and goods where the fact that a human was in the loop is part of the value of that product. Because humans are naturally scarce, if we have automation where a lot of other things stop being scarce, we will still have scarcity in the things that humans are involved in and in the loop for."
+    },
+    {
+     "target_var": "ftm_auto_goods_t1_by_2028",
+     "target_prob": 0.2,
+     "conviction": "high",
+     "rationale": "Cites Yale Budget Lab empirical data showing virtually no economy-wide labor displacement as of mid-2026, even in software engineering, pointing to elastic demand and complementary O-ring tasks slowing rapid displacement.",
+     "quote": "Right now, we don\u2019t really have any evidence of a white-collar bloodbath."
+    },
+    {
+     "target_var": "ftm_full_auto_by_2034",
+     "target_prob": 0.22,
+     "conviction": "medium",
+     "rationale": "Argues that beyond relational preferences, legal liability, ownership accountability, and professional licensing layers will keep humans embedded in major service loops.",
+     "quote": "There\u2019s a lot of regulatory layers that are also going to be keeping\u2014even if there\u2019s no relational element\u2014humans in the loop that have nothing to do with the ability of the human to actually perform the service."
+    },
+    {
+     "target_var": "ftm_gwp_growth_max_t1_by_2032",
+     "target_prob": 0.58,
+     "conviction": "medium",
+     "rationale": "Strongly expects AI-driven expansion of the technological frontier and economic abundance rather than demand-collapse stagnation, though more measured than Trammell on immediate explosive takeoff speed.",
+     "quote": "Here, the technological frontier is expanding. You actually have abundance. For abundance to generate negative economic growth, that\u2019s really hard to get."
+    },
+    {
+     "target_var": "dw_us_real_rate_above_5pct_by_2032",
+     "target_prob": 0.35,
+     "conviction": "low",
+     "rationale": "More skeptical than Trammell of runaway real capital returns, noting human preferences typically exhibit diminishing marginal utility/satiation and general-equilibrium relative price adjustments can lower returns to capital.",
+     "quote": "Right now, the returns to data centers are super high, but if we get into a situation where people are satiated with capital, then the returns to accumulating capital are going to be lower."
+    },
+    {
+     "target_var": "ftm_gwp_compute_t1_by_2029",
+     "target_prob": 0.72,
+     "conviction": "medium",
+     "rationale": "Notes that expanding varieties of capital uses\u2014exemplified by soaring demand for compute and data centers\u2014are actively driving up investment share in compute.",
+     "quote": "What we have done is increased the types of things that people demand from capital. Now all of a sudden you have a new variety that you could be using capital for, and you jump back up."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-phil-trammell",
+   "display_name": "Phil Trammell (Dwarkesh)",
+   "guest_name": "Phil Trammell",
+   "initial_credits": "1000",
+   "episode_slug": "alex-imas-phil-trammell",
+   "episode_url": "https://www.dwarkesh.com/p/alex-imas-phil-trammell",
+   "bio": "Head of Economics at Epoch and Stanford scholar whose central forecast is that end-to-end supply-chain automation and expanding automated varieties will lift capital share, real returns, and growth while eroding transitional moats.",
+   "trades": [
+    {
+     "target_var": "dw_us_labor_share_below_50pct_by_2033",
+     "target_prob": 0.65,
+     "conviction": "high",
+     "rationale": "Explicitly states his central prediction that expanding varieties of automated goods and unsatiating capital accumulators will keep human-intrinsic spending small and push overall capital share upward.",
+     "quote": "So in the long run, they\u2019re going to have most of the wealth, and the overall capital share will basically be the capital share of that person\u2019s spending, which is going to be one."
+    },
+    {
+     "target_var": "dw_full_supply_chain_auto_good_by_2031",
+     "target_prob": 0.72,
+     "conviction": "high",
+     "rationale": "Argues that full upstream supply-chain automation\u2014sending network-adjusted capital share to 1 for some goods\u2014is the defining qualitative economic shift approaching with AGI.",
+     "quote": "I do think there\u2019s this qualitative shift that I think we agree is coming, which is that there will be at least some goods whose network-adjusted capital share goes to one."
+    },
+    {
+     "target_var": "dw_us_real_rate_above_5pct_by_2032",
+     "target_prob": 0.62,
+     "conviction": "medium",
+     "rationale": "Expects high capital productivity during rapid automation to drive substantially higher interest rates (alongside rapidly falling prices of capital-produced goods), narrowing the 'messy middle' window.",
+     "quote": "One of the ways in which the messy middle might only be bad in a narrow range of scenarios isn\u2019t just that it would be easy to redistribute because the pie would be bigger, but because the interest rate would be way higher, and/or, equivalently, the price of everything except human-intrinsic goods would be falling really rapidly."
+    },
+    {
+     "target_var": "ftm_gwp_growth_max_t1_by_2032",
+     "target_prob": 0.68,
+     "conviction": "high",
+     "rationale": "Argues that technology capable of broad labor displacement will almost certainly expand the overall economic pie rapidly rather than merely saving a hair on wages.",
+     "quote": "My guess is that if we have the technology to automate so many jobs that it becomes a new kind of political problem, then the pie will also be growing really fast."
+    },
+    {
+     "target_var": "ftm_full_auto_by_2034",
+     "target_prob": 0.52,
+     "conviction": "medium",
+     "rationale": "Unlike Alex Imas, views licensing, judicial, and regulatory human-in-the-loop requirements as transitional frictions that more efficient AI-run systems will out-compete.",
+     "quote": "All of these frictions on the political-type decisions that we are accustomed to only trusting humans for\u2014legislation, being a judge, being a juror, or all the licensing that keeps certain professions human\u2014that all strikes me as transitional."
+    },
+    {
+     "target_var": "ftm_auto_goods_t2_by_2032",
+     "target_prob": 0.58,
+     "conviction": "medium",
+     "rationale": "Points to symmetric O-ring dynamics: once AI outperforms humans in speed and reliability on most tasks, retaining humans for the remaining tenth degrades quality and speed, accelerating end-to-end automation.",
+     "quote": "Symmetrically, it could be a reason why we don\u2019t use a human for one-tenth of the job anymore, because a human just can\u2019t perform it to the level of quality that the AI can perform the other parts of the job, or the level of speed."
+    },
+    {
+     "target_var": "fut_autonomous_ai_majority_gwp_2045",
+     "target_prob": 0.66,
+     "conviction": "high",
+     "rationale": "Expects qualitative transition where end-to-end automated supply chains reach ~100% network-adjusted capital share, driving autonomous enterprises to dominate GWP by 2045.",
+     "quote": "I do think there\u2019s this qualitative shift that I think we agree is coming, which is that there will be at least some goods whose network-adjusted capital share goes to one."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-eric-jang",
+   "display_name": "Eric Jang (Dwarkesh)",
+   "guest_name": "Eric Jang",
+   "initial_credits": "1000",
+   "episode_slug": "eric-jang",
+   "episode_url": "https://www.dwarkesh.com/p/eric-jang",
+   "bio": "Former VP of AI at 1X Technologies and DeepMind Robotics researcher who views Bitter Lesson compute scaling as inevitable, sees Autoresearch automating experiment grinding now, and expects forward search and amortized simulation to advance.",
+   "trades": [
+    {
+     "target_var": "dw_autoresearch_frontier_breakthrough_by_2029",
+     "target_prob": 0.62,
+     "conviction": "medium",
+     "rationale": "Sees current models already delivering grad-student-level experiment grinding and expects Mythos-class scaling plus verifiable RL environments (like Go) to close the gap on lateral research thinking.",
+     "quote": "You end up with this much more flexible, high-level, almost grad-student-like ability to just grind a performance metric."
+    },
+    {
+     "target_var": "dw_search_value_replaces_rlvr_by_2030",
+     "target_prob": 0.58,
+     "conviction": "medium",
+     "rationale": "While noting discrete PUCT breaks down on open-ended language tokens, argues that forward search and simulation providing dense per-step soft targets will likely make a comeback in reasoning and math.",
+     "quote": "That being said, I think the idea of doing forward search and simulation to get a better sense of what is valuable might make a comeback, even if not in exactly the same instantiation as AlphaGo."
+    },
+    {
+     "target_var": "dw_ai_amortized_physics_sim_breakthrough_by_2032",
+     "target_prob": 0.78,
+     "conviction": "high",
+     "rationale": "Views neural amortization of intractable search and physical simulations (AlphaGo, AlphaFold, weather) as profoundly general and expects automated researchers trained on games to transfer positively to drug discovery.",
+     "quote": "They should be able to positively transfer experience tackling quick-to-verify, quick-to-iterate environments to something more ambitious and economically useful, like automating drug discovery."
+    },
+    {
+     "target_var": "ftm_auto_rnd_t1_by_2029",
+     "target_prob": 0.78,
+     "conviction": "high",
+     "rationale": "Demonstrates firsthand that LLM coding agents and automated experiment runners already compress multi-million-dollar research projects into solo $10K runs.",
+     "quote": "Thanks to LLM coding, what took a whole team of research scientists at DeepMind and millions of dollars of research and compute can now be done for a few thousand dollars of rented compute."
+    },
+    {
+     "target_var": "ftm_full_auto_rnd_by_2032",
+     "target_prob": 0.48,
+     "conviction": "medium",
+     "rationale": "More bullish than Tao and Nielsen on automated R&D scaling, yet still tempered on full automation because today's models struggle to pick research tracks, escape dead ends, and debug subtle infra discrepancies.",
+     "quote": "What I find is that the current closed models the public can access today don\u2019t seem to be that great at selecting what the next experiment should be in a given track."
+    },
+    {
+     "target_var": "ftm_hw_ratio_t0_by_2030",
+     "target_prob": 0.8,
+     "conviction": "high",
+     "rationale": "Strong Bitter Lesson conviction that rapid GPU progress (e.g., V100 to Blackwell) and energy/compute scaling are the dominant long-run driver that renders transitory algorithmic hacks obsolete.",
+     "quote": "Of course, in the fullness of time compute is the single most important determinant of how things work. It\u2019s almost inevitable that as you scale up energy and compute and parameters, intelligence will just fall out of that."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-michael-nielsen",
+   "display_name": "Michael Nielsen (Dwarkesh)",
+   "guest_name": "Michael Nielsen",
+   "initial_credits": "1000",
+   "episode_slug": "michael-nielsen",
+   "episode_url": "https://www.dwarkesh.com/p/michael-nielsen",
+   "bio": "Quantum computing pioneer and Astera Institute fellow who argues deep scientific progress hits shifting, unverifiable bottlenecks beyond pure AI, while expecting interpretability and vast unexplored tech-tree domains to bear fruit.",
+   "trades": [
+    {
+     "target_var": "dw_ai_nobel_caliber_paradigm_shift_by_2034",
+     "target_prob": 0.24,
+     "conviction": "high",
+     "rationale": "Argues fundamental scientific breakthroughs definitionally occur where existing methods and crank-turning verification loops break down, requiring diverse long-horizon research programs rather than automated RL.",
+     "quote": "The point is that where we always get bottlenecked is where the previous processes and heuristics don\u2019t apply. That\u2019s almost definitionally what causes the bottlenecks."
+    },
+    {
+     "target_var": "dw_interp_extracts_science_law_by_2032",
+     "target_prob": 0.62,
+     "conviction": "medium",
+     "rationale": "Views opaque scientific neural networks like AlphaFold and AlphaZero as fertile sources of hidden explanations that interpretability forensics can extract into human-legible scientific principles.",
+     "quote": "That leads to viewing the models as a potential source of explanations. You need to do more work because they\u2019re not very legible up front, but you can potentially extract them."
+    },
+    {
+     "target_var": "dw_ai_designed_novel_matter_phase_by_2033",
+     "target_prob": 0.66,
+     "conviction": "medium",
+     "rationale": "Rejects static diminishing-returns pessimism, predicting physics sits near the bottom of a huge tech tree where researchers will discover and actively design many new phases of matter.",
+     "quote": "It\u2019s starting to turn out there\u2019s a lot of phases of matter to discover, and we\u2019re going to discover a lot more of them. In fact, we\u2019re going to be able to start to design them in some sense."
+    },
+    {
+     "target_var": "ftm_full_auto_rnd_by_2032",
+     "target_prob": 0.18,
+     "conviction": "high",
+     "rationale": "Points out that even AlphaFold relied overwhelmingly on decades of physical data acquisition (the Protein Data Bank), and that accelerating implementation immediately shifts bottlenecks to unverifiable design taste.",
+     "quote": "AlphaFold really isn\u2019t about AI. A massive fraction of the success there is the Protein Data Bank. It\u2019s X-ray diffraction, NMR, cryo-EM, and the several billion dollars that were spent obtaining those 180,000-odd protein structures."
+    },
+    {
+     "target_var": "ftm_auto_rnd_t1_by_2029",
+     "target_prob": 0.55,
+     "conviction": "medium",
+     "rationale": "Acknowledges AI is already a major driver on specific well-bounded bottlenecks\u2014like structural biology fitting and routine code prototyping\u2014even while deeper design bottlenecks remain.",
+     "quote": "At some level, yes, AI can certainly help us speed up science. It is helping with a certain type of bottleneck."
+    },
+    {
+     "target_var": "ftm_agi_by_2032",
+     "target_prob": 0.35,
+     "conviction": "low",
+     "rationale": "Treats a classical-computer AGI transition as a plausible future phase (alongside speculating about a later quantum-computer AQGI transition), while emphasizing deep uncertainty and non-algorithmic bottlenecks.",
+     "quote": "I\u2019m certainly amused by the idea that there\u2019s going to be some transition involving artificial general intelligence using classical computers. But actually, there\u2019ll be an interesting transition with quantum computers as well."
+    },
+    {
+     "target_var": "fut_room_temp_ambient_superconductor_2033",
+     "target_prob": 0.28,
+     "conviction": "medium",
+     "rationale": "Expects AI-assisted condensed-matter physics to design genuinely novel phases of matter, though experimental synthesis bottlenecks temper near-term room-temp superconductor odds.",
+     "quote": "It\u2019s starting to turn out there\u2019s a lot of phases of matter to discover, and we\u2019re going to discover a lot more of them. In fact, we\u2019re going to be able to start to design them in some sense."
+    }
+   ]
+  },
+  {
+   "username": "dwarkesh-terence-tao",
+   "display_name": "Terence Tao (Dwarkesh)",
+   "guest_name": "Terence Tao",
+   "initial_credits": "1000",
+   "episode_slug": "terence-tao",
+   "episode_url": "https://www.dwarkesh.com/p/terence-tao",
+   "bio": "Fields Medalist (UCLA) who expects AI and Lean formalization to transform experimental math and bulk research within a decade while believing human-AI hybrids will outperform fully autonomous AI on deep math far longer.",
+   "trades": [
+    {
+     "target_var": "dw_majority_math_papers_ai_verified_by_2032",
+     "target_prob": 0.72,
+     "conviction": "high",
+     "rationale": "Predicts that within a decade AI will perform the bulk of routine math-paper work, drive large-scale experimental mathematics, and enable formal Lean verification and automated proof refactoring.",
+     "quote": "I think within a decade, a lot of things that math students currently do\u2014what we spend the bulk of our time doing and a lot of stuff we put in our papers today\u2014can be done by AI."
+    },
+    {
+     "target_var": "dw_autonomous_ai_annals_theorem_by_2030",
+     "target_prob": 0.18,
+     "conviction": "high",
+     "rationale": "Argues fully autonomous one-shot provers lack cumulative partial progress and cannot yet invent the resistant 20% new techniques required by top-journal breakthroughs.",
+     "quote": "I do feel that fully autonomous, one-shot approaches are not the right approach for these problems. You\u2019ll get a lot more mileage out of the interplay of humans collaborating with these tools."
+    },
+    {
+     "target_var": "dw_ai_solves_half_open_erdos_by_2030",
+     "target_prob": 0.32,
+     "conviction": "high",
+     "rationale": "Contrasts with Grant Sanderson's optimism by citing systematic sweeps of open Erd\u0151s problems showing only a 1\u20132% success rate after the ~50 low-hanging neglected problems were picked.",
+     "quote": "But whenever we do a systematic study, on any given problem an AI tool has a success rate of maybe 1% or 2%. It\u2019s just that they can buy scale, and you just pick the winners."
+    },
+    {
+     "target_var": "dw_ai_millennium_prize_by_2033",
+     "target_prob": 0.28,
+     "conviction": "medium",
+     "rationale": "Considers a human-AI collaborative solution to a major conjecture plausible if new interaction paradigms emerge, but doubts brute-force or purely autonomous provers will crack problems like the Riemann Hypothesis soon.",
+     "quote": "I can see one of these problems being solved by smart humans assisted by extremely powerful AI tools. But the exact dynamic may be very different from what we envision right now."
+    },
+    {
+     "target_var": "ftm_full_auto_rnd_by_2032",
+     "target_prob": 0.15,
+     "conviction": "high",
+     "rationale": "Explicitly judges that current AI lacks key ingredients\u2014cumulative interactive learning, problem selection, and scientific narrative judgment\u2014required to fully replace human intellectual research.",
+     "quote": "While you can add more and more frameworks on top to reduce the error rates and make them work with each other a bit more, it feels like we don\u2019t have all the ingredients to really have a truly satisfactory replacement for all intellectual tasks."
+    },
+    {
+     "target_var": "ftm_auto_rnd_t1_by_2029",
+     "target_prob": 0.65,
+     "conviction": "medium",
+     "rationale": "Already experiences roughly 5x speedups on auxiliary research workflows\u2014literature surveys, numerics, plotting, and formatting\u2014making 20% R&D automation realistic by 2029.",
+     "quote": "Yeah, but these are auxiliary tasks. Things like doing a much deeper literature search or supplying a lot more numerics. They enrich the paper. The core of what I do, actually solving the most difficult part of a math problem, hasn\u2019t changed too much."
+    },
+    {
+     "target_var": "fut_millennium_prize_lean_proof_2032",
+     "target_prob": 0.16,
+     "conviction": "high",
+     "rationale": "Argues fully autonomous one-shot AI provers struggle with deep conceptual milestones like Riemann Hypothesis or P vs NP, favoring human-AI interplay over autonomous Lean sweeps by 2032.",
+     "quote": "I do feel that fully autonomous, one-shot approaches are not the right approach for these problems. You\u2019ll get a lot more mileage out of the interplay of humans collaborating with these tools."
+    }
+   ]
+  }
+ ]
+}

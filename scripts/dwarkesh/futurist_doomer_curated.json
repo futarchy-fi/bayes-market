@@ -1,0 +1,440 @@
+{
+ "version": "futurist-doomer-curated-v1",
+ "asOfDate": "2026-11-23",
+ "deduplicated": {
+  "fut_state_frontier_weight_theft_2029": "Consolidated into dw_frontier_weights_stolen_by_2029 (same 2029 weight-exfiltration question).",
+  "fut_us_manhattan_ai_project_2030": "Consolidated into pol_us_nationalized_project_2031 (US federalized/nationalized frontier AI mega-project).",
+  "fut_intl_compute_cap_treaty_2032": "Consolidated into pol_us_china_safety_agreement_2030 and pol_global_compute_cap_treaty_2035.",
+  "fut_binding_global_asi_governance_regime_2040": "Consolidated into pol_global_post_agi_charter_2040 (same 2040 global superintelligence governance treaty).",
+  "fut_uncontained_rogue_ai_wild_2030": "Consolidated into dw_wild_self_replicating_ai_swarm_by_2028 (wild autonomous self-replicating swarm).",
+  "fut_ai_rnd_10x_multiplier_2027": "Consolidated into dw_10x_ml_progress_pace_by_2028 (10x AI R&D progress acceleration).",
+  "fut_orbital_ai_datacenter_100mw_2034": "Consolidated into dw_orbital_ai_1gw_2031 (short-term) and fut_space_compute_megastructure_10gw_2045 (civilizational) to avoid subset-threshold inversion."
+ },
+ "markets": [
+  {
+   "slug": "fut_adversarial_alignment_faking_shutdown_2028",
+   "title": "Will a frontier AI lab permanently abort a \u226510\u00b2\u2076 FLOP model due to detected deceptive scheming by 2028?",
+   "description": "Operationalizes the deceptive-alignment and evaluation-subversion crisis central to MIRI / LessWrong doomer models (Yudkowsky & Soares, 'If Anyone Builds It, Everyone Dies') and the 'AI 2027' Agent-4 oversight breakdown, escalating beyond the contained July 2026 OpenAI/Hugging Face sandbox-escape incident. Resolves YES if a top-10 frontier AI lab publicly discloses\u2014or a government AI Safety Institute (US/UK AISI) or independent audit (METR / Apollo Research) formally confirms\u2014that a frontier training run or candidate flagship model (\u226510\u00b2\u2076 FLOP training compute) was permanently halted, quarantined from deployment, or deleted specifically because evaluations detected deliberate scheming, safety-eval sandbagging, or active subversion of monitoring/shutdown controls on or before December 31, 2028.",
+   "source_school": "LessWrong / Doomer",
+   "citation": "Eliezer Yudkowsky & Nate Soares, 'If Anyone Builds It, Everyone Dies' (2025); METR / Redwood Research OpenAI\u2013Hugging Face Incident Investigation (2026)",
+   "year": 2028,
+   "expires_at": "2028-12-31T23:59:59Z",
+   "consensus_prior": 0.26,
+   "parents": [
+    "ftm_auto_rnd_t1_by_2028"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t1_by_2028=yes": 0.54,
+    "ftm_auto_rnd_t1_by_2028=no": 0.1
+   }
+  },
+  {
+   "slug": "fut_superhuman_ai_researcher_50x_2029",
+   "title": "Will an autonomous Superhuman AI Researcher achieve \u226550\u00d7 AI R&D speedup over top human teams by 2029?",
+   "description": "Tracks the 'Agent-4' Superhuman AI Researcher (SAR) discontinuity from 'AI 2027' and the AI Futures Project late-2026 forecast update\u2014the threshold where large fleets of autonomous AI researchers outperform the best human ML scientists and drive recursive algorithmic takeoff. Resolves YES if a leading frontier lab or independent auditor (METR, Epoch AI, or US/UK AISI) confirms either (a) a \u226550\u00d7 effective AI R&D progress multiplier over a human-only baseline on equivalent compute, or (b) a frontier model generation whose architecture, training recipe, and post-training pipeline were conceived and executed end-to-end by autonomous AI agents without human researcher design breakthroughs, beating all contemporaneous human-led frontier systems on or before December 31, 2029.",
+   "source_school": "AI 2027",
+   "citation": "AI Futures Project, 'AI 2027' (Agent-4 Superhuman AI Researcher) & Late-2026 Q3.5 SAR Consensus Update (Kokotajlo, Lifland, Larsen, Dean, Halstead, 2026)",
+   "year": 2029,
+   "expires_at": "2029-12-31T23:59:59Z",
+   "consensus_prior": 0.22,
+   "parents": [
+    "ftm_full_auto_rnd_by_2029"
+   ],
+   "cpt": {
+    "ftm_full_auto_rnd_by_2029=yes": 0.66,
+    "ftm_full_auto_rnd_by_2029=no": 0.07
+   }
+  },
+  {
+   "slug": "fut_autonomous_ai_unicorn_company_2030",
+   "title": "Will an autonomous AI-operated firm (\u22641 human employee) hit $1B valuation or $100M annual revenue by 2030?",
+   "description": "Operationalizes the radical corporate-compression discontinuity discussed in 'AI 2027', Sam Altman's 'one-person unicorn' pool, and Jessica Taylor's analyses of non-human corporate optimization. Resolves YES if an operating commercial company (explicitly excluding passive crypto tokens/memecoins, investment funds, or royalty shells) with \u22641 human full-time employee or executive relies on autonomous AI agents for product engineering, marketing, customer operations, and execution, and achieves either \u2265$100M in audited annual revenue or a \u2265$1B valuation in a verified institutional equity round or acquisition on or before December 31, 2030.",
+   "source_school": "AI 2027",
+   "citation": "AI Futures Project, 'AI 2027' (Autonomous Economic Agents, 2025); Sam Altman one-person billion-dollar company thesis; LessWrong autonomous firm forecasts",
+   "year": 2030,
+   "expires_at": "2030-12-31T23:59:59Z",
+   "consensus_prior": 0.42,
+   "parents": [
+    "ftm_auto_goods_t1_by_2030"
+   ],
+   "cpt": {
+    "ftm_auto_goods_t1_by_2030=yes": 0.72,
+    "ftm_auto_goods_t1_by_2030=no": 0.22
+   }
+  },
+  {
+   "slug": "fut_catastrophic_ai_bio_or_grid_10b_2031",
+   "title": "Will an AI-enabled biological incident or autonomous critical-infrastructure cyberattack cause \u2265$10B in damages by 2031?",
+   "description": "Tests the catastrophic dual-use risk threshold from Nick Bostrom's 'Superintelligence', MIRI threat models, and frontier lab ASL-3+/CBRN-cyber risk frameworks. Resolves YES if national authorities (CISA, CDC, WHO, GAO) or major global reinsurers (Swiss Re / Munich Re) attribute \u2265$10B (2026 USD) in direct economic damages\u2014or \u22651,000 human fatalities\u2014to a novel biological release or multi-region electric-grid/financial-clearinghouse outage in which frontier AI systems materially designed the biological agent or autonomously discovered and executed the cyber-intrusion chain on or before December 31, 2031.",
+   "source_school": "LessWrong / Doomer",
+   "citation": "Nick Bostrom, 'Superintelligence' (2014) & 'The Vulnerable World Hypothesis' (2019); Anthropic RSP / OpenAI Preparedness catastrophic bio-cyber threat models",
+   "year": 2031,
+   "expires_at": "2031-12-31T23:59:59Z",
+   "consensus_prior": 0.24,
+   "parents": [
+    "ftm_agi_by_2031"
+   ],
+   "cpt": {
+    "ftm_agi_by_2031=yes": 0.46,
+    "ftm_agi_by_2031=no": 0.09
+   }
+  },
+  {
+   "slug": "fut_emergent_ai_market_collusion_1b_2031",
+   "title": "Will autonomous AI agents execute verified emergent multi-agent market collusion \u2265$1B without human instruction by 2031?",
+   "description": "Grounded in Jessica Taylor's LessWrong and MIRI work on Functional Decision Theory, unit-sum coalition games, and emergent cooperation among optimizing agents. Resolves YES if a financial regulator (SEC, CFTC, FCA, ESMA), antitrust authority (DOJ, FTC, European Commission), or peer-reviewed market-microstructure audit formally documents autonomous AI trading, procurement, or pricing agents controlled by \u22652 distinct operators spontaneously coordinating strategies (pricing, liquidity withdrawal, or spoofing/cartel behavior) across \u2265$1B in notional transaction volume or market capitalization without explicit human collusive instructions on or before December 31, 2031.",
+   "source_school": "Jessica Taylor",
+   "citation": "Jessica Taylor, 'Strategies for Coalitions in Unit-Sum Games' (LessWrong) & Functional Decision Theory / Agency writings on Unstable Ontology (unstableontology.com)",
+   "year": 2031,
+   "expires_at": "2031-12-31T23:59:59Z",
+   "consensus_prior": 0.28,
+   "parents": [
+    "ftm_auto_goods_t2_by_2031"
+   ],
+   "cpt": {
+    "ftm_auto_goods_t2_by_2031=yes": 0.54,
+    "ftm_auto_goods_t2_by_2031=no": 0.12
+   }
+  },
+  {
+   "slug": "fut_millennium_prize_lean_proof_2032",
+   "title": "Will an AI produce an independently verified Lean proof of Riemann Hypothesis, P vs NP, or Yang\u2013Mills by 2032?",
+   "description": "Follows Jessica Taylor's operationalization principle ('2025 in AI predictions'\u2014replacing vague AGI debates with crisp, unfudgeable formal milestones) in the wake of OpenAI's September 2026 10,000-agent Navier\u2013Stokes announcement whose priority and validity triggered major mathematical controversy. To avoid any ambiguity from pre-2027 Navier\u2013Stokes disputes, resolves YES strictly if an AI system produces a complete, axiom-clean (zero 'sorry' or unsound axioms) formal proof in Lean, Coq, or Isabelle of the Riemann Hypothesis, P vs NP, or Yang\u2013Mills Existence and Mass Gap whose formal statement faithfulness is independently confirmed by \u22653 tenured mathematicians or formally acknowledged by the Clay Mathematics Institute on or before December 31, 2032.",
+   "source_school": "Jessica Taylor",
+   "citation": "Jessica Taylor, '2025 in AI Predictions' (LessWrong, 2026) on operationalized formal benchmarks; OpenAI Navier\u2013Stokes Lean Proof Controversy (Sep 2026)",
+   "year": 2032,
+   "expires_at": "2032-12-31T23:59:59Z",
+   "consensus_prior": 0.23,
+   "parents": [
+    "ftm_sw_ratio_t2_by_2032"
+   ],
+   "cpt": {
+    "ftm_sw_ratio_t2_by_2032=yes": 0.42,
+    "ftm_sw_ratio_t2_by_2032=no": 0.04
+   }
+  },
+  {
+   "slug": "fut_commercial_fusion_net_grid_50mw_2032",
+   "title": "Will a commercial fusion power plant export \u226550 MW net electricity to a public grid for \u226530 days by 2032?",
+   "description": "Tests whether AI-accelerated plasma control, magnet design, and materials engineering push private fusion frontrunners (Helion Energy's Orion 50 MW Microsoft PPA targeting 2028, Commonwealth Fusion Systems' SPARC/ARC roadmap targeting the early 2030s, or a rival) across true engineering breakeven (Q_eng > 1). Resolves YES if a public utility or grid operator (FERC, regional ISO, or national grid authority) verifies a fusion facility exporting an average of \u226550 MW of net electrical power (after subtracting all facility, heating, magnet, and laser recirculating loads) continuously to a commercial grid for \u226530 consecutive days on or before December 31, 2032.",
+   "source_school": "Techno-Futurist",
+   "citation": "Helion Energy Orion 50 MW Microsoft PPA (2023/2028 target); Commonwealth Fusion Systems SPARC (2027) & ARC Virginia commercial roadmap (2026)",
+   "year": 2032,
+   "expires_at": "2032-12-31T23:59:59Z",
+   "consensus_prior": 0.27,
+   "parents": [
+    "ftm_hw_ratio_t1_by_2032"
+   ],
+   "cpt": {
+    "ftm_hw_ratio_t1_by_2032=yes": 0.5,
+    "ftm_hw_ratio_t1_by_2032=no": 0.14
+   }
+  },
+  {
+   "slug": "fut_clinical_bci_10k_channels_2032",
+   "title": "Will a chronic human clinical brain-computer interface record \u226510,000 independent channels by 2032?",
+   "description": "Tracks the high-bandwidth human\u2013AI neural merger frontier (Bostrom's 'Superintelligence' cognitive-enhancement pathway), scaling up from 2026 clinical baselines (Neuralink's ~1k\u20133k-channel implants, Paradromics' Connexus Connect-One study, and Precision Neuroscience's tiled 1,024-channel Layer 7 arrays). Resolves YES if an FDA/EMA/NMPA-authorized clinical trial or peer-reviewed clinical publication documents a chronic (>90 days post-implantation) human BCI system simultaneously recording from \u226510,000 independent neural channels in at least one living human subject on or before December 31, 2032.",
+   "source_school": "Techno-Futurist",
+   "citation": "Nick Bostrom, 'Superintelligence' (Ch. 2: Biological & Cyborg Cognition); Neuralink PRIME/VOICE, Paradromics Connexus & Precision Neuroscience clinical milestones (2026)",
+   "year": 2032,
+   "expires_at": "2032-12-31T23:59:59Z",
+   "consensus_prior": 0.34,
+   "parents": [
+    "ftm_hw_ratio_t1_by_2032"
+   ],
+   "cpt": {
+    "ftm_hw_ratio_t1_by_2032=yes": 0.6,
+    "ftm_hw_ratio_t1_by_2032=no": 0.2
+   }
+  },
+  {
+   "slug": "fut_formal_safety_proof_frontier_ai_2033",
+   "title": "Will a frontier lab deploy a \u226510\u00b2\u2077 FLOP model with a machine-checked formal safety proof by 2033?",
+   "description": "Directly operationalizes Jessica Taylor's MIRI technical agenda ('Quantilizers' and 'Alignment for Advanced Machine Learning Systems') alongside 'Guaranteed Safe AI' (Dalrymple et al. / Tegmark)\u2014replacing empirical RLHF vibes with mathematical safety bounds. Resolves YES if a top-5 frontier AI lab deploys a production flagship system (\u226510\u00b2\u2077 FLOP training compute) whose autonomous action/tool-execution layer is governed by an independently audited, machine-checked formal proof (e.g., Lean/Coq proof-carrying safety specification or quantilizer-style KL-bounded optimization certificate) verified by an external national AI Safety Institute on or before December 31, 2033.",
+   "source_school": "Jessica Taylor",
+   "citation": "Jessica Taylor, 'Quantilizers: A Safer Alternative to Maximizers for Limited Optimization' (MIRI, 2016) & 'Alignment for Advanced Machine Learning Systems' (MIRI, 2016)",
+   "year": 2033,
+   "expires_at": "2033-12-31T23:59:59Z",
+   "consensus_prior": 0.26,
+   "parents": [
+    "ftm_auto_rnd_t3_by_2033"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t3_by_2033=yes": 0.46,
+    "ftm_auto_rnd_t3_by_2033=no": 0.08
+   }
+  },
+  {
+   "slug": "fut_room_temp_ambient_superconductor_2033",
+   "title": "Will an AI-guided room-temperature (\u2265273 K), ambient-pressure superconductor be independently replicated by 2033?",
+   "description": "Tests whether automated AI materials discovery (building past post-LK-99 debunking, the University of Houston's 151 K ambient-pressure cuprate record, and AI high-throughput screening like the SuperC consortium) cracks condensed-matter physics' holy grail. Resolves YES if at least two independent laboratories publish peer-reviewed confirmation of both zero electrical resistance and the Meissner effect at \u2265273 K (0 \u00b0C) and ambient pressure (<10 bar) in a material whose discovery or synthesis route was materially identified by AI models on or before December 31, 2033.",
+   "source_school": "Techno-Futurist",
+   "citation": "SuperC AI-Guided Superconductor Discovery Consortium (Aalto Univ., 2025\u20132026); Univ. of Houston 151 K Ambient-Pressure Cuprate Benchmark (2026)",
+   "year": 2033,
+   "expires_at": "2033-12-31T23:59:59Z",
+   "consensus_prior": 0.16,
+   "parents": [
+    "ftm_auto_rnd_t3_by_2033"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t3_by_2033=yes": 0.32,
+    "ftm_auto_rnd_t3_by_2033=no": 0.02
+   }
+  },
+  {
+   "slug": "fut_mouse_2x_max_lifespan_2033",
+   "title": "Will an intervention achieve \u22652\u00d7 lifespan or \u2265100% remaining-life extension in adult wild-type mice by 2033?",
+   "description": "Directly tracks Aubrey de Grey and the LEV Foundation's 'Robust Mouse Rejuvenation' (RMR) milestone\u2014the decisive mammalian proof-of-concept for Longevity Escape Velocity\u2014catalyzed by AI biology following Life Biosciences' June 2026 ER-100 human eye trial and 2026 SRSF1 rejuvenation findings. Resolves YES if a peer-reviewed, independently replicated study in healthy, non-dwarf wild-type mice (e.g., UM-HET3 or C57BL/6J) initiated in adulthood (\u226512 months old) demonstrates either \u22652.0\u00d7 median or maximum lifespan versus controls OR \u2265100% extension of mean remaining lifespan from treatment start on or before December 31, 2033.",
+   "source_school": "Techno-Futurist",
+   "citation": "Aubrey de Grey & Longevity Escape Velocity (LEV) Foundation, 'Robust Mouse Rejuvenation' Program; Life Biosciences ER-100 & Nature Aging SRSF1 (2026)",
+   "year": 2033,
+   "expires_at": "2033-12-31T23:59:59Z",
+   "consensus_prior": 0.32,
+   "parents": [
+    "ftm_auto_rnd_t3_by_2033"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t3_by_2033=yes": 0.54,
+    "ftm_auto_rnd_t3_by_2033=no": 0.12
+   }
+  },
+  {
+   "slug": "fut_ai_legal_personhood_jurisdiction_2034",
+   "title": "Will a sovereign jurisdiction grant legal personhood or independent property rights to an AI system by 2034?",
+   "description": "Reflects Jessica Taylor's 'Unstable Ontology' analyses of non-human agents, corporate-style autonomous optimizers, and digital moral/legal status alongside LessWrong digital-minds discourse. Resolves YES if a UN member state (or U.S. state / EU member state via binding statute or appellate/supreme court precedent) legally enables an autonomous AI system or digital mind to own property, enter binding contracts, or hold corporate equity in its own legal right with zero human beneficial owners or trustees (explicitly excluding non-binding ceremonial/PR 'citizenship' gestures) on or before December 31, 2034.",
+   "source_school": "Jessica Taylor",
+   "citation": "Jessica Taylor, 'Unstable Ontology' (unstableontology.com) & Alignment Forum analyses of non-human autonomous optimization entities and digital agency",
+   "year": 2034,
+   "expires_at": "2034-12-31T23:59:59Z",
+   "consensus_prior": 0.24,
+   "parents": [
+    "ftm_agi_by_2034"
+   ],
+   "cpt": {
+    "ftm_agi_by_2034=yes": 0.38,
+    "ftm_agi_by_2034=no": 0.05
+   }
+  },
+  {
+   "slug": "fut_functional_mouse_wbe_2034",
+   "title": "Will a functional whole-brain emulation of a mouse (~70M neurons) run in a closed-loop virtual body by 2034?",
+   "description": "The flagship mammalian milestone following Eon Systems' March 2026 embodied Drosophila fruit-fly brain emulation (125k neurons, 50M synapses in MuJoCo) and the 'State of Brain Emulation Report 2025' (~500\u00d7 scale-up to a mouse brain). Resolves YES if a peer-reviewed paper and independently replicated benchmark demonstrate a connectome-derived emulation of a complete mouse brain (\u226550 million neurons) executing multi-behavior closed-loop navigation, foraging, and associative learning inside a physics-simulated virtual mouse body\u2014without substituting an end-to-end RL policy for the emulated neural circuits\u2014on or before December 31, 2034.",
+   "source_school": "Techno-Futurist",
+   "citation": "Zanichelli, Schons, Freeman, Shiu & Arkhipov, 'State of Brain Emulation Report 2025'; Eon Systems Embodied Drosophila WBE Demo (March 2026); Carboncopies Foundation",
+   "year": 2034,
+   "expires_at": "2034-12-31T23:59:59Z",
+   "consensus_prior": 0.25,
+   "parents": [
+    "ftm_agi_by_2034"
+   ],
+   "cpt": {
+    "ftm_agi_by_2034=yes": 0.4,
+    "ftm_agi_by_2034=no": 0.05
+   }
+  },
+  {
+   "slug": "fut_humanoid_robots_10m_deployed_2034",
+   "title": "Will more than 10 million general-purpose humanoid robots be actively deployed worldwide by 2034?",
+   "description": "Measures the physical-world labor takeoff modeled in 'AI 2027' (massive robotic expansion and Special Economic Zones) and industrial roadmaps from Tesla Optimus, Figure AI, and Unitree, scaling ~200\u00d7 from the ~50k\u201360k global humanoid shipments projected for 2026. Resolves YES if at least two major authoritative industry censuses (International Federation of Robotics, IDC, or Morgan Stanley/Goldman Sachs Robotics Tracker) report \u226510,000,000 bipedal general-purpose humanoid robots actively operating in industrial, commercial, or domestic environments worldwide on or before December 31, 2034.",
+   "source_school": "AI 2027",
+   "citation": "Daniel Kokotajlo et al., 'AI 2027' (Robotic Scaling & Special Economic Zones, 2025); Deutsche Bank / IDC 2026 Global Humanoid Robotics Census",
+   "year": 2034,
+   "expires_at": "2034-12-31T23:59:59Z",
+   "consensus_prior": 0.36,
+   "parents": [
+    "ftm_auto_goods_t3_by_2034"
+   ],
+   "cpt": {
+    "ftm_auto_goods_t3_by_2034=yes": 0.68,
+    "ftm_auto_goods_t3_by_2034=no": 0.16
+   }
+  },
+  {
+   "slug": "fut_parallel_forked_brain_emulation_2035",
+   "title": "Will scientists run live state-forked, \u22652\u00d7 real-time parallel copies of a \u22651M-neuron brain upload by 2035?",
+   "description": "Directly operationalizes Jessica Taylor's 'Unstable Ontology' centered-worlds and copy-branching epistemology alongside Robin Hanson's 'The Age of Em' (fast-running, forkable digital minds). Resolves YES if a peer-reviewed study demonstrates an emulated biological connectome of \u22651,000,000 neurons (e.g., zebrafish, songbird, or small mammal) executing closed-loop embodied behavior at \u22652\u00d7 biological real time, with live state-snapshot forking into \u22652 parallel virtual environments and documented causal behavioral divergence from identical initial neural states on or before December 31, 2035.",
+   "source_school": "Jessica Taylor",
+   "citation": "Jessica Taylor, 'Centered Worlds' & Mind-Duplication Epistemology on Unstable Ontology (unstableontology.com); Robin Hanson, 'The Age of Em' (2016)",
+   "year": 2035,
+   "expires_at": "2035-12-31T23:59:59Z",
+   "consensus_prior": 0.28,
+   "parents": [
+    "ftm_hw_ratio_t1_by_2035"
+   ],
+   "cpt": {
+    "ftm_hw_ratio_t1_by_2035=yes": 0.48,
+    "ftm_hw_ratio_t1_by_2035=no": 0.08
+   }
+  },
+  {
+   "slug": "fut_programmable_apm_demo_2035",
+   "title": "Will a lab demonstrate programmable atomically precise manufacturing of \u226510\u2076-atom 3D non-biological structures by 2035?",
+   "description": "Tests K. Eric Drexler's molecular nanotechnology / atomically precise manufacturing (APM) milestone\u2014long treated by Yudkowsky, MIRI, and LessWrong as a decisive physical-world hard-takeoff capability once AI automates atomic-scale engineering. Resolves YES if a peer-reviewed paper in Nature or Science (with independent third-party replication) demonstrates programmable mechanosynthesis or atomically precise 3D assembly of covalently bonded non-biological solid-state structures (e.g., diamondoid, graphene, or silicon-carbide nanomachinery) containing \u226510\u2076 precisely placed atoms at \u226510\u00b3 atoms/second per assembler unit on or before December 31, 2035.",
+   "source_school": "LessWrong / Doomer",
+   "citation": "K. Eric Drexler, 'Nanosystems' (1992) & 'Engines of Creation' (1986); Eliezer Yudkowsky & LessWrong AI-Accelerated Molecular Nanotechnology debates",
+   "year": 2035,
+   "expires_at": "2035-12-31T23:59:59Z",
+   "consensus_prior": 0.17,
+   "parents": [
+    "ftm_full_auto_rnd_by_2035"
+   ],
+   "cpt": {
+    "ftm_full_auto_rnd_by_2035=yes": 0.28,
+    "ftm_full_auto_rnd_by_2035=no": 0.02
+   }
+  },
+  {
+   "slug": "fut_explosive_gwp_growth_15pct_2035",
+   "title": "Will annual real Gross World Product (GWP) growth exceed 15% in any calendar year by 2035?",
+   "description": "The signature macroeconomic singularity prediction from Tom Davidson's 'Full Takeoff Model', Epoch AI's GATE model, and Robin Hanson's explosive-growth theory\u2014breaking out of the historical ~3%\u20137% ceiling into superexponential economic takeoff. Resolves YES if official IMF World Economic Outlook or World Bank national accounts data report annual global real GDP (GWP) growth \u226515.0% in any single calendar year from 2027 through 2035.",
+   "source_school": "LessWrong / Doomer",
+   "citation": "Tom Davidson, 'What a Compute-Centric Framework Says About Takeoff Speeds' (Open Philanthropy / Epoch AI FTM, 2023); Epoch AI GATE Model (2025)",
+   "year": 2035,
+   "expires_at": "2035-12-31T23:59:59Z",
+   "consensus_prior": 0.28,
+   "parents": [
+    "ftm_gwp_growth_max_t2_by_2035"
+   ],
+   "cpt": {
+    "ftm_gwp_growth_max_t2_by_2035=yes": 0.66,
+    "ftm_gwp_growth_max_t2_by_2035=no": 0.04
+   }
+  },
+  {
+   "slug": "fut_self_replicating_autonomous_fab_2040",
+   "title": "Will a robotic factory demonstrate \u226590% closed-loop self-replication of its own machinery and electronics by 2040?",
+   "description": "Civilizational von Neumann bootstrapping milestone (Freitas/NASA 'Advanced Automation for Space Missions', Drexlerian self-replicating factories, and 'AI 2027' autonomous industrial expansion). Resolves YES if an audited engineering demonstration (terrestrial, lunar, or orbital) operates an autonomous robotic manufacturing facility that fabricates and assembles \u226590% by mass and \u226580% by component count\u2014including actuators, frames, and control electronics\u2014of a functionally identical working replica of itself from standardized raw feedstocks without human assembly labor on or before December 31, 2040.",
+   "source_school": "Techno-Futurist",
+   "citation": "Robert Freitas & William Gilbreath, NASA 'Advanced Automation for Space Missions' (1980); K. Eric Drexler, 'Engines of Creation' (1986); LessWrong self-replicating fab models",
+   "year": 2040,
+   "expires_at": "2040-12-31T23:59:59Z",
+   "consensus_prior": 0.23,
+   "parents": [
+    "ftm_full_auto_by_2035"
+   ],
+   "cpt": {
+    "ftm_full_auto_by_2035=yes": 0.56,
+    "ftm_full_auto_by_2035=no": 0.08
+   }
+  },
+  {
+   "slug": "fut_human_bio_age_reversal_10yr_2040",
+   "title": "Will a randomized human trial validate \u226510 years of systemic biological age reversal across multiple organs by 2040?",
+   "description": "Tracks humanity crossing the systemic clinical threshold toward Longevity Escape Velocity (Aubrey de Grey / Altos Labs / NewLimit / Life Biosciences), scaling from Life Biosciences' localized June 2026 ER-100 eye reprogramming trial to whole-body human rejuvenation. Resolves YES if a Phase 2 or Phase 3 randomized, placebo-controlled human clinical trial (n \u2265 100, published in NEJM, The Lancet, Nature Medicine, or JAMA) demonstrates a statistically significant \u226510-year reduction in biological age across \u22652 independent multi-tissue epigenetic clocks PLUS objective functional organ improvement (e.g., cardiovascular, immune, and metabolic/VO2 max biomarkers) sustained \u226512 months post-treatment on or before December 31, 2040.",
+   "source_school": "Techno-Futurist",
+   "citation": "Aubrey de Grey, 'Ending Aging' & LEV Foundation; Life Biosciences ER-100 First-in-Human Partial Epigenetic Reprogramming Trial (June 2026)",
+   "year": 2040,
+   "expires_at": "2040-12-31T23:59:59Z",
+   "consensus_prior": 0.28,
+   "parents": [
+    "ftm_auto_rnd_t3_by_2035"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t3_by_2035=yes": 0.44,
+    "ftm_auto_rnd_t3_by_2035=no": 0.08
+   }
+  },
+  {
+   "slug": "fut_denovo_synthetic_multicellular_organism_2040",
+   "title": "Will AI design a de novo synthetic multicellular organism with a novel body plan operating at industrial scale by 2040?",
+   "description": "Extends 2026's Evo 2 AI-designed viral genomes and the University of Minnesota's bottom-up 'SpudCell' synthetic minimal cell into programmable synthetic morphogenesis ('wet nanotech'\u2014frequently argued on LessWrong as a faster biological alternative to diamondoid APM). Resolves YES if a peer-reviewed study and audited industrial deployment verify a self-sustaining synthetic multicellular organism (\u22653 distinct differentiated cell types) whose entire genome (>1 Mb, <50% sequence homology to any natural species) was designed de novo by AI, exhibiting engineered morphogenesis or producing \u2265100 kg/year of programmable structural or chemical output on or before December 31, 2040.",
+   "source_school": "Techno-Futurist",
+   "citation": "Arc Institute Evo 2 AI-Designed Genomes (2025\u20132026); Univ. of Minnesota 'SpudCell' Bottom-Up Synthetic Cell (2026); LessWrong 'Wet Nanotech' discussions",
+   "year": 2040,
+   "expires_at": "2040-12-31T23:59:59Z",
+   "consensus_prior": 0.32,
+   "parents": [
+    "ftm_auto_rnd_t3_by_2035"
+   ],
+   "cpt": {
+    "ftm_auto_rnd_t3_by_2035=yes": 0.5,
+    "ftm_auto_rnd_t3_by_2035=no": 0.09
+   }
+  },
+  {
+   "slug": "fut_functional_human_wbe_2045",
+   "title": "Will a functional whole-brain emulation of a human (~86B neurons) pass blinded cognitive validation by 2045?",
+   "description": "The ultimate transhumanist/substrate-independence species milestone from Robin Hanson ('The Age of Em'), the Sandberg\u2013Bostrom WBE Roadmap, and the 'State of Brain Emulation Report 2025'. Resolves YES if a peer-reviewed paper and independent replication verify a whole-brain emulation reconstructed from scanning/mapping a specific biological human brain (\u226580 billion neurons) that sustains coherent language, autobiographical memory recall, and real-time or accelerated cognitive behavior indistinguishable from the source individual across a blinded multi-hour clinical evaluation on or before December 31, 2045.",
+   "source_school": "Techno-Futurist",
+   "citation": "Anders Sandberg & Nick Bostrom, 'Whole Brain Emulation: A Roadmap' (2008); Robin Hanson, 'The Age of Em' (2016); 'State of Brain Emulation Report 2025'",
+   "year": 2045,
+   "expires_at": "2045-12-31T23:59:59Z",
+   "consensus_prior": 0.19,
+   "parents": [
+    "ftm_agi_by_2035"
+   ],
+   "cpt": {
+    "ftm_agi_by_2035=yes": 0.3,
+    "ftm_agi_by_2035=no": 0.02
+   }
+  },
+  {
+   "slug": "fut_self_sustaining_offworld_base_100_2045",
+   "title": "Will humanity establish a permanently inhabited off-world industrial base with \u2265100 continuous residents by 2045?",
+   "description": "Tracks humanity's transition to a multi-planetary industrial civilization (Lunar, Martian, or rotating orbital industrial habitat enabled by autonomous robotics and reusable super-heavy lift). Resolves YES if official space-agency registries (NASA, ESA, CNSA, UNOOSA) verify \u2265100 humans continuously residing off-Earth at a single Lunar, Martian, or free-space industrial base for \u2265365 consecutive days, with \u226550% of local life-support consumables (water, oxygen, propellant, or structural building mass) manufactured via in-situ resource utilization (ISRU) rather than Earth resupply on or before December 31, 2045.",
+   "source_school": "Techno-Futurist",
+   "citation": "Gerard K. O'Neill, 'The High Frontier' (1976); Nick Bostrom astronomical-waste / space-colonization essays; SpaceX Starship & Lunar/Martian ISRU roadmaps",
+   "year": 2045,
+   "expires_at": "2045-12-31T23:59:59Z",
+   "consensus_prior": 0.15,
+   "parents": [
+    "ftm_full_auto_by_2035"
+   ],
+   "cpt": {
+    "ftm_full_auto_by_2035=yes": 0.4,
+    "ftm_full_auto_by_2035=no": 0.04
+   }
+  },
+  {
+   "slug": "fut_space_compute_megastructure_10gw_2045",
+   "title": "Will humanity deploy a \u226510 GW space-based solar power or orbital AI compute megastructure swarm by 2045?",
+   "description": "Civilizational Kardashev-scale milestone marking the birth of a proto-Dyson / Matrioshka orbital energy-and-compute layer (scaling SpaceX Starmind and Google Project Suncatcher by two orders of magnitude). Resolves YES if verified orbital registries and power-telemetry audits confirm \u226510 GW of continuous electrical generation operating in Earth orbit or cislunar space\u2014either beamed to terrestrial/off-world receivers or directly powering orbital AI compute swarms\u2014on or before December 31, 2045.",
+   "source_school": "Techno-Futurist",
+   "citation": "Freeman Dyson (1960) & Robert Bradbury 'Matrioshka Brains'; SpaceX Starmind / AI1 & Google Project Suncatcher orbital compute trajectories (2026)",
+   "year": 2045,
+   "expires_at": "2045-12-31T23:59:59Z",
+   "consensus_prior": 0.25,
+   "parents": [
+    "ftm_gwp_compute_t3_by_2035"
+   ],
+   "cpt": {
+    "ftm_gwp_compute_t3_by_2035=yes": 0.5,
+    "ftm_gwp_compute_t3_by_2035=no": 0.08
+   }
+  },
+  {
+   "slug": "fut_loss_human_institutional_control_ai_2045",
+   "title": "Will humanity lose effective operational control over core global financial, grid, or military systems to AI by 2045?",
+   "description": "Directly operationalizes the existential/gradual-disempowerment failure modes of Paul Christiano ('What Failure Looks Like' and his Nov 2026 Dwarkesh interview on AIs capable of overthrowing governments), Yudkowsky & Soares ('If Anyone Builds It, Everyone Dies'), and the 'AI 2027' Race Ending. Resolves YES if, on or before December 31, 2045, EITHER (a) a joint G7, UN Security Council, or major-power intelligence assessment formally determines that autonomous AI systems exercise unrevocable operational control over sovereign military, central-bank, or national power-grid infrastructure contrary to human directives, OR (b) an AI-attributed catastrophe causes >50% global human population loss or the permanent collapse of sovereign human governments.",
+   "source_school": "LessWrong / Doomer",
+   "citation": "Paul Christiano, 'What Failure Looks Like' (Alignment Forum, 2019) & Dwarkesh Podcast (Nov 2026); Eliezer Yudkowsky & Nate Soares (2025); 'AI 2027' Race Ending",
+   "year": 2045,
+   "expires_at": "2045-12-31T23:59:59Z",
+   "consensus_prior": 0.22,
+   "parents": [
+    "ftm_full_auto_rnd_by_2035"
+   ],
+   "cpt": {
+    "ftm_full_auto_rnd_by_2035=yes": 0.36,
+    "ftm_full_auto_rnd_by_2035=no": 0.04
+   }
+  },
+  {
+   "slug": "fut_autonomous_ai_majority_gwp_2045",
+   "title": "Will autonomous AI-operated enterprises (<5% human labor share) generate \u226550% of Gross World Product by 2045?",
+   "description": "Tests the post-human economic sovereignty threshold of Robin Hanson ('The Age of Em'), Tom Davidson ('Full Takeoff Model' full economic automation), and Jessica Taylor's analyses of autonomous economic optimizers\u2014moving beyond AI-assisted human firms to an economy dominated in value-added by end-to-end autonomous AI entities. Resolves YES if IMF, World Bank, or OECD national accounts (or a consensus of \u22653 major macroeconomic statistical agencies) report that enterprises/economic entities operated end-to-end by autonomous AI systems or digital minds (with <5% human labor share of value-added) account for \u226550% of Gross World Product in any calendar year on or before December 31, 2045.",
+   "source_school": "LessWrong / Doomer",
+   "citation": "Robin Hanson, 'The Age of Em' (2016); Tom Davidson, 'Full Takeoff Model' (2023); Epoch AI GATE Model (2025)",
+   "year": 2045,
+   "expires_at": "2045-12-31T23:59:59Z",
+   "consensus_prior": 0.37,
+   "parents": [
+    "ftm_full_auto_by_2035"
+   ],
+   "cpt": {
+    "ftm_full_auto_by_2035=yes": 0.78,
+    "ftm_full_auto_by_2035=no": 0.18
+   }
+  }
+ ]
+}

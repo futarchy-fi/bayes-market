@@ -1,5 +1,5 @@
 {
- "builtAt": "2026-11-23T03:13:00Z",
+ "builtAt": "2026-11-23T04:20:20Z",
  "bridges": [
   {
    "externalId": "x0067",
@@ -119,71 +119,6 @@
    "rationale": "Direct AGI timeline anchor before 2036; meeting FTM AGI training threshold by 2035 maps directly."
   },
   {
-   "externalId": "x0116",
-   "parents": [
-    "ftm_agi_by_2037"
-   ],
-   "strength": 5,
-   "direction": "positive",
-   "cpt": {
-    "ftm_agi_by_2037=yes": 0.8176,
-    "ftm_agi_by_2037=no": 0.1824
-   },
-   "rationale": "Direct AGI timeline anchor before 2038; meeting FTM AGI training threshold by 2037 maps directly."
-  },
-  {
-   "externalId": "x0103",
-   "parents": [
-    "ftm_agi_by_2039"
-   ],
-   "strength": 5,
-   "direction": "positive",
-   "cpt": {
-    "ftm_agi_by_2039=yes": 0.8176,
-    "ftm_agi_by_2039=no": 0.1824
-   },
-   "rationale": "Direct AGI timeline anchor before 2040; meeting FTM AGI training threshold by 2039 maps directly."
-  },
-  {
-   "externalId": "x0153",
-   "parents": [
-    "ftm_agi_by_2041"
-   ],
-   "strength": 5,
-   "direction": "positive",
-   "cpt": {
-    "ftm_agi_by_2041=yes": 0.8176,
-    "ftm_agi_by_2041=no": 0.1824
-   },
-   "rationale": "Direct AGI timeline anchor before 2042; meeting FTM AGI training threshold by 2041 maps directly."
-  },
-  {
-   "externalId": "x0146",
-   "parents": [
-    "ftm_agi_by_2044"
-   ],
-   "strength": 5,
-   "direction": "positive",
-   "cpt": {
-    "ftm_agi_by_2044=yes": 0.8176,
-    "ftm_agi_by_2044=no": 0.1824
-   },
-   "rationale": "Direct AGI timeline anchor before 2045; meeting FTM AGI training threshold by 2044 maps directly."
-  },
-  {
-   "externalId": "x0114",
-   "parents": [
-    "ftm_agi_by_2045"
-   ],
-   "strength": 5,
-   "direction": "positive",
-   "cpt": {
-    "ftm_agi_by_2045=yes": 0.8176,
-    "ftm_agi_by_2045=no": 0.1824
-   },
-   "rationale": "Direct AGI timeline anchor before 2048; meeting FTM AGI training threshold by 2045 maps directly."
-  },
-  {
    "externalId": "x0246",
    "parents": [
     "ftm_auto_rnd_t0_by_2027"
@@ -195,45 +130,6 @@
     "ftm_auto_rnd_t0_by_2027=no": 0.2315
    },
    "rationale": "Early R&D automation crossing 5% by 2027 strongly raises likelihood of a 2027 AGI fire alarm."
-  },
-  {
-   "externalId": "x0084",
-   "parents": [
-    "ftm_agi_by_2035"
-   ],
-   "strength": 4,
-   "direction": "positive",
-   "cpt": {
-    "ftm_agi_by_2035=yes": 0.7685,
-    "ftm_agi_by_2035=no": 0.2315
-   },
-   "rationale": "Reaching AGI training compute by 2035 strongly favors current LLM scaling paradigm succeeding."
-  },
-  {
-   "externalId": "x0139",
-   "parents": [
-    "ftm_agi_by_2035"
-   ],
-   "strength": 4,
-   "direction": "positive",
-   "cpt": {
-    "ftm_agi_by_2035=yes": 0.7685,
-    "ftm_agi_by_2035=no": 0.2315
-   },
-   "rationale": "Faster AGI arrival (by 2035) makes it much more likely the first AGI is built on LLMs."
-  },
-  {
-   "externalId": "x0102",
-   "parents": [
-    "ftm_agi_by_2035"
-   ],
-   "strength": 3,
-   "direction": "positive",
-   "cpt": {
-    "ftm_agi_by_2035=yes": 0.7311,
-    "ftm_agi_by_2035=no": 0.2689
-   },
-   "rationale": "Reaching AGI by 2035 favors incumbent API-model labs rather than a new post-paradigm entrant."
   },
   {
    "externalId": "x0072",
@@ -256,8 +152,8 @@
    "strength": 4,
    "direction": "negative",
    "cpt": {
-    "ftm_sub_agi_by_2029=yes": 0.1824,
-    "ftm_sub_agi_by_2029=no": 0.8176
+    "ftm_sub_agi_by_2029=yes": 0.2315,
+    "ftm_sub_agi_by_2029=no": 0.7685
    },
    "rationale": "Reaching Sub-AGI by 2029 makes OpenAI abandoning its AGI goal before 2030 much less likely."
   },
@@ -355,28 +251,28 @@
   {
    "externalId": "x0070",
    "parents": [
-    "ftm_agi_by_2040"
+    "ftm_agi_by_2035"
    ],
    "strength": 5,
    "direction": "positive",
    "cpt": {
-    "ftm_agi_by_2040=yes": 0.8176,
-    "ftm_agi_by_2040=no": 0.1824
+    "ftm_agi_by_2035=yes": 0.8176,
+    "ftm_agi_by_2035=no": 0.1824
    },
-   "rationale": "Superintelligence by 2040 (conditional on survival) closely tracks AGI compute sufficiency by 2040."
+   "rationale": "Superintelligence by 2040 (conditional on survival) is strongly driven by strict AGI by 2035."
   },
   {
    "externalId": "x0092",
    "parents": [
-    "ftm_agi_by_2045"
+    "ftm_agi_by_2035"
    ],
    "strength": 5,
    "direction": "positive",
    "cpt": {
-    "ftm_agi_by_2045=yes": 0.8176,
-    "ftm_agi_by_2045=no": 0.1824
+    "ftm_agi_by_2035=yes": 0.8176,
+    "ftm_agi_by_2035=no": 0.1824
    },
-   "rationale": "Superintelligence by 2050 closely tracks reaching AGI compute sufficiency by 2045."
+   "rationale": "Superintelligence by 2050 (conditional on survival) is strongly elevated by strict AGI by 2035."
   },
   {
    "externalId": "x0209",
@@ -494,19 +390,6 @@
     "ftm_auto_rnd_t1_by_2030=no": 0.2315
    },
    "rationale": "10M-line Lean mathlib by 2030 tracks AI-accelerated formal R&D automation (20% by 2030)."
-  },
-  {
-   "externalId": "x0300",
-   "parents": [
-    "ftm_agi_by_2040"
-   ],
-   "strength": 3,
-   "direction": "positive",
-   "cpt": {
-    "ftm_agi_by_2040=yes": 0.7311,
-    "ftm_agi_by_2040=no": 0.2689
-   },
-   "rationale": "Resolving P vs NP by 2050 is substantially more likely if AGI is achieved by 2040."
   },
   {
    "externalId": "x0282",
@@ -719,15 +602,15 @@
   {
    "externalId": "x0291",
    "parents": [
-    "ftm_full_auto_by_2045"
+    "ftm_full_auto_by_2035"
    ],
    "strength": 5,
    "direction": "positive",
    "cpt": {
-    "ftm_full_auto_by_2045=yes": 0.8176,
-    "ftm_full_auto_by_2045=no": 0.1824
+    "ftm_full_auto_by_2035=yes": 0.8176,
+    "ftm_full_auto_by_2035=no": 0.1824
    },
-   "rationale": "Full automation of >97% of jobs before 2075 tracks FTM full goods automation by 2045."
+   "rationale": "Full economic automation (>97% of jobs before 2075) is strongly elevated by full automation by 2035."
   },
   {
    "externalId": "x0090",
@@ -769,19 +652,6 @@
    "rationale": "AI compute capex exceeding 2% of GWP by 2032 increases macroeconomic dislocation and crash risk."
   },
   {
-   "externalId": "x0347",
-   "parents": [
-    "ftm_auto_goods_t2_by_2040"
-   ],
-   "strength": 4,
-   "direction": "positive",
-   "cpt": {
-    "ftm_auto_goods_t2_by_2040=yes": 0.7685,
-    "ftm_auto_goods_t2_by_2040=no": 0.2315
-   },
-   "rationale": "A one-person $1B company by 2040 tracks 50% goods-and-services automation by 2040."
-  },
-  {
    "externalId": "x0267",
    "parents": [
     "ftm_auto_goods_t0_by_2028"
@@ -808,19 +678,6 @@
    "rationale": "Prompt-to-high-quality video games before 2030 tracks 20% goods-and-services automation by 2029."
   },
   {
-   "externalId": "x0330",
-   "parents": [
-    "ftm_auto_goods_t3_by_2040"
-   ],
-   "strength": 4,
-   "direction": "positive",
-   "cpt": {
-    "ftm_auto_goods_t3_by_2040=yes": 0.7685,
-    "ftm_auto_goods_t3_by_2040=no": 0.2315
-   },
-   "rationale": "Majority AI-generated digital entertainment by 2040 tracks 90% goods-and-services automation by 2040."
-  },
-  {
    "externalId": "x0251",
    "parents": [
     "ftm_auto_goods_t1_by_2030"
@@ -836,15 +693,15 @@
   {
    "externalId": "x0232",
    "parents": [
-    "ftm_agi_by_2040"
+    "ftm_agi_by_2035"
    ],
    "strength": 4,
    "direction": "positive",
    "cpt": {
-    "ftm_agi_by_2040=yes": 0.7685,
-    "ftm_agi_by_2040=no": 0.2315
+    "ftm_agi_by_2035=yes": 0.7685,
+    "ftm_agi_by_2035=no": 0.2315
    },
-   "rationale": "Achieving AGI by 2040 gives a decade+ of post-AGI R&D to cure aging before 2050."
+   "rationale": "A cure to aging by 2050 is strongly accelerated by reaching strict AGI by 2035."
   },
   {
    "externalId": "x0202",
@@ -923,19 +780,6 @@
     "ftm_auto_goods_t1_by_2029=no": 0.2689
    },
    "rationale": "Autonomous passenger aircraft piloting before 2030 tracks 20% goods-and-services automation by 2029."
-  },
-  {
-   "externalId": "x0197",
-   "parents": [
-    "ftm_auto_goods_t3_by_2040"
-   ],
-   "strength": 3,
-   "direction": "positive",
-   "cpt": {
-    "ftm_auto_goods_t3_by_2040=yes": 0.7311,
-    "ftm_auto_goods_t3_by_2040=no": 0.2689
-   },
-   "rationale": "Banning human-driven cars in a city center by 2040 tracks 90% goods-and-services automation by 2040."
   },
   {
    "externalId": "x0077",
@@ -1029,19 +873,6 @@
    "rationale": "Reaching full AGI compute sufficiency by 2035 makes an effective global AI pause before 2035 less likely."
   },
   {
-   "externalId": "x0098",
-   "parents": [
-    "ftm_agi_by_2037"
-   ],
-   "strength": 4,
-   "direction": "negative",
-   "cpt": {
-    "ftm_agi_by_2037=yes": 0.2315,
-    "ftm_agi_by_2037=no": 0.7685
-   },
-   "rationale": "Reaching full AGI compute sufficiency by 2037 indicates US AI research was not banned beforehand."
-  },
-  {
    "externalId": "x0212",
    "parents": [
     "ftm_sub_agi_by_2029"
@@ -1081,19 +912,6 @@
    "rationale": "An AI disaster killing >=100k people before 2029 is strongly elevated by Sub-AGI by 2028."
   },
   {
-   "externalId": "x0225",
-   "parents": [
-    "ftm_agi_by_2039"
-   ],
-   "strength": 4,
-   "direction": "positive",
-   "cpt": {
-    "ftm_agi_by_2039=yes": 0.7685,
-    "ftm_agi_by_2039=no": 0.2315
-   },
-   "rationale": "An AI disaster killing >=100 people before 2040 is strongly elevated by AGI arrival by 2039."
-  },
-  {
    "externalId": "x0260",
    "parents": [
     "ftm_agi_by_2032"
@@ -1101,23 +919,23 @@
    "strength": 4,
    "direction": "positive",
    "cpt": {
-    "ftm_agi_by_2032=yes": 0.7685,
-    "ftm_agi_by_2032=no": 0.2315
+    "ftm_agi_by_2032=yes": 0.8176,
+    "ftm_agi_by_2032=no": 0.1824
    },
    "rationale": "Very rapid strict AGI by 2032 compresses alignment lead-time and elevates pre-2040 1bn-death risk."
   },
   {
    "externalId": "x0204",
    "parents": [
-    "ftm_agi_by_2040"
+    "ftm_agi_by_2035"
    ],
    "strength": 4,
    "direction": "positive",
    "cpt": {
-    "ftm_agi_by_2040=yes": 0.7685,
-    "ftm_agi_by_2040=no": 0.2315
+    "ftm_agi_by_2035=yes": 0.7685,
+    "ftm_agi_by_2035=no": 0.2315
    },
-   "rationale": "A misaligned-AI 'close call' before 2100 is substantially more likely if AGI arrives by 2040."
+   "rationale": "A misaligned-AI 'close call' before 2100 is substantially more likely if strict AGI arrives by 2035."
   },
   {
    "externalId": "x0226",
@@ -1198,19 +1016,6 @@
    "rationale": "Instant deepfakes by end of 2027 tracks crossing 5% economic AI deployment by 2027."
   },
   {
-   "externalId": "x0108",
-   "parents": [
-    "ftm_sub_agi_by_2035"
-   ],
-   "strength": 3,
-   "direction": "positive",
-   "cpt": {
-    "ftm_sub_agi_by_2035=yes": 0.7311,
-    "ftm_sub_agi_by_2035=no": 0.2689
-   },
-   "rationale": "Reaching Sub-AGI by 2035 raises likelihood of superhuman persuasion emerging ahead of superintelligence."
-  },
-  {
    "externalId": "x0234",
    "parents": [
     "ftm_sub_agi_by_2029"
@@ -1265,15 +1070,15 @@
   {
    "externalId": "x0348",
    "parents": [
-    "ftm_agi_by_2040"
+    "ftm_agi_by_2035"
    ],
    "strength": 4,
    "direction": "positive",
    "cpt": {
-    "ftm_agi_by_2040=yes": 0.7685,
-    "ftm_agi_by_2040=no": 0.2315
+    "ftm_agi_by_2035=yes": 0.7685,
+    "ftm_agi_by_2035=no": 0.2315
    },
-   "rationale": "Reaching AGI by 2040 raises the probability of AI taking over governance/control by 2100."
+   "rationale": "Reaching strict AGI by 2035 raises the probability of AI taking over governance/control by 2100."
   },
   {
    "externalId": "x0240",

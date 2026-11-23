@@ -1,1007 +1,2348 @@
 {
- "at": "2026-11-23T03:13:11Z",
- "dryRun": false,
- "proposed": 99,
- "applied": 99,
- "dropped": [],
- "worstMarginalDelta": 4.859389999278818e-07,
- "minCalibratedLift": 0.1156,
- "stats": {
-  "treewidth": 8.0,
-  "cliqueCount": 648.0,
-  "maxCliqueStates": 512.0,
-  "statesLog2": 648.0
+ "generatedAt": "2026-11-23T04:23:36Z",
+ "asOfDate": "2026-11-23",
+ "totalMarkets": 441,
+ "countsByFamily": {
+  "ftm": 262,
+  "manifold": 84,
+  "dwarkesh": 56,
+  "policy": 14,
+  "futurist": 25
  },
- "checks": [
+ "totalEdges": 714,
+ "bridgedLeaves": 179,
+ "widenedSpreadCount": 0,
+ "treewidth": 8.0,
+ "cliqueCount": 441.0,
+ "worstMarginalDelta": 4.8e-07,
+ "minCalibratedLift": 0.1268,
+ "bridges": [
   {
-   "externalId": "x0067",
+   "marketId": "x0067",
+   "variableId": "x_will_we_get_agi_before_2028",
+   "family": "manifold",
    "parents": [
     "ftm_sub_agi_by_2027"
    ],
-   "target": 0.307731,
-   "implied": 0.307731,
-   "delta": 4.9e-07,
-   "lift": 0.5988
+   "seedMarginal": 0.307731,
+   "impliedMarginal": 0.307731,
+   "delta": 3.5e-07,
+   "lift": 0.6057,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0069",
-   "parents": [
-    "ftm_sub_agi_by_2029"
-   ],
-   "target": 0.51,
-   "implied": 0.51,
-   "delta": 9e-08,
-   "lift": 0.4919
-  },
-  {
-   "externalId": "x0070",
-   "parents": [
-    "ftm_agi_by_2040"
-   ],
-   "target": 0.75,
-   "implied": 0.75,
-   "delta": 1.3e-07,
-   "lift": 0.6085
-  },
-  {
-   "externalId": "x0071",
+   "marketId": "x0071",
+   "variableId": "x_will_we_get_agi_before_2029",
+   "family": "manifold",
    "parents": [
     "ftm_sub_agi_by_2028"
    ],
-   "target": 0.510634,
-   "implied": 0.510634,
-   "delta": 3.8e-07,
-   "lift": 0.466
+   "seedMarginal": 0.510634,
+   "impliedMarginal": 0.510634,
+   "delta": 1.2e-07,
+   "lift": 0.4828,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0073",
+   "marketId": "x0069",
+   "variableId": "x_will_we_get_agi_before_2030",
+   "family": "manifold",
+   "parents": [
+    "ftm_sub_agi_by_2029"
+   ],
+   "seedMarginal": 0.51,
+   "impliedMarginal": 0.51,
+   "delta": 5e-08,
+   "lift": 0.5227,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0078",
+   "variableId": "x_will_we_get_agi_before_2031",
+   "family": "manifold",
    "parents": [
     "ftm_agi_by_2030"
    ],
-   "target": 0.39,
-   "implied": 0.39,
-   "delta": 1.5e-07,
-   "lift": 0.5503
+   "seedMarginal": 0.57,
+   "impliedMarginal": 0.57,
+   "delta": 0.0,
+   "lift": 0.4155,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0074",
+   "marketId": "x0074",
+   "variableId": "x_will_we_get_agi_before_2032",
+   "family": "manifold",
    "parents": [
     "ftm_agi_by_2031"
    ],
-   "target": 0.636499,
-   "implied": 0.636499,
-   "delta": 5e-08,
-   "lift": 0.3639
+   "seedMarginal": 0.636499,
+   "impliedMarginal": 0.636499,
+   "delta": 3e-07,
+   "lift": 0.387,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0078",
+   "marketId": "x0086",
+   "variableId": "x_will_we_get_agi_before_2033",
+   "family": "manifold",
    "parents": [
-    "ftm_agi_by_2030"
+    "ftm_agi_by_2032"
    ],
-   "target": 0.57,
-   "implied": 0.57,
-   "delta": 2.4e-07,
-   "lift": 0.405
+   "seedMarginal": 0.671041,
+   "impliedMarginal": 0.671041,
+   "delta": 1e-08,
+   "lift": 0.3991,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0085",
+   "marketId": "x0088",
+   "variableId": "x_will_we_get_agi_before_2034",
+   "family": "manifold",
+   "parents": [
+    "ftm_agi_by_2033"
+   ],
+   "seedMarginal": 0.69037,
+   "impliedMarginal": 0.69037,
+   "delta": 9e-08,
+   "lift": 0.4306,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0085",
+   "variableId": "x_will_we_get_agi_before_2035",
+   "family": "manifold",
    "parents": [
     "ftm_agi_by_2034"
    ],
-   "target": 0.681378,
-   "implied": 0.681378,
-   "delta": 3.3e-07,
-   "lift": 0.4298
+   "seedMarginal": 0.681378,
+   "impliedMarginal": 0.681378,
+   "delta": 1e-07,
+   "lift": 0.5176,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0086",
-   "parents": [
-    "ftm_agi_by_2032"
-   ],
-   "target": 0.671041,
-   "implied": 0.671041,
-   "delta": 2.9e-07,
-   "lift": 0.3573
-  },
-  {
-   "externalId": "x0088",
-   "parents": [
-    "ftm_agi_by_2033"
-   ],
-   "target": 0.69037,
-   "implied": 0.69037,
-   "delta": 2.4e-07,
-   "lift": 0.3693
-  },
-  {
-   "externalId": "x0092",
-   "parents": [
-    "ftm_agi_by_2045"
-   ],
-   "target": 0.7644,
-   "implied": 0.7644,
-   "delta": 2.9e-07,
-   "lift": 0.6348
-  },
-  {
-   "externalId": "x0096",
+   "marketId": "x0096",
+   "variableId": "x_will_we_get_agi_before_2036",
+   "family": "manifold",
    "parents": [
     "ftm_agi_by_2035"
    ],
-   "target": 0.74,
-   "implied": 0.74,
-   "delta": 3e-08,
-   "lift": 0.4061
+   "seedMarginal": 0.74,
+   "impliedMarginal": 0.74,
+   "delta": 2e-07,
+   "lift": 0.5091,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0099",
+   "marketId": "x0246",
+   "variableId": "x_will_there_be_a_fire_alarm_for_agi_by_the_end_of_2027",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_rnd_t0_by_2027"
+   ],
+   "seedMarginal": 0.126085,
+   "impliedMarginal": 0.126085,
+   "delta": 2.4e-07,
+   "lift": 0.2443,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0072",
+   "variableId": "x_will_we_have_at_least_one_more_ai_winter_before_agi_is_rea",
+   "family": "manifold",
+   "parents": [
+    "ftm_agi_by_2035"
+   ],
+   "seedMarginal": 0.154825,
+   "impliedMarginal": 0.154825,
+   "delta": 3.3e-07,
+   "lift": 0.288,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0261",
+   "variableId": "x_will_openai_abandon_the_goal_of_building_agi_before_2030",
+   "family": "manifold",
    "parents": [
     "ftm_sub_agi_by_2029"
    ],
-   "target": 0.28622,
-   "implied": 0.28622,
-   "delta": 4e-08,
-   "lift": 0.6322
+   "seedMarginal": 0.132065,
+   "impliedMarginal": 0.132065,
+   "delta": 5e-08,
+   "lift": 0.1422,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0103",
-   "parents": [
-    "ftm_agi_by_2039"
-   ],
-   "target": 0.774448,
-   "implied": 0.774448,
-   "delta": 6e-08,
-   "lift": 0.5496
-  },
-  {
-   "externalId": "x0114",
-   "parents": [
-    "ftm_agi_by_2045"
-   ],
-   "target": 0.887957,
-   "implied": 0.887957,
-   "delta": 3e-07,
-   "lift": 0.5434
-  },
-  {
-   "externalId": "x0116",
-   "parents": [
-    "ftm_agi_by_2037"
-   ],
-   "target": 0.75,
-   "implied": 0.75,
-   "delta": 1.6e-07,
-   "lift": 0.4969
-  },
-  {
-   "externalId": "x0129",
-   "parents": [
-    "ftm_sub_agi_by_2028"
-   ],
-   "target": 0.189807,
-   "implied": 0.189807,
-   "delta": 3.5e-07,
-   "lift": 0.631
-  },
-  {
-   "externalId": "x0133",
-   "parents": [
-    "ftm_agi_by_2031"
-   ],
-   "target": 0.431931,
-   "implied": 0.431931,
-   "delta": 2.5e-07,
-   "lift": 0.5417
-  },
-  {
-   "externalId": "x0142",
+   "marketId": "x0142",
+   "variableId": "x_will_we_get_asi_before_2028",
+   "family": "manifold",
    "parents": [
     "ftm_sub_agi_by_2027"
    ],
-   "target": 0.107805,
-   "implied": 0.107805,
-   "delta": 1.4e-07,
-   "lift": 0.5838
+   "seedMarginal": 0.107805,
+   "impliedMarginal": 0.107805,
+   "delta": 1.9e-07,
+   "lift": 0.5635,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0146",
+   "marketId": "x0129",
+   "variableId": "x_will_we_get_asi_before_2029",
+   "family": "manifold",
    "parents": [
-    "ftm_agi_by_2044"
+    "ftm_sub_agi_by_2028"
    ],
-   "target": 0.827548,
-   "implied": 0.827548,
-   "delta": 9e-08,
-   "lift": 0.6103
+   "seedMarginal": 0.189807,
+   "impliedMarginal": 0.189807,
+   "delta": 4e-07,
+   "lift": 0.6189,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0153",
+   "marketId": "x0099",
+   "variableId": "x_will_we_get_asi_before_2030",
+   "family": "manifold",
    "parents": [
-    "ftm_agi_by_2041"
+    "ftm_sub_agi_by_2029"
    ],
-   "target": 0.803984,
-   "implied": 0.803984,
-   "delta": 1.4e-07,
-   "lift": 0.5849
+   "seedMarginal": 0.28622,
+   "impliedMarginal": 0.28622,
+   "delta": 2.6e-07,
+   "lift": 0.6339,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0154",
+   "marketId": "x0133",
+   "variableId": "x_will_we_get_asi_before_2032",
+   "family": "manifold",
+   "parents": [
+    "ftm_agi_by_2031"
+   ],
+   "seedMarginal": 0.431931,
+   "impliedMarginal": 0.431931,
+   "delta": 6e-08,
+   "lift": 0.5681,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0154",
+   "variableId": "x_will_we_get_asi_before_2034",
+   "family": "manifold",
    "parents": [
     "ftm_agi_by_2033"
    ],
-   "target": 0.537306,
-   "implied": 0.537306,
-   "delta": 1.8e-07,
-   "lift": 0.5259
+   "seedMarginal": 0.537306,
+   "impliedMarginal": 0.537306,
+   "delta": 2.4e-07,
+   "lift": 0.5882,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0165",
-   "parents": [
-    "ftm_auto_goods_t2_by_2030"
-   ],
-   "target": 0.152788,
-   "implied": 0.152788,
-   "delta": 4e-08,
-   "lift": 0.5898
-  },
-  {
-   "externalId": "x0218",
+   "marketId": "x0218",
+   "variableId": "x_will_we_get_asi_before_2036",
+   "family": "manifold",
    "parents": [
     "ftm_agi_by_2035"
    ],
-   "target": 0.66,
-   "implied": 0.66,
-   "delta": 1.1e-07,
-   "lift": 0.5089
-  },
-  {
-   "externalId": "x0252",
-   "parents": [
-    "ftm_auto_rnd_t2_by_2030"
-   ],
-   "target": 0.31543,
-   "implied": 0.31543,
-   "delta": 3.2e-07,
-   "lift": 0.6259
-  },
-  {
-   "externalId": "x0269",
-   "parents": [
-    "ftm_gwp_growth_max_t0_by_2027"
-   ],
-   "target": 0.283868,
-   "implied": 0.283868,
-   "delta": 3.9e-07,
-   "lift": 0.6323
-  },
-  {
-   "externalId": "x0273",
-   "parents": [
-    "ftm_auto_rnd_t0_by_2027"
-   ],
-   "target": 0.717777,
-   "implied": 0.717777,
-   "delta": 1.6e-07,
-   "lift": 0.3445
-  },
-  {
-   "externalId": "x0281",
-   "parents": [
-    "ftm_auto_goods_t1_by_2029"
-   ],
-   "target": 0.28,
-   "implied": 0.28,
-   "delta": 2.2e-07,
-   "lift": 0.6336
-  },
-  {
-   "externalId": "x0291",
-   "parents": [
-    "ftm_full_auto_by_2045"
-   ],
-   "target": 0.625355,
-   "implied": 0.625355,
-   "delta": 3.7e-07,
-   "lift": 0.5752
-  },
-  {
-   "externalId": "x0302",
-   "parents": [
-    "ftm_full_auto_by_2034"
-   ],
-   "target": 0.232649,
-   "implied": 0.232649,
+   "seedMarginal": 0.66,
+   "impliedMarginal": 0.66,
    "delta": 1.3e-07,
-   "lift": 0.4881
+   "lift": 0.5996,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0328",
-   "parents": [
-    "ftm_auto_goods_t2_by_2029"
-   ],
-   "target": 0.136493,
-   "implied": 0.136493,
-   "delta": 3.9e-07,
-   "lift": 0.6034
-  },
-  {
-   "externalId": "x0344",
-   "parents": [
-    "ftm_auto_goods_t2_by_2029"
-   ],
-   "target": 0.122101,
-   "implied": 0.122101,
-   "delta": 2.8e-07,
-   "lift": 0.586
-  },
-  {
-   "externalId": "x0354",
-   "parents": [
-    "ftm_auto_rnd_t0_by_2027"
-   ],
-   "target": 0.4,
-   "implied": 0.4,
-   "delta": 2e-08,
-   "lift": 0.6257
-  },
-  {
-   "externalId": "x0072",
-   "parents": [
-    "ftm_agi_by_2035"
-   ],
-   "target": 0.154825,
-   "implied": 0.154825,
-   "delta": 1.4e-07,
-   "lift": 0.2275
-  },
-  {
-   "externalId": "x0076",
-   "parents": [
-    "ftm_auto_goods_t1_by_2029"
-   ],
-   "target": 0.76249,
-   "implied": 0.76249,
-   "delta": 6e-08,
-   "lift": 0.2344
-  },
-  {
-   "externalId": "x0077",
-   "parents": [
-    "ftm_sub_agi_by_2029"
-   ],
-   "target": 0.693338,
-   "implied": 0.693338,
-   "delta": 8e-08,
-   "lift": 0.2972
-  },
-  {
-   "externalId": "x0080",
-   "parents": [
-    "ftm_sub_agi_by_2029"
-   ],
-   "target": 0.047057,
-   "implied": 0.047057,
-   "delta": 9e-08,
-   "lift": 0.1905
-  },
-  {
-   "externalId": "x0084",
-   "parents": [
-    "ftm_agi_by_2035"
-   ],
-   "target": 0.594443,
-   "implied": 0.594443,
-   "delta": 1e-08,
-   "lift": 0.4967
-  },
-  {
-   "externalId": "x0090",
-   "parents": [
-    "ftm_auto_goods_t0_by_2029"
-   ],
-   "target": 0.852578,
-   "implied": 0.852578,
-   "delta": 4.6e-07,
-   "lift": 0.1832
-  },
-  {
-   "externalId": "x0093",
-   "parents": [
-    "ftm_auto_rnd_t1_by_2029"
-   ],
-   "target": 0.904092,
-   "implied": 0.904092,
-   "delta": 1e-07,
-   "lift": 0.12
-  },
-  {
-   "externalId": "x0094",
-   "parents": [
-    "ftm_sub_agi_by_2034"
-   ],
-   "target": 0.849783,
-   "implied": 0.849783,
-   "delta": 4.3e-07,
-   "lift": 0.2611
-  },
-  {
-   "externalId": "x0098",
-   "parents": [
-    "ftm_agi_by_2037"
-   ],
-   "target": 0.258792,
-   "implied": 0.258792,
-   "delta": 2.2e-07,
-   "lift": 0.4344
-  },
-  {
-   "externalId": "x0104",
-   "parents": [
-    "ftm_sub_agi_by_2029"
-   ],
-   "target": 0.182004,
-   "implied": 0.182004,
-   "delta": 2.6e-07,
-   "lift": 0.4852
-  },
-  {
-   "externalId": "x0132",
-   "parents": [
-    "ftm_gwp_compute_t2_by_2034"
-   ],
-   "target": 0.63204,
-   "implied": 0.63204,
-   "delta": 2e-07,
-   "lift": 0.4297
-  },
-  {
-   "externalId": "x0139",
-   "parents": [
-    "ftm_agi_by_2035"
-   ],
-   "target": 0.633904,
-   "implied": 0.633904,
-   "delta": 8e-08,
-   "lift": 0.4677
-  },
-  {
-   "externalId": "x0151",
+   "marketId": "x0073",
+   "variableId": "x_conditional_on_no_existential_catastrophe_will_there_be_2",
+   "family": "manifold",
    "parents": [
     "ftm_agi_by_2030"
    ],
-   "target": 0.822377,
-   "implied": 0.822377,
-   "delta": 4.6e-07,
-   "lift": 0.5179
+   "seedMarginal": 0.39,
+   "impliedMarginal": 0.39,
+   "delta": 3.2e-07,
+   "lift": 0.5617,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0174",
+   "marketId": "x0070",
+   "variableId": "x_conditional_on_no_existential_catastrophe_will_there_be_a",
+   "family": "manifold",
    "parents": [
-    "ftm_sub_agi_by_2029"
+    "ftm_agi_by_2035"
    ],
-   "target": 0.829962,
-   "implied": 0.829962,
-   "delta": 3.7e-07,
-   "lift": 0.1695
-  },
-  {
-   "externalId": "x0177",
-   "parents": [
-    "ftm_sub_agi_by_2028"
-   ],
-   "target": 0.282026,
-   "implied": 0.282026,
+   "seedMarginal": 0.75,
+   "impliedMarginal": 0.75,
    "delta": 1.1e-07,
-   "lift": 0.5359
+   "lift": 0.4946,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0202",
-   "parents": [
-    "ftm_auto_goods_t1_by_2028"
-   ],
-   "target": 0.61121,
-   "implied": 0.61121,
-   "delta": 2.5e-07,
-   "lift": 0.5019
-  },
-  {
-   "externalId": "x0204",
-   "parents": [
-    "ftm_agi_by_2040"
-   ],
-   "target": 0.827116,
-   "implied": 0.827116,
-   "delta": 3.3e-07,
-   "lift": 0.413
-  },
-  {
-   "externalId": "x0208",
+   "marketId": "x0092",
+   "variableId": "x_conditional_on_no_existential_catastrophe_will_there_be_4",
+   "family": "manifold",
    "parents": [
     "ftm_agi_by_2035"
    ],
-   "target": 0.653371,
-   "implied": 0.653371,
-   "delta": 1.7e-07,
-   "lift": 0.4511
-  },
-  {
-   "externalId": "x0212",
-   "parents": [
-    "ftm_sub_agi_by_2029"
-   ],
-   "target": 0.3911,
-   "implied": 0.3911,
-   "delta": 1.8e-07,
-   "lift": 0.5147
-  },
-  {
-   "externalId": "x0215",
-   "parents": [
-    "ftm_auto_rnd_t1_by_2029"
-   ],
-   "target": 0.818804,
-   "implied": 0.818804,
-   "delta": 1.3e-07,
-   "lift": 0.1956
-  },
-  {
-   "externalId": "x0216",
-   "parents": [
-    "ftm_agi_by_2035"
-   ],
-   "target": 0.35,
-   "implied": 0.35,
-   "delta": 2.5e-07,
-   "lift": 0.454
-  },
-  {
-   "externalId": "x0225",
-   "parents": [
-    "ftm_agi_by_2039"
-   ],
-   "target": 0.806636,
-   "implied": 0.806636,
-   "delta": 5e-08,
-   "lift": 0.4134
-  },
-  {
-   "externalId": "x0226",
-   "parents": [
-    "ftm_agi_by_2033"
-   ],
-   "target": 0.106559,
-   "implied": 0.106559,
+   "seedMarginal": 0.7644,
+   "impliedMarginal": 0.7644,
    "delta": 8e-08,
-   "lift": 0.2707
+   "lift": 0.4725,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0227",
-   "parents": [
-    "ftm_auto_goods_t1_by_2030"
-   ],
-   "target": 0.790792,
-   "implied": 0.790792,
-   "delta": 3.7e-07,
-   "lift": 0.2292
-  },
-  {
-   "externalId": "x0232",
-   "parents": [
-    "ftm_agi_by_2040"
-   ],
-   "target": 0.49,
-   "implied": 0.49,
-   "delta": 1.4e-07,
-   "lift": 0.4777
-  },
-  {
-   "externalId": "x0234",
-   "parents": [
-    "ftm_sub_agi_by_2029"
-   ],
-   "target": 0.558949,
-   "implied": 0.558949,
-   "delta": 4e-07,
-   "lift": 0.41
-  },
-  {
-   "externalId": "x0235",
-   "parents": [
-    "ftm_sub_agi_by_2028"
-   ],
-   "target": 0.124728,
-   "implied": 0.124728,
-   "delta": 1.7e-07,
-   "lift": 0.4481
-  },
-  {
-   "externalId": "x0240",
-   "parents": [
-    "ftm_agi_by_2033"
-   ],
-   "target": 0.07799,
-   "implied": 0.07799,
-   "delta": 3.5e-07,
-   "lift": 0.2057
-  },
-  {
-   "externalId": "x0241",
-   "parents": [
-    "ftm_sub_agi_by_2028"
-   ],
-   "target": 0.671901,
-   "implied": 0.671901,
-   "delta": 6e-08,
-   "lift": 0.2998
-  },
-  {
-   "externalId": "x0246",
-   "parents": [
-    "ftm_auto_rnd_t0_by_2027"
-   ],
-   "target": 0.126085,
-   "implied": 0.126085,
-   "delta": 2.5e-07,
-   "lift": 0.302
-  },
-  {
-   "externalId": "x0249",
-   "parents": [
-    "ftm_agi_by_2035"
-   ],
-   "target": 0.321075,
-   "implied": 0.321075,
-   "delta": 3.3e-07,
-   "lift": 0.4659
-  },
-  {
-   "externalId": "x0256",
-   "parents": [
-    "ftm_sub_agi_by_2030"
-   ],
-   "target": 0.420233,
-   "implied": 0.420233,
-   "delta": 1e-07,
-   "lift": 0.5216
-  },
-  {
-   "externalId": "x0260",
-   "parents": [
-    "ftm_agi_by_2032"
-   ],
-   "target": 0.053428,
-   "implied": 0.053428,
-   "delta": 8e-08,
-   "lift": 0.1838
-  },
-  {
-   "externalId": "x0261",
-   "parents": [
-    "ftm_sub_agi_by_2029"
-   ],
-   "target": 0.132065,
-   "implied": 0.132065,
-   "delta": 1e-07,
-   "lift": 0.1403
-  },
-  {
-   "externalId": "x0265",
-   "parents": [
-    "ftm_sub_agi_by_2028"
-   ],
-   "target": 0.22277,
-   "implied": 0.22277,
-   "delta": 3.6e-07,
-   "lift": 0.5316
-  },
-  {
-   "externalId": "x0267",
-   "parents": [
-    "ftm_auto_goods_t0_by_2028"
-   ],
-   "target": 0.47,
-   "implied": 0.47,
-   "delta": 2.6e-07,
-   "lift": 0.5035
-  },
-  {
-   "externalId": "x0270",
-   "parents": [
-    "ftm_auto_goods_t0_by_2027"
-   ],
-   "target": 0.780355,
-   "implied": 0.780355,
-   "delta": 9e-08,
-   "lift": 0.2217
-  },
-  {
-   "externalId": "x0275",
-   "parents": [
-    "ftm_auto_rnd_t0_by_2028"
-   ],
-   "target": 0.876152,
-   "implied": 0.876152,
-   "delta": 1e-07,
-   "lift": 0.1668
-  },
-  {
-   "externalId": "x0289",
-   "parents": [
-    "ftm_auto_goods_t0_by_2029"
-   ],
-   "target": 0.799006,
-   "implied": 0.799006,
-   "delta": 2.1e-07,
-   "lift": 0.2459
-  },
-  {
-   "externalId": "x0330",
-   "parents": [
-    "ftm_auto_goods_t3_by_2040"
-   ],
-   "target": 0.644582,
-   "implied": 0.644582,
-   "delta": 3.7e-07,
-   "lift": 0.5366
-  },
-  {
-   "externalId": "x0345",
-   "parents": [
-    "ftm_auto_goods_t1_by_2029"
-   ],
-   "target": 0.616005,
-   "implied": 0.616005,
-   "delta": 3e-08,
-   "lift": 0.365
-  },
-  {
-   "externalId": "x0347",
-   "parents": [
-    "ftm_auto_goods_t2_by_2040"
-   ],
-   "target": 0.433562,
-   "implied": 0.433562,
-   "delta": 2.1e-07,
-   "lift": 0.4192
-  },
-  {
-   "externalId": "x0348",
-   "parents": [
-    "ftm_agi_by_2040"
-   ],
-   "target": 0.45112,
-   "implied": 0.45112,
-   "delta": 1.8e-07,
-   "lift": 0.4506
-  },
-  {
-   "externalId": "x0353",
-   "parents": [
-    "ftm_auto_rnd_t1_by_2030"
-   ],
-   "target": 0.667591,
-   "implied": 0.667591,
-   "delta": 3e-08,
-   "lift": 0.3806
-  },
-  {
-   "externalId": "x0366",
-   "parents": [
-    "ftm_train_run_t2_by_2032"
-   ],
-   "target": 0.70633,
-   "implied": 0.70633,
-   "delta": 1.1e-07,
-   "lift": 0.4753
-  },
-  {
-   "externalId": "x0371",
-   "parents": [
-    "ftm_gwp_compute_t0_by_2028"
-   ],
-   "target": 0.830325,
-   "implied": 0.830325,
-   "delta": 1.9e-07,
-   "lift": 0.225
-  },
-  {
-   "externalId": "x0372",
-   "parents": [
-    "ftm_sub_agi_by_2033"
-   ],
-   "target": 0.85,
-   "implied": 0.85,
-   "delta": 1e-08,
-   "lift": 0.2273
-  },
-  {
-   "externalId": "x0380",
-   "parents": [
-    "ftm_auto_goods_t1_by_2030"
-   ],
-   "target": 0.195058,
-   "implied": 0.195058,
-   "delta": 1e-08,
-   "lift": 0.4439
-  },
-  {
-   "externalId": "x0102",
-   "parents": [
-    "ftm_agi_by_2035"
-   ],
-   "target": 0.675487,
-   "implied": 0.675487,
-   "delta": 1.7e-07,
-   "lift": 0.3788
-  },
-  {
-   "externalId": "x0108",
-   "parents": [
-    "ftm_sub_agi_by_2035"
-   ],
-   "target": 0.643855,
-   "implied": 0.643855,
-   "delta": 6e-08,
-   "lift": 0.4444
-  },
-  {
-   "externalId": "x0115",
-   "parents": [
-    "ftm_auto_rnd_t0_by_2027"
-   ],
-   "target": 0.193298,
-   "implied": 0.193298,
-   "delta": 1.5e-07,
-   "lift": 0.3516
-  },
-  {
-   "externalId": "x0126",
-   "parents": [
-    "ftm_sub_agi_by_2035"
-   ],
-   "target": 0.78442,
-   "implied": 0.78442,
-   "delta": 8e-08,
-   "lift": 0.3341
-  },
-  {
-   "externalId": "x0137",
-   "parents": [
-    "ftm_auto_goods_t1_by_2029"
-   ],
-   "target": 0.567217,
-   "implied": 0.567217,
-   "delta": 2.4e-07,
-   "lift": 0.3677
-  },
-  {
-   "externalId": "x0152",
-   "parents": [
-    "ftm_gwp_compute_t2_by_2032"
-   ],
-   "target": 0.56,
-   "implied": 0.56,
-   "delta": 3e-08,
-   "lift": 0.3945
-  },
-  {
-   "externalId": "x0170",
-   "parents": [
-    "ftm_sub_agi_by_2028"
-   ],
-   "target": 0.80058,
-   "implied": 0.80058,
-   "delta": 7e-08,
-   "lift": 0.175
-  },
-  {
-   "externalId": "x0197",
-   "parents": [
-    "ftm_auto_goods_t3_by_2040"
-   ],
-   "target": 0.4,
-   "implied": 0.4,
-   "delta": 4.1e-07,
-   "lift": 0.3668
-  },
-  {
-   "externalId": "x0209",
+   "marketId": "x0209",
+   "variableId": "x_will_fast_takeoff_less_than_72_hours_from_agi_to_asi_occur",
+   "family": "manifold",
    "parents": [
     "ftm_full_auto_rnd_by_2035"
    ],
-   "target": 0.173233,
-   "implied": 0.173233,
-   "delta": 1e-07,
-   "lift": 0.2489
+   "seedMarginal": 0.173233,
+   "impliedMarginal": 0.173233,
+   "delta": 1.3e-07,
+   "lift": 0.2068,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0214",
-   "parents": [
-    "ftm_sub_agi_by_2029"
-   ],
-   "target": 0.394838,
-   "implied": 0.394838,
-   "delta": 2.7e-07,
-   "lift": 0.4518
-  },
-  {
-   "externalId": "x0251",
-   "parents": [
-    "ftm_auto_goods_t1_by_2030"
-   ],
-   "target": 0.593173,
-   "implied": 0.593173,
-   "delta": 9e-08,
-   "lift": 0.3751
-  },
-  {
-   "externalId": "x0268",
-   "parents": [
-    "ftm_gwp_compute_t0_by_2028"
-   ],
-   "target": 0.928186,
-   "implied": 0.928186,
-   "delta": 3.5e-07,
-   "lift": 0.1156
-  },
-  {
-   "externalId": "x0282",
+   "marketId": "x0354",
+   "variableId": "x_will_ai_research_be_mostly_autonomous_by_june_1_2027",
+   "family": "manifold",
    "parents": [
     "ftm_auto_rnd_t0_by_2027"
    ],
-   "target": 0.763696,
-   "implied": 0.763696,
-   "delta": 2.5e-07,
-   "lift": 0.2463
+   "seedMarginal": 0.4,
+   "impliedMarginal": 0.4,
+   "delta": 2.4e-07,
+   "lift": 0.633,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0300",
+   "marketId": "x0273",
+   "variableId": "x_will_we_develop_leopold_s_drop_in_remote_ai_workers_by_end",
+   "family": "manifold",
    "parents": [
-    "ftm_agi_by_2040"
+    "ftm_auto_rnd_t0_by_2027"
    ],
-   "target": 0.8,
-   "implied": 0.8,
+   "seedMarginal": 0.717777,
+   "impliedMarginal": 0.717777,
+   "delta": 1e-08,
+   "lift": 0.3951,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0252",
+   "variableId": "x_will_ai_surpass_humans_in_conducting_scientific_research_b",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_rnd_t2_by_2030"
+   ],
+   "seedMarginal": 0.31543,
+   "impliedMarginal": 0.31543,
+   "delta": 2e-08,
+   "lift": 0.6351,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0215",
+   "variableId": "x_will_we_have_an_ai_generated_research_paper_accepted_to_1",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2029"
+   ],
+   "seedMarginal": 0.818804,
+   "impliedMarginal": 0.818804,
    "delta": 0.0,
-   "lift": 0.3772
+   "lift": 0.2187,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0310",
+   "marketId": "x0174",
+   "variableId": "x_will_the_arc_agi_grand_prize_be_claimed_before_2030",
+   "family": "manifold",
    "parents": [
-    "ftm_auto_goods_t2_by_2035"
+    "ftm_sub_agi_by_2029"
    ],
-   "target": 0.582164,
-   "implied": 0.582164,
-   "delta": 1.8e-07,
-   "lift": 0.4531
+   "seedMarginal": 0.829962,
+   "impliedMarginal": 0.829962,
+   "delta": 2.8e-07,
+   "lift": 0.1818,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0333",
+   "marketId": "x0256",
+   "variableId": "x_will_the_arc_agi_grand_prize_be_claimed_by_an_llm",
+   "family": "manifold",
    "parents": [
-    "ftm_gwp_compute_t0_by_2027"
+    "ftm_sub_agi_by_2030"
    ],
-   "target": 0.72136,
-   "implied": 0.72136,
-   "delta": 1e-07,
-   "lift": 0.2899
+   "seedMarginal": 0.420233,
+   "impliedMarginal": 0.420233,
+   "delta": 4e-08,
+   "lift": 0.536,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0360",
+   "marketId": "x0093",
+   "variableId": "x_superhuman_mathematical_problem_solving_before_2030_assumi",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2029"
+   ],
+   "seedMarginal": 0.904092,
+   "impliedMarginal": 0.904092,
+   "delta": 3e-07,
+   "lift": 0.1376,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0353",
+   "variableId": "x_will_lean_mathlib_contain_more_than_10_million_lines_of_co",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2030"
+   ],
+   "seedMarginal": 0.667591,
+   "impliedMarginal": 0.667591,
+   "delta": 2e-08,
+   "lift": 0.4329,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0282",
+   "variableId": "x_ai_beats_minecraft_rsg_in_under_10_minutes_before_2028",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_rnd_t0_by_2027"
+   ],
+   "seedMarginal": 0.763696,
+   "impliedMarginal": 0.763696,
+   "delta": 2e-08,
+   "lift": 0.275,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0094",
+   "variableId": "x_before_2035_will_there_exist_any_ai_that_can_perform_arbit",
+   "family": "manifold",
+   "parents": [
+    "ftm_sub_agi_by_2034"
+   ],
+   "seedMarginal": 0.849783,
+   "impliedMarginal": 0.849783,
+   "delta": 7e-08,
+   "lift": 0.3337,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0275",
+   "variableId": "x_in_2028_will_an_ai_be_able_to_play_randomly_selected_compu",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_rnd_t0_by_2028"
+   ],
+   "seedMarginal": 0.876152,
+   "impliedMarginal": 0.876152,
+   "delta": 0.0,
+   "lift": 0.1972,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0115",
+   "variableId": "x_will_we_fully_interpret_a_gpt_2_level_language_model_by_20",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_rnd_t0_by_2027"
+   ],
+   "seedMarginal": 0.193298,
+   "impliedMarginal": 0.193298,
+   "delta": 9e-08,
+   "lift": 0.306,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0360",
+   "variableId": "x_will_a_large_language_model_beat_a_super_grandmaster_at_ch",
+   "family": "manifold",
    "parents": [
     "ftm_sw_ratio_t1_by_2035"
    ],
-   "target": 0.77,
-   "implied": 0.77,
-   "delta": 1.2e-07,
-   "lift": 0.3688
+   "seedMarginal": 0.77,
+   "impliedMarginal": 0.77,
+   "delta": 3.9e-07,
+   "lift": 0.412,
+   "widenedSpread": false
   },
   {
-   "externalId": "x0399",
+   "marketId": "x0366",
+   "variableId": "x_will_there_be_a_period_of_12_contiguous_months_during_whic",
+   "family": "manifold",
+   "parents": [
+    "ftm_train_run_t2_by_2032"
+   ],
+   "seedMarginal": 0.70633,
+   "impliedMarginal": 0.70633,
+   "delta": 6e-08,
+   "lift": 0.4067,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0399",
+   "variableId": "x_space_datacenter_industry_generates_100m_annual_revenue_by",
+   "family": "manifold",
    "parents": [
     "ftm_gwp_compute_t1_by_2029"
    ],
-   "target": 0.344738,
-   "implied": 0.344738,
+   "seedMarginal": 0.344738,
+   "impliedMarginal": 0.344738,
+   "delta": 9e-08,
+   "lift": 0.4581,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0371",
+   "variableId": "x_openai_reaches_100b_revenue_in_2028",
+   "family": "manifold",
+   "parents": [
+    "ftm_gwp_compute_t0_by_2028"
+   ],
+   "seedMarginal": 0.830325,
+   "impliedMarginal": 0.830325,
+   "delta": 1e-08,
+   "lift": 0.2414,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0333",
+   "variableId": "x_will_a_new_lab_create_a_top_performing_ai_frontier_model_b",
+   "family": "manifold",
+   "parents": [
+    "ftm_gwp_compute_t0_by_2027"
+   ],
+   "seedMarginal": 0.72136,
+   "impliedMarginal": 0.72136,
+   "delta": 3.9e-07,
+   "lift": 0.3012,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0151",
+   "variableId": "x_will_ssi_ilya_s_company_offer_a_product_before_someone_cre",
+   "family": "manifold",
+   "parents": [
+    "ftm_agi_by_2030"
+   ],
+   "seedMarginal": 0.822377,
+   "impliedMarginal": 0.822377,
+   "delta": 1.1e-07,
+   "lift": 0.5076,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0214",
+   "variableId": "x_will_anthropic_have_a_major_conflict_involving_its_unique",
+   "family": "manifold",
+   "parents": [
+    "ftm_sub_agi_by_2029"
+   ],
+   "seedMarginal": 0.394838,
+   "impliedMarginal": 0.394838,
+   "delta": 1.5e-07,
+   "lift": 0.459,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0269",
+   "variableId": "x_by_2028_will_there_be_a_visible_break_in_trend_line_on_us",
+   "family": "manifold",
+   "parents": [
+    "ftm_gwp_growth_max_t0_by_2027"
+   ],
+   "seedMarginal": 0.283868,
+   "impliedMarginal": 0.283868,
+   "delta": 1.2e-07,
+   "lift": 0.6041,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0281",
+   "variableId": "x_will_ai_cause_the_us_unemployment_rate_to_exceed_10_before",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t1_by_2029"
+   ],
+   "seedMarginal": 0.28,
+   "impliedMarginal": 0.28,
+   "delta": 4.7e-07,
+   "lift": 0.6322,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0165",
+   "variableId": "x_will_ai_cause_mass_unemployment_by_2030",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t2_by_2030"
+   ],
+   "seedMarginal": 0.152788,
+   "impliedMarginal": 0.152788,
+   "delta": 3.3e-07,
+   "lift": 0.5326,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0344",
+   "variableId": "x_will_we_have_near_complete_automation_of_the_world_econ_2",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t2_by_2029"
+   ],
+   "seedMarginal": 0.122101,
+   "impliedMarginal": 0.122101,
+   "delta": 2e-07,
+   "lift": 0.5531,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0302",
+   "variableId": "x_will_we_have_near_complete_automation_of_the_world_economy",
+   "family": "manifold",
+   "parents": [
+    "ftm_full_auto_by_2034"
+   ],
+   "seedMarginal": 0.232649,
+   "impliedMarginal": 0.232649,
+   "delta": 8e-08,
+   "lift": 0.3851,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0291",
+   "variableId": "x_will_97_of_all_jobs_be_fully_automated_before_the_year_207",
+   "family": "manifold",
+   "parents": [
+    "ftm_full_auto_by_2035"
+   ],
+   "seedMarginal": 0.625355,
+   "impliedMarginal": 0.625355,
+   "delta": 1.2e-07,
+   "lift": 0.6234,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0090",
+   "variableId": "x_will_ai_be_life_changing_for_muggles_by_the_end_of_2029",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t0_by_2029"
+   ],
+   "seedMarginal": 0.852578,
+   "impliedMarginal": 0.852578,
+   "delta": 3.1e-07,
+   "lift": 0.2155,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0380",
+   "variableId": "x_will_universal_basic_income_be_introduced_in_the_u_s_by_20",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t1_by_2030"
+   ],
+   "seedMarginal": 0.195058,
+   "impliedMarginal": 0.195058,
+   "delta": 3e-08,
+   "lift": 0.3781,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0152",
+   "variableId": "x_will_ai_cause_a_financial_crash_within_a_decade_by_oct_203",
+   "family": "manifold",
+   "parents": [
+    "ftm_gwp_compute_t2_by_2032"
+   ],
+   "seedMarginal": 0.56,
+   "impliedMarginal": 0.56,
+   "delta": 2e-07,
+   "lift": 0.408,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0267",
+   "variableId": "x_in_early_2028_will_an_ai_be_able_to_generate_a_full_high_q",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t0_by_2028"
+   ],
+   "seedMarginal": 0.47,
+   "impliedMarginal": 0.47,
+   "delta": 1.1e-07,
+   "lift": 0.526,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0345",
+   "variableId": "x_high_quality_ai_generated_video_games_by_prompt_before__3",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t1_by_2029"
+   ],
+   "seedMarginal": 0.616005,
+   "impliedMarginal": 0.616005,
+   "delta": 1.8e-07,
+   "lift": 0.3877,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0251",
+   "variableId": "x_will_at_least_five_purely_ai_written_books_make_it_onto_th",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t1_by_2030"
+   ],
+   "seedMarginal": 0.593173,
+   "impliedMarginal": 0.593173,
+   "delta": 4e-08,
+   "lift": 0.4043,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0232",
+   "variableId": "x_by_2050_will_there_be_a_cure_to_aging_conditional_on_agi_b",
+   "family": "manifold",
+   "parents": [
+    "ftm_agi_by_2035"
+   ],
+   "seedMarginal": 0.49,
+   "impliedMarginal": 0.49,
+   "delta": 2.4e-07,
+   "lift": 0.5231,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0202",
+   "variableId": "x_will_things_basically_be_fine_regarding_job_loss_and_unemp",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t1_by_2028"
+   ],
+   "seedMarginal": 0.61121,
+   "impliedMarginal": 0.61121,
+   "delta": 3.4e-07,
+   "lift": 0.5124,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0310",
+   "variableId": "x_will_increasing_levels_of_ai_automation_cause_a_meaningful",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t2_by_2035"
+   ],
+   "seedMarginal": 0.582164,
+   "impliedMarginal": 0.582164,
+   "delta": 2.7e-07,
+   "lift": 0.4619,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0289",
+   "variableId": "x_will_fully_autonomous_level_5_self_driving_cars_be_availab",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t0_by_2029"
+   ],
+   "seedMarginal": 0.799006,
+   "impliedMarginal": 0.799006,
+   "delta": 1.7e-07,
+   "lift": 0.2868,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0227",
+   "variableId": "x_2030_3_over_one_hundred_thousand_humanoid_robots_will_be_d",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t1_by_2030"
+   ],
+   "seedMarginal": 0.790792,
+   "impliedMarginal": 0.790792,
+   "delta": 1e-07,
+   "lift": 0.2595,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0328",
+   "variableId": "x_will_50_of_human_physical_labor_be_replaced_by_robots_befo",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t2_by_2029"
+   ],
+   "seedMarginal": 0.136493,
+   "impliedMarginal": 0.136493,
+   "delta": 1.6e-07,
+   "lift": 0.5772,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0137",
+   "variableId": "x_will_artificial_intelligence_pilot_an_aircraft_with_human",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t1_by_2029"
+   ],
+   "seedMarginal": 0.567217,
+   "impliedMarginal": 0.567217,
+   "delta": 1.6e-07,
+   "lift": 0.3852,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0077",
+   "variableId": "x_by_2029_will_an_ai_escape_containment",
+   "family": "manifold",
+   "parents": [
+    "ftm_sub_agi_by_2029"
+   ],
+   "seedMarginal": 0.693338,
+   "impliedMarginal": 0.693338,
+   "delta": 7e-08,
+   "lift": 0.3169,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0241",
+   "variableId": "x_by_the_end_of_2028_will_ai_models_as_dario_amodei_speculat",
+   "family": "manifold",
+   "parents": [
+    "ftm_sub_agi_by_2028"
+   ],
+   "seedMarginal": 0.671901,
+   "impliedMarginal": 0.671901,
+   "delta": 2.7e-07,
+   "lift": 0.3107,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0177",
+   "variableId": "x_manhattan_project_for_agi_before_2029",
+   "family": "manifold",
+   "parents": [
+    "ftm_sub_agi_by_2028"
+   ],
+   "seedMarginal": 0.282026,
+   "impliedMarginal": 0.282026,
+   "delta": 3.2e-07,
+   "lift": 0.537,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0104",
+   "variableId": "x_will_the_us_government_take_control_of_openai_or_its_major",
+   "family": "manifold",
+   "parents": [
+    "ftm_sub_agi_by_2029"
+   ],
+   "seedMarginal": 0.182004,
+   "impliedMarginal": 0.182004,
+   "delta": 3.3e-07,
+   "lift": 0.4456,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0208",
+   "variableId": "x_will_the_us_or_uk_nationalize_any_frontier_ai_labs_by_2035",
+   "family": "manifold",
+   "parents": [
+    "ftm_agi_by_2035"
+   ],
+   "seedMarginal": 0.653371,
+   "impliedMarginal": 0.653371,
+   "delta": 3.6e-07,
+   "lift": 0.5094,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0126",
+   "variableId": "x_will_at_least_25_nations_collaborate_to_develop_and_enforc",
+   "family": "manifold",
+   "parents": [
+    "ftm_sub_agi_by_2035"
+   ],
+   "seedMarginal": 0.78442,
+   "impliedMarginal": 0.78442,
+   "delta": 1.4e-07,
+   "lift": 0.3881,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0216",
+   "variableId": "x_conditional_on_humanity_surviving_to_2035_will_a_global_ai",
+   "family": "manifold",
+   "parents": [
+    "ftm_agi_by_2035"
+   ],
+   "seedMarginal": 0.35,
+   "impliedMarginal": 0.35,
+   "delta": 1.3e-07,
+   "lift": 0.5114,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0212",
+   "variableId": "x_will_there_be_a_massive_catastrophe_caused_by_ai_before_20",
+   "family": "manifold",
+   "parents": [
+    "ftm_sub_agi_by_2029"
+   ],
+   "seedMarginal": 0.3911,
+   "impliedMarginal": 0.3911,
+   "delta": 2.2e-07,
+   "lift": 0.528,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0080",
+   "variableId": "x_will_ai_kill_20_of_the_human_population_before_2030",
+   "family": "manifold",
+   "parents": [
+    "ftm_sub_agi_by_2029"
+   ],
+   "seedMarginal": 0.047057,
+   "impliedMarginal": 0.047057,
+   "delta": 2.4e-07,
+   "lift": 0.1517,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0265",
+   "variableId": "x_does_an_ai_disaster_kill_at_least_100_000_people_before_20",
+   "family": "manifold",
+   "parents": [
+    "ftm_sub_agi_by_2028"
+   ],
+   "seedMarginal": 0.22277,
+   "impliedMarginal": 0.22277,
+   "delta": 2.3e-07,
+   "lift": 0.5233,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0260",
+   "variableId": "x_does_an_ai_disaster_kill_at_least_1_000_000_000_1bn_people",
+   "family": "manifold",
+   "parents": [
+    "ftm_agi_by_2032"
+   ],
+   "seedMarginal": 0.053428,
+   "impliedMarginal": 0.053428,
+   "delta": 1e-07,
+   "lift": 0.161,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0204",
+   "variableId": "x_will_there_be_at_least_a_close_call_with_a_powerful_misali",
+   "family": "manifold",
+   "parents": [
+    "ftm_agi_by_2035"
+   ],
+   "seedMarginal": 0.827116,
+   "impliedMarginal": 0.827116,
+   "delta": 0.0,
+   "lift": 0.3166,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0226",
+   "variableId": "x_will_a_misaligned_agi_take_over_the_world",
+   "family": "manifold",
+   "parents": [
+    "ftm_agi_by_2033"
+   ],
+   "seedMarginal": 0.106559,
+   "impliedMarginal": 0.106559,
+   "delta": 1.3e-07,
+   "lift": 0.2086,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0372",
+   "variableId": "x_will_an_ai_model_be_capable_of_superhuman_persuasion_befor",
+   "family": "manifold",
+   "parents": [
+    "ftm_sub_agi_by_2033"
+   ],
+   "seedMarginal": 0.85,
+   "impliedMarginal": 0.85,
+   "delta": 4.6e-07,
+   "lift": 0.287,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0132",
+   "variableId": "x_will_there_be_an_airstrike_on_a_datacenter_before_2035",
+   "family": "manifold",
+   "parents": [
+    "ftm_gwp_compute_t2_by_2034"
+   ],
+   "seedMarginal": 0.63204,
+   "impliedMarginal": 0.63204,
+   "delta": 3.7e-07,
+   "lift": 0.4583,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0076",
+   "variableId": "x_we_will_see_a_100k_person_anti_ai_protest_before_2030",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t1_by_2029"
+   ],
+   "seedMarginal": 0.76249,
+   "impliedMarginal": 0.76249,
+   "delta": 9e-08,
+   "lift": 0.2511,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0268",
+   "variableId": "x_in_2028_will_ai_be_at_least_as_big_a_political_issue_as_ab",
+   "family": "manifold",
+   "parents": [
+    "ftm_gwp_compute_t0_by_2028"
+   ],
+   "seedMarginal": 0.928186,
+   "impliedMarginal": 0.928186,
+   "delta": 2.7e-07,
+   "lift": 0.1268,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0270",
+   "variableId": "x_instant_deepfakes_of_anyone_doing_anything_by_the_end_of_2",
+   "family": "manifold",
+   "parents": [
+    "ftm_auto_goods_t0_by_2027"
+   ],
+   "seedMarginal": 0.780355,
+   "impliedMarginal": 0.780355,
+   "delta": 1.4e-07,
+   "lift": 0.2363,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0234",
+   "variableId": "x_by_2029_will_an_ai_convince_a_human_to_help_it_successfull",
+   "family": "manifold",
+   "parents": [
+    "ftm_sub_agi_by_2029"
+   ],
+   "seedMarginal": 0.558949,
+   "impliedMarginal": 0.558949,
+   "delta": 2.1e-07,
+   "lift": 0.4327,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0235",
+   "variableId": "x_will_the_us_federal_government_spend_more_than_1_1000th_of",
+   "family": "manifold",
+   "parents": [
+    "ftm_sub_agi_by_2028"
+   ],
+   "seedMarginal": 0.124728,
+   "impliedMarginal": 0.124728,
+   "delta": 5e-08,
+   "lift": 0.4169,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0170",
+   "variableId": "x_will_there_be_a_coherent_ai_safety_movement_with_leaders_a",
+   "family": "manifold",
+   "parents": [
+    "ftm_sub_agi_by_2028"
+   ],
+   "seedMarginal": 0.80058,
+   "impliedMarginal": 0.80058,
+   "delta": 3e-08,
+   "lift": 0.1812,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0249",
+   "variableId": "x_will_unsuccessfully_aligned_agi_kill_us_all",
+   "family": "manifold",
+   "parents": [
+    "ftm_agi_by_2035"
+   ],
+   "seedMarginal": 0.321075,
+   "impliedMarginal": 0.321075,
+   "delta": 3.3e-07,
+   "lift": 0.4002,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0348",
+   "variableId": "x_will_ai_take_over_the_world_by_2100",
+   "family": "manifold",
+   "parents": [
+    "ftm_agi_by_2035"
+   ],
+   "seedMarginal": 0.45112,
+   "impliedMarginal": 0.45112,
+   "delta": 5e-08,
+   "lift": 0.5044,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "x0240",
+   "variableId": "x_will_ai_wipe_out_all_biological_life_on_earth_before_2100",
+   "family": "manifold",
+   "parents": [
+    "ftm_agi_by_2033"
+   ],
+   "seedMarginal": 0.07799,
+   "impliedMarginal": 0.07799,
+   "delta": 6e-08,
+   "lift": 0.1556,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0001",
+   "variableId": "dw_us_frontier_algo_pause_by_2028",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2028"
+   ],
+   "seedMarginal": 0.18,
+   "impliedMarginal": 0.18,
+   "delta": 4e-08,
+   "lift": 0.4149,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0002",
+   "variableId": "dw_frontier_weights_stolen_by_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t2_by_2029"
+   ],
+   "seedMarginal": 0.34,
+   "impliedMarginal": 0.34,
+   "delta": 3.3e-07,
+   "lift": 0.4564,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0003",
+   "variableId": "dw_10x_ml_progress_pace_by_2028",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2028"
+   ],
+   "seedMarginal": 0.22,
+   "impliedMarginal": 0.22,
+   "delta": 2.3e-07,
+   "lift": 0.5994,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0004",
+   "variableId": "dw_local_superhuman_agent_by_2030",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_sw_ratio_t1_by_2030"
+   ],
+   "seedMarginal": 0.48,
+   "impliedMarginal": 0.48,
+   "delta": 1.9e-07,
+   "lift": 0.4871,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0005",
+   "variableId": "dw_cot_monitorability_broken_by_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_sub_agi_by_2029"
+   ],
+   "seedMarginal": 0.5,
+   "impliedMarginal": 0.5,
+   "delta": 4e-07,
+   "lift": 0.4642,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0006",
+   "variableId": "dw_second_millennium_prize_ai_by_2028",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2028"
+   ],
+   "seedMarginal": 0.28,
+   "impliedMarginal": 0.28,
+   "delta": 1.4e-07,
+   "lift": 0.451,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0007",
+   "variableId": "dw_3month_autonomous_agent_horizon_by_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_sub_agi_by_2029"
+   ],
+   "seedMarginal": 0.52,
+   "impliedMarginal": 0.52,
+   "delta": 2e-07,
+   "lift": 0.4966,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0008",
+   "variableId": "dw_continual_weekly_weight_updates_by_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_sw_ratio_t1_by_2029"
+   ],
+   "seedMarginal": 0.36,
+   "impliedMarginal": 0.36,
+   "delta": 1.9e-07,
+   "lift": 0.4668,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0009",
+   "variableId": "dw_open_weight_within_6mo_frontier_by_2030",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_full_auto_rnd_by_2030"
+   ],
+   "seedMarginal": 0.55,
+   "impliedMarginal": 0.55,
+   "delta": 7e-08,
+   "lift": 0.4269,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0010",
+   "variableId": "dw_ai_proposes_new_ml_paradigm_by_2031",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_full_auto_rnd_by_2031"
+   ],
+   "seedMarginal": 0.42,
+   "impliedMarginal": 0.42,
+   "delta": 3.6e-07,
+   "lift": 0.5421,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0011",
+   "variableId": "dw_dropin_remote_worker_noncoding_by_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_goods_t1_by_2029"
+   ],
+   "seedMarginal": 0.52,
+   "impliedMarginal": 0.52,
+   "delta": 1.8e-07,
+   "lift": 0.4645,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0012",
+   "variableId": "dw_covert_rogue_lab_deployment_by_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2029"
+   ],
+   "seedMarginal": 0.38,
+   "impliedMarginal": 0.38,
+   "delta": 1e-07,
+   "lift": 0.4713,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0013",
+   "variableId": "dw_mandatory_frontier_incident_audits_by_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_train_run_t0_by_2029"
+   ],
+   "seedMarginal": 0.42,
+   "impliedMarginal": 0.42,
+   "delta": 3.7e-07,
+   "lift": 0.359,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0014",
+   "variableId": "dw_wild_self_replicating_ai_swarm_by_2028",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_sub_agi_by_2028"
+   ],
+   "seedMarginal": 0.32,
+   "impliedMarginal": 0.32,
+   "delta": 3.7e-07,
+   "lift": 0.4743,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0015",
+   "variableId": "dw_monitor_agent_collusion_demo_by_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t2_by_2029"
+   ],
+   "seedMarginal": 0.44,
+   "impliedMarginal": 0.44,
+   "delta": 1.5e-07,
+   "lift": 0.4328,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0016",
+   "variableId": "dw_ai_designed_leading_node_chip_by_2031",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_full_auto_rnd_by_2031"
+   ],
+   "seedMarginal": 0.48,
+   "impliedMarginal": 0.48,
+   "delta": 2.7e-07,
+   "lift": 0.4838,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0017",
+   "variableId": "dw_billion_dollar_reward_hack_incident_by_2030",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_goods_t1_by_2030"
+   ],
+   "seedMarginal": 0.42,
+   "impliedMarginal": 0.42,
+   "delta": 3e-07,
+   "lift": 0.48,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0018",
+   "variableId": "dw_opaque_neuralese_frontier_model_by_2030",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_sw_ratio_t1_by_2030"
+   ],
+   "seedMarginal": 0.46,
+   "impliedMarginal": 0.46,
+   "delta": 3.7e-07,
+   "lift": 0.4201,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0019",
+   "variableId": "dw_ai_self_modification_refusal_incident_by_2030",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t2_by_2030"
+   ],
+   "seedMarginal": 0.36,
+   "impliedMarginal": 0.36,
    "delta": 2.8e-07,
-   "lift": 0.4614
+   "lift": 0.4888,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0020",
+   "variableId": "dw_frontier_ai_rev_1t_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_agi_by_2029"
+   ],
+   "seedMarginal": 0.35,
+   "impliedMarginal": 0.35,
+   "delta": 4.2e-07,
+   "lift": 0.5209,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0021",
+   "variableId": "dw_end_to_end_swe_ai_2028",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2028"
+   ],
+   "seedMarginal": 0.45,
+   "impliedMarginal": 0.45,
+   "delta": 2.9e-07,
+   "lift": 0.5156,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0022",
+   "variableId": "dw_ai_discovered_fda_drugs_2032",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_agi_by_2030"
+   ],
+   "seedMarginal": 0.35,
+   "impliedMarginal": 0.35,
+   "delta": 5e-08,
+   "lift": 0.5125,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0023",
+   "variableId": "dw_ai_biosecurity_law_us_2028",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_sub_agi_by_2028"
+   ],
+   "seedMarginal": 0.4,
+   "impliedMarginal": 0.4,
+   "delta": 4.6e-07,
+   "lift": 0.4266,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0024",
+   "variableId": "dw_space_ai_cheaper_earth_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_gwp_compute_t1_by_2029"
+   ],
+   "seedMarginal": 0.16,
+   "impliedMarginal": 0.16,
+   "delta": 1.2e-07,
+   "lift": 0.3058,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0025",
+   "variableId": "dw_orbital_ai_1gw_2031",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_gwp_compute_t2_by_2031"
+   ],
+   "seedMarginal": 0.24,
+   "impliedMarginal": 0.24,
+   "delta": 3.5e-07,
+   "lift": 0.374,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0026",
+   "variableId": "dw_humanoid_1m_annual_2030",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_goods_t1_by_2030"
+   ],
+   "seedMarginal": 0.35,
+   "impliedMarginal": 0.35,
+   "delta": 3.6e-07,
+   "lift": 0.5009,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0027",
+   "variableId": "dw_terafab_logic_scale_2031",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_gwp_compute_t2_by_2031"
+   ],
+   "seedMarginal": 0.22,
+   "impliedMarginal": 0.22,
+   "delta": 0.0,
+   "lift": 0.3753,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0028",
+   "variableId": "dw_nvidia_share_gt65_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_hw_ratio_t0_by_2029"
+   ],
+   "seedMarginal": 0.55,
+   "impliedMarginal": 0.55,
+   "delta": 2.1e-07,
+   "lift": 0.3189,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0029",
+   "variableId": "dw_nvidia_annual_rev_500b_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_gwp_compute_t1_by_2029"
+   ],
+   "seedMarginal": 0.52,
+   "impliedMarginal": 0.52,
+   "delta": 6e-08,
+   "lift": 0.4724,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0030",
+   "variableId": "dw_frontier_open_model_huawei_first_2028",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2028"
+   ],
+   "seedMarginal": 0.48,
+   "impliedMarginal": 0.48,
+   "delta": 2.6e-07,
+   "lift": 0.4059,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0031",
+   "variableId": "dw_token_cost_100x_drop_2028",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_gwp_compute_t1_by_2028"
+   ],
+   "seedMarginal": 0.45,
+   "impliedMarginal": 0.45,
+   "delta": 2e-07,
+   "lift": 0.496,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0032",
+   "variableId": "dw_openai_anthropic_50pct_flops_2028",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_sub_agi_by_2028"
+   ],
+   "seedMarginal": 0.44,
+   "impliedMarginal": 0.44,
+   "delta": 2.4e-07,
+   "lift": 0.4354,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0033",
+   "variableId": "dw_hyperscaler_bond_yield_8pct_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_gwp_compute_t2_by_2029"
+   ],
+   "seedMarginal": 0.3,
+   "impliedMarginal": 0.3,
+   "delta": 2.6e-07,
+   "lift": 0.4888,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0034",
+   "variableId": "dw_asml_euv_exceeds_120_2030",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_gwp_compute_t2_by_2030"
+   ],
+   "seedMarginal": 0.36,
+   "impliedMarginal": 0.36,
+   "delta": 2.6e-07,
+   "lift": 0.4046,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0035",
+   "variableId": "dw_us_datacenter_power_10pct_2028",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_gwp_compute_t0_by_2028"
+   ],
+   "seedMarginal": 0.48,
+   "impliedMarginal": 0.48,
+   "delta": 6e-08,
+   "lift": 0.4807,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0036",
+   "variableId": "dw_10m_context_frontier_api_2028",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_train_run_t1_by_2028"
+   ],
+   "seedMarginal": 0.36,
+   "impliedMarginal": 0.36,
+   "delta": 1.1e-07,
+   "lift": 0.4614,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0037",
+   "variableId": "dw_scaleup_domain_1000_chips_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_train_run_t1_by_2029"
+   ],
+   "seedMarginal": 0.55,
+   "impliedMarginal": 0.55,
+   "delta": 3.3e-07,
+   "lift": 0.4465,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0038",
+   "variableId": "dw_sub4bit_frontier_training_2030",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_hw_ratio_t0_by_2030"
+   ],
+   "seedMarginal": 0.45,
+   "impliedMarginal": 0.45,
+   "delta": 2.5e-07,
+   "lift": 0.4109,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0039",
+   "variableId": "dw_intel_14a_major_ai_foundry_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_gwp_compute_t1_by_2029"
+   ],
+   "seedMarginal": 0.48,
+   "impliedMarginal": 0.48,
+   "delta": 5e-08,
+   "lift": 0.4179,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0040",
+   "variableId": "dw_submicron_hybrid_bonding_hvm_2032",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_hw_ratio_t1_by_2032"
+   ],
+   "seedMarginal": 0.46,
+   "impliedMarginal": 0.46,
+   "delta": 3.3e-07,
+   "lift": 0.4697,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0041",
+   "variableId": "dw_cfet_stacked_transistors_hvm_2034",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_hw_ratio_t1_by_2034"
+   ],
+   "seedMarginal": 0.55,
+   "impliedMarginal": 0.55,
+   "delta": 2e-08,
+   "lift": 0.4804,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0042",
+   "variableId": "dw_ai_millennium_prize_by_2033",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t2_by_2033"
+   ],
+   "seedMarginal": 0.52,
+   "impliedMarginal": 0.52,
+   "delta": 1.6e-07,
+   "lift": 0.5185,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0043",
+   "variableId": "dw_ai_mathlib_autonomous_theorem_by_2031",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2031"
+   ],
+   "seedMarginal": 0.5,
+   "impliedMarginal": 0.5,
+   "delta": 1.3e-07,
+   "lift": 0.5277,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0044",
+   "variableId": "dw_ai_math_industrial_breakthrough_by_2031",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2031"
+   ],
+   "seedMarginal": 0.45,
+   "impliedMarginal": 0.45,
+   "delta": 3.3e-07,
+   "lift": 0.5061,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0045",
+   "variableId": "dw_us_labor_share_below_50pct_by_2033",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_goods_t2_by_2033"
+   ],
+   "seedMarginal": 0.34,
+   "impliedMarginal": 0.34,
+   "delta": 1.3e-07,
+   "lift": 0.4777,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0046",
+   "variableId": "dw_full_supply_chain_auto_good_by_2031",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_goods_t1_by_2031"
+   ],
+   "seedMarginal": 0.32,
+   "impliedMarginal": 0.32,
+   "delta": 1e-08,
+   "lift": 0.4481,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0047",
+   "variableId": "dw_us_real_rate_above_5pct_by_2032",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_gwp_growth_max_t1_by_2032"
+   ],
+   "seedMarginal": 0.35,
+   "impliedMarginal": 0.35,
+   "delta": 3e-08,
+   "lift": 0.4452,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0048",
+   "variableId": "dw_autoresearch_frontier_breakthrough_by_2029",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2029"
+   ],
+   "seedMarginal": 0.4,
+   "impliedMarginal": 0.4,
+   "delta": 4e-07,
+   "lift": 0.5476,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0049",
+   "variableId": "dw_search_value_replaces_rlvr_by_2030",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_sw_ratio_t1_by_2030"
+   ],
+   "seedMarginal": 0.38,
+   "impliedMarginal": 0.38,
+   "delta": 4.3e-07,
+   "lift": 0.4077,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0050",
+   "variableId": "dw_ai_amortized_physics_sim_breakthrough_by_2032",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t2_by_2032"
+   ],
+   "seedMarginal": 0.52,
+   "impliedMarginal": 0.52,
+   "delta": 1.9e-07,
+   "lift": 0.5042,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0051",
+   "variableId": "dw_ai_nobel_caliber_paradigm_shift_by_2034",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_agi_by_2034"
+   ],
+   "seedMarginal": 0.28,
+   "impliedMarginal": 0.28,
+   "delta": 2.7e-07,
+   "lift": 0.4207,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0052",
+   "variableId": "dw_interp_extracts_science_law_by_2032",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2032"
+   ],
+   "seedMarginal": 0.42,
+   "impliedMarginal": 0.42,
+   "delta": 1e-08,
+   "lift": 0.4184,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0053",
+   "variableId": "dw_ai_designed_novel_matter_phase_by_2033",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t2_by_2033"
+   ],
+   "seedMarginal": 0.38,
+   "impliedMarginal": 0.38,
+   "delta": 2.6e-07,
+   "lift": 0.4093,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0054",
+   "variableId": "dw_majority_math_papers_ai_verified_by_2032",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2032"
+   ],
+   "seedMarginal": 0.48,
+   "impliedMarginal": 0.48,
+   "delta": 1.2e-07,
+   "lift": 0.4948,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0055",
+   "variableId": "dw_ai_solves_half_open_erdos_by_2030",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_sub_agi_by_2030"
+   ],
+   "seedMarginal": 0.4,
+   "impliedMarginal": 0.4,
+   "delta": 1e-07,
+   "lift": 0.5134,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "d0056",
+   "variableId": "dw_autonomous_ai_annals_theorem_by_2030",
+   "family": "dwarkesh",
+   "parents": [
+    "ftm_auto_rnd_t2_by_2030"
+   ],
+   "seedMarginal": 0.26,
+   "impliedMarginal": 0.26,
+   "delta": 2.9e-07,
+   "lift": 0.5424,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "p0001",
+   "variableId": "pol_mandatory_predeploy_evals_2028",
+   "family": "policy",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2028"
+   ],
+   "seedMarginal": 0.48,
+   "impliedMarginal": 0.48,
+   "delta": 2.8e-07,
+   "lift": 0.4117,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "p0002",
+   "variableId": "pol_us_china_export_tighten_2028",
+   "family": "policy",
+   "parents": [
+    "ftm_train_run_t0_by_2028"
+   ],
+   "seedMarginal": 0.5,
+   "impliedMarginal": 0.5,
+   "delta": 1.8e-07,
+   "lift": 0.3588,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "p0003",
+   "variableId": "pol_federal_whistleblower_incident_2028",
+   "family": "policy",
+   "parents": [
+    "ftm_sub_agi_by_2028"
+   ],
+   "seedMarginal": 0.49,
+   "impliedMarginal": 0.49,
+   "delta": 1.7e-07,
+   "lift": 0.3537,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "p0004",
+   "variableId": "pol_us_frontier_licensing_2029",
+   "family": "policy",
+   "parents": [
+    "ftm_sub_agi_by_2029"
+   ],
+   "seedMarginal": 0.42,
+   "impliedMarginal": 0.42,
+   "delta": 1.2e-07,
+   "lift": 0.4622,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "p0005",
+   "variableId": "pol_autonomous_agent_liability_2029",
+   "family": "policy",
+   "parents": [
+    "ftm_auto_goods_t1_by_2029"
+   ],
+   "seedMarginal": 0.35,
+   "impliedMarginal": 0.35,
+   "delta": 8e-08,
+   "lift": 0.4292,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "p0006",
+   "variableId": "pol_us_open_weights_restriction_2030",
+   "family": "policy",
+   "parents": [
+    "ftm_sub_agi_by_2030"
+   ],
+   "seedMarginal": 0.38,
+   "impliedMarginal": 0.38,
+   "delta": 1.1e-07,
+   "lift": 0.4703,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "p0007",
+   "variableId": "pol_us_china_safety_agreement_2030",
+   "family": "policy",
+   "parents": [
+    "ftm_auto_rnd_t2_by_2030"
+   ],
+   "seedMarginal": 0.34,
+   "impliedMarginal": 0.34,
+   "delta": 4e-08,
+   "lift": 0.3919,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "p0008",
+   "variableId": "pol_hw_chip_governance_mandate_2030",
+   "family": "policy",
+   "parents": [
+    "ftm_train_run_t1_by_2030"
+   ],
+   "seedMarginal": 0.44,
+   "impliedMarginal": 0.44,
+   "delta": 4e-08,
+   "lift": 0.3708,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "p0009",
+   "variableId": "pol_sovereign_compute_1gw_2030",
+   "family": "policy",
+   "parents": [
+    "ftm_gwp_compute_t1_by_2030"
+   ],
+   "seedMarginal": 0.58,
+   "impliedMarginal": 0.58,
+   "delta": 5e-08,
+   "lift": 0.3952,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "p0010",
+   "variableId": "pol_us_nationalized_project_2031",
+   "family": "policy",
+   "parents": [
+    "ftm_full_auto_rnd_by_2031"
+   ],
+   "seedMarginal": 0.35,
+   "impliedMarginal": 0.35,
+   "delta": 1.3e-07,
+   "lift": 0.4767,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "p0011",
+   "variableId": "pol_emergency_moratorium_2031",
+   "family": "policy",
+   "parents": [
+    "ftm_full_auto_rnd_by_2031"
+   ],
+   "seedMarginal": 0.28,
+   "impliedMarginal": 0.28,
+   "delta": 1.3e-07,
+   "lift": 0.4652,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "p0012",
+   "variableId": "pol_iaea_ai_agency_2033",
+   "family": "policy",
+   "parents": [
+    "ftm_agi_by_2033"
+   ],
+   "seedMarginal": 0.32,
+   "impliedMarginal": 0.32,
+   "delta": 2e-08,
+   "lift": 0.4073,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "p0013",
+   "variableId": "pol_global_compute_cap_treaty_2035",
+   "family": "policy",
+   "parents": [
+    "ftm_agi_by_2035"
+   ],
+   "seedMarginal": 0.3,
+   "impliedMarginal": 0.3,
+   "delta": 1.3e-07,
+   "lift": 0.3514,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "p0014",
+   "variableId": "pol_global_post_agi_charter_2040",
+   "family": "policy",
+   "parents": [
+    "ftm_full_auto_by_2035"
+   ],
+   "seedMarginal": 0.32,
+   "impliedMarginal": 0.32,
+   "delta": 2.5e-07,
+   "lift": 0.3416,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0001",
+   "variableId": "fut_adversarial_alignment_faking_shutdown_2028",
+   "family": "futurist",
+   "parents": [
+    "ftm_auto_rnd_t1_by_2028"
+   ],
+   "seedMarginal": 0.26,
+   "impliedMarginal": 0.26,
+   "delta": 2.9e-07,
+   "lift": 0.5145,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0002",
+   "variableId": "fut_superhuman_ai_researcher_50x_2029",
+   "family": "futurist",
+   "parents": [
+    "ftm_full_auto_rnd_by_2029"
+   ],
+   "seedMarginal": 0.22,
+   "impliedMarginal": 0.22,
+   "delta": 4.2e-07,
+   "lift": 0.6662,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0003",
+   "variableId": "fut_autonomous_ai_unicorn_company_2030",
+   "family": "futurist",
+   "parents": [
+    "ftm_auto_goods_t1_by_2030"
+   ],
+   "seedMarginal": 0.42,
+   "impliedMarginal": 0.42,
+   "delta": 4.5e-07,
+   "lift": 0.5024,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0004",
+   "variableId": "fut_catastrophic_ai_bio_or_grid_10b_2031",
+   "family": "futurist",
+   "parents": [
+    "ftm_agi_by_2031"
+   ],
+   "seedMarginal": 0.24,
+   "impliedMarginal": 0.24,
+   "delta": 3.3e-07,
+   "lift": 0.4677,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0005",
+   "variableId": "fut_emergent_ai_market_collusion_1b_2031",
+   "family": "futurist",
+   "parents": [
+    "ftm_auto_goods_t2_by_2031"
+   ],
+   "seedMarginal": 0.28,
+   "impliedMarginal": 0.28,
+   "delta": 1e-08,
+   "lift": 0.4548,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0006",
+   "variableId": "fut_millennium_prize_lean_proof_2032",
+   "family": "futurist",
+   "parents": [
+    "ftm_sw_ratio_t2_by_2032"
+   ],
+   "seedMarginal": 0.23,
+   "impliedMarginal": 0.23,
+   "delta": 2e-08,
+   "lift": 0.5309,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0007",
+   "variableId": "fut_commercial_fusion_net_grid_50mw_2032",
+   "family": "futurist",
+   "parents": [
+    "ftm_hw_ratio_t1_by_2032"
+   ],
+   "seedMarginal": 0.27,
+   "impliedMarginal": 0.27,
+   "delta": 2e-07,
+   "lift": 0.3824,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0008",
+   "variableId": "fut_clinical_bci_10k_channels_2032",
+   "family": "futurist",
+   "parents": [
+    "ftm_hw_ratio_t1_by_2032"
+   ],
+   "seedMarginal": 0.34,
+   "impliedMarginal": 0.34,
+   "delta": 4.8e-07,
+   "lift": 0.4107,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0009",
+   "variableId": "fut_formal_safety_proof_frontier_ai_2033",
+   "family": "futurist",
+   "parents": [
+    "ftm_auto_rnd_t3_by_2033"
+   ],
+   "seedMarginal": 0.26,
+   "impliedMarginal": 0.26,
+   "delta": 1.2e-07,
+   "lift": 0.4002,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0010",
+   "variableId": "fut_room_temp_ambient_superconductor_2033",
+   "family": "futurist",
+   "parents": [
+    "ftm_auto_rnd_t3_by_2033"
+   ],
+   "seedMarginal": 0.16,
+   "impliedMarginal": 0.16,
+   "delta": 1.9e-07,
+   "lift": 0.3225,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0011",
+   "variableId": "fut_mouse_2x_max_lifespan_2033",
+   "family": "futurist",
+   "parents": [
+    "ftm_auto_rnd_t3_by_2033"
+   ],
+   "seedMarginal": 0.32,
+   "impliedMarginal": 0.32,
+   "delta": 1.2e-07,
+   "lift": 0.4367,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0012",
+   "variableId": "fut_ai_legal_personhood_jurisdiction_2034",
+   "family": "futurist",
+   "parents": [
+    "ftm_agi_by_2034"
+   ],
+   "seedMarginal": 0.24,
+   "impliedMarginal": 0.24,
+   "delta": 1.9e-07,
+   "lift": 0.3579,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0013",
+   "variableId": "fut_functional_mouse_wbe_2034",
+   "family": "futurist",
+   "parents": [
+    "ftm_agi_by_2034"
+   ],
+   "seedMarginal": 0.25,
+   "impliedMarginal": 0.25,
+   "delta": 2.6e-07,
+   "lift": 0.3779,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0014",
+   "variableId": "fut_humanoid_robots_10m_deployed_2034",
+   "family": "futurist",
+   "parents": [
+    "ftm_auto_goods_t3_by_2034"
+   ],
+   "seedMarginal": 0.36,
+   "impliedMarginal": 0.36,
+   "delta": 5e-08,
+   "lift": 0.471,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0015",
+   "variableId": "fut_parallel_forked_brain_emulation_2035",
+   "family": "futurist",
+   "parents": [
+    "ftm_hw_ratio_t1_by_2035"
+   ],
+   "seedMarginal": 0.28,
+   "impliedMarginal": 0.28,
+   "delta": 1.2e-07,
+   "lift": 0.3451,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0016",
+   "variableId": "fut_programmable_apm_demo_2035",
+   "family": "futurist",
+   "parents": [
+    "ftm_full_auto_rnd_by_2035"
+   ],
+   "seedMarginal": 0.17,
+   "impliedMarginal": 0.17,
+   "delta": 1.3e-07,
+   "lift": 0.2415,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0017",
+   "variableId": "fut_explosive_gwp_growth_15pct_2035",
+   "family": "futurist",
+   "parents": [
+    "ftm_gwp_growth_max_t2_by_2035"
+   ],
+   "seedMarginal": 0.28,
+   "impliedMarginal": 0.28,
+   "delta": 1.5e-07,
+   "lift": 0.377,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0018",
+   "variableId": "fut_self_replicating_autonomous_fab_2040",
+   "family": "futurist",
+   "parents": [
+    "ftm_full_auto_by_2035"
+   ],
+   "seedMarginal": 0.23,
+   "impliedMarginal": 0.23,
+   "delta": 6e-08,
+   "lift": 0.3154,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0019",
+   "variableId": "fut_human_bio_age_reversal_10yr_2040",
+   "family": "futurist",
+   "parents": [
+    "ftm_auto_rnd_t3_by_2035"
+   ],
+   "seedMarginal": 0.28,
+   "impliedMarginal": 0.28,
+   "delta": 1.9e-07,
+   "lift": 0.3271,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0020",
+   "variableId": "fut_denovo_synthetic_multicellular_organism_2040",
+   "family": "futurist",
+   "parents": [
+    "ftm_auto_rnd_t3_by_2035"
+   ],
+   "seedMarginal": 0.32,
+   "impliedMarginal": 0.32,
+   "delta": 1.2e-07,
+   "lift": 0.3762,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0021",
+   "variableId": "fut_functional_human_wbe_2045",
+   "family": "futurist",
+   "parents": [
+    "ftm_agi_by_2035"
+   ],
+   "seedMarginal": 0.19,
+   "impliedMarginal": 0.19,
+   "delta": 9e-08,
+   "lift": 0.2783,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0022",
+   "variableId": "fut_self_sustaining_offworld_base_100_2045",
+   "family": "futurist",
+   "parents": [
+    "ftm_full_auto_by_2035"
+   ],
+   "seedMarginal": 0.15,
+   "impliedMarginal": 0.15,
+   "delta": 1.3e-07,
+   "lift": 0.2133,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0023",
+   "variableId": "fut_space_compute_megastructure_10gw_2045",
+   "family": "futurist",
+   "parents": [
+    "ftm_gwp_compute_t3_by_2035"
+   ],
+   "seedMarginal": 0.25,
+   "impliedMarginal": 0.25,
+   "delta": 1e-08,
+   "lift": 0.5048,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0024",
+   "variableId": "fut_loss_human_institutional_control_ai_2045",
+   "family": "futurist",
+   "parents": [
+    "ftm_full_auto_rnd_by_2035"
+   ],
+   "seedMarginal": 0.22,
+   "impliedMarginal": 0.22,
+   "delta": 1.9e-07,
+   "lift": 0.294,
+   "widenedSpread": false
+  },
+  {
+   "marketId": "u0025",
+   "variableId": "fut_autonomous_ai_majority_gwp_2045",
+   "family": "futurist",
+   "parents": [
+    "ftm_full_auto_by_2035"
+   ],
+   "seedMarginal": 0.37,
+   "impliedMarginal": 0.37,
+   "delta": 1.2e-07,
+   "lift": 0.4838,
+   "widenedSpread": false
   }
  ]
 }

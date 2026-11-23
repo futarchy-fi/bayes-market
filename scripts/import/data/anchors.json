@@ -1,5 +1,5 @@
 {
- "builtAt": "2026-11-23T03:13:00Z",
+ "builtAt": "2026-11-23T04:20:20Z",
  "anchors": [
   {
    "marketId": "x0067",
@@ -83,84 +83,12 @@
    "fetchedAt": "2026-11-23T03:13:00Z"
   },
   {
-   "marketId": "x0116",
-   "variableId": "x_will_we_get_agi_before_2038",
-   "source": "manifold",
-   "ref": "WD1VD4NMaaRG1ouof9LP",
-   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2038",
-   "value": 0.75,
-   "fetchedAt": "2026-11-23T03:13:00Z"
-  },
-  {
-   "marketId": "x0103",
-   "variableId": "x_will_we_get_agi_before_2040",
-   "source": "manifold",
-   "ref": "srlaR1wDLUCU8lej269R",
-   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2040",
-   "value": 0.774448,
-   "fetchedAt": "2026-11-23T03:13:00Z"
-  },
-  {
-   "marketId": "x0153",
-   "variableId": "x_will_we_get_agi_before_2042",
-   "source": "manifold",
-   "ref": "kaRBQKvUDqdJLIdP0Y7n",
-   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2042",
-   "value": 0.803984,
-   "fetchedAt": "2026-11-23T03:13:00Z"
-  },
-  {
-   "marketId": "x0146",
-   "variableId": "x_will_we_get_agi_before_2045",
-   "source": "manifold",
-   "ref": "MowtNfp5FkGicxbzsgcb",
-   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2045",
-   "value": 0.827548,
-   "fetchedAt": "2026-11-23T03:13:00Z"
-  },
-  {
-   "marketId": "x0114",
-   "variableId": "x_will_we_get_agi_before_2048",
-   "source": "manifold",
-   "ref": "gydlA7gBnOlkzqYd67Wt",
-   "url": "https://manifold.markets/RemNi/will-we-get-agi-before-2048",
-   "value": 0.887957,
-   "fetchedAt": "2026-11-23T03:13:00Z"
-  },
-  {
    "marketId": "x0246",
    "variableId": "x_will_there_be_a_fire_alarm_for_agi_by_the_end_of_2027",
    "source": "manifold",
    "ref": "IdQPxWoEENJyu8NvHR9u",
    "url": "https://manifold.markets/IsaacKing/will-there-be-a-fire-alarm-for-agi",
    "value": 0.126085,
-   "fetchedAt": "2026-11-23T03:13:00Z"
-  },
-  {
-   "marketId": "x0084",
-   "variableId": "x_are_llms_capable_of_reaching_agi",
-   "source": "manifold",
-   "ref": "ia45vPl7XunfCIclcIfY",
-   "url": "https://manifold.markets/IsaacKing/are-llms-capable-of-reaching-agi",
-   "value": 0.594443,
-   "fetchedAt": "2026-11-23T03:13:00Z"
-  },
-  {
-   "marketId": "x0139",
-   "variableId": "x_will_the_first_agi_be_a_large_language_model",
-   "source": "manifold",
-   "ref": "MqHJpapTs2Mu1BvyLGiG",
-   "url": "https://manifold.markets/No_ones_ghost/will-the-first-agi-be-a-large-langu",
-   "value": 0.633904,
-   "fetchedAt": "2026-11-23T03:13:00Z"
-  },
-  {
-   "marketId": "x0102",
-   "variableId": "x_will_agi_come_from_a_company_whose_primary_product_involve",
-   "source": "manifold",
-   "ref": "dq71tp00zu",
-   "url": "https://manifold.markets/iamgingertrash/will-agi-come-from-a-company-whos-p",
-   "value": 0.675487,
    "fetchedAt": "2026-11-23T03:13:00Z"
   },
   {
@@ -344,15 +272,6 @@
    "fetchedAt": "2026-11-23T03:13:00Z"
   },
   {
-   "marketId": "x0300",
-   "variableId": "x_will_ai_resolve_p_vs_np_by_2050",
-   "source": "manifold",
-   "ref": "Cxo1aXMF2iuvoul2FAhf",
-   "url": "https://manifold.markets/SG/will-ai-resolve-p-vs-np-by-2050",
-   "value": 0.8,
-   "fetchedAt": "2026-11-23T03:13:00Z"
-  },
-  {
    "marketId": "x0282",
    "variableId": "x_ai_beats_minecraft_rsg_in_under_10_minutes_before_2028",
    "source": "manifold",
@@ -533,15 +452,6 @@
    "fetchedAt": "2026-11-23T03:13:00Z"
   },
   {
-   "marketId": "x0347",
-   "variableId": "x_will_there_be_a_billion_dollar_company_with_only_one_perso",
-   "source": "manifold",
-   "ref": "l694w77ahy",
-   "url": "https://manifold.markets/PabloAntonio/will-there-be-a-billiondollar-compa",
-   "value": 0.433562,
-   "fetchedAt": "2026-11-23T03:13:00Z"
-  },
-  {
    "marketId": "x0267",
    "variableId": "x_in_early_2028_will_an_ai_be_able_to_generate_a_full_high_q",
    "source": "manifold",
@@ -557,15 +467,6 @@
    "ref": "LGvGEKD3bbdS9uxFgmWJ",
    "url": "https://manifold.markets/SneakySly/high-quality-aigenerated-video-game-2c55249fe948",
    "value": 0.616005,
-   "fetchedAt": "2026-11-23T03:13:00Z"
-  },
-  {
-   "marketId": "x0330",
-   "variableId": "x_will_most_digital_entertainment_be_ai_generated_by_2040",
-   "source": "manifold",
-   "ref": "eu3xUzwd3j9hsyS6IYk1",
-   "url": "https://manifold.markets/CelebratedWhale/will-most-digital-entertainment-be-11a27e445ed4",
-   "value": 0.644582,
    "fetchedAt": "2026-11-23T03:13:00Z"
   },
   {
@@ -641,15 +542,6 @@
    "fetchedAt": "2026-11-23T03:13:00Z"
   },
   {
-   "marketId": "x0197",
-   "variableId": "x_will_a_country_ban_human_driven_cars_in_favor_of_ai_self_d",
-   "source": "manifold",
-   "ref": "7DXAL229eyElYUannr94",
-   "url": "https://manifold.markets/strutheo/will-a-country-ban-human-driven-car",
-   "value": 0.4,
-   "fetchedAt": "2026-11-23T03:13:00Z"
-  },
-  {
    "marketId": "x0077",
    "variableId": "x_by_2029_will_an_ai_escape_containment",
    "source": "manifold",
@@ -713,15 +605,6 @@
    "fetchedAt": "2026-11-23T03:13:00Z"
   },
   {
-   "marketId": "x0098",
-   "variableId": "x_will_the_united_states_ban_ai_research_by_the_end_of_2037",
-   "source": "manifold",
-   "ref": "nf4QhoSMOmoa9m5iLpDt",
-   "url": "https://manifold.markets/IsaacKing/will-the-united-states-ban-ai-resea",
-   "value": 0.258792,
-   "fetchedAt": "2026-11-23T03:13:00Z"
-  },
-  {
    "marketId": "x0212",
    "variableId": "x_will_there_be_a_massive_catastrophe_caused_by_ai_before_20",
    "source": "manifold",
@@ -746,15 +629,6 @@
    "ref": "nrRwBalvp8XEsvS39Su0",
    "url": "https://manifold.markets/ScroogeMcDuck/does-an-ai-accident-kill-at-least-1-16699bd37e14",
    "value": 0.22277,
-   "fetchedAt": "2026-11-23T03:13:00Z"
-  },
-  {
-   "marketId": "x0225",
-   "variableId": "x_does_an_ai_disaster_kill_at_least_100_people_before_2040",
-   "source": "manifold",
-   "ref": "hMn7h6TFqzYZr16Lmtht",
-   "url": "https://manifold.markets/ScroogeMcDuck/does-an-ai-disaster-kill-at-least-1-73bcb6a788ab",
-   "value": 0.806636,
    "fetchedAt": "2026-11-23T03:13:00Z"
   },
   {
@@ -827,15 +701,6 @@
    "ref": "cNmTnf0Q0OqH2clJS26c",
    "url": "https://manifold.markets/dreev/instant-deepfakes-of-anyone-within",
    "value": 0.780355,
-   "fetchedAt": "2026-11-23T03:13:00Z"
-  },
-  {
-   "marketId": "x0108",
-   "variableId": "x_will_ai_be_capable_of_superhuman_persuasion_well_before_1y",
-   "source": "manifold",
-   "ref": "gRkJsEFMbvzqpICdcJxP",
-   "url": "https://manifold.markets/ZviMowshowitz/will-ai-be-capable-of-superhuman-pe",
-   "value": 0.643855,
    "fetchedAt": "2026-11-23T03:13:00Z"
   },
   {
