@@ -633,3 +633,17 @@ class TestLeaderboardUpgraded:
         })
         assert store.users[42].display_name is None
         assert store.local_users["legacy_local"].display_name is None
+
+
+    async def test_leaderboard_excludes_configured_treasury_id(self, client, monkeypatch):
+        import exchange.core.api as api_mod
+        from exchange.core.models import Decimal
+
+        acc_treasury = api_mod.app.state.risk.create_account()
+        api_mod.app.state.risk.mint(acc_treasury.id, Decimal("998000"))
+        monkeypatch.setattr(api_mod, "TREASURY_ACCOUNT_ID", str(acc_treasury.id))
+
+        resp = await client.get("/v1/leaderboard")
+        assert resp.status_code == 200
+        ids = [e["accountId"] for e in resp.json()["entries"]]
+        assert acc_treasury.id not in ids
