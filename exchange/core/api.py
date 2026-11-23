@@ -1448,6 +1448,8 @@ async def get_leaderboard() -> LeaderboardResponse:
         joint = getattr(app.state, "joint", None)
         if joint is not None:
             excluded_ids.add(joint.treasury_account_id)
+        if TREASURY_ACCOUNT_ID.isdigit():
+            excluded_ids.add(int(TREASURY_ACCOUNT_ID))
         excluded_ids |= {
             u.account_id for u in auth_store.local_users.values()
             if u.is_service_account
