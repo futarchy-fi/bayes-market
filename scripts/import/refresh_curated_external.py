@@ -46,7 +46,7 @@ LIQUIDITY = 10000.0
 # Curated high-signal unresolved 2027+ AI-futures Manifold markets:
 # (marketId, manifold_ref, ftm_parent_var, sign (+1/-1), strength (3..5), rationale)
 CURATED_MARKETS: list[tuple[str, str, str, int, int, str]] = [
-    # --- 1. Canonical AGI Timelines (2028..2048) ---
+    # --- 1. Canonical Short-Timelines AGI Anchors (2027..2035) ---
     ("x0067", "HQObM8ZeuU0YQ3HUdGZ2", "ftm_sub_agi_by_2027", +1, 5,
      "Direct AGI timeline anchor before 2028; Sub-AGI by 2027 strongly raises pre-2028 AGI probability."),
     ("x0071", "vbFbnc7bl8Q6CTPtG3FG", "ftm_sub_agi_by_2028", +1, 5,
@@ -65,26 +65,10 @@ CURATED_MARKETS: list[tuple[str, str, str, int, int, str]] = [
      "Direct AGI timeline anchor before 2035; meeting FTM AGI training threshold by 2034 maps directly."),
     ("x0096", "phUWCiU3O3qaCmkMXb6y", "ftm_agi_by_2035", +1, 5,
      "Direct AGI timeline anchor before 2036; meeting FTM AGI training threshold by 2035 maps directly."),
-    ("x0116", "WD1VD4NMaaRG1ouof9LP", "ftm_agi_by_2037", +1, 5,
-     "Direct AGI timeline anchor before 2038; meeting FTM AGI training threshold by 2037 maps directly."),
-    ("x0103", "srlaR1wDLUCU8lej269R", "ftm_agi_by_2039", +1, 5,
-     "Direct AGI timeline anchor before 2040; meeting FTM AGI training threshold by 2039 maps directly."),
-    ("x0153", "kaRBQKvUDqdJLIdP0Y7n", "ftm_agi_by_2041", +1, 5,
-     "Direct AGI timeline anchor before 2042; meeting FTM AGI training threshold by 2041 maps directly."),
-    ("x0146", "MowtNfp5FkGicxbzsgcb", "ftm_agi_by_2044", +1, 5,
-     "Direct AGI timeline anchor before 2045; meeting FTM AGI training threshold by 2044 maps directly."),
-    ("x0114", "gydlA7gBnOlkzqYd67Wt", "ftm_agi_by_2045", +1, 5,
-     "Direct AGI timeline anchor before 2048; meeting FTM AGI training threshold by 2045 maps directly."),
 
     # --- 2. AGI Architecture, Pathway & Anti-Progress Signals ---
     ("x0246", "IdQPxWoEENJyu8NvHR9u", "ftm_auto_rnd_t0_by_2027", +1, 4,
      "Early R&D automation crossing 5% by 2027 strongly raises likelihood of a 2027 AGI fire alarm."),
-    ("x0084", "ia45vPl7XunfCIclcIfY", "ftm_agi_by_2035", +1, 4,
-     "Reaching AGI training compute by 2035 strongly favors current LLM scaling paradigm succeeding."),
-    ("x0139", "MqHJpapTs2Mu1BvyLGiG", "ftm_agi_by_2035", +1, 4,
-     "Faster AGI arrival (by 2035) makes it much more likely the first AGI is built on LLMs."),
-    ("x0102", "dq71tp00zu", "ftm_agi_by_2035", +1, 3,
-     "Reaching AGI by 2035 favors incumbent API-model labs rather than a new post-paradigm entrant."),
     ("x0072", "389HpvdvigElXaLZ6ZYH", "ftm_agi_by_2035", -1, 4,
      "Reaching AGI by 2035 makes an intervening AI winter substantially less likely."),
     ("x0261", "8yFaXVxy1qQ5RzfVIxtj", "ftm_sub_agi_by_2029", -1, 4,
@@ -105,10 +89,10 @@ CURATED_MARKETS: list[tuple[str, str, str, int, int, str]] = [
      "Pre-2036 ASI is strongly driven by meeting AGI training compute requirements by 2035."),
     ("x0073", "F3WW5VQthbykdojxr0Ef", "ftm_agi_by_2030", +1, 5,
      "Superintelligence by 2030 (conditional on survival) closely tracks AGI compute sufficiency by 2030."),
-    ("x0070", "cSmn5bvykckNzpKJYz1a", "ftm_agi_by_2040", +1, 5,
-     "Superintelligence by 2040 (conditional on survival) closely tracks AGI compute sufficiency by 2040."),
-    ("x0092", "tvoPGB4JP7wbV0dN1iYq", "ftm_agi_by_2045", +1, 5,
-     "Superintelligence by 2050 closely tracks reaching AGI compute sufficiency by 2045."),
+    ("x0070", "cSmn5bvykckNzpKJYz1a", "ftm_agi_by_2035", +1, 5,
+     "Superintelligence by 2040 (conditional on survival) is strongly driven by strict AGI by 2035."),
+    ("x0092", "tvoPGB4JP7wbV0dN1iYq", "ftm_agi_by_2035", +1, 5,
+     "Superintelligence by 2050 (conditional on survival) is strongly elevated by strict AGI by 2035."),
     ("x0209", "NCKfrEGePme7MPrZa3jK", "ftm_full_auto_rnd_by_2035", +1, 3,
      "Rapid full R&D automation by 2035 increases probability of a sharp recursive takeoff (<72h)."),
 
@@ -129,8 +113,6 @@ CURATED_MARKETS: list[tuple[str, str, str, int, int, str]] = [
      "Superhuman math problem-solving before 2030 tracks 20% R&D automation by 2029."),
     ("x0353", "AynyL0t2g2", "ftm_auto_rnd_t1_by_2030", +1, 4,
      "10M-line Lean mathlib by 2030 tracks AI-accelerated formal R&D automation (20% by 2030)."),
-    ("x0300", "Cxo1aXMF2iuvoul2FAhf", "ftm_agi_by_2040", +1, 3,
-     "Resolving P vs NP by 2050 is substantially more likely if AGI is achieved by 2040."),
     ("x0282", "9AynNtnO5I", "ftm_auto_rnd_t0_by_2027", +1, 3,
      "Sub-10-minute Minecraft RSG before 2028 reflects agentic capability progress tracked by 2027 R&D automation."),
     ("x0094", "G0GmOyaD1Qx3LoXfP9N7", "ftm_sub_agi_by_2034", +1, 4,
@@ -167,26 +149,22 @@ CURATED_MARKETS: list[tuple[str, str, str, int, int, str]] = [
      "Near-complete economic automation before 2030 strongly tracks 50% goods automation by 2029."),
     ("x0302", "LvVDGJAlWrYyk7qmyIqq", "ftm_full_auto_by_2034", +1, 5,
      "Near-complete economic automation before 2035 directly tracks FTM full goods automation by 2034."),
-    ("x0291", "ap8fNwshZJN3HOBVQLu5", "ftm_full_auto_by_2045", +1, 5,
-     "Full automation of >97% of jobs before 2075 tracks FTM full goods automation by 2045."),
+    ("x0291", "ap8fNwshZJN3HOBVQLu5", "ftm_full_auto_by_2035", +1, 5,
+     "Full economic automation (>97% of jobs before 2075) is strongly elevated by full automation by 2035."),
     ("x0090", "kyxxpr56vv", "ftm_auto_goods_t0_by_2029", +1, 4,
      "AI becoming life-changing for the general public by end of 2029 tracks 5% goods automation by 2029."),
     ("x0380", "a5qjz7gClUTBF2QDMpQD", "ftm_auto_goods_t1_by_2030", +1, 4,
      "US UBI introduction by 2030 is strongly driven by 20% labor automation by 2030."),
     ("x0152", "OKiiNBPTnoyjVTxFqtws", "ftm_gwp_compute_t2_by_2032", +1, 3,
      "AI compute capex exceeding 2% of GWP by 2032 increases macroeconomic dislocation and crash risk."),
-    ("x0347", "l694w77ahy", "ftm_auto_goods_t2_by_2040", +1, 4,
-     "A one-person $1B company by 2040 tracks 50% goods-and-services automation by 2040."),
     ("x0267", "A319ydGB1B7f4PMOROL3", "ftm_auto_goods_t0_by_2028", +1, 4,
      "Prompt-to-full-movie generation in early 2028 tracks 5% goods-and-services automation by 2028."),
     ("x0345", "LGvGEKD3bbdS9uxFgmWJ", "ftm_auto_goods_t1_by_2029", +1, 4,
      "Prompt-to-high-quality video games before 2030 tracks 20% goods-and-services automation by 2029."),
-    ("x0330", "eu3xUzwd3j9hsyS6IYk1", "ftm_auto_goods_t3_by_2040", +1, 4,
-     "Majority AI-generated digital entertainment by 2040 tracks 90% goods-and-services automation by 2040."),
     ("x0251", "8LdjDDGtPYeHQbbTDCkj", "ftm_auto_goods_t1_by_2030", +1, 3,
      "Five AI-written NYT fiction bestsellers before 2031 tracks 20% economic task automation by 2030."),
-    ("x0232", "xRKVaKdN6F2YBYneq7Jk", "ftm_agi_by_2040", +1, 4,
-     "Achieving AGI by 2040 gives a decade+ of post-AGI R&D to cure aging before 2050."),
+    ("x0232", "xRKVaKdN6F2YBYneq7Jk", "ftm_agi_by_2035", +1, 4,
+     "A cure to aging by 2050 is strongly accelerated by reaching strict AGI by 2035."),
     ("x0202", "NtqQ7bNiunP5aHWJamma", "ftm_auto_goods_t1_by_2028", -1, 4,
      "20% goods-and-services automation by 2028 makes benign near-term labor outcomes substantially less likely."),
     ("x0310", "FSAlCG0hY2tv3clI9NHm", "ftm_auto_goods_t2_by_2035", +1, 3,
@@ -201,8 +179,6 @@ CURATED_MARKETS: list[tuple[str, str, str, int, int, str]] = [
      "Replacing >50% of human physical labor by robots before 2030 tracks 50% goods automation by 2029."),
     ("x0137", "wTnNfSRkPmKWmYSs1uND", "ftm_auto_goods_t1_by_2029", +1, 3,
      "Autonomous passenger aircraft piloting before 2030 tracks 20% goods-and-services automation by 2029."),
-    ("x0197", "7DXAL229eyElYUannr94", "ftm_auto_goods_t3_by_2040", +1, 3,
-     "Banning human-driven cars in a city center by 2040 tracks 90% goods-and-services automation by 2040."),
 
     # --- 8. AI Safety, Governance, Geopolitics & Catastrophic Risk ---
     ("x0077", "4fehtquIkz1RxcbJejDq", "ftm_sub_agi_by_2029", +1, 4,
@@ -219,20 +195,16 @@ CURATED_MARKETS: list[tuple[str, str, str, int, int, str]] = [
      "25-nation unified AI development standards by 2035 are catalyzed by Sub-AGI arrival by 2035."),
     ("x0216", "RQAbCjnhmzVhODm7MVco", "ftm_agi_by_2035", -1, 4,
      "Reaching full AGI compute sufficiency by 2035 makes an effective global AI pause before 2035 less likely."),
-    ("x0098", "nf4QhoSMOmoa9m5iLpDt", "ftm_agi_by_2037", -1, 4,
-     "Reaching full AGI compute sufficiency by 2037 indicates US AI research was not banned beforehand."),
     ("x0212", "czck4zd672", "ftm_sub_agi_by_2029", +1, 4,
      "A massive AI-caused catastrophe before 2030 is strongly elevated by Sub-AGI arrival by 2029."),
     ("x0080", "3cBLGjcbZ2ElJkHCdDpm", "ftm_sub_agi_by_2029", +1, 4,
      "Catastrophic >20% population loss from AI before 2030 depends on crossing Sub-AGI by 2029."),
     ("x0265", "nrRwBalvp8XEsvS39Su0", "ftm_sub_agi_by_2028", +1, 4,
      "An AI disaster killing >=100k people before 2029 is strongly elevated by Sub-AGI by 2028."),
-    ("x0225", "hMn7h6TFqzYZr16Lmtht", "ftm_agi_by_2039", +1, 4,
-     "An AI disaster killing >=100 people before 2040 is strongly elevated by AGI arrival by 2039."),
     ("x0260", "hd6bCiYXPBI1pikaryWa", "ftm_agi_by_2032", +1, 4,
      "Very rapid strict AGI by 2032 compresses alignment lead-time and elevates pre-2040 1bn-death risk."),
-    ("x0204", "T1uSdwfOr3pXN0V4rmsF", "ftm_agi_by_2040", +1, 4,
-     "A misaligned-AI 'close call' before 2100 is substantially more likely if AGI arrives by 2040."),
+    ("x0204", "T1uSdwfOr3pXN0V4rmsF", "ftm_agi_by_2035", +1, 4,
+     "A misaligned-AI 'close call' before 2100 is substantially more likely if strict AGI arrives by 2035."),
     ("x0226", "OEkQx1xzABwnkQRKwyL9", "ftm_agi_by_2033", +1, 4,
      "Rapid strict AGI by 2033 leaves less time for alignment, raising misaligned-AGI takeover risk."),
     ("x0372", "B8w3FaPyQJWJslzSCTv5", "ftm_sub_agi_by_2033", +1, 4,
@@ -245,8 +217,6 @@ CURATED_MARKETS: list[tuple[str, str, str, int, int, str]] = [
      "AI compute buildout exceeding 0.5% of GWP by 2028 elevates AI to a top-tier 2028 political issue."),
     ("x0270", "cNmTnf0Q0OqH2clJS26c", "ftm_auto_goods_t0_by_2027", +1, 4,
      "Instant deepfakes by end of 2027 tracks crossing 5% economic AI deployment by 2027."),
-    ("x0108", "gRkJsEFMbvzqpICdcJxP", "ftm_sub_agi_by_2035", +1, 3,
-     "Reaching Sub-AGI by 2035 raises likelihood of superhuman persuasion emerging ahead of superintelligence."),
     ("x0234", "9YEJjxtnXHFsbRe311cX", "ftm_sub_agi_by_2029", +1, 4,
      "An AI socially engineering its escape by 2029 is strongly raised by reaching Sub-AGI by 2029."),
     ("x0235", "IW3ACtIeEN8JTvUxR3fy", "ftm_sub_agi_by_2028", +1, 4,
@@ -255,8 +225,8 @@ CURATED_MARKETS: list[tuple[str, str, str, int, int, str]] = [
      "Early Sub-AGI progress by 2028 sustains a coherent organized AI safety movement in May 2029."),
     ("x0249", "TeWRQojLHpWs2EH05HcC", "ftm_agi_by_2035", +1, 4,
      "Faster AGI arrival by 2035 increases risk of deploying an unaligned AGI with existential consequences."),
-    ("x0348", "MkeETzMpiLJ0JuoNqiZH", "ftm_agi_by_2040", +1, 4,
-     "Reaching AGI by 2040 raises the probability of AI taking over governance/control by 2100."),
+    ("x0348", "MkeETzMpiLJ0JuoNqiZH", "ftm_agi_by_2035", +1, 4,
+     "Reaching strict AGI by 2035 raises the probability of AI taking over governance/control by 2100."),
     ("x0240", "qRiKFHS6nvztSzdecHZo", "ftm_agi_by_2033", +1, 4,
      "Rapid AGI arrival by 2033 leaves less alignment buffer, elevating biological-extinction tail risk."),
 ]
@@ -333,6 +303,7 @@ def main() -> None:
     ap.add_argument("--out-external", default="backend/seeds_external.json")
     ap.add_argument("--out-anchors", default="scripts/import/data/anchors.json")
     ap.add_argument("--out-proposals", default="scripts/bridge/data/bridge_proposals_remapped.json")
+    ap.add_argument("--offline", action="store_true", help="Reuse cached live-refreshed records from --prev-external without hitting Manifold API")
     args = ap.parse_args()
 
     ftm = json.loads(Path(args.ftm).read_text())
@@ -343,17 +314,40 @@ def main() -> None:
         prev_ext = json.loads(Path(args.prev_external).read_text()).get("markets", {})
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    print(f"Live-fetching {len(CURATED_MARKETS)} curated Manifold markets at {now}...")
-
     fetched: dict[str, dict] = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
-        futs = {pool.submit(fetch_manifold_market, ref): (mid, ref) for mid, ref, *_ in CURATED_MARKETS}
-        for fut in concurrent.futures.as_completed(futs):
-            mid, ref = futs[fut]
+    if args.offline:
+        print(f"Offline filtering {len(CURATED_MARKETS)} curated Manifold markets from {args.prev_external}...")
+        for mid, ref, *_ in CURATED_MARKETS:
+            prev = prev_ext.get(mid)
+            if not prev:
+                continue
+            prov = prev.get("provenance", {})
+            exp_iso = prev.get("expires_at", "2099-12-31T23:59:59Z")
             try:
-                fetched[mid] = fut.result()
-            except Exception as exc:
-                print(f"WARN: failed to fetch {mid} ({ref}): {exc}")
+                close_ms = int(datetime.fromisoformat(exp_iso.replace("Z", "+00:00")).timestamp() * 1000)
+            except ValueError:
+                close_ms = None
+            fetched[mid] = {
+                "isResolved": False,
+                "outcomeType": "BINARY",
+                "probability": prev["marginals"]["yes"],
+                "closeTime": close_ms,
+                "question": prev["title"],
+                "url": prov.get("url") or prev.get("anchor", {}).get("url"),
+                "uniqueBettorCount": prov.get("forecasters", 0),
+                "volume": prov.get("sourceVolume", 0.0),
+                "_refreshedAt": prov.get("refreshedAt") or prev.get("anchor", {}).get("fetchedAt") or now,
+            }
+    else:
+        print(f"Live-fetching {len(CURATED_MARKETS)} curated Manifold markets at {now}...")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
+            futs = {pool.submit(fetch_manifold_market, ref): (mid, ref) for mid, ref, *_ in CURATED_MARKETS}
+            for fut in concurrent.futures.as_completed(futs):
+                mid, ref = futs[fut]
+                try:
+                    fetched[mid] = fut.result()
+                except Exception as exc:
+                    print(f"WARN: failed to fetch {mid} ({ref}): {exc}")
 
     ext_markets: dict[str, dict] = {}
     anchors: list[dict] = []
@@ -416,7 +410,7 @@ def main() -> None:
             "marginals": {"yes": p, "no": round(1.0 - p, 6)},
             "liquidity": LIQUIDITY,
             "volume": 0.0,
-            "created_at": now,
+            "created_at": raw.get("_refreshedAt", now),
             "expires_at": expires,
             "provenance": {
                 "source": "manifold",
@@ -425,14 +419,14 @@ def main() -> None:
                 "method": "external-import-v2",
                 "forecasters": forecasters,
                 "sourceVolume": volume,
-                "refreshedAt": now,
+                "refreshedAt": raw.get("_refreshedAt", now),
             },
             "anchor": {
                 "source": "manifold",
                 "ref": ref,
                 "url": url,
                 "value": p,
-                "fetchedAt": now,
+                "fetchedAt": raw.get("_refreshedAt", now),
             },
         }
 
@@ -459,7 +453,7 @@ def main() -> None:
             "ref": ref,
             "url": url,
             "value": p,
-            "fetchedAt": now,
+            "fetchedAt": raw.get("_refreshedAt", now),
         })
         bridges.append({
             "externalId": mid,
